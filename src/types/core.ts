@@ -23,10 +23,32 @@ export type ObligationType =
   | 'performance_security'
   | 'reserve_backed_claim';
 
+export type ReportingFormType =
+  | '1099-A'
+  | '1099-B'
+  | '1099-C'
+  | '1099-INT'
+  | '1099-OID'
+  | '1099-K'
+  | '1099-S'
+  | 'K1-1065'
+  | 'K1-1120S'
+  | 'K1-1041'
+  | 'UCC-1'
+  | 'UCC-3';
+
+export type FilingStatus =
+  | 'not_reportable'
+  | 'review_required'
+  | 'draft_generated'
+  | 'approved_for_filing'
+  | 'filed'
+  | 'corrected';
+
 export interface EntityRecord {
   id: string;
   name: string;
-  entityType: 'trust' | 'llc' | 'corporation' | 'partnership' | 'nonprofit' | 'individual';
+  entityType: 'trust' | 'llc' | 'corporation' | 'partnership' | 'nonprofit' | 'individual' | 's_corp';
   jurisdiction: string;
   status: 'active' | 'inactive' | 'pending';
   taxId?: string;
@@ -149,6 +171,8 @@ export interface InstrumentRecord {
   obligationType: ObligationType;
   paymentMedium: PaymentMedium;
   faceValue?: number;
+  interestRate?: number;
+  oidAmount?: number;
   securedByAssetIds?: string[];
   status: 'draft' | 'active' | 'satisfied' | 'cancelled';
   notes?: string;
@@ -172,7 +196,12 @@ export interface TransactionRecord {
     | 'proceedsReceived'
     | 'pledgePosting'
     | 'tenderDesignation'
-    | 'debtDischarge';
+    | 'debtDischarge'
+    | 'gift'
+    | 'capitalContribution'
+    | 'beneficiaryDistribution'
+    | 'securityDisposition'
+    | 'realEstateClosing';
   amount: number;
   date: string;
   description: string;
@@ -180,6 +209,8 @@ export interface TransactionRecord {
   toAccountId?: string;
   paymentMedium?: PaymentMedium;
   relatedInstrumentId?: string;
+  relatedAssetId?: string;
+  counterpartyName?: string;
   status: 'pending' | 'posted' | 'failed';
 }
 
@@ -205,6 +236,38 @@ export interface OnChainTransactionRecord {
   feeAmount?: number;
   feeAssetSymbol?: string;
   status: 'pending' | 'confirmed' | 'failed';
+}
+
+export interface TransactionTaxProfile {
+  transactionId: string;
+  reportable: boolean;
+  candidateForms: ReportingFormType[];
+  reasoning: string;
+  taxYear: number;
+  filingStatus: FilingStatus;
+}
+
+export interface ReportingRule {
+  id: string;
+  name: string;
+  appliesToTransactionTypes: TransactionRecord['type'][];
+  appliesToEntityTypes?: EntityRecord['entityType'][];
+  appliesToAssetClasses?: AssetRecord['assetClass'][];
+  candidateForms: ReportingFormType[];
+  reasoningTemplate: string;
+}
+
+export interface GeneratedReportingPacket {
+  id: string;
+  transactionId?: string;
+  entityId: string;
+  formType: ReportingFormType;
+  title: string;
+  taxYear: number;
+  filingStatus: FilingStatus;
+  generatedAt: string;
+  verifiedAt?: string;
+  notes?: string;
 }
 
 export interface ComplianceItem {
@@ -248,6 +311,7 @@ export interface DocumentRecord {
     | 'authority'
     | 'legal_memo'
     | 'pledge'
+    | 'ucc'
     | 'other';
   createdAt: string;
   status: 'draft' | 'final' | 'archived';
