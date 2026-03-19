@@ -1,10 +1,12 @@
 import type {
   AccountRecord,
   AssetRecord,
+  AuthorityRecord,
   ComplianceItem,
   DashboardSummary,
   DocumentRecord,
   EntityRecord,
+  InstrumentRecord,
   OnChainTransactionRecord,
   TransactionRecord,
   WalletRecord,
@@ -73,6 +75,19 @@ export const mockWallets: WalletRecord[] = [
   },
 ];
 
+export const mockAuthorities: AuthorityRecord[] = [
+  {
+    id: 'auth-001',
+    entityId: 'ent-las-trust',
+    name: 'Counsel of Record Example',
+    role: 'attorney_of_record',
+    noticeOfAppearanceFiled: true,
+    clientAuthorizationStatus: 'verified',
+    powerOfAttorneyOnFile: false,
+    notes: 'Representation tracked for recordkeeping purposes.',
+  },
+];
+
 export const mockAssets: AssetRecord[] = [
   {
     id: 'ast-note-001',
@@ -90,25 +105,31 @@ export const mockAssets: AssetRecord[] = [
     daysToLiquidate: 21,
     status: 'active',
     dispositionStatus: 'held',
+    paymentMedium: 'private_tender',
+    obligationType: 'secured_private_obligation',
+    pledgeStatus: 'unpledged',
     description: 'Privately held note with installment support.',
   },
   {
-    id: 'ast-gold-001',
+    id: 'ast-silver-001',
     entityId: 'ent-las-trust',
-    name: 'Gold Reserve Position',
+    name: 'Silver Performance Reserve',
     assetClass: 'metal',
-    assetSubtype: 'bullion',
-    estimatedValue: 42000,
-    bookValue: 42000,
-    marketValue: 43800,
-    liquidationValue: 40150,
-    immediateCashValue: 38500,
+    assetSubtype: 'silver_reserve',
+    estimatedValue: 18500,
+    bookValue: 18500,
+    marketValue: 19200,
+    liquidationValue: 17600,
+    immediateCashValue: 16850,
     liquidityClass: 'medium',
     valuationMethod: 'market_comp',
     daysToLiquidate: 3,
     status: 'active',
-    dispositionStatus: 'held',
-    description: 'Allocated precious metals reserve.',
+    dispositionStatus: 'pledged',
+    paymentMedium: 'specie',
+    obligationType: 'performance_security',
+    pledgeStatus: 'pledged',
+    description: 'Silver reserve tracked as pledged performance security.',
   },
   {
     id: 'ast-eth-001',
@@ -127,6 +148,7 @@ export const mockAssets: AssetRecord[] = [
     status: 'active',
     dispositionStatus: 'held',
     classification: 'commodity_like',
+    paymentMedium: 'digital_asset',
     custodyStatus: 'controlled',
     complianceStatus: 'review',
     explorerUrl: 'https://etherscan.io/',
@@ -147,10 +169,37 @@ export const mockAssets: AssetRecord[] = [
     daysToLiquidate: 14,
     status: 'active',
     dispositionStatus: 'held',
+    paymentMedium: 'contractual_mixed',
     classification: 'unclassified',
     custodyStatus: 'controlled',
     complianceStatus: 'ok',
     description: 'Primary operating domain and brand asset.',
+  },
+];
+
+export const mockInstruments: InstrumentRecord[] = [
+  {
+    id: 'ins-001',
+    entityId: 'ent-las-trust',
+    title: 'Private Silver Bond / Performance Security Record',
+    instrumentType: 'private_bond',
+    obligationType: 'performance_security',
+    paymentMedium: 'specie',
+    faceValue: 18500,
+    securedByAssetIds: ['ast-silver-001'],
+    status: 'active',
+    notes: 'Tracked as private performance security record, not public currency.',
+  },
+  {
+    id: 'ins-002',
+    entityId: 'ent-las-trust',
+    title: 'Private Note Instrument',
+    instrumentType: 'promissory_note',
+    obligationType: 'secured_private_obligation',
+    paymentMedium: 'private_tender',
+    faceValue: 145000,
+    securedByAssetIds: ['ast-note-001'],
+    status: 'active',
   },
 ];
 
@@ -163,6 +212,7 @@ export const mockTransactions: TransactionRecord[] = [
     date: '2026-03-01',
     description: 'Rental income received',
     toAccountId: 'acct-operating',
+    paymentMedium: 'fiat',
     status: 'posted',
   },
   {
@@ -174,6 +224,7 @@ export const mockTransactions: TransactionRecord[] = [
     description: 'Monthly reserve allocation',
     fromAccountId: 'acct-operating',
     toAccountId: 'acct-reserve',
+    paymentMedium: 'fiat',
     status: 'posted',
   },
   {
@@ -184,6 +235,19 @@ export const mockTransactions: TransactionRecord[] = [
     date: '2026-03-08',
     description: 'Advance against private note liquidation value',
     toAccountId: 'acct-operating',
+    paymentMedium: 'private_tender',
+    relatedInstrumentId: 'ins-002',
+    status: 'posted',
+  },
+  {
+    id: 'txn-004',
+    entityId: 'ent-las-trust',
+    type: 'pledgePosting',
+    amount: 18500,
+    date: '2026-03-12',
+    description: 'Silver reserve posted as performance security',
+    paymentMedium: 'specie',
+    relatedInstrumentId: 'ins-001',
     status: 'posted',
   },
 ];
@@ -221,6 +285,14 @@ export const mockCompliance: ComplianceItem[] = [
     category: 'digital_asset_review',
     status: 'upcoming',
   },
+  {
+    id: 'cmp-003',
+    entityId: 'ent-las-trust',
+    title: 'Authority and appearance record review',
+    dueDate: '2026-03-28',
+    category: 'authority_review',
+    status: 'upcoming',
+  },
 ];
 
 export const mockDocuments: DocumentRecord[] = [
@@ -248,13 +320,29 @@ export const mockDocuments: DocumentRecord[] = [
     createdAt: '2026-03-12',
     status: 'draft',
   },
+  {
+    id: 'doc-004',
+    entityId: 'ent-las-trust',
+    title: 'Cash vs Credit Legal Position Memo',
+    category: 'legal_memo',
+    createdAt: '2026-03-18',
+    status: 'draft',
+  },
+  {
+    id: 'doc-005',
+    entityId: 'ent-las-trust',
+    title: 'Silver Pledge / Performance Security Record',
+    category: 'pledge',
+    createdAt: '2026-03-18',
+    status: 'draft',
+  },
 ];
 
 export const mockDashboardSummary: DashboardSummary = {
   totalCash: 124500,
-  totalAssets: 236550,
-  totalLiquidationValue: 182350,
-  totalImmediateCashValue: 156800,
+  totalAssets: 212250,
+  totalLiquidationValue: 160300,
+  totalImmediateCashValue: 135150,
   monthlyInflow: 12000,
   monthlyOutflow: 6400,
   netCashFlow: 5600,

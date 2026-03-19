@@ -9,6 +9,20 @@ export type ModuleKey =
   | 'aiStudio'
   | 'settings';
 
+export type PaymentMedium =
+  | 'fiat'
+  | 'specie'
+  | 'private_tender'
+  | 'digital_asset'
+  | 'contractual_mixed';
+
+export type ObligationType =
+  | 'public_obligation'
+  | 'private_obligation'
+  | 'secured_private_obligation'
+  | 'performance_security'
+  | 'reserve_backed_claim';
+
 export interface EntityRecord {
   id: string;
   name: string;
@@ -41,6 +55,17 @@ export interface WalletRecord {
   notes?: string;
 }
 
+export interface AuthorityRecord {
+  id: string;
+  entityId?: string;
+  name: string;
+  role: 'attorney_of_record' | 'private_representative' | 'trustee' | 'manager' | 'agent' | 'other';
+  noticeOfAppearanceFiled?: boolean;
+  clientAuthorizationStatus?: 'verified' | 'unverified' | 'not_applicable';
+  powerOfAttorneyOnFile?: boolean;
+  notes?: string;
+}
+
 export interface AssetRecord {
   id: string;
   entityId: string;
@@ -70,10 +95,13 @@ export interface AssetRecord {
     | 'lp_position'
     | 'domain_asset'
     | 'private_promissory_note'
+    | 'private_bond'
     | 'trust_interest'
     | 'contract_right'
     | 'jewelry'
     | 'bullion'
+    | 'silver_reserve'
+    | 'gold_reserve'
     | 'other';
   walletId?: string;
   estimatedValue: number;
@@ -94,13 +122,36 @@ export interface AssetRecord {
     | 'commodity_like'
     | 'collectible'
     | 'unclassified';
+  paymentMedium?: PaymentMedium;
+  obligationType?: ObligationType;
   custodyStatus?: 'controlled' | 'delegated' | 'locked' | 'disputed';
   complianceStatus?: 'ok' | 'review' | 'restricted' | 'unknown';
   contractAddress?: string;
   tokenId?: string;
   explorerUrl?: string;
   encumbranceNotes?: string;
+  pledgeStatus?: 'unpledged' | 'pledged' | 'released';
   description?: string;
+}
+
+export interface InstrumentRecord {
+  id: string;
+  entityId: string;
+  title: string;
+  instrumentType:
+    | 'promissory_note'
+    | 'private_bond'
+    | 'security_agreement'
+    | 'pledge_agreement'
+    | 'performance_bond'
+    | 'assignment'
+    | 'other';
+  obligationType: ObligationType;
+  paymentMedium: PaymentMedium;
+  faceValue?: number;
+  securedByAssetIds?: string[];
+  status: 'draft' | 'active' | 'satisfied' | 'cancelled';
+  notes?: string;
 }
 
 export interface TransactionRecord {
@@ -118,12 +169,17 @@ export interface TransactionRecord {
     | 'collateralAdvance'
     | 'assignment'
     | 'reserveDraw'
-    | 'proceedsReceived';
+    | 'proceedsReceived'
+    | 'pledgePosting'
+    | 'tenderDesignation'
+    | 'debtDischarge';
   amount: number;
   date: string;
   description: string;
   fromAccountId?: string;
   toAccountId?: string;
+  paymentMedium?: PaymentMedium;
+  relatedInstrumentId?: string;
   status: 'pending' | 'posted' | 'failed';
 }
 
@@ -156,7 +212,15 @@ export interface ComplianceItem {
   entityId: string;
   title: string;
   dueDate: string;
-  category: 'annual_report' | 'tax' | 'license' | 'insurance' | 'governance' | 'digital_asset_review' | 'custom';
+  category:
+    | 'annual_report'
+    | 'tax'
+    | 'license'
+    | 'insurance'
+    | 'governance'
+    | 'digital_asset_review'
+    | 'authority_review'
+    | 'custom';
   status: 'ok' | 'upcoming' | 'overdue' | 'blocked';
   notes?: string;
 }
@@ -181,6 +245,9 @@ export interface DocumentRecord {
     | 'valuation'
     | 'liquidation'
     | 'assignment'
+    | 'authority'
+    | 'legal_memo'
+    | 'pledge'
     | 'other';
   createdAt: string;
   status: 'draft' | 'final' | 'archived';
