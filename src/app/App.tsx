@@ -4,6 +4,7 @@ import type { Entity } from '../types/app.models';
 import { useAuth } from '../hooks/useAuth';
 import { coreMockData } from '../data/mockData';
 import AppShell from '../components/layout/AppShell';
+import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 
@@ -35,11 +36,6 @@ const ProfileSetup = lazy(() =>
 const Verification = lazy(() =>
   import('../components/verification/Verification').then((module) => ({
     default: module.Verification,
-  }))
-);
-const Welcome = lazy(() =>
-  import('../components/welcome/Welcome').then((module) => ({
-    default: module.Welcome,
   }))
 );
 
@@ -486,19 +482,17 @@ export default function App() {
     }
 
     return (
-      <Suspense fallback={<SuspenseShell title="Loading Secure Access" />}>
-        <Welcome
-          isConfigured={auth.isConfigured}
-          renderGoogleButton={auth.renderGoogleButton}
-          onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
-          onStartOnboarding={() => setEntryStage('pathSelect')}
-          pendingCredentialAuth={auth.pendingCredentialAuth}
-          onStartCredentialAuth={auth.startCredentialAuth}
-          onVerifyCredentialAuth={auth.verifyCredentialAuth}
-          onSignInWithPassword={auth.signInWithPassword}
-          onCancelCredentialAuth={auth.cancelCredentialAuth}
-        />
-      </Suspense>
+      <Welcome
+        isConfigured={auth.isConfigured}
+        renderGoogleButton={auth.renderGoogleButton}
+        onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
+        onStartOnboarding={() => setEntryStage('pathSelect')}
+        pendingCredentialAuth={auth.pendingCredentialAuth}
+        onStartCredentialAuth={auth.startCredentialAuth}
+        onVerifyCredentialAuth={auth.verifyCredentialAuth}
+        onSignInWithPassword={auth.signInWithPassword}
+        onCancelCredentialAuth={auth.cancelCredentialAuth}
+      />
     );
   }
 

@@ -36,7 +36,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Saira:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://esm.sh/zone.js@0.14.7"></script>
   <style>
     :root {
       /* Shared colors */
@@ -69,15 +68,18 @@
       --border-secondary: #cbd5e1;
     }
 
+    html, body, #root {
+      min-height: 100%;
+    }
+
     body {
+      margin: 0;
       font-family: 'Saira', sans-serif;
       background-color: var(--bg-primary);
       color: var(--text-primary);
-      transition: background-color 0.3s ease, color 0.3s ease;
     }
     body.dark {
-      background-image: radial-gradient(circle at 1px 1px, var(--border-primary) 1px, transparent 0);
-      background-size: 2rem 2rem;
+      background-image: none;
     }
 
     .custom-scrollbar::-webkit-scrollbar {
@@ -113,48 +115,7 @@
     .btn-primary:hover {
        background-color: var(--bg-interactive-hover);
     }
-
-    /* Welcome screen background animation */
-    @keyframes gradient-animation {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-    .animated-gradient-bg {
-      background: linear-gradient(-45deg, #1e293b, #0f172a, #2563eb, #1e293b);
-      background-size: 400% 400%;
-      animation: gradient-animation 25s ease infinite;
-    }
   </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "rxjs": "https://esm.sh/rxjs@^7.8.2?conditions=es2015",
-    "@google/genai": "https://esm.sh/@google/genai@^0.12.0",
-    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
-    "express": "https://esm.sh/express@^5.2.1?external=rxjs",
-    "dotenv": "https://esm.sh/dotenv@^17.3.1?external=rxjs",
-    "body-parser": "https://esm.sh/body-parser@^2.2.2?external=rxjs",
-    "crypto": "https://esm.sh/crypto@^1.0.1?external=rxjs",
-    "jsonwebtoken": "https://esm.sh/jsonwebtoken@^9.0.3?external=rxjs",
-    "node-fetch": "https://esm.sh/node-fetch@^3.3.2?external=rxjs",
-    "cors": "https://esm.sh/cors@^2.8.5?external=rxjs",
-    "react-plaid-link": "https://esm.sh/react-plaid-link@^3.5.0",
-    "uuid": "https://esm.sh/uuid@^13.0.0?external=rxjs",
-    "plaid": "https://esm.sh/plaid@^41.1.0?external=rxjs",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "@angular/core": "https://esm.sh/@angular/core@18.1.0",
-    "@angular/common": "https://esm.sh/@angular/common@18.1.0",
-    "@angular/platform-browser": "https://esm.sh/@angular/platform-browser@18.1.0",
-    "@angular/compiler": "https://esm.sh/@angular/compiler@18.1.0",
-    "zone.js": "https://esm.sh/zone.js@0.14.7"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="dark">
   <div id="root"></div>
