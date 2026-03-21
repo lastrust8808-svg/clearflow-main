@@ -85,17 +85,17 @@ export function getInvoiceDeliveryResolution(
   };
 }
 
-export function downloadInvoicePacket(options: {
+export function buildInvoicePacketHtml(options: {
   invoice: InvoiceRecord;
   customer?: CustomerRecord;
   entity?: EntityRecord;
 }) {
   const { invoice, customer, entity } = options;
-  const fileName = `${sanitizeFileName(invoice.invoiceNumber)}.html`;
   const issuedBy =
     entity?.branding?.emailFromName || entity?.displayName || entity?.name || 'ClearFlow';
   const customerName = customer?.name || 'Customer';
-  const html = `<!doctype html>
+
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -198,6 +198,61 @@ export function downloadInvoicePacket(options: {
     </div>
   </body>
 </html>`;
+}
+
+export function buildInvoicePacketFileName(invoice: InvoiceRecord) {
+  return `${sanitizeFileName(invoice.invoiceNumber)}.html`;
+}
+
+export function buildInvoiceEmailPayload(options: {
+  invoice: InvoiceRecord;
+  customer?: CustomerRecord;
+  entity?: EntityRecord;
+  workspaceSettings?: WorkspaceSettingsRecord;
+}) {
+  const { invoice, customer, entity, workspaceSettings } = options;
+  const recipientEmail = resolveInvoiceRecipientEmail(invoice, customer);
+  const attachmentFileName = buildInvoicePacketFileName(invoice);
+  const senderName =
+    entity?.branding?.emailFromName || entity?.displayName || entity?.name || 'ClearFlow';
+  const supportEmail = workspaceSettings?.supportEmail || '';
+  const subject = `${senderName} Invoice ${invoice.invoiceNumber}`;
+  const textBody = [
+    `Hello ${customer?.name || 'there'},`,
+    '',
+    `Your invoice ${invoice.invoiceNumber} is ready.`,
+    `Amount due: ${formatCurrency(invoice.totalAmount, invoice.currency)}`,
+    `Due date: ${invoice.dueDate || 'Not set'}`,
+    '',
+    invoice.paymentInstructions
+      ? `Payment instructions: ${invoice.paymentInstructions}`
+      : 'Payment instructions are included in the attached invoice packet.',
+    '',
+    supportEmail ? `Reply contact: ${supportEmail}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const attachmentHtml = buildInvoicePacketHtml({ invoice, customer, entity });
+
+  return {
+    recipientEmail,
+    subject,
+    textBody,
+    htmlBody: attachmentHtml,
+    attachmentFileName,
+    attachmentHtml,
+    replyTo: supportEmail || undefined,
+  };
+}
+
+export function downloadInvoicePacket(options: {
+  invoice: InvoiceRecord;
+  customer?: CustomerRecord;
+  entity?: EntityRecord;
+}) {
+  const { invoice, customer, entity } = options;
+  const fileName = buildInvoicePacketFileName(invoice);
+  const html = buildInvoicePacketHtml({ invoice, customer, entity });
 
   if (typeof window !== 'undefined') {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -221,35 +276,21 @@ export function openInvoiceEmailDraft(options: {
   workspaceSettings?: WorkspaceSettingsRecord;
   attachmentFileName: string;
 }) {
-  const { invoice, customer, entity, workspaceSettings, attachmentFileName } = options;
-  const recipientEmail = resolveInvoiceRecipientEmail(invoice, customer);
+  const { attachmentFileName } = options;
+  const payload = buildInvoiceEmailPayload(options);
+  const { recipientEmail } = payload;
   if (!recipientEmail || typeof window === 'undefined') {
     return false;
   }
 
-  const senderName =
-    entity?.branding?.emailFromName || entity?.displayName || entity?.name || 'ClearFlow';
-  const supportEmail = workspaceSettings?.supportEmail || '';
-  const subject = `${senderName} Invoice ${invoice.invoiceNumber}`;
   const body = [
-    `Hello ${customer?.name || 'there'},`,
-    '',
-    `Your invoice ${invoice.invoiceNumber} is ready.`,
-    `Amount due: ${formatCurrency(invoice.totalAmount, invoice.currency)}`,
-    `Due date: ${invoice.dueDate || 'Not set'}`,
-    '',
-    invoice.paymentInstructions
-      ? `Payment instructions: ${invoice.paymentInstructions}`
-      : 'Payment instructions are included in the attached invoice packet.',
+    payload.textBody,
     '',
     `ClearFlow has downloaded ${attachmentFileName} locally so you can attach it before sending.`,
-    supportEmail ? `Reply contact: ${supportEmail}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  ].join('\n');
 
   const mailtoUrl = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(
-    subject
+    payload.subject
   )}&body=${encodeURIComponent(body)}`;
   window.location.href = mailtoUrl;
   return true;

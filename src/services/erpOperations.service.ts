@@ -1,4 +1,4 @@
-type OperationStatus = 'queued' | 'processed';
+type OperationStatus = 'queued' | 'processed' | 'sent' | 'fallback_required';
 
 interface DeliveryQueueResponse {
   success: boolean;
@@ -7,6 +7,9 @@ interface DeliveryQueueResponse {
     status: OperationStatus;
     queuedAt: string;
     operation: 'send' | 'export';
+    sentAt?: string;
+    deliveryChannel?: 'smtp' | 'manual' | 'internal';
+    fallbackReason?: string | null;
   };
 }
 
@@ -46,6 +49,12 @@ export async function queueInvoiceDelivery(payload: {
   deliveryMethod?: string;
   recipientEmail?: string;
   internalDeliveryTarget?: string;
+  emailSubject?: string;
+  emailTextBody?: string;
+  emailHtmlBody?: string;
+  attachmentFileName?: string;
+  attachmentHtml?: string;
+  replyTo?: string;
 }) {
   try {
     const response = await fetch(`${ERP_API_BASE}/api/erp/invoice-deliveries`, {

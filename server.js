@@ -41,6 +41,13 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Clear-Flow server is running on http://localhost:${PORT}`);
   console.log(`Plaid environment: ${process.env.PLAID_ENV || 'sandbox'}`);
+  console.log(
+    `SMTP delivery: ${
+      process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_FROM_EMAIL
+        ? 'configured'
+        : 'not configured'
+    }`
+  );
   if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
     console.warn('WARNING: Plaid client ID or secret not configured. API calls will fail.');
   }

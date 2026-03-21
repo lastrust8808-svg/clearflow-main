@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
+import { isMailerConfigured, sendInvoiceEmail } from '../utils/mailer.js';
 
 const router = express.Router();
 
@@ -8,9 +9,22 @@ const invoiceExportJobs = [];
 const statementImportJobs = [];
 const reconciliationCloseJobs = [];
 
-router.post('/invoice-deliveries', (req, res) => {
-  const { invoiceId, entityId, invoiceNumber, deliveryMethod, recipientEmail, internalDeliveryTarget } =
-    req.body || {};
+router.post('/invoice-deliveries', async (req, res) => {
+  const {
+    invoiceId,
+    entityId,
+    invoiceNumber,
+    deliveryMethod,
+    recipientEmail,
+    internalDeliveryTarget,
+    emailSubject,
+    emailTextBody,
+    emailHtmlBody,
+    attachmentFileName,
+    attachmentHtml,
+    replyTo,
+    fromName,
+  } = req.body || {};
 
   if (!invoiceId || !entityId || !invoiceNumber) {
     return res.status(400).json({ success: false, error: 'Missing invoice delivery payload.' });
@@ -28,6 +42,39 @@ router.post('/invoice-deliveries', (req, res) => {
     operation: 'send',
     queuedAt: new Date().toISOString(),
   };
+
+  if (job.deliveryMethod === 'email' && recipientEmail) {
+    if (isMailerConfigured()) {
+      try {
+        await sendInvoiceEmail({
+          to: recipientEmail,
+          subject: emailSubject || `Invoice ${invoiceNumber}`,
+          text: emailTextBody || `Your invoice ${invoiceNumber} is attached.`,
+          html: emailHtmlBody || `<p>Your invoice <strong>${invoiceNumber}</strong> is attached.</p>`,
+          attachmentFileName,
+          attachmentHtml,
+          replyTo,
+          fromName,
+        });
+        job.status = 'sent';
+        job.sentAt = new Date().toISOString();
+        job.deliveryChannel = 'smtp';
+      } catch (error) {
+        job.status = 'fallback_required';
+        job.deliveryChannel = 'manual';
+        job.fallbackReason =
+          error instanceof Error ? error.message : 'SMTP delivery failed.';
+      }
+    } else {
+      job.status = 'fallback_required';
+      job.deliveryChannel = 'manual';
+      job.fallbackReason = 'SMTP is not configured on the server.';
+    }
+  } else if (job.deliveryMethod === 'internal_user') {
+    job.deliveryChannel = 'internal';
+  } else {
+    job.deliveryChannel = 'manual';
+  }
 
   invoiceDeliveryJobs.unshift(job);
   return res.status(201).json({ success: true, job });

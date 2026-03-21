@@ -10,6 +10,8 @@ import {
   queueInvoiceExport,
 } from '../../services/erpOperations.service';
 import {
+  buildInvoiceEmailPayload,
+  buildInvoicePacketFileName,
   downloadInvoicePacket,
   openInvoiceEmailDraft,
   resolveInvoiceRecipientEmail,
@@ -935,29 +937,22 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     const customer = customers.find((item) => item.id === invoice.customerId);
     const entity = data.entities.find((item) => item.id === invoice.entityId);
     const recipientEmail = resolveInvoiceRecipientEmail(invoice, customer);
-    const needsPacketDownload = invoice.deliveryMethod !== 'internal_user';
-    const packetDownload = needsPacketDownload
-      ? downloadInvoicePacket({
-          invoice,
-          customer,
-          entity,
-        })
-      : null;
-    const exportResponse = needsPacketDownload
-      ? await queueInvoiceExport({
-          invoiceId: invoice.id,
-          entityId: invoice.entityId,
-          invoiceNumber: invoice.invoiceNumber,
-        })
-      : null;
-    const exportDocumentId = packetDownload
-      ? `doc-export-${invoiceId}-${Date.now()}`
-      : null;
+    const emailPayload = buildInvoiceEmailPayload({
+      invoice,
+      customer,
+      entity,
+      workspaceSettings: data.workspaceSettings,
+    });
+    const needsPacketDocument = invoice.deliveryMethod !== 'internal_user';
+    const exportDocumentId = needsPacketDocument ? `doc-export-${invoiceId}-${Date.now()}` : null;
+    const attachmentFileName = emailPayload.attachmentFileName || buildInvoicePacketFileName(invoice);
 
     let deliveryResponse:
       | Awaited<ReturnType<typeof queueInvoiceDelivery>>
       | null = null;
-    let deliveryNotes = 'Invoice packet downloaded for manual delivery.';
+    let exportResponse: Awaited<ReturnType<typeof queueInvoiceExport>> | null = null;
+    let packetDownload: ReturnType<typeof downloadInvoicePacket> | null = null;
+    let deliveryNotes = 'Invoice packet prepared for manual delivery.';
     let deliveryStatus: InvoiceRecord['deliveryStatus'] = 'ready_to_send';
 
     if (invoice.deliveryMethod === 'internal_user') {
@@ -981,34 +976,66 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         deliveryMethod: invoice.deliveryMethod,
         recipientEmail,
         internalDeliveryTarget: invoice.internalDeliveryTarget,
+        emailSubject: emailPayload.subject,
+        emailTextBody: emailPayload.textBody,
+        emailHtmlBody: emailPayload.htmlBody,
+        attachmentFileName: emailPayload.attachmentFileName,
+        attachmentHtml: emailPayload.attachmentHtml,
+        replyTo: emailPayload.replyTo,
       });
-      const openedDraft = openInvoiceEmailDraft({
+      if (deliveryResponse.job.status === 'sent') {
+        deliveryNotes = `Invoice emailed directly to ${recipientEmail} from the configured ClearFlow mail account.`;
+        deliveryStatus = 'sent';
+      } else {
+        exportResponse = await queueInvoiceExport({
+          invoiceId: invoice.id,
+          entityId: invoice.entityId,
+          invoiceNumber: invoice.invoiceNumber,
+        });
+        packetDownload = downloadInvoicePacket({
+          invoice,
+          customer,
+          entity,
+        });
+        const openedDraft = openInvoiceEmailDraft({
+          invoice,
+          customer,
+          entity,
+          workspaceSettings: data.workspaceSettings,
+          attachmentFileName: packetDownload.fileName,
+        });
+        deliveryNotes = openedDraft
+          ? `Server email is not configured yet. Email draft opened for ${recipientEmail}. Attach ${packetDownload.fileName} and send through your connected mail account.`
+          : `Server email is not configured yet. ${packetDownload.fileName} downloaded for manual attachment to ${recipientEmail}.`;
+      }
+    } else if (invoice.deliveryMethod === 'email') {
+      exportResponse = await queueInvoiceExport({
+        invoiceId: invoice.id,
+        entityId: invoice.entityId,
+        invoiceNumber: invoice.invoiceNumber,
+      });
+      packetDownload = downloadInvoicePacket({
         invoice,
         customer,
         entity,
-        workspaceSettings: data.workspaceSettings,
-        attachmentFileName: packetDownload?.fileName || `${invoice.invoiceNumber}.html`,
       });
-      deliveryNotes = openedDraft
-        ? `Email draft opened for ${recipientEmail}. Attach ${
-            packetDownload?.fileName || 'the downloaded invoice packet'
-          } and send through your connected mail account.`
-        : `Email is on file for ${recipientEmail}. ${
-            packetDownload?.fileName || 'The invoice packet'
-          } downloaded for manual attachment.`;
-    } else if (invoice.deliveryMethod === 'email') {
-      deliveryNotes = `No client email is on file. ${
-        packetDownload?.fileName || 'The invoice packet'
-      } downloaded so you can attach and send manually once an email is available.`;
+      deliveryNotes = `No client email is on file. ${packetDownload.fileName} downloaded so you can attach and send manually once an email is available.`;
       deliveryStatus = 'draft';
-    } else if (invoice.deliveryMethod === 'export') {
-      deliveryNotes = `${
-        packetDownload?.fileName || 'The invoice packet'
-      } downloaded from the ERP delivery desk for manual attachment or offline delivery.`;
     } else {
-      deliveryNotes = `${
-        packetDownload?.fileName || 'The invoice packet'
-      } downloaded for manual invoice delivery.`;
+      exportResponse = await queueInvoiceExport({
+        invoiceId: invoice.id,
+        entityId: invoice.entityId,
+        invoiceNumber: invoice.invoiceNumber,
+      });
+      packetDownload = downloadInvoicePacket({
+        invoice,
+        customer,
+        entity,
+      });
+      deliveryNotes =
+        invoice.deliveryMethod === 'export'
+          ? `${packetDownload.fileName} downloaded from the ERP delivery desk for manual attachment or offline delivery.`
+          : `${packetDownload.fileName} downloaded for manual invoice delivery.`;
     }
 
     setData((prev) => ({
@@ -1024,7 +1051,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 deliveryStatus === 'sent' ? new Date().toISOString() : invoice.sentAt,
               deliveryJobId: deliveryResponse?.job.id || invoice.deliveryJobId,
               exportJobId: exportResponse?.job.id || invoice.exportJobId,
-              exportedAt: packetDownload ? new Date().toISOString() : invoice.exportedAt,
+              exportedAt: needsPacketDocument ? new Date().toISOString() : invoice.exportedAt,
               linkedDocumentIds:
                 exportDocumentId && !invoice.linkedDocumentIds?.includes(exportDocumentId)
                   ? [exportDocumentId, ...(invoice.linkedDocumentIds ?? [])]
@@ -1033,7 +1060,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             }
           : invoice
       ),
-      documents: exportDocumentId && packetDownload
+      documents: exportDocumentId
         ? [
             {
               id: exportDocumentId,
@@ -1044,7 +1071,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               status: 'final',
               sourceRecordType: 'document',
               sourceRecordId: invoiceId,
-              fileName: packetDownload.fileName,
+              fileName: packetDownload?.fileName || attachmentFileName,
               mimeType: 'text/html',
               summary: `Invoice packet prepared for ${invoice.invoiceNumber}.`,
             },
