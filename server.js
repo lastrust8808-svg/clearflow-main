@@ -6,6 +6,7 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import plaidApiRoutes from './server/routes/plaid.js';
+import erpRoutes from './server/routes/erp.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -26,6 +27,7 @@ app.use(bodyParser.json());
 // --- API Routes ---
 // Mount the modular Plaid router at the /api/plaid base path.
 app.use('/api/plaid', plaidApiRoutes);
+app.use('/api/erp', erpRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {

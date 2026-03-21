@@ -1,6 +1,11 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { AppData, Entity, User } from '../types/app.models';
+import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
+import {
+  clearStoredMembershipDraft,
+  enrichAppDataFromMembershipDraft,
+} from '../services/membershipDraft.service';
 
 declare const google: any;
 
@@ -35,6 +40,7 @@ interface AuthContextType {
   mockLogin: (name: string, email: string) => void;
   updateUser: (user: User) => void;
   updateEntities: (entities: Entity[]) => void;
+  updateCoreDataSnapshot: (snapshot: CoreDataBundle) => void;
   completeProfileSetup: (name: string, email: string) => void;
   completeVerification: () => void;
   logout: () => void;
@@ -214,6 +220,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateCoreDataSnapshot = (snapshot: CoreDataBundle) => {
+    if (state.appData) {
+      setState((s) => ({
+        ...s,
+        appData: s.appData ? { ...s.appData, coreDataSnapshot: snapshot } : null,
+      }));
+    }
+  };
+
   const completeProfileSetup = (name: string, email: string) => {
     if (!state.appData) {
       logout();
@@ -221,7 +236,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const updatedUser = { ...state.appData.user, name, email, isVerified: false };
-    const finalAppData = { ...state.appData, user: updatedUser };
+    const finalAppData = enrichAppDataFromMembershipDraft({
+      ...state.appData,
+      user: updatedUser,
+    });
 
     if (state.apiAccessToken) {
       // Real GSI flow with Drive persistence
@@ -247,11 +265,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const completeVerification = () => {
     if (state.appData?.user) {
         const updatedUser = { ...state.appData.user, isVerified: true };
+        const verifiedSnapshot = state.appData.coreDataSnapshot
+          ? {
+              ...state.appData.coreDataSnapshot,
+              entities: state.appData.coreDataSnapshot.entities.map((entity) => ({
+                ...entity,
+                status: 'active',
+              })),
+              authorityRecords: state.appData.coreDataSnapshot.authorityRecords.map((record) => ({
+                ...record,
+                clientAuthorizationStatus: 'active',
+              })),
+              tokens: state.appData.coreDataSnapshot.tokens.map((token) =>
+                token.status === 'issued'
+                  ? {
+                      ...token,
+                      status: 'verified',
+                      verifiedAt: new Date().toISOString(),
+                      proofReference:
+                        token.proofReference ??
+                        'Verified during identity and authority onboarding.',
+                    }
+                  : token
+              ),
+            }
+          : undefined;
         setState(s => ({
             ...s,
-            appData: s.appData ? { ...s.appData, user: updatedUser } : null,
+            appData: s.appData
+              ? { ...s.appData, user: updatedUser, coreDataSnapshot: verifiedSnapshot }
+              : null,
             status: 'authenticated',
         }));
+        clearStoredMembershipDraft();
     }
   };
 
@@ -262,7 +308,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userDataService.clearCache();
     initialDataLoaded.current = false;
     setSavingStatus('idle');
-    setState({ user: null, token: null, apiAccessToken: null, status: 'unauthenticated', appData: null, gsiUser: null });
+    setState({
+      token: null,
+      apiAccessToken: null,
+      status: 'unauthenticated',
+      appData: null,
+      gsiUser: null,
+    });
   };
 
   const requestDriveAccess = () => {
@@ -281,6 +333,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     mockLogin,
     updateUser,
     updateEntities,
+    updateCoreDataSnapshot,
     completeProfileSetup,
     completeVerification,
     logout,

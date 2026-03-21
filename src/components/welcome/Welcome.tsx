@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Logo } from '../logo/Logo';
 
 interface WelcomeProps {
   isConfigured: boolean;
   onDevLogin: () => void;
+  onStartOnboarding: () => void;
+  renderGoogleButton: (elementId: string) => void;
 }
 
-export const Welcome: React.FC<WelcomeProps> = ({ isConfigured, onDevLogin }) => {
+export const Welcome: React.FC<WelcomeProps> = ({
+  isConfigured,
+  onDevLogin,
+  onStartOnboarding,
+  renderGoogleButton,
+}) => {
+  useEffect(() => {
+    if (isConfigured) {
+      renderGoogleButton('google-btn-container');
+    }
+  }, [isConfigured, renderGoogleButton]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
@@ -37,7 +50,14 @@ export const Welcome: React.FC<WelcomeProps> = ({ isConfigured, onDevLogin }) =>
             </div>
           )}
 
-          <div className="mt-6 flex justify-center">
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={onStartOnboarding}
+              className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20"
+            >
+              Start Secure Onboarding
+            </button>
             <button
               type="button"
               onClick={onDevLogin}

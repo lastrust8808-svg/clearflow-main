@@ -6,14 +6,10 @@ import {
   type MembershipIntakeDraft,
   type OnboardingPath,
 } from '../../services/onboarding.service';
-
-const STORAGE_KEY = 'clearflow-membership-intake-draft';
-const STORAGE_ID_KEY = 'clearflow-membership-intake-draft-id';
-
-export const clearStoredMembershipDraft = () => {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_ID_KEY);
-};
+import {
+  MEMBERSHIP_DRAFT_ID_STORAGE_KEY,
+  MEMBERSHIP_DRAFT_STORAGE_KEY,
+} from '../../services/membershipDraft.service';
 
 interface MembershipEstablishmentProps {
   selectedPath: OnboardingPath;
@@ -126,13 +122,13 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
 
     try {
       const draft = buildDraft();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+      localStorage.setItem(MEMBERSHIP_DRAFT_STORAGE_KEY, JSON.stringify(draft));
 
-      const existingDraftId = localStorage.getItem(STORAGE_ID_KEY);
+      const existingDraftId = localStorage.getItem(MEMBERSHIP_DRAFT_ID_STORAGE_KEY);
       const saved = await saveOnboardingDraft(draft, existingDraftId);
       const backendDraftId = saved.draft.id;
 
-      localStorage.setItem(STORAGE_ID_KEY, backendDraftId);
+      localStorage.setItem(MEMBERSHIP_DRAFT_ID_STORAGE_KEY, backendDraftId);
 
       if (supportingFiles.length > 0) {
         setSaveMessage('Uploading supporting files...');

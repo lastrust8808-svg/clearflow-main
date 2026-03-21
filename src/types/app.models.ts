@@ -1,3 +1,5 @@
+import type { CoreDataBundle } from './core';
+
 export interface User {
   id: string;
   name: string;
@@ -289,6 +291,7 @@ export interface AppData {
   ratedCharges?: RatedCharge[];
   billingInvoices?: BillingInvoice[];
   settlements?: Settlement[];
+  coreDataSnapshot?: CoreDataBundle;
 }
 
 // === Regulation Z Scope Engine Models ===
