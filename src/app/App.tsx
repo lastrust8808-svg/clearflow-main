@@ -217,6 +217,14 @@ function loadDataForUser(userId: string, authEntities: Entity[], coreDataSnapsho
   const scopedKey = buildScopedKey(DATA_STORAGE_KEY, userId);
   const mappedEntities = mapAuthEntitiesToCore(authEntities);
 
+  if (coreDataSnapshot) {
+    const parsed = normalizeCoreDataBundle(coreDataSnapshot);
+    if (parsed.entities.length === 0 && mappedEntities.length > 0) {
+      return { ...parsed, entities: mappedEntities };
+    }
+    return parsed;
+  }
+
   try {
     const raw = window.localStorage.getItem(scopedKey);
     if (raw) {
@@ -228,14 +236,6 @@ function loadDataForUser(userId: string, authEntities: Entity[], coreDataSnapsho
     }
   } catch {
     // fall through to auth-backed seed data
-  }
-
-  if (coreDataSnapshot) {
-    const parsed = normalizeCoreDataBundle(coreDataSnapshot);
-    if (parsed.entities.length === 0 && mappedEntities.length > 0) {
-      return { ...parsed, entities: mappedEntities };
-    }
-    return parsed;
   }
 
   return buildBlankBundle(mappedEntities);
@@ -321,7 +321,7 @@ export default function App() {
 
     setData(nextData);
     setActiveSection(loadSectionForUser(currentUserId));
-  }, [auth.authStatus, currentUserId]);
+  }, [auth.authStatus, auth.appData?.coreDataSnapshot, auth.appData?.entities, currentUserId]);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !currentUserId) {

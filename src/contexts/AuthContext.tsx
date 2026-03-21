@@ -12,6 +12,10 @@ import {
   verifyLocalAuthChallenge,
 } from '../services/localAuth.service';
 import {
+  loadAccountAppData,
+  saveAccountAppData,
+} from '../services/accountPersistence.service';
+import {
   clearStoredMembershipDraft,
   enrichAppDataFromMembershipDraft,
 } from '../services/membershipDraft.service';
@@ -157,6 +161,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (state.localAccountId) {
       try {
         saveLocalAuthAppData(state.localAccountId, state.appData);
+        void saveAccountAppData(state.localAccountId, state.appData).catch((error) => {
+          console.warn('Failed to mirror local account data to durable storage.', error);
+        });
         setSavingStatus('saved');
         setTimeout(() => setSavingStatus('idle'), 2500);
       } catch (err) {
@@ -302,6 +309,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: nextStatus,
     }));
 
+    void loadAccountAppData(result.userId)
+      .then((durableAppData) => {
+        if (!durableAppData) {
+          return;
+        }
+
+        saveLocalAuthAppData(result.userId, durableAppData);
+        initialDataLoaded.current = false;
+
+        setState((current) => {
+          if (current.localAccountId !== result.userId) {
+            return current;
+          }
+
+          const durableStatus: AuthStatus =
+            durableAppData.user.isVerified
+              ? 'authenticated'
+              : durableAppData.user.name &&
+                  (durableAppData.user.email || durableAppData.user.phone)
+                ? 'pending-verification'
+                : 'pending-profile-setup';
+
+          return {
+            ...current,
+            appData: durableAppData,
+            status: durableStatus,
+          };
+        });
+      })
+      .catch((error) => {
+        console.warn('Failed to hydrate local account from durable storage.', error);
+      });
+
     return { success: true };
   };
 
@@ -367,6 +407,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
     } else if (state.localAccountId) {
       saveLocalAuthAppData(state.localAccountId, finalAppData);
+      void saveAccountAppData(state.localAccountId, finalAppData).catch((error) => {
+        console.warn('Failed to persist local account profile setup to durable storage.', error);
+      });
       setState((s) => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
     } else {
       // Invalid state, logout
@@ -409,6 +452,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (nextAppData && state.localAccountId) {
           saveLocalAuthAppData(state.localAccountId, nextAppData);
+          void saveAccountAppData(state.localAccountId, nextAppData).catch((error) => {
+            console.warn('Failed to persist verification state to durable storage.', error);
+          });
         }
 
         setState(s => ({

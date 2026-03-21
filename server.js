@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
+import storageRoutes from './server/routes/storage.js';
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env.local' });
@@ -22,13 +23,14 @@ app.use(cors());
 // Note: Webhook verification needs the raw body, so it's handled separately.
 app.use('/api/plaid/webhook', bodyParser.raw({ type: 'application/json' }));
 // All other routes can use the standard JSON parser.
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '25mb' }));
 
 
 // --- API Routes ---
 // Mount the modular Plaid router at the /api/plaid base path.
 app.use('/api/plaid', plaidApiRoutes);
 app.use('/api/erp', erpRoutes);
+app.use('/api/storage', storageRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {

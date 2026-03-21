@@ -1,3 +1,8 @@
+import {
+  loadAccountDocumentFile,
+  uploadAccountDocumentFile,
+} from './accountPersistence.service';
+
 const DB_NAME = 'clearflow-document-vault';
 const STORE_NAME = 'document-files';
 const DB_VERSION = 1;
@@ -18,6 +23,11 @@ interface StoredDocumentFile {
 
 function buildScopedId(scopeId: string, fileId: string) {
   return `${scopeId}::${fileId}`;
+}
+
+function normalizeScopedFileId(scopeId: string, fileId: string) {
+  const prefix = `${scopeId}::`;
+  return fileId.startsWith(prefix) ? fileId.slice(prefix.length) : fileId;
 }
 
 function getActiveScopeId() {
@@ -73,12 +83,17 @@ async function withStore<T>(
   });
 }
 
+async function cacheStoredFile(record: StoredDocumentFile) {
+  await withStore('readwrite', (store) => store.put(record));
+}
+
 export async function saveDocumentFile(fileId: string, file: File) {
   const ownerScopeId = getActiveScopeId();
+  const scopedId = normalizeScopedFileId(ownerScopeId, fileId);
   const record: StoredDocumentFile = {
-    id: buildScopedId(ownerScopeId, fileId),
+    id: buildScopedId(ownerScopeId, scopedId),
     ownerScopeId,
-    scopedId: fileId,
+    scopedId,
     fileName: file.name,
     mimeType: file.type || 'application/octet-stream',
     sizeBytes: file.size,
@@ -87,6 +102,14 @@ export async function saveDocumentFile(fileId: string, file: File) {
   };
 
   await withStore('readwrite', (store) => store.put(record));
+
+  if (ownerScopeId !== GLOBAL_VAULT_SCOPE) {
+    try {
+      await uploadAccountDocumentFile(ownerScopeId, scopedId, file);
+    } catch (error) {
+      console.warn('Failed to mirror document file to durable account storage.', error);
+    }
+  }
 
   return {
     fileName: record.fileName,
@@ -98,15 +121,55 @@ export async function saveDocumentFile(fileId: string, file: File) {
 }
 
 export async function getDocumentFile(fileId: string) {
+  const activeScopeId = getActiveScopeId();
+  const scopedLookupId = buildScopedId(activeScopeId, normalizeScopedFileId(activeScopeId, fileId));
   const scopedResult = await withStore<StoredDocumentFile | undefined>('readonly', (store) =>
-    store.get(buildScopedId(getActiveScopeId(), fileId))
+    store.get(scopedLookupId)
   );
 
   if (scopedResult) {
     return scopedResult;
   }
 
-  return withStore<StoredDocumentFile | undefined>('readonly', (store) => store.get(fileId));
+  const legacyLocalResult = await withStore<StoredDocumentFile | undefined>('readonly', (store) =>
+    store.get(fileId)
+  );
+
+  if (legacyLocalResult) {
+    return legacyLocalResult;
+  }
+
+  if (activeScopeId === GLOBAL_VAULT_SCOPE) {
+    return undefined;
+  }
+
+  try {
+    const remoteFile = await loadAccountDocumentFile(
+      activeScopeId,
+      normalizeScopedFileId(activeScopeId, fileId)
+    );
+
+    if (!remoteFile) {
+      return undefined;
+    }
+
+    const cachedRecord: StoredDocumentFile = {
+      id: scopedLookupId,
+      ownerScopeId: activeScopeId,
+      scopedId: normalizeScopedFileId(activeScopeId, fileId),
+      fileName: remoteFile.fileName,
+      mimeType: remoteFile.mimeType,
+      sizeBytes: remoteFile.sizeBytes,
+      uploadedAt: remoteFile.uploadedAt,
+      blob: remoteFile.blob,
+    };
+
+    await cacheStoredFile(cachedRecord);
+    return cachedRecord;
+  } catch (error) {
+    console.warn('Failed to load document file from durable account storage.', error);
+    return undefined;
+  }
 }
 
 export async function downloadDocumentFile(fileId: string, fallbackName?: string) {
