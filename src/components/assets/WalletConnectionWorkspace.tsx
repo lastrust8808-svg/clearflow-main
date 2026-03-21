@@ -103,6 +103,7 @@ export default function WalletConnectionWorkspace({
           wallet.network.toLowerCase().includes(network)
         )
       ).length,
+      liveBroadcast: data.wallets.filter((wallet) => wallet.executionSupport === 'live_broadcast').length,
     }),
     [data.wallets]
   );
@@ -226,6 +227,12 @@ export default function WalletConnectionWorkspace({
             </span>
             <strong style={{ fontSize: 24 }}>{walletCounts.evmReady}</strong>
           </div>
+          <div style={statTileStyle}>
+            <span style={{ fontSize: 12, color: '#7dd3fc', textTransform: 'uppercase' }}>
+              Live Broadcast
+            </span>
+            <strong style={{ fontSize: 24 }}>{walletCounts.liveBroadcast}</strong>
+          </div>
         </div>
 
         <div style={cardStyle}>
@@ -303,7 +310,7 @@ export default function WalletConnectionWorkspace({
               {isConnecting ? 'Connecting...' : 'Connect Wallet'}
             </button>
             <span style={{ color: '#cbd5e1', fontSize: 13 }}>
-              Injected EVM wallets will be requested in-browser when available. Other providers can be tracked as custody records now and upgraded later.
+              Injected EVM wallets can move into live broadcast mode. Bitcoin, Solana, and manual custody records still support proof, reserve tracking, and controlled release even before direct payout execution is wired in.
             </span>
           </div>
         </div>
@@ -369,6 +376,12 @@ export default function WalletConnectionWorkspace({
                 <div style={{ color: '#cbd5e1', fontSize: 13 }}>
                   Last sync: {wallet.lastSyncAt ? new Date(wallet.lastSyncAt).toLocaleString() : 'Never'}
                 </div>
+                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                  Execution: {wallet.executionSupport || 'manual_release'}
+                </div>
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
+                {wallet.executionNotes || 'Wallet execution details will appear here as support expands.'}
               </div>
             </div>
           ))}

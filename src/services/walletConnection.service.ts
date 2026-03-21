@@ -7,6 +7,7 @@ import type {
   TransactionRecord,
   TreasuryAccountRecord,
   WalletConnectionProvider,
+  WalletExecutionSupport,
   WalletRecord,
 } from '../types/core';
 
@@ -137,6 +138,49 @@ const getNetworkProfile = (network: string) => {
   };
 };
 
+export function getWalletExecutionSupport(
+  network: string,
+  provider: WalletConnectionProvider
+): {
+  mode: WalletExecutionSupport;
+  notes: string;
+} {
+  const normalizedNetwork = network.toLowerCase();
+  const isInjectedEvmNetwork = ['ethereum', 'base', 'polygon'].some((label) =>
+    normalizedNetwork.includes(label)
+  );
+
+  if (
+    isInjectedEvmNetwork &&
+    (provider === 'metamask' || provider === 'coinbase')
+  ) {
+    return {
+      mode: 'live_broadcast',
+      notes:
+        'This wallet can request live injected signing and broadcast for EVM-compatible payouts.',
+    };
+  }
+
+  if (
+    provider === 'manual' ||
+    provider === 'walletconnect' ||
+    normalizedNetwork.includes('bitcoin') ||
+    normalizedNetwork.includes('solana')
+  ) {
+    return {
+      mode: 'manual_release',
+      notes:
+        'This wallet can anchor custody, proof, and controlled release, but payout execution still needs manual confirmation on this network/provider.',
+    };
+  }
+
+  return {
+    mode: 'read_only',
+    notes:
+      'This wallet is tracked for visibility and reconciliation, but live payout execution is not enabled yet.',
+  };
+}
+
 const normalizeNetwork = (network: string, chainId?: string) => {
   if (!chainId) {
     return network;
@@ -205,6 +249,7 @@ export async function connectDigitalWallet(
   const profile = getNetworkProfile(network);
   const address = resolved.address || buildFallbackAddress(network);
   const now = new Date().toISOString();
+  const executionSupport = getWalletExecutionSupport(network, payload.provider);
   const providerLabel =
     payload.provider === 'walletconnect'
       ? 'WalletConnect'
@@ -229,6 +274,8 @@ export async function connectDigitalWallet(
             : 'multisig',
       connectionProvider: payload.provider,
       connectionStatus: 'connected',
+      executionSupport: executionSupport.mode,
+      executionNotes: executionSupport.notes,
       lastSyncAt: now,
       linkedTreasuryAccountId: payload.linkedTreasuryAccountId,
       linkedLedgerAccountId: payload.linkedLedgerAccountId,
@@ -238,8 +285,8 @@ export async function connectDigitalWallet(
         : `${providerLabel} added as a wallet control record.`,
     },
     notice: resolved.injected
-      ? `${providerLabel} connected on ${network} and ready to sync into treasury/accounting.`
-      : `${providerLabel} wallet record created. Add more wallet details later if needed.`,
+      ? `${providerLabel} connected on ${network} and ready to sync into treasury/accounting. ${executionSupport.notes}`
+      : `${providerLabel} wallet record created. ${executionSupport.notes}`,
   };
 }
 
@@ -438,6 +485,18 @@ export function syncConnectedWallet(
       connectionStatus: 'connected',
       lastSyncAt: now,
       nativeAssetSymbol: payload.wallet.nativeAssetSymbol || profile.symbol,
+      executionSupport:
+        payload.wallet.executionSupport ||
+        getWalletExecutionSupport(
+          payload.wallet.network,
+          payload.wallet.connectionProvider || 'manual'
+        ).mode,
+      executionNotes:
+        payload.wallet.executionNotes ||
+        getWalletExecutionSupport(
+          payload.wallet.network,
+          payload.wallet.connectionProvider || 'manual'
+        ).notes,
     },
     digitalAsset,
     onChainTransaction,

@@ -1675,6 +1675,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         setOperationsNotice(
           `Vendor ${liveVendor.name} does not have a digital wallet address on file yet, so release stayed in controlled queue mode.`
         );
+      } else if (liveWallet.executionSupport === 'manual_release') {
+        setOperationsNotice(
+          `Wallet ${liveWallet.name} is in controlled manual-release mode on ${liveWallet.network}, so the payout stayed queued for operator confirmation.`
+        );
+      } else if (liveWallet.executionSupport === 'read_only') {
+        setOperationsNotice(
+          `Wallet ${liveWallet.name} is currently read-only for payout execution, so release stayed in controlled queue mode.`
+        );
       } else {
         setOperationsNotice(
           'Injected-wallet broadcast is not available for this wallet/network, so release stayed in controlled queue mode.'

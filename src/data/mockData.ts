@@ -868,6 +868,9 @@ export const coreMockData: CoreDataBundle = {
       custodyType: 'multisig',
       connectionProvider: 'manual',
       connectionStatus: 'connected',
+      executionSupport: 'manual_release',
+      executionNotes:
+        'This wallet is ready for proof, reserve tracking, and controlled release. Live payout execution will switch on when an injected or provider-backed Ethereum path is connected.',
       lastSyncAt: '2026-03-18T15:12:00Z',
       linkedTreasuryAccountId: 'tre-001',
       linkedLedgerAccountId: 'led-digital-001',
@@ -884,6 +887,9 @@ export const coreMockData: CoreDataBundle = {
       custodyType: 'self_custody',
       connectionProvider: 'manual',
       connectionStatus: 'connected',
+      executionSupport: 'manual_release',
+      executionNotes:
+        'Bitcoin wallet activity is tracked directly in treasury and ledger records, while payout release remains operator-controlled.',
       lastSyncAt: '2026-03-16T10:40:00Z',
       linkedTreasuryAccountId: 'tre-002',
       linkedLedgerAccountId: 'led-digital-001',

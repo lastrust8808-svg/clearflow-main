@@ -526,7 +526,11 @@ export default function PaymentRecordModal({
                   }}
                 >
                   {selectedWallet
-                    ? `Wallet ${selectedWallet.name} will anchor the on-chain proof and treasury settlement link.`
+                    ? selectedWallet.executionSupport === 'live_broadcast'
+                      ? `Wallet ${selectedWallet.name} is live-broadcast ready for on-chain settlement.`
+                      : selectedWallet.executionSupport === 'manual_release'
+                        ? `Wallet ${selectedWallet.name} will anchor proof and controlled release, but final settlement still requires manual chain confirmation on this network/provider.`
+                        : `Wallet ${selectedWallet.name} is currently read-only for payout execution and will stay in controlled queue mode.`
                     : 'Pick a connected wallet to create the on-chain settlement record.'}
                 </div>
               </div>

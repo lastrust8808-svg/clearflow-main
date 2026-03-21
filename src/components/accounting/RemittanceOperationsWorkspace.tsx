@@ -297,6 +297,17 @@ export default function RemittanceOperationsWorkspace({
                         </div>
                       </div>
                     ) : null}
+                    {payment.method === 'digital_asset' ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Execution Mode</strong>
+                        <div>
+                          {payment.linkedWalletId
+                            ? wallets.find((item) => item.id === payment.linkedWalletId)?.executionSupport ||
+                              'manual_release'
+                            : 'manual_release'}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div

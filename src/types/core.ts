@@ -213,6 +213,8 @@ export type WalletConnectionStatus =
   | 'syncing'
   | 'attention_needed';
 
+export type WalletExecutionSupport = 'live_broadcast' | 'manual_release' | 'read_only';
+
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
 export type InterEntitySettlementMode = 'mirrored_halves' | 'cross_entity_clearing';
@@ -340,6 +342,8 @@ export interface WalletRecord {
   custodyType: CustodyType;
   connectionProvider?: WalletConnectionProvider;
   connectionStatus?: WalletConnectionStatus;
+  executionSupport?: WalletExecutionSupport;
+  executionNotes?: string;
   lastSyncAt?: string;
   linkedTreasuryAccountId?: string;
   linkedLedgerAccountId?: string;
