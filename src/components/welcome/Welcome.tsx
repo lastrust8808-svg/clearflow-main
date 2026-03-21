@@ -165,12 +165,11 @@ export const Welcome: React.FC<WelcomeProps> = ({
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          opacity: 0.3,
+          opacity: 0.14,
           backgroundImage:
             'radial-gradient(rgba(255,255,255,0.34) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.16) 0.8px, transparent 0.8px)',
           backgroundPosition: '0 0, 18px 18px',
           backgroundSize: '36px 36px',
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 75%)',
         }}
       />
 
@@ -195,7 +194,6 @@ export const Welcome: React.FC<WelcomeProps> = ({
             background: 'rgba(24, 18, 42, 0.74)',
             border: '1px solid rgba(126, 242, 255, 0.16)',
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
-            backdropFilter: 'blur(18px)',
             display: 'grid',
             gap: 24,
           }}
@@ -278,7 +276,6 @@ export const Welcome: React.FC<WelcomeProps> = ({
             background: 'rgba(28, 19, 45, 0.86)',
             border: '1px solid rgba(126, 242, 255, 0.16)',
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
-            backdropFilter: 'blur(20px)',
             display: 'grid',
             gap: 18,
           }}

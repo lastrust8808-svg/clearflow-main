@@ -178,12 +178,11 @@ export default function AppShell({
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          opacity: themePalette.sparkleOpacity,
+          opacity: Math.min(themePalette.sparkleOpacity, 0.18),
           backgroundImage:
             'radial-gradient(rgba(255,255,255,0.35) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.18) 0.8px, transparent 0.8px)',
           backgroundPosition: '0 0, 18px 18px',
           backgroundSize: '36px 36px',
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 75%)',
         }}
       />
       <aside
@@ -193,7 +192,6 @@ export default function AppShell({
           borderRight: '1px solid var(--cf-border)',
           padding: '24px 16px',
           background: themePalette.sidebarBackground,
-          backdropFilter: 'blur(18px)',
           boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.05)',
         }}
       >
@@ -264,7 +262,6 @@ export default function AppShell({
                       boxShadow: isActive
                         ? '0 10px 28px rgba(54, 215, 255, 0.16)'
                         : 'none',
-                      transition: 'all 160ms ease',
                       display: 'grid',
                       gap: 4,
                     }}
