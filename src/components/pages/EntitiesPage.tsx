@@ -3,6 +3,7 @@ import type { CoreDataBundle } from '../../types/core';
 import PageSection from '../ui/PageSection';
 import EntityProfileCard from '../entities/EntityProfileCard';
 import EntityResourceStudio from '../entities/EntityResourceStudio';
+import EntityExecutionStudio from '../entities/EntityExecutionStudio';
 import StatCard from '../ui/StatCard';
 
 interface EntitiesPageProps {
@@ -65,6 +66,13 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
         description="Create the working resources an entity needs to operate: bank accounts, wallets, authority records, obligations, instruments, and control documents."
       >
         <EntityResourceStudio data={data} setData={setData} />
+      </PageSection>
+
+      <PageSection
+        title="Entity Execution Studio"
+        description="Launch linked setup bundles for formation, signers, banking, governing documents, and compliance kickoff."
+      >
+        <EntityExecutionStudio data={data} setData={setData} />
       </PageSection>
     </div>
   );
