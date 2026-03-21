@@ -1,14 +1,31 @@
 const DB_NAME = 'clearflow-document-vault';
 const STORE_NAME = 'document-files';
 const DB_VERSION = 1;
+const GLOBAL_VAULT_SCOPE = 'global';
+
+let activeVaultScopeId = GLOBAL_VAULT_SCOPE;
 
 interface StoredDocumentFile {
   id: string;
+  ownerScopeId: string;
+  scopedId: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
   uploadedAt: string;
   blob: Blob;
+}
+
+function buildScopedId(scopeId: string, fileId: string) {
+  return `${scopeId}::${fileId}`;
+}
+
+function getActiveScopeId() {
+  return activeVaultScopeId || GLOBAL_VAULT_SCOPE;
+}
+
+export function setDocumentVaultScope(scopeId: string | null | undefined) {
+  activeVaultScopeId = scopeId || GLOBAL_VAULT_SCOPE;
 }
 
 function openDocumentVault(): Promise<IDBDatabase> {
@@ -57,8 +74,11 @@ async function withStore<T>(
 }
 
 export async function saveDocumentFile(fileId: string, file: File) {
+  const ownerScopeId = getActiveScopeId();
   const record: StoredDocumentFile = {
-    id: fileId,
+    id: buildScopedId(ownerScopeId, fileId),
+    ownerScopeId,
+    scopedId: fileId,
     fileName: file.name,
     mimeType: file.type || 'application/octet-stream',
     sizeBytes: file.size,
@@ -78,6 +98,14 @@ export async function saveDocumentFile(fileId: string, file: File) {
 }
 
 export async function getDocumentFile(fileId: string) {
+  const scopedResult = await withStore<StoredDocumentFile | undefined>('readonly', (store) =>
+    store.get(buildScopedId(getActiveScopeId(), fileId))
+  );
+
+  if (scopedResult) {
+    return scopedResult;
+  }
+
   return withStore<StoredDocumentFile | undefined>('readonly', (store) => store.get(fileId));
 }
 

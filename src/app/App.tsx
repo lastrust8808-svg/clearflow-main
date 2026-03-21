@@ -4,6 +4,7 @@ import type { Entity } from '../types/app.models';
 import { useAuth } from '../hooks/useAuth';
 import { coreMockData } from '../data/mockData';
 import AppShell from '../components/layout/AppShell';
+import { setDocumentVaultScope } from '../services/documentVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
@@ -299,8 +300,13 @@ export default function App() {
       setEntryStage('welcome');
       setActiveSection('overview');
       setData(coreMockData);
+      setDocumentVaultScope(null);
     }
   }, [auth.authStatus]);
+
+  useEffect(() => {
+    setDocumentVaultScope(currentUserId);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !currentUserId) {
