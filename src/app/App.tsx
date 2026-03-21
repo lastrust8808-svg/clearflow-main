@@ -320,6 +320,11 @@ export default function App() {
     () => mapAuthEntitiesToCore(auth.appData?.entities ?? []),
     [auth.appData?.entities]
   );
+  const dataSignature = useMemo(() => JSON.stringify(data), [data]);
+  const authSnapshotSignature = useMemo(
+    () => JSON.stringify(auth.appData?.coreDataSnapshot ?? null),
+    [auth.appData?.coreDataSnapshot]
+  );
 
   useEffect(() => {
     if (auth.authStatus === 'unauthenticated') {
@@ -344,12 +349,21 @@ export default function App() {
       auth.appData?.entities ?? [],
       auth.appData?.coreDataSnapshot
     );
+    const nextDataSignature = JSON.stringify(nextData);
 
-    setData(nextData);
+    if (nextDataSignature !== dataSignature) {
+      setData(nextData);
+    }
     const hashSection =
       typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
     setActiveSection(hashSection || loadSectionForUser(currentUserId));
-  }, [auth.authStatus, auth.appData?.coreDataSnapshot, auth.appData?.entities, currentUserId]);
+  }, [
+    auth.authStatus,
+    auth.appData?.coreDataSnapshot,
+    auth.appData?.entities,
+    currentUserId,
+    dataSignature,
+  ]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -369,8 +383,10 @@ export default function App() {
     }
 
     window.localStorage.setItem(buildScopedKey(DATA_STORAGE_KEY, currentUserId), JSON.stringify(data));
-    auth.updateCoreDataSnapshot(data);
-  }, [auth, auth.authStatus, currentUserId, data]);
+    if (authSnapshotSignature !== dataSignature) {
+      auth.updateCoreDataSnapshot(data);
+    }
+  }, [auth, auth.authStatus, authSnapshotSignature, currentUserId, data, dataSignature]);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !currentUserId) {
