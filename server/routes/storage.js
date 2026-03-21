@@ -2,9 +2,12 @@ import express from 'express';
 import {
   loadAccountAppData,
   loadAccountDocumentFile,
+  loadAccountRemittanceVault,
   saveAccountAppData,
   saveAccountDocumentFile,
+  saveAccountRemittanceVault,
 } from '../services/accountStorage.js';
+import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
 
@@ -79,6 +82,95 @@ router.post('/accounts/:accountId/files', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to save document file.',
+    });
+  }
+});
+
+router.get('/accounts/:accountId/vendors/:vendorId/remittance-instructions', async (req, res) => {
+  try {
+    const record = await loadAccountRemittanceVault(req.params.accountId, req.params.vendorId);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Remittance instructions not found.',
+      });
+    }
+
+    const instructions = decryptJson(record.encryptedPayload);
+    return res.status(200).json({
+      success: true,
+      instructions,
+      savedAt: record.savedAt,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load remittance instructions.',
+    });
+  }
+});
+
+router.put('/accounts/:accountId/vendors/:vendorId/remittance-instructions', async (req, res) => {
+  const {
+    beneficiaryName,
+    bankName,
+    routingNumber,
+    accountNumber,
+    accountType,
+    railPreference,
+    remittanceEmail,
+  } = req.body || {};
+
+  if (!beneficiaryName || !routingNumber || !accountNumber) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing remittance instruction payload.',
+    });
+  }
+
+  try {
+    const encryptedPayload = encryptJson({
+      beneficiaryName,
+      bankName,
+      routingNumber,
+      accountNumber,
+      accountType,
+      railPreference,
+      remittanceEmail,
+    });
+
+    const result = await saveAccountRemittanceVault(
+      req.params.accountId,
+      req.params.vendorId,
+      {
+        encryptedPayload,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      result,
+      masked: {
+        beneficiaryName,
+        bankName,
+        accountMask: String(accountNumber).slice(-4),
+        routingMask: String(routingNumber).slice(-4),
+        accountType,
+        railPreference,
+        remittanceEmail,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to save remittance instructions.',
     });
   }
 });

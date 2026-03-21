@@ -75,3 +75,29 @@ export async function sendInvoiceEmail({
 
   return info;
 }
+
+export async function sendPlainEmail({
+  to,
+  subject,
+  text,
+  html,
+  replyTo,
+  fromName,
+}) {
+  const activeTransporter = getTransporter();
+  if (!activeTransporter) {
+    throw new Error('SMTP is not configured.');
+  }
+
+  const fromAddress = process.env.SMTP_FROM_EMAIL;
+  const senderName = fromName || process.env.SMTP_FROM_NAME || 'ClearFlow';
+
+  return activeTransporter.sendMail({
+    from: `"${senderName}" <${fromAddress}>`,
+    to,
+    replyTo: replyTo || fromAddress,
+    subject,
+    text,
+    html,
+  });
+}

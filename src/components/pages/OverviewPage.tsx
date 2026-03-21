@@ -25,6 +25,12 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const autoReconciledCount = settlementFlows.filter(
     (item) => item.derivedAutoReconcileStatus === 'matched'
   ).length;
+  const privateTreasuryCount = data.treasuryAccounts.filter(
+    (item) => item.originatingAuthority === 'private_ledger_only'
+  ).length;
+  const instrumentDischargeCount = data.instrumentSettlements.filter(
+    (item) => item.dischargeMethod === 'instrument_performance'
+  ).length;
   const reviewItems = [
     ...data.complianceTags.filter((item) => item.status === 'review'),
     ...data.digitalAssetCompliance.filter(
@@ -57,6 +63,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
           value={`$${totalDigitalEstimatedValue.toLocaleString()}`}
         />
         <StatCard label="Wallets" value={data.wallets.length} />
+        <StatCard label="Treasury Accounts" value={data.treasuryAccounts.length} />
+        <StatCard label="Private Treasury Only" value={privateTreasuryCount} />
+        <StatCard label="Instrument Discharges" value={instrumentDischargeCount} />
         <StatCard label="Liquid Cash Ready" value={liquidCashReadyCount} />
         <StatCard label="Auto Reconciled" value={autoReconciledCount} />
         <StatCard label="Review Items" value={reviewItems} />
@@ -100,6 +109,27 @@ export default function OverviewPage({ data }: OverviewPageProps) {
             <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
               Every transaction can now be viewed as a settlement flow, whether it clears as liquid
               cash, a tokenized credit, or a controlled debit with proof.
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Private Treasury Layer"
+            subtitle="Reserve, remittance clearing, and instrument pools before outside rails"
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+              Treasury accounts now separate private-ledger discharge from bank-backed discharge,
+              so obligations, reserves, and remittance pools can be tracked before external cash
+              rails are used.
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Instrument Performance"
+            subtitle="Recognize obligation, present remittance, then discharge by contract logic"
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+              Instrument settlements and remittance statements now model note/performance logic
+              directly, instead of forcing everything to look like an ordinary bank payment.
             </div>
           </RecordCard>
 

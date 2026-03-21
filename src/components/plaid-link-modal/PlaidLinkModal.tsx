@@ -14,6 +14,7 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isMockMode = !!linkToken?.startsWith('link-sandbox-mock-');
 
   useEffect(() => {
     const createToken = async () => {
@@ -45,8 +46,12 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
     }
   }, [currentUser, onConnected]);
 
+  const handleMockConnect = useCallback(async () => {
+    await onSuccess(`public-sandbox-mock-${Date.now()}`);
+  }, [onSuccess]);
+
   const { open, ready } = usePlaidLink({
-    token: linkToken,
+    token: isMockMode ? null : linkToken,
     onSuccess,
     onExit: (err, metadata) => {
       if (err) {
@@ -78,6 +83,24 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
                 <p className="text-sm text-slate-400">Please wait while we finalize your account connection.</p>
             </div>
         );
+    }
+
+    if (isMockMode) {
+      return (
+        <>
+          <p className="text-sm text-slate-400 mb-6">
+            The production Plaid backend is not configured in this environment yet, so ClearFlow
+            will create a live-ready mock connection. That lets you test the operational ledger,
+            bank-feed rules, and auto-reconcile flow right now without blocking the build path.
+          </p>
+          <button
+            onClick={handleMockConnect}
+            className="w-full py-3 bg-cyan-600 text-white font-semibold rounded-md hover:bg-cyan-700"
+          >
+            Connect Demo Bank Feed
+          </button>
+        </>
+      );
     }
 
     return (

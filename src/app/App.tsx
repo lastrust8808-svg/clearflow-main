@@ -15,7 +15,7 @@ const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
 const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
 const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
 const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
-const AIStudioPage = lazy(() => import('../components/pages/AIStudioPage'));
+const AIStudioPage = lazy(() => import('../components/pages/AiStudioPage'));
 const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
 const MembershipEstablishment = lazy(() =>
   import('../components/membership-establishment/MembershipEstablishment').then((module) => ({
@@ -140,6 +140,9 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     accountingPeriods: [],
     journalEntries: [],
     settlements: [],
+    treasuryAccounts: [],
+    instrumentSettlements: [],
+    remittanceStatements: [],
     ledgerAccounts: [],
     assets: [],
     wallets: [],
@@ -156,6 +159,8 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     documents: [],
     tokens: [],
     aiWorkflows: coreMockData.aiWorkflows,
+    bankFeedRules: [],
+    bankFeedEntries: [],
     workspaceSettings: coreMockData.workspaceSettings,
   };
 }
@@ -179,6 +184,11 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     accountingPeriods: candidate.accountingPeriods ?? coreMockData.accountingPeriods,
     journalEntries: candidate.journalEntries ?? coreMockData.journalEntries,
     settlements: candidate.settlements ?? coreMockData.settlements,
+    treasuryAccounts: candidate.treasuryAccounts ?? coreMockData.treasuryAccounts,
+    instrumentSettlements:
+      candidate.instrumentSettlements ?? coreMockData.instrumentSettlements,
+    remittanceStatements:
+      candidate.remittanceStatements ?? coreMockData.remittanceStatements,
     ledgerAccounts: candidate.ledgerAccounts ?? coreMockData.ledgerAccounts,
     assets: candidate.assets ?? coreMockData.assets,
     wallets: candidate.wallets ?? coreMockData.wallets,
@@ -197,6 +207,8 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     documents: candidate.documents ?? coreMockData.documents,
     tokens: candidate.tokens ?? coreMockData.tokens,
     aiWorkflows: candidate.aiWorkflows ?? coreMockData.aiWorkflows,
+    bankFeedRules: candidate.bankFeedRules ?? coreMockData.bankFeedRules,
+    bankFeedEntries: candidate.bankFeedEntries ?? coreMockData.bankFeedEntries,
     workspaceSettings: candidate.workspaceSettings ?? coreMockData.workspaceSettings,
   };
 }
@@ -467,6 +479,7 @@ export default function App() {
           pendingCredentialAuth={auth.pendingCredentialAuth}
           onStartCredentialAuth={auth.startCredentialAuth}
           onVerifyCredentialAuth={auth.verifyCredentialAuth}
+          onSignInWithPassword={auth.signInWithPassword}
           onCancelCredentialAuth={auth.cancelCredentialAuth}
         />
       </Suspense>

@@ -14,13 +14,21 @@ interface SignalEvaluatePayload {
   device?: PlaidDevice;
 }
 
-// FIX: Access environment variables from the custom window.process object.
-const API_BASE_URL = (window as any).process?.env?.REACT_APP_API_BASE_URL;
+const RUNTIME_API_BASE =
+  (window as any).process?.env?.REACT_APP_API_BASE_URL ||
+  (window as any).process?.env?.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin.includes('localhost')
+      ? 'http://localhost:8000'
+      : window.location.origin
+    : 'http://localhost:8000');
+
+const PLAID_API_BASE = `${RUNTIME_API_BASE.replace(/\/$/, '')}/api/plaid`;
 
 class PlaidService {
   
   private isBackendConfigured(): boolean {
-    return !!API_BASE_URL && !API_BASE_URL.includes('YOUR_NGROK');
+    return !!RUNTIME_API_BASE && !RUNTIME_API_BASE.includes('YOUR_NGROK');
   }
 
   // ============== REAL API IMPLEMENTATIONS ==============
@@ -30,7 +38,7 @@ class PlaidService {
       console.warn('Backend not configured, using mock link token.');
       return Promise.resolve({ link_token: `link-sandbox-mock-${Date.now()}`});
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/link_token`, {
+    const response = await fetch(`${PLAID_API_BASE}/link_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
@@ -48,7 +56,7 @@ class PlaidService {
        const identityMatchScores = await this.getMockMatchIdentity(userName, bankOwnerName);
        return { authResponse, identityData, identityMatchScores, itemId: `mock-item-${Date.now()}` };
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/exchange_public_token`, {
+    const response = await fetch(`${PLAID_API_BASE}/exchange_public_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ public_token: publicToken, userId, userName })
@@ -62,14 +70,14 @@ class PlaidService {
 
   async getTransactions(itemId: string): Promise<PlaidTransaction[]> {
      if (!this.isBackendConfigured()) return Promise.resolve([]);
-     const response = await fetch(`${API_BASE_URL}/plaid/transactions/${itemId}`);
+     const response = await fetch(`${PLAID_API_BASE}/transactions/${itemId}`);
      if (!response.ok) throw new Error('Failed to fetch transactions');
      return response.json();
   }
   
   async syncTransactions(itemId: string): Promise<PlaidTransaction[]> {
     if (!this.isBackendConfigured()) return Promise.resolve([]);
-    const response = await fetch(`${API_BASE_URL}/plaid/transactions/sync`, {
+    const response = await fetch(`${PLAID_API_BASE}/transactions/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId })
@@ -84,7 +92,7 @@ class PlaidService {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for getAuth.');
       return this.getMockAuth(itemId, initialAmount);
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/auth/get`, {
+    const response = await fetch(`${PLAID_API_BASE}/auth/get`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId, initialAmount })
@@ -101,7 +109,7 @@ class PlaidService {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for getIdentity.');
       return this.getMockIdentity(itemId, userName);
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/identity/get`, {
+     const response = await fetch(`${PLAID_API_BASE}/identity/get`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId, userName })
@@ -118,7 +126,7 @@ class PlaidService {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for matchIdentity.');
       return this.getMockMatchIdentity(userName, bankName);
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/identity/match`, {
+    const response = await fetch(`${PLAID_API_BASE}/identity/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userName, bankName }) // bankName is used for simulation on backend
@@ -135,7 +143,7 @@ class PlaidService {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for signalPrepare.');
       return this.getMockSignalPrepare(itemId);
     }
-    const response = await fetch(`${API_BASE_URL}/plaid/signal/prepare`, {
+    const response = await fetch(`${PLAID_API_BASE}/signal/prepare`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId })
@@ -152,7 +160,7 @@ class PlaidService {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for signalEvaluate.');
       return this.getMockSignalEvaluate(payload);
     }
-     const response = await fetch(`${API_BASE_URL}/plaid/signal/evaluate`, {
+     const response = await fetch(`${PLAID_API_BASE}/signal/evaluate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

@@ -44,6 +44,13 @@ function deriveAutoReconcileStatus(flow: Omit<SettlementFlowView, 'derivedAutoRe
     return 'pending';
   }
 
+  if (
+    flow.settlement.processorStatus === 'blocked' ||
+    flow.settlement.processorStatus === 'requires_review'
+  ) {
+    return 'exception';
+  }
+
   if (!flow.journalEntries.length) {
     return 'pending';
   }
@@ -68,6 +75,7 @@ function deriveAutoReconcileStatus(flow: Omit<SettlementFlowView, 'derivedAutoRe
 
   if (
     flow.settlement.verificationStatus === 'verified' &&
+    flow.settlement.processorStatus !== 'processing' &&
     paymentSettled &&
     proofSettled &&
     reconciliationAligned &&

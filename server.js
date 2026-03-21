@@ -8,6 +8,7 @@ import cors from 'cors';
 import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
 import storageRoutes from './server/routes/storage.js';
+import authRoutes from './server/routes/auth.js';
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env.local' });
@@ -31,6 +32,7 @@ app.use(bodyParser.json({ limit: '25mb' }));
 app.use('/api/plaid', plaidApiRoutes);
 app.use('/api/erp', erpRoutes);
 app.use('/api/storage', storageRoutes);
+app.use('/api/auth', authRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {

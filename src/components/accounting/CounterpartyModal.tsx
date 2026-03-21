@@ -66,6 +66,18 @@ export default function CounterpartyModal({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [routingNumber, setRoutingNumber] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [beneficiaryName, setBeneficiaryName] = useState('');
+  const [accountType, setAccountType] = useState<
+    'checking' | 'savings' | 'business_checking' | 'other'
+  >('business_checking');
+  const [railPreference, setRailPreference] = useState<'ach' | 'eft' | 'wire'>('ach');
+  const [remittanceEmail, setRemittanceEmail] = useState('');
+  const [digitalWalletAddress, setDigitalWalletAddress] = useState('');
+  const [digitalWalletNetwork, setDigitalWalletNetwork] = useState('Ethereum');
+  const [digitalAssetSymbol, setDigitalAssetSymbol] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -74,6 +86,16 @@ export default function CounterpartyModal({
     setPhone('');
     setAddress('');
     setNotes('');
+    setRoutingNumber('');
+    setAccountNumber('');
+    setBankName('');
+    setBeneficiaryName('');
+    setAccountType('business_checking');
+    setRailPreference('ach');
+    setRemittanceEmail('');
+    setDigitalWalletAddress('');
+    setDigitalWalletNetwork('Ethereum');
+    setDigitalAssetSymbol('');
   }, [open, mode]);
 
   if (!open) return null;
@@ -97,6 +119,58 @@ export default function CounterpartyModal({
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" style={inputStyle} />
           </div>
           <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={mode === 'customer' ? 'Billing address' : 'Remit address'} style={inputStyle} />
+          {mode === 'vendor' ? (
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                padding: 14,
+                borderRadius: 12,
+                border: '1px solid rgba(45,212,191,0.25)',
+                background: 'rgba(8,47,73,0.28)',
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#99f6e4' }}>
+                Remittance instructions
+              </div>
+              <div style={{ color: '#cbd5f5', fontSize: 13 }}>
+                Save vendor banking details once so ACH, EFT, wire, and ledger-backed remittance can route automatically.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <input value={beneficiaryName} onChange={(e) => setBeneficiaryName(e.target.value)} placeholder="Beneficiary name" style={inputStyle} />
+                <input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Receiving bank name" style={inputStyle} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <input value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="Routing number" style={inputStyle} />
+                <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 17))} placeholder="Account number" style={inputStyle} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <select value={accountType} onChange={(e) => setAccountType(e.target.value as typeof accountType)} style={inputStyle}>
+                  <option value="business_checking">Business checking</option>
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                  <option value="other">Other</option>
+                </select>
+                <select value={railPreference} onChange={(e) => setRailPreference(e.target.value as typeof railPreference)} style={inputStyle}>
+                  <option value="ach">ACH</option>
+                  <option value="eft">EFT</option>
+                  <option value="wire">Wire</option>
+                </select>
+              </div>
+              <input type="email" value={remittanceEmail} onChange={(e) => setRemittanceEmail(e.target.value)} placeholder="Remittance advice email" style={inputStyle} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <input value={digitalWalletAddress} onChange={(e) => setDigitalWalletAddress(e.target.value)} placeholder="Digital wallet address (optional)" style={inputStyle} />
+                <select value={digitalWalletNetwork} onChange={(e) => setDigitalWalletNetwork(e.target.value)} style={inputStyle}>
+                  <option value="Ethereum">Ethereum</option>
+                  <option value="Base">Base</option>
+                  <option value="Polygon">Polygon</option>
+                  <option value="Bitcoin">Bitcoin</option>
+                  <option value="Solana">Solana</option>
+                </select>
+              </div>
+              <input value={digitalAssetSymbol} onChange={(e) => setDigitalAssetSymbol(e.target.value)} placeholder="Preferred digital asset symbol (USDC, ETH, BTC, SOL)" style={inputStyle} />
+            </div>
+          ) : null}
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -109,7 +183,25 @@ export default function CounterpartyModal({
           <button type="button" onClick={onClose} style={buttonStyle}>Close</button>
           <button
             type="button"
-            onClick={() => onSubmit({ name, email, phone, address, notes })}
+            onClick={() =>
+              onSubmit({
+                name,
+                email,
+                phone,
+                address,
+                notes,
+                routingNumber: routingNumber || undefined,
+                accountNumber: accountNumber || undefined,
+                bankName: bankName || undefined,
+                beneficiaryName: beneficiaryName || undefined,
+                accountType,
+                railPreference,
+                remittanceEmail: remittanceEmail || undefined,
+                digitalWalletAddress: digitalWalletAddress || undefined,
+                digitalWalletNetwork: digitalWalletAddress ? digitalWalletNetwork : undefined,
+                digitalAssetSymbol: digitalAssetSymbol || undefined,
+              })
+            }
             style={buttonStyle}
           >
             Save {mode === 'customer' ? 'Customer' : 'Vendor'}

@@ -7,14 +7,17 @@ import type {
   LocalAuthContactType,
 } from '../services/localAuth.service';
 import {
+  authenticateLocalPassword,
   saveLocalAuthAppData,
   startLocalAuthChallenge,
+  updateLocalAccountCredentials,
   verifyLocalAuthChallenge,
 } from '../services/localAuth.service';
 import {
   loadAccountAppData,
   saveAccountAppData,
 } from '../services/accountPersistence.service';
+import { deliverVerificationCode } from '../services/authVerification.service';
 import {
   clearStoredMembershipDraft,
   enrichAppDataFromMembershipDraft,
@@ -58,13 +61,28 @@ interface AuthContextType {
     contactType: LocalAuthContactType;
     contactValue: string;
     name?: string;
-  }) => { success: boolean; error?: string };
-  verifyCredentialAuth: (code: string) => { success: boolean; error?: string };
+  }) => Promise<{ success: boolean; error?: string }>;
+  verifyCredentialAuth: (input: {
+    code: string;
+    userHandle?: string;
+    password?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  signInWithPassword: (input: {
+    identifier: string;
+    password: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   cancelCredentialAuth: () => void;
+  isLocalCredentialFlow: boolean;
   updateUser: (user: User) => void;
   updateEntities: (entities: Entity[]) => void;
   updateCoreDataSnapshot: (snapshot: CoreDataBundle) => void;
-  completeProfileSetup: (name: string, email?: string, phone?: string) => void;
+  completeProfileSetup: (
+    name: string,
+    email?: string,
+    phone?: string,
+    userHandle?: string,
+    password?: string
+  ) => void;
   completeVerification: () => void;
   logout: () => void;
   requestDriveAccess: () => void;
@@ -251,7 +269,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const startCredentialAuth = (input: {
+  const startCredentialAuth = async (input: {
     contactType: LocalAuthContactType;
     contactValue: string;
     name?: string;
@@ -261,9 +279,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result;
     }
 
+    const delivery = await deliverVerificationCode({
+      contactType: result.challenge.contactType,
+      contactValue: result.challenge.contactValue,
+      maskedTarget: result.challenge.maskedTarget,
+      code: result.challenge.codePreview || '',
+    });
+
     setState((current) => ({
       ...current,
-      pendingCredentialAuth: result.challenge,
+      pendingCredentialAuth: {
+        ...result.challenge,
+        deliveryMode: delivery.deliveryMode,
+        deliveryMessage: delivery.message,
+        codePreview:
+          delivery.deliveryMode === 'in_app_preview'
+            ? result.challenge.codePreview
+            : undefined,
+      },
       gsiUser: null,
       token: null,
       apiAccessToken: null,
@@ -271,20 +304,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       appData: null,
       status: 'unauthenticated',
     }));
-
     return { success: true };
   };
 
-  const verifyCredentialAuth = (code: string) => {
+  const verifyCredentialAuth = async (input: {
+    code: string;
+    userHandle?: string;
+    password?: string;
+  }) => {
     const challenge = state.pendingCredentialAuth;
     if (!challenge) {
       return { success: false, error: 'Request a verification code first.' };
     }
 
-    const result = verifyLocalAuthChallenge({
+    const result = await verifyLocalAuthChallenge({
       contactType: challenge.contactType,
       contactValue: challenge.contactValue,
-      code,
+      code: input.code,
+      userHandle: input.userHandle,
+      password: input.password,
     });
 
     if (!result.success) {
@@ -345,6 +383,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { success: true };
   };
 
+  const signInWithPassword = async (input: {
+    identifier: string;
+    password: string;
+  }) => {
+    const result = await authenticateLocalPassword(input);
+    if (!result.success) {
+      return result;
+    }
+
+    const nextStatus: AuthStatus =
+      result.appData.user.isVerified
+        ? 'authenticated'
+        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
+          ? 'pending-verification'
+          : 'pending-profile-setup';
+
+    setState((current) => ({
+      ...current,
+      appData: result.appData,
+      token: 'local-token',
+      apiAccessToken: null,
+      localAccountId: result.userId,
+      gsiUser: null,
+      pendingCredentialAuth: null,
+      status: nextStatus,
+    }));
+
+    void loadAccountAppData(result.userId)
+      .then((durableAppData) => {
+        if (!durableAppData) {
+          return;
+        }
+
+        saveLocalAuthAppData(result.userId, durableAppData);
+        initialDataLoaded.current = false;
+
+        setState((current) => {
+          if (current.localAccountId !== result.userId) {
+            return current;
+          }
+
+          const durableStatus: AuthStatus =
+            durableAppData.user.isVerified
+              ? 'authenticated'
+              : durableAppData.user.name &&
+                  (durableAppData.user.email || durableAppData.user.phone)
+                ? 'pending-verification'
+                : 'pending-profile-setup';
+
+          return {
+            ...current,
+            appData: durableAppData,
+            status: durableStatus,
+          };
+        });
+      })
+      .catch((error) => {
+        console.warn('Failed to hydrate password-auth account from durable storage.', error);
+      });
+
+    return { success: true };
+  };
+
   const cancelCredentialAuth = () => {
     setState((current) => ({
       ...current,
@@ -373,7 +474,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const completeProfileSetup = (name: string, email?: string, phone?: string) => {
+  const completeProfileSetup = (
+    name: string,
+    email?: string,
+    phone?: string,
+    userHandle?: string,
+    password?: string
+  ) => {
     if (!state.appData) {
       logout();
       return;
@@ -384,6 +491,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       name,
       email: email || state.appData.user.email,
       phone: phone || state.appData.user.phone,
+      userHandle: userHandle || state.appData.user.userHandle,
       isVerified: false,
     };
     const finalAppData = enrichAppDataFromMembershipDraft({
@@ -407,6 +515,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
     } else if (state.localAccountId) {
       saveLocalAuthAppData(state.localAccountId, finalAppData);
+      void updateLocalAccountCredentials({
+        userId: state.localAccountId,
+        appData: finalAppData,
+        userHandle,
+        password,
+      }).catch((error) => {
+        console.warn('Failed to persist local backup credentials.', error);
+      });
       void saveAccountAppData(state.localAccountId, finalAppData).catch((error) => {
         console.warn('Failed to persist local account profile setup to durable storage.', error);
       });
@@ -501,7 +617,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     mockLogin,
     startCredentialAuth,
     verifyCredentialAuth,
+    signInWithPassword,
     cancelCredentialAuth,
+    isLocalCredentialFlow: Boolean(state.localAccountId && !state.apiAccessToken),
     updateUser,
     updateEntities,
     updateCoreDataSnapshot,

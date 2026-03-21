@@ -159,6 +159,12 @@ export type SettlementPath =
   | 'tokenized_debit'
   | 'mixed';
 
+export type DischargeMethod =
+  | 'internal_ledger_credit'
+  | 'instrument_performance'
+  | 'bank_rail_payment'
+  | 'mixed_discharge';
+
 export type SettlementStatus =
   | 'draft'
   | 'routing'
@@ -189,6 +195,23 @@ export type VerificationStatus =
   | 'exception';
 
 export type AutoReconcileStatus = 'pending' | 'matched' | 'partial' | 'exception';
+export type BankFeedConnectionStatus =
+  | 'disconnected'
+  | 'connected'
+  | 'syncing'
+  | 'attention_needed';
+
+export type WalletConnectionProvider =
+  | 'metamask'
+  | 'coinbase'
+  | 'walletconnect'
+  | 'manual';
+
+export type WalletConnectionStatus =
+  | 'disconnected'
+  | 'connected'
+  | 'syncing'
+  | 'attention_needed';
 
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
@@ -287,6 +310,8 @@ export interface LedgerAccountRecord {
     | 'memo';
   currency?: string;
   balance: number;
+  remittanceEligible?: boolean;
+  remittanceClassification?: 'cash' | 'obligation' | 'receivable' | 'reserve' | 'other';
   linkedAssetIds?: string[];
   linkedWalletIds?: string[];
 }
@@ -313,6 +338,12 @@ export interface WalletRecord {
   network: string;
   address: string;
   custodyType: CustodyType;
+  connectionProvider?: WalletConnectionProvider;
+  connectionStatus?: WalletConnectionStatus;
+  lastSyncAt?: string;
+  linkedTreasuryAccountId?: string;
+  linkedLedgerAccountId?: string;
+  nativeAssetSymbol?: string;
   linkedDocumentIds?: string[];
   notes?: string;
 }
@@ -332,6 +363,7 @@ export interface DigitalAssetRecord {
   custodyStatus: CustodyStatus;
   complianceStatus: ComplianceStatus;
   contractAddress?: string;
+  tokenDecimals?: number;
   tokenId?: string;
   explorerUrl?: string;
   linkedLedgerAccountId?: string;
@@ -421,6 +453,9 @@ export interface OnChainTransactionRecord {
   network: string;
   eventType: OnChainEventType;
   assetId?: string;
+  linkedPaymentId?: string;
+  linkedSettlementId?: string;
+  linkedTransactionId?: string;
   timestamp: string;
   feeAmount?: number;
   feeAssetSymbol?: string;
@@ -475,7 +510,10 @@ export interface SettlementRecord {
   linkedJournalEntryIds?: string[];
   linkedReconciliationId?: string;
   linkedOnChainRecordId?: string;
+  linkedInstrumentSettlementId?: string;
+  linkedRemittanceStatementId?: string;
   path: SettlementPath;
+  dischargeMethod?: DischargeMethod;
   direction: 'incoming' | 'outgoing';
   status: SettlementStatus;
   liquidCashStage: LiquidCashStage;
@@ -490,6 +528,26 @@ export interface SettlementRecord {
   initiatedAt: string;
   expectedSettlementDate?: string;
   actualSettlementDate?: string;
+  originSourceType?: 'bank_account' | 'ledger_account' | 'manual_remittance';
+  originSourceId?: string;
+  executionRail?:
+    | 'FedNow'
+    | 'RTP'
+    | 'Fedwire'
+    | 'SameDayACH'
+    | 'StandardACH'
+    | 'LedgerRemittance'
+    | 'None';
+  processorStatus?:
+    | 'queued'
+    | 'processing'
+    | 'settled'
+    | 'requires_review'
+    | 'blocked';
+  executionReason?: string;
+  executionReference?: string;
+  releasedAt?: string;
+  releasedBy?: string;
   reserveBacked?: boolean;
   requiresManualReview?: boolean;
   autoReconcileStatus: AutoReconcileStatus;
@@ -640,6 +698,117 @@ export interface WorkspaceSettingsRecord {
   preferredAccentColor?: string;
 }
 
+export interface TreasuryAccountRecord {
+  id: string;
+  entityId: string;
+  name: string;
+  treasuryType: 'reserve' | 'operational_cash' | 'remittance_clearing' | 'instrument_pool';
+  status: 'active' | 'restricted' | 'archived';
+  currency: string;
+  availableBalance: number;
+  reservedBalance?: number;
+  linkedLedgerAccountId?: string;
+  originatingAuthority:
+    | 'private_ledger_only'
+    | 'bank_partner_required'
+    | 'instrument_only'
+    | 'hybrid';
+  remittanceEnabled: boolean;
+  linkedBankAccountId?: string;
+  linkedObligationIds?: string[];
+  notes?: string;
+}
+
+export interface InstrumentSettlementRecord {
+  id: string;
+  entityId: string;
+  title: string;
+  instrumentId?: string;
+  obligationId?: string;
+  treasuryAccountId?: string;
+  linkedSettlementId?: string;
+  linkedTransactionId?: string;
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
+  dischargeMethod: DischargeMethod;
+  recognitionBasis: 'obligation_recognized_before_cash' | 'cash_settled';
+  performanceStatus: 'draft' | 'issued' | 'presented' | 'performed' | 'disputed';
+  faceAmount: number;
+  performedAmount: number;
+  currency: string;
+  effectiveDate: string;
+  dueDate?: string;
+  remittanceReference?: string;
+  notes?: string;
+}
+
+export interface RemittanceStatementRecord {
+  id: string;
+  entityId: string;
+  title: string;
+  statementDate: string;
+  payerName: string;
+  payeeName: string;
+  amount: number;
+  currency: string;
+  dischargeMethod: DischargeMethod;
+  treasuryAccountId?: string;
+  linkedInstrumentSettlementId?: string;
+  linkedSettlementId?: string;
+  linkedObligationIds?: string[];
+  linkedDocumentIds?: string[];
+  micrLine?: {
+    routingNumber?: string;
+    accountNumberMask?: string;
+    serialNumber?: string;
+    mode: 'informational_only' | 'bank_backed';
+  };
+  status: 'draft' | 'issued' | 'accepted' | 'performed';
+  notes?: string;
+}
+
+export interface BankFeedRuleRecord {
+  id: string;
+  entityId: string;
+  bankAccountId?: string;
+  name: string;
+  merchantContains: string;
+  direction: 'credit' | 'debit' | 'any';
+  transactionType?: 'income' | 'expense' | 'deposit' | 'withdrawal';
+  defaultLedgerAccountId?: string;
+  counterpartyLabel?: string;
+  memoTemplate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  verificationMode: 'bank_confirmation' | 'internal_control_token' | 'manual_review';
+  autoPost: boolean;
+  autoReconcile: boolean;
+  active: boolean;
+}
+
+export interface BankFeedEntryRecord {
+  id: string;
+  entityId: string;
+  bankAccountId: string;
+  sourceProvider: 'plaid' | 'manual';
+  externalTransactionId: string;
+  postedDate: string;
+  description: string;
+  merchantName?: string;
+  amount: number;
+  direction: 'credit' | 'debit';
+  category?: string;
+  importedAt: string;
+  status: 'imported' | 'posted' | 'reconciled' | 'exception';
+  matchedRuleId?: string;
+  linkedTransactionId?: string;
+  linkedJournalEntryId?: string;
+  linkedReconciliationId?: string;
+  linkedTokenIds?: string[];
+  verificationStatus: VerificationStatus;
+  notes?: string;
+}
+
 
 export interface CustomerRecord {
   id: string;
@@ -662,6 +831,23 @@ export interface VendorRecord {
   remitAddress?: string;
   defaultExpenseAccountId?: string;
   status: 'active' | 'inactive';
+  paymentInstructions?: {
+    beneficiaryName?: string;
+    bankName?: string;
+    routingNumber?: string;
+    routingMask?: string;
+    accountNumber?: string;
+    accountMask?: string;
+    accountType?: 'checking' | 'savings' | 'business_checking' | 'other';
+    railPreference?: 'ach' | 'eft' | 'wire';
+    remittanceEmail?: string;
+    digitalWalletAddress?: string;
+    digitalWalletNetwork?: string;
+    digitalAssetSymbol?: string;
+    verificationStatus?: 'unverified' | 'routing_valid' | 'verified' | 'invalid';
+    lastValidatedAt?: string;
+    storedInVault?: boolean;
+  };
   linkedDocumentIds?: string[];
   notes?: string;
 }
@@ -830,7 +1016,42 @@ export interface PaymentRecord {
   linkedBillIds?: string[];
   linkedTransactionIds?: string[];
   linkedSettlementId?: string;
+  linkedWalletId?: string;
+  linkedDigitalAssetId?: string;
+  linkedOnChainTransactionId?: string;
   linkedDocumentIds?: string[];
+  sourceBankAccountId?: string;
+  sourceLedgerAccountId?: string;
+  treasuryAccountId?: string;
+  dischargeMethod?: DischargeMethod;
+  approvalStatus?: 'not_required' | 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvedAt?: string;
+  releaseStatus?: 'not_applicable' | 'queued' | 'ready_to_release' | 'released';
+  releasedBy?: string;
+  releasedAt?: string;
+  releaseTokenId?: string;
+  settlementExecution?: {
+    sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
+    executionRail:
+      | 'FedNow'
+      | 'RTP'
+      | 'Fedwire'
+      | 'SameDayACH'
+      | 'StandardACH'
+      | 'LedgerRemittance'
+      | 'None';
+    processorStatus:
+      | 'queued'
+      | 'processing'
+      | 'settled'
+      | 'requires_review'
+      | 'blocked';
+    executionReason: string;
+    executionReference?: string;
+    vendorInstructionVerified?: boolean;
+    simulatedProcessing?: boolean;
+  };
   notes?: string;
 }
 
@@ -848,6 +1069,17 @@ export interface BankAccountRecord {
   linkedDocumentIds?: string[];
   onboardingStatus?: 'draft' | 'collecting' | 'ready' | 'submitted' | 'connected';
   onboardingChecklist?: BankOnboardingChecklistItem[];
+  connectionType?: 'plaid_connected' | 'manual_bank' | 'ledger_proxy';
+  liveFeedEnabled?: boolean;
+  liveFeedStatus?: BankFeedConnectionStatus;
+  liveConnectionProvider?: 'plaid' | 'manual';
+  plaidItemId?: string;
+  lastFeedSyncAt?: string;
+  autoReconcileEnabled?: boolean;
+  routingNumber?: string;
+  accountNumber?: string;
+  achOriginationEnabled?: boolean;
+  wireEnabled?: boolean;
 }
 
 export interface ReconciliationStatementLineRecord {
@@ -939,6 +1171,9 @@ export interface CoreDataBundle {
   accountingPeriods: AccountingPeriodRecord[];
   journalEntries: JournalEntryRecord[];
   settlements: SettlementRecord[];
+  treasuryAccounts: TreasuryAccountRecord[];
+  instrumentSettlements: InstrumentSettlementRecord[];
+  remittanceStatements: RemittanceStatementRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   assets: AssetRecord[];
   wallets: WalletRecord[];
@@ -955,6 +1190,8 @@ export interface CoreDataBundle {
   documents: DocumentRecord[];
   tokens: TokenRecord[];
   aiWorkflows: AIWorkflowRecord[];
+  bankFeedRules: BankFeedRuleRecord[];
+  bankFeedEntries: BankFeedEntryRecord[];
   workspaceSettings: WorkspaceSettingsRecord;
 }
 

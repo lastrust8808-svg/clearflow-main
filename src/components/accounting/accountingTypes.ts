@@ -10,6 +10,7 @@ export type AccountingSection =
   | 'customers'
   | 'vendors'
   | 'payments'
+  | 'bankFeed'
   | 'intercompany'
   | 'reconciliation';
 
@@ -63,6 +64,16 @@ export interface CounterpartySubmitPayload {
   phone: string;
   address: string;
   notes: string;
+  routingNumber?: string;
+  accountNumber?: string;
+  bankName?: string;
+  beneficiaryName?: string;
+  accountType?: 'checking' | 'savings' | 'business_checking' | 'other';
+  railPreference?: 'ach' | 'eft' | 'wire';
+  remittanceEmail?: string;
+  digitalWalletAddress?: string;
+  digitalWalletNetwork?: string;
+  digitalAssetSymbol?: string;
 }
 
 export interface BillSubmitPayload {
@@ -105,9 +116,36 @@ export interface PaymentSubmitPayload {
   paymentDate: string;
   amount: string;
   method: 'ach' | 'wire' | 'check' | 'card' | 'cash' | 'digital_asset' | 'other';
+  sourceBankAccountId?: string;
+  sourceLedgerAccountId?: string;
+  treasuryAccountId?: string;
+  linkedWalletId?: string;
+  linkedDigitalAssetId?: string;
+  dischargeMethod?:
+    | 'internal_ledger_credit'
+    | 'instrument_performance'
+    | 'bank_rail_payment'
+    | 'mixed_discharge';
+  urgency?: 'instant' | 'same_day' | 'standard' | 'final';
   notes: string;
   linkedInvoiceId?: string;
   linkedBillId?: string;
+}
+
+export interface BankFeedRuleSubmitPayload {
+  bankAccountId: string;
+  name: string;
+  merchantContains: string;
+  direction: 'credit' | 'debit' | 'any';
+  transactionType: 'income' | 'expense' | 'deposit' | 'withdrawal';
+  defaultLedgerAccountId?: string;
+  counterpartyLabel?: string;
+  memoTemplate?: string;
+  minAmount?: string;
+  maxAmount?: string;
+  verificationMode: 'bank_confirmation' | 'internal_control_token' | 'manual_review';
+  autoPost: boolean;
+  autoReconcile: boolean;
 }
 
 export interface InterEntityTransferSubmitPayload {

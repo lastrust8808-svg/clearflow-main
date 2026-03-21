@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle, DocumentRecord, InvoiceRecord, SettlementPath, TokenRecord } from '../../types/core';
 import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
@@ -18,8 +18,17 @@ import {
 } from '../../services/invoiceDelivery.service';
 import { buildReconciliationCloseMetrics } from '../../services/reconciliationControls.service';
 import { parseStatementFileForReconciliation } from '../../services/reconciliationStatement.service';
+import { syncBankFeedToLedger } from '../../services/bankFeed.service';
+import { plaidService } from '../../services/plaid.service';
+import { executeSettlementProcessing } from '../../services/settlementExecution.service';
+import {
+  canUseInjectedWalletExecution,
+  executeInjectedWalletPayment,
+  pollInjectedWalletTransaction,
+} from '../../services/walletExecution.service';
 import AccountingDashboardSection from '../accounting/AccountingDashboardSection';
 import AccountingToolbar from '../accounting/AccountingToolbar';
+import BankFeedWorkspace from '../accounting/BankFeedWorkspace';
 import BillIntakeModal from '../accounting/BillIntakeModal';
 import CounterpartyModal from '../accounting/CounterpartyModal';
 import EditableRecordSection from '../accounting/EditableRecordSection';
@@ -30,9 +39,12 @@ import JournalEntryModal from '../accounting/JournalEntryModal';
 import PaymentRecordModal from '../accounting/PaymentRecordModal';
 import QuoteBuilderModal from '../accounting/QuoteBuilderModal';
 import ReconciliationWorkspace from '../accounting/ReconciliationWorkspace';
+import RemittanceOperationsWorkspace from '../accounting/RemittanceOperationsWorkspace';
 import ReceiptIntakeModal from '../accounting/ReceiptIntakeModal';
+import { PlaidLinkModal } from '../plaid-link-modal/PlaidLinkModal';
 import type {
   AccountingSection,
+  BankFeedRuleSubmitPayload,
   BillSubmitPayload,
   CounterpartySubmitPayload,
   InterEntityTransferSubmitPayload,
@@ -57,6 +69,7 @@ import {
   updateCollectionRecord,
 } from '../accounting/accountingUtils';
 import PageSection from '../ui/PageSection';
+import type { PlaidConnectionPayload } from '../../types/app.models';
 
 interface AccountingPageProps {
   data: CoreDataBundle;
@@ -89,8 +102,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isIntercompanyModalOpen, setIsIntercompanyModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(false);
+  const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
+  const [operationsNotice, setOperationsNotice] = useState('');
 
   const invoices = data.invoices ?? [];
   const bills = data.bills ?? [];
@@ -102,7 +118,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const journalEntries = data.journalEntries ?? [];
   const interEntityTransfers = data.interEntityTransfers ?? [];
   const bankAccounts = data.bankAccounts ?? [];
+  const bankFeedRules = data.bankFeedRules ?? [];
+  const bankFeedEntries = data.bankFeedEntries ?? [];
   const reconciliations = data.reconciliations ?? [];
+  const ledgerAccounts = data.ledgerAccounts ?? [];
+  const treasuryAccounts = data.treasuryAccounts ?? [];
+  const wallets = data.wallets ?? [];
+  const digitalAssets = data.digitalAssets ?? [];
 
   const quoteRecords = invoices.filter(isQuoteRecord);
   const standardInvoices = invoices.filter((record) => !isQuoteRecord(record));
@@ -270,9 +292,46 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const ensureVendorRecord = (
     prev: CoreDataBundle,
     entityId: string,
-    payload: { name?: string; email?: string; phone?: string; address?: string; notes?: string },
+    payload: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+      notes?: string;
+      routingNumber?: string;
+      accountNumber?: string;
+      bankName?: string;
+      beneficiaryName?: string;
+      accountType?: 'checking' | 'savings' | 'business_checking' | 'other';
+      railPreference?: 'ach' | 'eft' | 'wire';
+      remittanceEmail?: string;
+      digitalWalletAddress?: string;
+      digitalWalletNetwork?: string;
+      digitalAssetSymbol?: string;
+    },
   ) => {
     const normalizedName = payload.name?.trim();
+    const paymentInstructions =
+      payload.routingNumber || payload.accountNumber || payload.bankName || payload.beneficiaryName
+        ? {
+            beneficiaryName: payload.beneficiaryName || normalizedName,
+            bankName: payload.bankName || undefined,
+            routingNumber: payload.routingNumber || undefined,
+            accountNumber: payload.accountNumber || undefined,
+            accountMask: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+            accountType: payload.accountType,
+            railPreference: payload.railPreference,
+            remittanceEmail: payload.remittanceEmail || payload.email || undefined,
+            digitalWalletAddress: payload.digitalWalletAddress || undefined,
+            digitalWalletNetwork: payload.digitalWalletNetwork || undefined,
+            digitalAssetSymbol: payload.digitalAssetSymbol || undefined,
+            verificationStatus:
+              payload.routingNumber?.length === 9 ? ('routing_valid' as const) : ('unverified' as const),
+            lastValidatedAt:
+              payload.routingNumber?.length === 9 ? new Date().toISOString() : undefined,
+          }
+        : undefined;
+
     if (!normalizedName) {
       return {
         vendorId: prev.vendors[0]?.id || `ven-${Date.now()}`,
@@ -288,7 +347,26 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     if (existingVendor) {
       return {
         vendorId: existingVendor.id,
-        vendors: prev.vendors,
+        vendors: prev.vendors.map((record) =>
+          record.id === existingVendor.id
+            ? {
+                ...record,
+                email: payload.email || record.email,
+                phone: payload.phone || record.phone,
+                remitAddress: payload.address || record.remitAddress,
+                notes: payload.notes || record.notes,
+                paymentInstructions: paymentInstructions
+                  ? {
+                      ...record.paymentInstructions,
+                      ...paymentInstructions,
+                      accountMask:
+                        paymentInstructions.accountMask ||
+                        record.paymentInstructions?.accountMask,
+                    }
+                  : record.paymentInstructions,
+              }
+            : record
+        ),
       };
     }
 
@@ -304,12 +382,19 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           phone: payload.phone || undefined,
           remitAddress: payload.address || undefined,
           status: 'active' as const,
+          paymentInstructions,
           notes: payload.notes || undefined,
         },
         ...prev.vendors,
       ],
     };
   };
+
+  const resolveLedgerBalance = (
+    currentBalance: number,
+    direction: 'incoming' | 'outgoing',
+    amount: number
+  ) => Number((currentBalance + (direction === 'incoming' ? amount : -amount)).toFixed(2));
 
   const persistUploadDocument = async ({
     entityId,
@@ -697,39 +782,186 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     setCounterpartyModalMode(null);
   };
 
-  const handlePaymentSubmit = (payload: PaymentSubmitPayload) => {
+  const handlePaymentSubmit = async (payload: PaymentSubmitPayload) => {
     const amount = Number(payload.amount || 0);
     if (!amount) {
       return;
     }
 
-    setData((prev) => {
-      const entity = prev.entities[0];
-      if (!entity) return prev;
+    const entity = data.entities[0];
+    if (!entity) {
+      return;
+    }
 
-      const stamp = Date.now();
-      const paymentId = `pay-${stamp}`;
-      const transactionId = `txn-${stamp}`;
-      const settlementId = `set-${stamp}`;
-      const journalId = `je-${stamp}`;
-      const linkedInvoice = payload.linkedInvoiceId
-        ? prev.invoices.find((invoice) => invoice.id === payload.linkedInvoiceId)
+    const stamp = Date.now();
+    const paymentId = `pay-${stamp}`;
+    const transactionId = `txn-${stamp}`;
+    const settlementId = `set-${stamp}`;
+    const journalId = `je-${stamp}`;
+    const remittanceStatementId = `remit-${stamp}`;
+    const instrumentSettlementId = `ins-${stamp}`;
+    const linkedInvoice = payload.linkedInvoiceId
+      ? data.invoices.find((invoice) => invoice.id === payload.linkedInvoiceId)
+      : undefined;
+    const linkedBill = payload.linkedBillId
+      ? data.bills.find((bill) => bill.id === payload.linkedBillId)
+      : undefined;
+    const selectedVendor =
+      payload.counterpartyType === 'vendor' && payload.counterpartyId
+        ? data.vendors.find((vendor) => vendor.id === payload.counterpartyId)
         : undefined;
-      const linkedBill = payload.linkedBillId
-        ? prev.bills.find((bill) => bill.id === payload.linkedBillId)
+    const selectedCustomer =
+      payload.counterpartyType === 'customer' && payload.counterpartyId
+        ? data.customers.find((customer) => customer.id === payload.counterpartyId)
         : undefined;
+    const selectedTreasuryAccount = payload.treasuryAccountId
+      ? data.treasuryAccounts.find((account) => account.id === payload.treasuryAccountId)
+      : undefined;
+    const treasuryLinkedLedgerAccount = selectedTreasuryAccount?.linkedLedgerAccountId
+      ? data.ledgerAccounts.find(
+          (account) => account.id === selectedTreasuryAccount.linkedLedgerAccountId
+        )
+      : undefined;
+    const selectedWallet = payload.linkedWalletId
+      ? data.wallets.find((wallet) => wallet.id === payload.linkedWalletId)
+      : undefined;
+    const selectedDigitalAsset = payload.linkedDigitalAssetId
+      ? data.digitalAssets.find((asset) => asset.id === payload.linkedDigitalAssetId)
+      : selectedWallet
+        ? data.digitalAssets.find((asset) => asset.walletId === selectedWallet.id)
+        : undefined;
+    const selectedDigitalLedgerAccount = selectedDigitalAsset?.linkedLedgerAccountId
+      ? data.ledgerAccounts.find((account) => account.id === selectedDigitalAsset.linkedLedgerAccountId)
+      : undefined;
+    const fallbackBankAccount = data.bankAccounts.find(
+      (account) =>
+        account.entityId === entity.id &&
+        account.status === 'active' &&
+        (payload.method === 'wire'
+          ? account.wireEnabled !== false
+          : payload.method === 'ach'
+            ? account.achOriginationEnabled !== false
+            : true)
+    );
+    const fallbackLedgerAccount = data.ledgerAccounts.find(
+      (account) =>
+        account.entityId === entity.id &&
+        (account.remittanceEligible ||
+          account.remittanceClassification === 'cash' ||
+          account.remittanceClassification === 'obligation')
+    );
+    const sourceBankAccount =
+      data.bankAccounts.find((account) => account.id === payload.sourceBankAccountId) ||
+      (payload.sourceLedgerAccountId || payload.treasuryAccountId || payload.method === 'digital_asset'
+        ? undefined
+        : fallbackBankAccount);
+    const sourceLedgerAccount =
+      data.ledgerAccounts.find((account) => account.id === payload.sourceLedgerAccountId) ||
+      treasuryLinkedLedgerAccount ||
+      (!sourceBankAccount && payload.method !== 'digital_asset' ? fallbackLedgerAccount : undefined);
+    const resolvedDischargeMethod: NonNullable<PaymentSubmitPayload['dischargeMethod']> =
+      payload.dischargeMethod ||
+      (payload.method === 'digital_asset'
+        ? 'mixed_discharge'
+        : selectedTreasuryAccount || sourceLedgerAccount
+          ? 'internal_ledger_credit'
+          : 'bank_rail_payment');
+    const requiresSettlementExecution =
+      payload.direction === 'outgoing' &&
+      payload.counterpartyType === 'vendor' &&
+      (payload.method === 'ach' || payload.method === 'wire');
+    const requiresWalletExecution =
+      payload.direction === 'outgoing' &&
+      payload.counterpartyType === 'vendor' &&
+      payload.method === 'digital_asset' &&
+      Boolean(selectedWallet);
+    const settlementExecutionResponse = requiresSettlementExecution
+      ? await executeSettlementProcessing({
+          entityId: entity.id,
+          paymentId,
+          settlementId,
+          amount,
+          currency: entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
+          direction: payload.direction,
+          method: payload.method,
+          urgency: payload.urgency,
+          sourceBankAccount: sourceBankAccount
+            ? {
+                id: sourceBankAccount.id,
+                institutionName: sourceBankAccount.institutionName,
+                routingNumber: sourceBankAccount.routingNumber,
+                accountNumber: sourceBankAccount.accountNumber,
+                achOriginationEnabled: sourceBankAccount.achOriginationEnabled,
+                wireEnabled: sourceBankAccount.wireEnabled,
+                connectionType: sourceBankAccount.connectionType,
+              }
+            : null,
+          sourceLedgerAccount: sourceLedgerAccount
+            ? {
+                id: sourceLedgerAccount.id,
+                name: sourceLedgerAccount.name,
+                remittanceEligible: sourceLedgerAccount.remittanceEligible,
+                remittanceClassification: sourceLedgerAccount.remittanceClassification,
+              }
+            : selectedTreasuryAccount
+              ? {
+                  id: selectedTreasuryAccount.id,
+                  name: selectedTreasuryAccount.name,
+                  remittanceEligible: selectedTreasuryAccount.remittanceEnabled,
+                  remittanceClassification: selectedTreasuryAccount.treasuryType,
+                }
+            : null,
+          vendorInstruction: selectedVendor?.paymentInstructions
+            ? {
+                beneficiaryName:
+                  selectedVendor.paymentInstructions.beneficiaryName || selectedVendor.name,
+                bankName: selectedVendor.paymentInstructions.bankName,
+                routingNumber: selectedVendor.paymentInstructions.routingNumber,
+                accountNumber: selectedVendor.paymentInstructions.accountNumber,
+                railPreference: selectedVendor.paymentInstructions.railPreference,
+                verificationStatus: selectedVendor.paymentInstructions.verificationStatus,
+              }
+            : null,
+        })
+      : null;
+
+    setData((prev) => {
+      const onChainTransactionId =
+        payload.method === 'digital_asset' && selectedWallet ? `oct-${stamp}` : undefined;
+      const digitalAssetUnitPrice =
+        selectedDigitalAsset && selectedDigitalAsset.quantity > 0
+          ? selectedDigitalAsset.estimatedValue / selectedDigitalAsset.quantity
+          : 1;
+      const digitalAssetQuantityMoved =
+        payload.method === 'digital_asset' && selectedDigitalAsset
+          ? Number((amount / Math.max(digitalAssetUnitPrice, 0.00000001)).toFixed(8))
+          : undefined;
+      const remittanceMode =
+        sourceBankAccount && (payload.method === 'ach' || payload.method === 'wire' || payload.method === 'check')
+          ? ('bank_backed' as const)
+          : ('informational_only' as const);
       const settlementPath: SettlementPath =
-        payload.method === 'wire'
-          ? 'wire'
-          : payload.method === 'card'
-            ? 'card'
-            : payload.method === 'cash'
-              ? 'cash'
-              : payload.method === 'digital_asset'
-                ? 'wallet'
+        payload.method === 'digital_asset'
+          ? selectedTreasuryAccount || resolvedDischargeMethod === 'mixed_discharge'
+            ? 'mixed'
+            : 'wallet'
+          : sourceLedgerAccount && (payload.method === 'ach' || payload.method === 'wire')
+          ? 'internal_ledger'
+          : resolvedDischargeMethod === 'internal_ledger_credit' && !sourceBankAccount
+            ? 'internal_ledger'
+          : payload.method === 'wire'
+            ? 'wire'
+            : payload.method === 'card'
+              ? 'card'
+              : payload.method === 'cash'
+                ? 'cash'
                 : 'ach';
       const shouldIssueSettlementToken =
-        payload.method === 'digital_asset' || prev.workspaceSettings.digitalAssetVerificationRequired;
+        payload.method === 'digital_asset' ||
+        prev.workspaceSettings.digitalAssetVerificationRequired ||
+        Boolean(sourceLedgerAccount) ||
+        Boolean(selectedTreasuryAccount) ||
+        requiresSettlementExecution;
       const settlementToken = shouldIssueSettlementToken
         ? {
             id: `tok-${settlementId}`,
@@ -737,14 +969,54 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             subjectType: 'settlement' as const,
             subjectId: settlementId,
             label: `${payload.direction === 'incoming' ? 'Receipt' : 'Disbursement'} Settlement Token`,
-            status: 'issued' as const,
+            status:
+              settlementExecutionResponse?.execution.verificationStatus === 'verified'
+                ? ('verified' as const)
+                : ('issued' as const),
             tokenStandard: 'internal-proof',
-            tokenReference: `SET-${stamp}`,
+            tokenReference:
+              settlementExecutionResponse?.execution.executionReference || `SET-${stamp}`,
             issuedAt: new Date().toISOString(),
-            proofReference: 'Issued automatically during payment posting.',
-            notes: payload.notes || undefined,
+            proofReference:
+              settlementExecutionResponse?.execution.executionReason ||
+              'Issued automatically during payment posting.',
+            notes:
+              payload.notes ||
+              (selectedTreasuryAccount
+                ? `Treasury source: ${selectedTreasuryAccount.name}`
+                : sourceLedgerAccount
+                ? `Ledger remittance source: ${sourceLedgerAccount.code} ${sourceLedgerAccount.name}`
+                : undefined),
           }
         : null;
+      const paymentStatus =
+        settlementExecutionResponse?.execution.processorStatus === 'blocked'
+          ? ('failed' as const)
+          : settlementExecutionResponse?.execution.processorStatus === 'settled'
+            ? ('settled' as const)
+            : settlementExecutionResponse?.execution
+              ? ('initiated' as const)
+              : requiresWalletExecution
+                ? ('initiated' as const)
+              : ('settled' as const);
+      const settlementStatus =
+        settlementExecutionResponse?.execution.processorStatus === 'blocked' ||
+        settlementExecutionResponse?.execution.processorStatus === 'requires_review'
+          ? ('exception' as const)
+          : settlementExecutionResponse?.execution
+            ? ('routing' as const)
+            : requiresWalletExecution
+              ? ('verifying' as const)
+            : payload.method === 'digital_asset'
+              ? ('settled' as const)
+              : ('settled' as const);
+      const remittanceCounterpartyName =
+        selectedVendor?.name ||
+        selectedCustomer?.name ||
+        (payload.direction === 'outgoing' ? 'Payee' : 'Payer');
+      const digitalLedgerLabel = selectedDigitalLedgerAccount
+        ? `${selectedDigitalLedgerAccount.code} ${selectedDigitalLedgerAccount.name}`
+        : selectedWallet?.linkedLedgerAccountId || '1610 Digital Asset Treasury';
       const nextPayment = {
         id: paymentId,
         entityId: entity.id,
@@ -755,56 +1027,221 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         amount,
         currency: entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
         method: payload.method,
-        status: 'settled' as const,
+        status: paymentStatus,
         linkedInvoiceIds: payload.linkedInvoiceId ? [payload.linkedInvoiceId] : undefined,
         linkedBillIds: payload.linkedBillId ? [payload.linkedBillId] : undefined,
         linkedTransactionIds: [transactionId],
         linkedSettlementId: settlementId,
-        notes: payload.notes || undefined,
+        linkedWalletId: selectedWallet?.id,
+        linkedDigitalAssetId: selectedDigitalAsset?.id,
+        linkedOnChainTransactionId: onChainTransactionId,
+        sourceBankAccountId: sourceBankAccount?.id,
+        sourceLedgerAccountId: sourceLedgerAccount?.id,
+        treasuryAccountId: selectedTreasuryAccount?.id,
+        dischargeMethod: resolvedDischargeMethod,
+        approvalStatus:
+          requiresSettlementExecution || requiresWalletExecution
+            ? ('pending' as const)
+            : ('not_required' as const),
+        releaseStatus:
+          requiresSettlementExecution || requiresWalletExecution
+            ? ('queued' as const)
+            : ('not_applicable' as const),
+        releaseTokenId: settlementToken?.id,
+        settlementExecution: settlementExecutionResponse
+          ? {
+              sourceType: settlementExecutionResponse.execution.sourceType,
+              executionRail: settlementExecutionResponse.execution.rail,
+              processorStatus: settlementExecutionResponse.execution.processorStatus,
+              executionReason: settlementExecutionResponse.execution.executionReason,
+              executionReference: settlementExecutionResponse.execution.executionReference,
+              vendorInstructionVerified:
+                settlementExecutionResponse.execution.vendorInstructionVerified,
+              simulatedProcessing: settlementExecutionResponse.execution.simulatedProcessing,
+            }
+          : requiresWalletExecution
+            ? {
+                sourceType: selectedTreasuryAccount || sourceLedgerAccount ? 'ledger_account' : 'manual_remittance',
+                executionRail: 'None',
+                processorStatus: 'queued',
+                executionReason: 'Wallet settlement is waiting for release and on-chain confirmation.',
+                executionReference: onChainTransactionId,
+                vendorInstructionVerified: true,
+                simulatedProcessing: true,
+              }
+          : undefined,
+        notes:
+          payload.notes ||
+          settlementExecutionResponse?.execution.executionReason ||
+          undefined,
       };
       const nextTransaction = {
         id: transactionId,
         entityId: entity.id,
-        type: payload.direction === 'incoming' ? 'deposit' as const : 'withdrawal' as const,
+        type:
+          payload.method === 'digital_asset'
+            ? payload.direction === 'incoming'
+              ? ('token_receipt' as const)
+              : ('wallet_transfer' as const)
+            : payload.direction === 'incoming'
+              ? ('deposit' as const)
+              : ('withdrawal' as const),
         title:
-          payload.direction === 'incoming'
+          payload.method === 'digital_asset'
+            ? payload.direction === 'incoming'
+              ? `Digital asset receipt${selectedDigitalAsset?.symbol ? ` (${selectedDigitalAsset.symbol})` : ''}`
+              : `Digital asset disbursement${selectedDigitalAsset?.symbol ? ` (${selectedDigitalAsset.symbol})` : ''}`
+            : payload.direction === 'incoming'
             ? `Customer receipt${linkedInvoice ? ` for ${linkedInvoice.invoiceNumber}` : ''}`
             : `Vendor payment${linkedBill ? ` for ${linkedBill.billNumber || linkedBill.id}` : ''}`,
         amount,
         currency: nextPayment.currency,
         date: nextPayment.paymentDate,
         status: 'posted' as const,
+        linkedAssetIds: selectedDigitalAsset ? [selectedDigitalAsset.id] : undefined,
+        linkedWalletId: selectedWallet?.id,
+        linkedOnChainRecordId: onChainTransactionId,
         linkedSettlementId: settlementId,
         linkedPaymentIds: [paymentId],
         linkedJournalEntryIds: [journalId],
         linkedTokenIds: settlementToken ? [settlementToken.id] : undefined,
-        notes: payload.notes || undefined,
+        notes:
+          payload.notes ||
+          settlementExecutionResponse?.execution.executionReason ||
+          undefined,
       };
+      const nextOnChainTransaction = onChainTransactionId
+        ? {
+            id: onChainTransactionId,
+            entityId: entity.id,
+            walletId: selectedWallet?.id,
+            txHash: `0x${Math.random().toString(16).slice(2)}${Math.random()
+              .toString(16)
+              .slice(2)}`.slice(0, 34),
+            network: selectedWallet?.network || selectedDigitalAsset?.network || 'Ethereum',
+            eventType: payload.direction === 'incoming' ? ('receive' as const) : ('send' as const),
+            assetId: selectedDigitalAsset?.id,
+            linkedPaymentId: paymentId,
+            linkedSettlementId: settlementId,
+            linkedTransactionId: transactionId,
+            timestamp: new Date(`${nextPayment.paymentDate}T12:00:00.000Z`).toISOString(),
+            feeAmount: Number((amount * 0.0003).toFixed(6)),
+            feeAssetSymbol: selectedDigitalAsset?.symbol || selectedWallet?.nativeAssetSymbol || 'ETH',
+            status: requiresWalletExecution ? ('pending' as const) : ('confirmed' as const),
+          }
+        : undefined;
+      const nextRemittanceStatement = {
+        id: remittanceStatementId,
+        entityId: entity.id,
+        title:
+          payload.direction === 'outgoing'
+            ? `Remittance Statement ${paymentId}`
+            : `Receipt Advice ${paymentId}`,
+        statementDate: nextPayment.paymentDate,
+        payerName:
+          payload.direction === 'outgoing'
+            ? entity.displayName || entity.name
+            : remittanceCounterpartyName,
+        payeeName:
+          payload.direction === 'outgoing'
+            ? remittanceCounterpartyName
+            : entity.displayName || entity.name,
+        amount,
+        currency: nextPayment.currency,
+        dischargeMethod: resolvedDischargeMethod,
+        treasuryAccountId: selectedTreasuryAccount?.id,
+        linkedInstrumentSettlementId:
+          resolvedDischargeMethod !== 'bank_rail_payment' ? instrumentSettlementId : undefined,
+        linkedSettlementId: settlementId,
+        micrLine: {
+          routingNumber: sourceBankAccount?.routingNumber,
+          accountNumberMask: sourceBankAccount?.accountNumber
+            ? sourceBankAccount.accountNumber.slice(-4)
+            : undefined,
+          serialNumber: String(stamp).slice(-6),
+          mode: remittanceMode,
+        },
+        status: paymentStatus === 'settled' ? ('performed' as const) : ('issued' as const),
+        notes:
+          payload.notes ||
+          `Generated from ${payload.method} payment posting with ${resolvedDischargeMethod} discharge.`,
+      };
+      const nextInstrumentSettlement =
+        resolvedDischargeMethod !== 'bank_rail_payment'
+          ? {
+              id: instrumentSettlementId,
+              entityId: entity.id,
+              title:
+                payload.direction === 'incoming'
+                  ? `Performance receipt ${paymentId}`
+                  : `Performance remittance ${paymentId}`,
+              treasuryAccountId: selectedTreasuryAccount?.id,
+              linkedSettlementId: settlementId,
+              linkedTransactionId: transactionId,
+              linkedTokenIds: settlementToken ? [settlementToken.id] : undefined,
+              dischargeMethod: resolvedDischargeMethod,
+              recognitionBasis: 'obligation_recognized_before_cash' as const,
+              performanceStatus:
+                paymentStatus === 'settled' ? ('performed' as const) : ('issued' as const),
+              faceAmount: amount,
+              performedAmount: paymentStatus === 'settled' ? amount : 0,
+              currency: nextPayment.currency,
+              effectiveDate: nextPayment.paymentDate,
+              dueDate: nextPayment.paymentDate,
+              remittanceReference: remittanceStatementId,
+              notes:
+                payload.notes ||
+                'Generated automatically from accounting payment discharge selection.',
+            }
+          : undefined;
       const nextSettlement = {
         id: settlementId,
         entityId: entity.id,
         linkedTransactionId: transactionId,
         linkedPaymentId: paymentId,
         linkedJournalEntryIds: [journalId],
+        linkedOnChainRecordId: onChainTransactionId,
+        linkedInstrumentSettlementId: nextInstrumentSettlement?.id,
+        linkedRemittanceStatementId: nextRemittanceStatement.id,
         path: settlementPath,
+        dischargeMethod: resolvedDischargeMethod,
         direction: payload.direction,
-        status: 'settled' as const,
+        status: settlementStatus,
         liquidCashStage:
-          payload.direction === 'incoming'
-            ? 'liquid_cash_available' as const
-            : 'liquid_cash_released' as const,
-        verificationMethod:
-          payload.method === 'digital_asset'
-            ? 'wallet_confirmation' as const
-            : 'bank_confirmation' as const,
-        verificationStatus:
-          settlementToken || payload.method === 'digital_asset'
-            ? 'pending' as const
-            : 'verified' as const,
+          requiresSettlementExecution
+            ? sourceLedgerAccount && payload.direction === 'outgoing'
+              ? ('liquid_cash_reserved' as const)
+              : ('liquid_cash_pending' as const)
+            : requiresWalletExecution
+              ? selectedTreasuryAccount
+                ? ('liquid_cash_reserved' as const)
+                : ('pending_liquidation' as const)
+            : payload.method === 'digital_asset'
+              ? payload.direction === 'incoming'
+                ? ('liquid_cash_available' as const)
+                : ('liquid_cash_released' as const)
+            : payload.direction === 'incoming'
+              ? ('liquid_cash_available' as const)
+              : ('liquid_cash_released' as const),
+        verificationMethod: settlementExecutionResponse
+          ? settlementExecutionResponse.execution.verificationMethod
+          : payload.method === 'digital_asset'
+            ? ('wallet_confirmation' as const)
+            : settlementToken
+              ? ('internal_control_token' as const)
+              : ('bank_confirmation' as const),
+        verificationStatus: settlementExecutionResponse
+          ? settlementExecutionResponse.execution.verificationStatus
+          : requiresWalletExecution
+            ? ('pending' as const)
+          : settlementToken || payload.method === 'digital_asset'
+            ? ('pending' as const)
+            : ('verified' as const),
         verificationReference:
-          payload.method === 'digital_asset'
+          settlementExecutionResponse?.execution.executionReason ||
+          (payload.method === 'digital_asset'
             ? 'Awaiting token or wallet verification.'
-            : 'ERP payment posting completed.',
+            : 'ERP payment posting completed.'),
         tokenizedProofId: settlementToken?.id,
         linkedTokenIds: settlementToken ? [settlementToken.id] : undefined,
         grossAmount: amount,
@@ -812,17 +1249,68 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         currency: nextPayment.currency,
         initiatedAt: nextPayment.paymentDate,
         expectedSettlementDate: nextPayment.paymentDate,
-        actualSettlementDate: nextPayment.paymentDate,
+        actualSettlementDate:
+          paymentStatus === 'settled' ? nextPayment.paymentDate : undefined,
+        originSourceType:
+          settlementExecutionResponse?.execution.sourceType ||
+          (selectedTreasuryAccount || sourceLedgerAccount
+            ? ('ledger_account' as const)
+            : onChainTransactionId
+              ? ('manual_remittance' as const)
+              : undefined),
+        originSourceId:
+          sourceBankAccount?.id ||
+          sourceLedgerAccount?.id ||
+          selectedTreasuryAccount?.id ||
+          selectedWallet?.id,
+        executionRail:
+          settlementExecutionResponse?.execution.rail ||
+          (payload.method === 'digital_asset' ? ('None' as const) : undefined),
+        processorStatus:
+          settlementExecutionResponse?.execution.processorStatus ||
+          (requiresWalletExecution
+            ? ('queued' as const)
+            : payload.method === 'digital_asset'
+              ? ('settled' as const)
+              : undefined),
+        executionReason:
+          settlementExecutionResponse?.execution.executionReason ||
+          (requiresWalletExecution
+            ? 'Wallet settlement is queued for release and chain confirmation.'
+            : payload.method === 'digital_asset'
+            ? 'Digital asset settlement posted through connected wallet controls.'
+            : undefined),
+        executionReference:
+          settlementExecutionResponse?.execution.executionReference || nextOnChainTransaction?.txHash,
+        reserveBacked:
+          selectedTreasuryAccount?.treasuryType === 'reserve' ||
+          sourceLedgerAccount?.remittanceClassification === 'reserve',
         autoReconcileStatus:
-          prev.workspaceSettings.autoReconcileJournalEntries ? 'pending' as const : undefined,
+          settlementStatus === 'exception'
+            ? ('exception' as const)
+            : prev.workspaceSettings.autoReconcileJournalEntries
+              ? ('pending' as const)
+              : undefined,
         requiresManualReview:
-          payload.method === 'digital_asset' || prev.workspaceSettings.requireDocumentLinksForSettlements,
-        notes: payload.notes || undefined,
+          payload.method === 'digital_asset' ||
+          prev.workspaceSettings.requireDocumentLinksForSettlements ||
+          settlementExecutionResponse?.execution.processorStatus === 'requires_review' ||
+          settlementExecutionResponse?.execution.processorStatus === 'blocked',
+        notes:
+          payload.notes ||
+          settlementExecutionResponse?.execution.executionReason ||
+          undefined,
       };
       const journalMemo =
-        payload.direction === 'incoming'
+        payload.method === 'digital_asset'
+          ? payload.direction === 'incoming'
+            ? `Record digital asset receipt${selectedDigitalAsset?.symbol ? ` in ${selectedDigitalAsset.symbol}` : ''}`
+            : `Record digital asset disbursement${selectedDigitalAsset?.symbol ? ` in ${selectedDigitalAsset.symbol}` : ''}`
+          : payload.direction === 'incoming'
           ? `Record payment receipt${linkedInvoice ? ` for ${linkedInvoice.invoiceNumber}` : ''}`
-          : `Record disbursement${linkedBill ? ` for ${linkedBill.billNumber || linkedBill.id}` : ''}`;
+          : `Record disbursement${linkedBill ? ` for ${linkedBill.billNumber || linkedBill.id}` : ''}${
+              sourceLedgerAccount ? ` from ${sourceLedgerAccount.name}` : ''
+            }`;
       const nextJournal = {
         id: journalId,
         entityId: entity.id,
@@ -835,17 +1323,33 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         entryDate: nextPayment.paymentDate,
         memo: journalMemo,
         debitAccount:
-          payload.direction === 'incoming'
+          payload.method === 'digital_asset'
+            ? payload.direction === 'incoming'
+              ? digitalLedgerLabel
+              : linkedBill
+                ? '2000 Accounts Payable'
+                : '6105 Digital Asset Disbursements'
+            : payload.direction === 'incoming'
             ? '1000 Operating Cash'
             : linkedBill
               ? '2000 Accounts Payable'
               : '6100 Disbursements',
         creditAccount:
-          payload.direction === 'incoming'
+          payload.method === 'digital_asset'
+            ? payload.direction === 'incoming'
+              ? linkedInvoice
+                ? '1100 Accounts Receivable'
+                : '2405 Digital Asset Clearing'
+              : digitalLedgerLabel
+            : payload.direction === 'incoming'
             ? linkedInvoice
               ? '1100 Accounts Receivable'
               : '2300 Unapplied Cash'
-            : '1000 Operating Cash',
+            : sourceLedgerAccount
+              ? `${sourceLedgerAccount.code} ${sourceLedgerAccount.name}`
+              : selectedTreasuryAccount
+                ? selectedTreasuryAccount.name
+              : '1000 Operating Cash',
         amount,
         status: 'posted' as const,
         source: 'system' as const,
@@ -854,9 +1358,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         autoReconcileStatus:
           (entity.operationalDefaults?.autoReconcileLedgerLinks ??
             prev.workspaceSettings.autoReconcileJournalEntries)
-            ? 'pending' as const
+            ? (settlementStatus === 'exception' ? ('exception' as const) : ('pending' as const))
             : undefined,
-        verificationRequired: prev.workspaceSettings.requireDocumentLinksForSettlements,
+        verificationRequired:
+          prev.workspaceSettings.requireDocumentLinksForSettlements ||
+          Boolean(settlementExecutionResponse) ||
+          Boolean(sourceLedgerAccount),
       };
 
       const nextInvoices = linkedInvoice
@@ -866,9 +1373,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                   ...invoice,
                   balanceDue: Math.max(0, invoice.balanceDue - amount),
                   status:
-                    invoice.balanceDue - amount <= 0
-                      ? 'paid'
-                      : 'partially_paid',
+                    invoice.balanceDue - amount <= 0 ? 'paid' : 'partially_paid',
                   linkedPaymentIds: [paymentId, ...(invoice.linkedPaymentIds ?? [])],
                   linkedTransactionIds: [transactionId, ...(invoice.linkedTransactionIds ?? [])],
                 }
@@ -883,15 +1388,125 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                   ...bill,
                   balanceDue: Math.max(0, bill.balanceDue - amount),
                   status:
-                    bill.balanceDue - amount <= 0
-                      ? 'paid'
-                      : 'partially_paid',
+                    bill.balanceDue - amount <= 0 ? 'paid' : 'partially_paid',
                   linkedPaymentIds: [paymentId, ...(bill.linkedPaymentIds ?? [])],
                   linkedTransactionIds: [transactionId, ...(bill.linkedTransactionIds ?? [])],
                 }
               : bill
           )
         : prev.bills;
+
+      const nextBankAccounts = sourceBankAccount
+        ? prev.bankAccounts.map((account) =>
+            account.id === sourceBankAccount.id
+              ? {
+                  ...account,
+                  currentBalance: resolveLedgerBalance(
+                    account.currentBalance ?? 0,
+                    payload.direction,
+                    amount
+                  ),
+                }
+              : account
+          )
+        : prev.bankAccounts;
+
+      const shouldApplyDigitalMovementImmediately =
+        payload.method === 'digital_asset' && (!requiresWalletExecution || payload.direction === 'incoming');
+
+      const nextLedgerAccounts = prev.ledgerAccounts.map((account) => {
+        if (sourceLedgerAccount && account.id === sourceLedgerAccount.id) {
+          return {
+            ...account,
+            balance: resolveLedgerBalance(account.balance, payload.direction, amount),
+          };
+        }
+
+        if (
+          shouldApplyDigitalMovementImmediately &&
+          selectedDigitalLedgerAccount &&
+          account.id === selectedDigitalLedgerAccount.id &&
+          account.id !== sourceLedgerAccount?.id
+        ) {
+          return {
+            ...account,
+            balance: resolveLedgerBalance(account.balance, payload.direction, amount),
+          };
+        }
+
+        return account;
+      });
+
+      const nextTreasuryAccounts = selectedTreasuryAccount
+        ? prev.treasuryAccounts.map((account) => {
+            if (account.id !== selectedTreasuryAccount.id) {
+              return account;
+            }
+
+            const nextAvailable =
+              payload.direction === 'incoming'
+                ? account.availableBalance + amount
+                : paymentStatus === 'settled'
+                  ? account.availableBalance - amount
+                  : account.availableBalance - amount;
+            const nextReserved =
+              payload.direction === 'outgoing' && paymentStatus !== 'settled'
+                ? (account.reservedBalance ?? 0) + amount
+                : account.reservedBalance;
+
+            return {
+              ...account,
+              availableBalance: Number(nextAvailable.toFixed(2)),
+              reservedBalance:
+                nextReserved !== undefined ? Number(nextReserved.toFixed(2)) : nextReserved,
+            };
+          })
+        : prev.treasuryAccounts;
+
+      const nextWallets = selectedWallet
+        ? prev.wallets.map((wallet) =>
+            wallet.id === selectedWallet.id
+              ? {
+                  ...wallet,
+                  connectionStatus: 'connected',
+                  lastSyncAt: new Date().toISOString(),
+                  linkedTreasuryAccountId:
+                    wallet.linkedTreasuryAccountId || selectedTreasuryAccount?.id,
+                }
+              : wallet
+          )
+        : prev.wallets;
+
+      const nextDigitalAssets = selectedDigitalAsset
+        ? prev.digitalAssets.map((asset) => {
+            if (
+              asset.id !== selectedDigitalAsset.id ||
+              !digitalAssetQuantityMoved ||
+              !shouldApplyDigitalMovementImmediately
+            ) {
+              return asset;
+            }
+
+            const nextQuantity = Math.max(
+              0,
+              asset.quantity +
+                (payload.direction === 'incoming'
+                  ? digitalAssetQuantityMoved
+                  : -digitalAssetQuantityMoved)
+            );
+            const nextEstimatedValue = Math.max(
+              0,
+              asset.estimatedValue + (payload.direction === 'incoming' ? amount : -amount)
+            );
+
+            return {
+              ...asset,
+              walletId: selectedWallet?.id || asset.walletId,
+              quantity: Number(nextQuantity.toFixed(8)),
+              estimatedValue: Number(nextEstimatedValue.toFixed(2)),
+            };
+          })
+        : prev.digitalAssets;
 
       return {
         ...prev,
@@ -901,8 +1516,20 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         invoices: nextInvoices,
         bills: nextBills,
         payments: [nextPayment, ...(prev.payments ?? [])],
+        bankAccounts: nextBankAccounts,
+        ledgerAccounts: nextLedgerAccounts,
+        treasuryAccounts: nextTreasuryAccounts,
+        wallets: nextWallets,
+        digitalAssets: nextDigitalAssets,
         transactions: [nextTransaction, ...(prev.transactions ?? [])],
         settlements: [nextSettlement, ...(prev.settlements ?? [])],
+        remittanceStatements: [nextRemittanceStatement, ...(prev.remittanceStatements ?? [])],
+        instrumentSettlements: nextInstrumentSettlement
+          ? [nextInstrumentSettlement, ...(prev.instrumentSettlements ?? [])]
+          : prev.instrumentSettlements,
+        onChainTransactions: nextOnChainTransaction
+          ? [nextOnChainTransaction, ...(prev.onChainTransactions ?? [])]
+          : prev.onChainTransactions,
         journalEntries: [nextJournal, ...(prev.journalEntries ?? [])],
         tokens: settlementToken ? [settlementToken, ...(prev.tokens ?? [])] : prev.tokens,
       };
@@ -910,6 +1537,652 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
     setActiveSubsection('payments');
     setIsPaymentModalOpen(false);
+  };
+
+  const handleApproveOutgoingPayment = (paymentId: string) => {
+    const approvalAt = new Date().toISOString();
+    const approver =
+      defaultEntity?.representativeName ||
+      defaultEntity?.displayName ||
+      data.workspaceSettings.workspaceName ||
+      'ClearFlow Operator';
+
+    setData((prev) => {
+      const payment = prev.payments.find((item) => item.id === paymentId);
+      if (!payment) {
+        return prev;
+      }
+
+      const settlement = payment.linkedSettlementId
+        ? prev.settlements.find((item) => item.id === payment.linkedSettlementId)
+        : undefined;
+
+      if (
+        payment.direction !== 'outgoing' ||
+        payment.counterpartyType !== 'vendor' ||
+        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
+        settlement?.processorStatus === 'requires_review' ||
+        settlement?.processorStatus === 'blocked'
+      ) {
+        return prev;
+      }
+
+      const linkedTokenIds = settlement?.linkedTokenIds || (payment.releaseTokenId ? [payment.releaseTokenId] : []);
+      const tokenShouldVerify = settlement?.verificationMethod === 'internal_control_token';
+
+      return {
+        ...prev,
+        payments: prev.payments.map((item) =>
+          item.id === paymentId
+            ? {
+                ...item,
+                approvalStatus: 'approved',
+                approvedBy: approver,
+                approvedAt: approvalAt,
+                releaseStatus: item.releaseStatus === 'released' ? 'released' : 'ready_to_release',
+                notes: item.notes || 'Approved for remittance release.',
+              }
+            : item
+        ),
+        settlements: prev.settlements.map((item) =>
+          item.id === payment.linkedSettlementId
+            ? {
+                ...item,
+                status:
+                  item.status === 'exception'
+                    ? item.status
+                    : payment.method === 'digital_asset'
+                      ? ('verifying' as const)
+                      : ('verifying' as const),
+                verificationStatus: tokenShouldVerify ? 'verified' : item.verificationStatus,
+                verificationReference: tokenShouldVerify
+                  ? `Internal control token approved by ${approver}.`
+                  : item.verificationReference,
+              }
+            : item
+        ),
+        tokens: prev.tokens.map((token) =>
+          linkedTokenIds.includes(token.id) && tokenShouldVerify
+            ? {
+                ...token,
+                status: 'verified',
+                verifiedAt: approvalAt,
+                proofReference:
+                  token.proofReference ||
+                  `Approved for remittance release by ${approver}.`,
+              }
+            : token
+        ),
+      };
+    });
+  };
+
+  const handleReleaseOutgoingPayment = async (paymentId: string) => {
+    const releasedAt = new Date().toISOString();
+    const releaser =
+      defaultEntity?.representativeName ||
+      defaultEntity?.displayName ||
+      data.workspaceSettings.workspaceName ||
+      'ClearFlow Operator';
+    const livePayment = data.payments.find((item) => item.id === paymentId);
+    const liveWallet = livePayment?.linkedWalletId
+      ? data.wallets.find((item) => item.id === livePayment.linkedWalletId)
+      : undefined;
+    const liveVendor =
+      livePayment?.counterpartyType === 'vendor' && livePayment.counterpartyId
+        ? data.vendors.find((item) => item.id === livePayment.counterpartyId)
+        : undefined;
+    const liveDigitalAsset = livePayment?.linkedDigitalAssetId
+      ? data.digitalAssets.find((item) => item.id === livePayment.linkedDigitalAssetId)
+      : undefined;
+    let walletExecution:
+      | {
+          txHash: string;
+          destinationAddress: string;
+          executionMode: 'injected_wallet';
+          transferKind: 'native_transfer' | 'erc20_transfer';
+          assetAmount: number;
+          rawUnits?: string;
+          contractAddress?: string;
+          assetSymbol?: string;
+        }
+      | undefined;
+
+    if (livePayment?.method === 'digital_asset' && liveWallet && liveVendor) {
+      if (canUseInjectedWalletExecution(liveWallet, liveVendor)) {
+        try {
+          walletExecution = await executeInjectedWalletPayment({
+            wallet: liveWallet,
+            vendor: liveVendor,
+            asset: liveDigitalAsset,
+            amountFiat: livePayment.amount,
+          });
+          setOperationsNotice(
+            walletExecution.transferKind === 'erc20_transfer'
+              ? `Token transfer broadcast from ${liveWallet.name}${walletExecution.assetSymbol ? ` using ${walletExecution.assetSymbol}` : ''}. Hash: ${walletExecution.txHash}`
+              : `Wallet transaction broadcast from ${liveWallet.name}. Hash: ${walletExecution.txHash}`
+          );
+        } catch (error) {
+          setOperationsNotice(
+            error instanceof Error
+              ? `${error.message} Release stayed in controlled queue.`
+              : 'Wallet broadcast failed, so the payment stayed in controlled queue.'
+          );
+        }
+      } else if (!liveVendor.paymentInstructions?.digitalWalletAddress) {
+        setOperationsNotice(
+          `Vendor ${liveVendor.name} does not have a digital wallet address on file yet, so release stayed in controlled queue mode.`
+        );
+      } else {
+        setOperationsNotice(
+          'Injected-wallet broadcast is not available for this wallet/network, so release stayed in controlled queue mode.'
+        );
+      }
+    }
+
+    setData((prev) => {
+      const payment = prev.payments.find((item) => item.id === paymentId);
+      if (!payment) {
+        return prev;
+      }
+
+      const settlement = payment.linkedSettlementId
+        ? prev.settlements.find((item) => item.id === payment.linkedSettlementId)
+        : undefined;
+
+      if (
+        payment.direction !== 'outgoing' ||
+        payment.counterpartyType !== 'vendor' ||
+        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
+        payment.releaseStatus === 'released' ||
+        (payment.approvalStatus !== 'approved' && payment.approvalStatus !== 'not_required') ||
+        settlement?.processorStatus === 'requires_review' ||
+        settlement?.processorStatus === 'blocked'
+      ) {
+        return prev;
+      }
+
+      const linkedTokenIds = settlement?.linkedTokenIds || (payment.releaseTokenId ? [payment.releaseTokenId] : []);
+      const treasuryAccount = payment.treasuryAccountId
+        ? prev.treasuryAccounts.find((account) => account.id === payment.treasuryAccountId)
+        : undefined;
+
+      return {
+        ...prev,
+        payments: prev.payments.map((item) =>
+          item.id === paymentId
+            ? {
+                ...item,
+                status: payment.method === 'digital_asset' ? 'initiated' : 'settled',
+                releaseStatus: 'released',
+                releasedBy: releaser,
+                releasedAt,
+                approvalStatus: item.approvalStatus || 'approved',
+                settlementExecution:
+                  item.method === 'digital_asset' && item.settlementExecution
+                    ? {
+                        ...item.settlementExecution,
+                        processorStatus: walletExecution ? 'processing' : item.settlementExecution.processorStatus,
+                        executionReason: walletExecution
+                          ? walletExecution.transferKind === 'erc20_transfer'
+                            ? `Broadcast token transfer through injected wallet control to ${walletExecution.destinationAddress}${walletExecution.assetSymbol ? ` using ${walletExecution.assetSymbol}` : ''}.`
+                            : `Broadcast through injected wallet control to ${walletExecution.destinationAddress}.`
+                          : item.settlementExecution.executionReason,
+                        executionReference: walletExecution?.txHash || item.settlementExecution.executionReference,
+                        simulatedProcessing: walletExecution ? false : item.settlementExecution.simulatedProcessing,
+                      }
+                    : item.settlementExecution,
+              }
+            : item
+        ),
+        settlements: prev.settlements.map((item) =>
+          item.id === payment.linkedSettlementId
+            ? {
+                ...item,
+                status: payment.method === 'digital_asset' ? 'clearing' : 'settled',
+                processorStatus: payment.method === 'digital_asset' ? 'processing' : 'settled',
+                releasedAt,
+                releasedBy: releaser,
+                actualSettlementDate:
+                  payment.method === 'digital_asset' ? item.actualSettlementDate : releasedAt.slice(0, 10),
+                liquidCashStage:
+                  payment.method === 'digital_asset' ? 'pending_liquidation' : 'liquid_cash_released',
+                verificationStatus: payment.method === 'digital_asset' ? 'pending' : 'verified',
+                verificationReference:
+                  payment.method === 'digital_asset'
+                    ? walletExecution
+                      ? walletExecution.transferKind === 'erc20_transfer'
+                        ? `Released by ${releaser}. Token transfer broadcast on-chain and waiting for confirmation.`
+                        : `Released by ${releaser}. Broadcast on-chain and waiting for confirmation.`
+                      : `Released by ${releaser} and waiting for on-chain confirmation.`
+                    : `Released by ${releaser} through the remittance control desk.`,
+                executionReference: walletExecution?.txHash || item.executionReference,
+                autoReconcileStatus: payment.method === 'digital_asset' ? item.autoReconcileStatus : 'pending',
+              }
+            : item
+        ),
+        onChainTransactions: prev.onChainTransactions.map((item) =>
+          item.id === payment.linkedOnChainTransactionId
+            ? {
+                ...item,
+                txHash: walletExecution?.txHash || item.txHash,
+                status: 'pending',
+              }
+            : item
+        ),
+        remittanceStatements: prev.remittanceStatements.map((item) =>
+          settlement?.linkedRemittanceStatementId && item.id === settlement.linkedRemittanceStatementId
+            ? {
+                ...item,
+                status: payment.method === 'digital_asset' ? 'accepted' : 'performed',
+              }
+            : item
+        ),
+        instrumentSettlements: prev.instrumentSettlements.map((item) =>
+          settlement?.linkedInstrumentSettlementId && item.id === settlement.linkedInstrumentSettlementId
+            ? {
+                ...item,
+                performanceStatus:
+                  payment.method === 'digital_asset' ? 'presented' : 'performed',
+                performedAmount:
+                  payment.method === 'digital_asset' ? item.performedAmount : payment.amount,
+              }
+            : item
+        ),
+        treasuryAccounts: treasuryAccount
+          ? prev.treasuryAccounts.map((account) =>
+              account.id === treasuryAccount.id
+                ? {
+                    ...account,
+                    reservedBalance: Number(
+                      Math.max(0, (account.reservedBalance ?? 0) - payment.amount).toFixed(2)
+                    ),
+                  }
+                : account
+            )
+          : prev.treasuryAccounts,
+        tokens: prev.tokens.map((token) =>
+          linkedTokenIds.includes(token.id)
+            ? {
+                ...token,
+                status: 'verified',
+                verifiedAt: releasedAt,
+                proofReference:
+                  token.proofReference ||
+                  `Released by ${releaser} through the remittance control desk.`,
+              }
+            : token
+        ),
+      };
+    });
+  };
+
+  const handleConfirmWalletSettlement = async (
+    paymentId: string,
+    options?: {
+      allowManualFallback?: boolean;
+      silentPending?: boolean;
+    }
+  ) => {
+    const allowManualFallback = options?.allowManualFallback ?? true;
+    const silentPending = options?.silentPending ?? false;
+    const confirmedAt = new Date().toISOString();
+    const confirmer =
+      defaultEntity?.representativeName ||
+      defaultEntity?.displayName ||
+      data.workspaceSettings.workspaceName ||
+      'ClearFlow Operator';
+    const livePayment = data.payments.find((item) => item.id === paymentId);
+    const liveWallet = livePayment?.linkedWalletId
+      ? data.wallets.find((item) => item.id === livePayment.linkedWalletId)
+      : undefined;
+    const liveOnChain = livePayment?.linkedOnChainTransactionId
+      ? data.onChainTransactions.find((item) => item.id === livePayment.linkedOnChainTransactionId)
+      : undefined;
+
+    if (livePayment?.method === 'digital_asset' && liveWallet && liveOnChain?.txHash) {
+      const pollResult = await pollInjectedWalletTransaction(liveOnChain.txHash);
+      if (pollResult.status === 'pending') {
+        if (!silentPending) {
+          setOperationsNotice(
+            `Wallet transaction ${liveOnChain.txHash} is still pending on ${liveWallet.network}.`
+          );
+        }
+        return;
+      }
+
+      if (pollResult.status === 'failed') {
+        setData((prev) => ({
+          ...prev,
+          payments: prev.payments.map((item) =>
+            item.id === paymentId ? { ...item, status: 'failed' } : item
+          ),
+          settlements: prev.settlements.map((item) =>
+            item.id === livePayment.linkedSettlementId
+              ? {
+                  ...item,
+                  status: 'exception',
+                  processorStatus: 'blocked',
+                  verificationStatus: 'exception',
+                  verificationReference: `On-chain execution failed for ${liveOnChain.txHash}.`,
+                  autoReconcileStatus: 'exception',
+                }
+              : item
+          ),
+          onChainTransactions: prev.onChainTransactions.map((item) =>
+            item.id === liveOnChain.id ? { ...item, status: 'failed' } : item
+          ),
+        }));
+        setOperationsNotice(`Wallet transaction ${liveOnChain.txHash} failed on-chain.`);
+        return;
+      }
+
+      if (pollResult.status === 'provider_unavailable') {
+        if (!allowManualFallback) {
+          return;
+        }
+
+        setOperationsNotice(
+          'Live wallet receipt polling is temporarily unavailable, so a controlled manual confirmation is being applied.'
+        );
+      } else {
+        setOperationsNotice(`Wallet transaction ${liveOnChain.txHash} confirmed on-chain.`);
+      }
+    } else if (livePayment?.method === 'digital_asset') {
+      if (!allowManualFallback) {
+        return;
+      }
+
+      setOperationsNotice(
+        'Manual confirmation applied because live provider receipt polling was not available for this wallet.'
+      );
+    }
+
+    setData((prev) => {
+      const payment = prev.payments.find((item) => item.id === paymentId);
+      if (
+        !payment ||
+        payment.direction !== 'outgoing' ||
+        payment.counterpartyType !== 'vendor' ||
+        payment.method !== 'digital_asset' ||
+        payment.releaseStatus !== 'released'
+      ) {
+        return prev;
+      }
+
+      const settlement = payment.linkedSettlementId
+        ? prev.settlements.find((item) => item.id === payment.linkedSettlementId)
+        : undefined;
+      const digitalAsset = payment.linkedDigitalAssetId
+        ? prev.digitalAssets.find((item) => item.id === payment.linkedDigitalAssetId)
+        : undefined;
+      const linkedLedgerAccount = digitalAsset?.linkedLedgerAccountId
+        ? prev.ledgerAccounts.find((item) => item.id === digitalAsset.linkedLedgerAccountId)
+        : undefined;
+      const quantityDelta =
+        digitalAsset && digitalAsset.quantity > 0 && digitalAsset.estimatedValue > 0
+          ? Number((payment.amount / (digitalAsset.estimatedValue / digitalAsset.quantity)).toFixed(8))
+          : 0;
+      const linkedTokenIds = settlement?.linkedTokenIds || (payment.releaseTokenId ? [payment.releaseTokenId] : []);
+
+      return {
+        ...prev,
+        payments: prev.payments.map((item) =>
+          item.id === paymentId
+            ? {
+                ...item,
+                status: 'settled',
+                settlementExecution:
+                  item.settlementExecution
+                    ? {
+                        ...item.settlementExecution,
+                        processorStatus: 'settled',
+                        executionReason:
+                          item.settlementExecution.executionReason ||
+                          `Confirmed on-chain by ${confirmer}.`,
+                      }
+                    : item.settlementExecution,
+              }
+            : item
+        ),
+        settlements: prev.settlements.map((item) =>
+          item.id === payment.linkedSettlementId
+            ? {
+                ...item,
+                status: 'settled',
+                processorStatus: 'settled',
+                actualSettlementDate: confirmedAt.slice(0, 10),
+                liquidCashStage: 'liquid_cash_released',
+                verificationStatus: 'verified',
+                verificationReference: `On-chain settlement confirmed by ${confirmer}.`,
+                autoReconcileStatus: 'pending',
+              }
+            : item
+        ),
+        onChainTransactions: prev.onChainTransactions.map((item) =>
+          item.id === payment.linkedOnChainTransactionId
+            ? {
+                ...item,
+                status: 'confirmed',
+              }
+            : item
+        ),
+        digitalAssets: digitalAsset
+          ? prev.digitalAssets.map((item) =>
+              item.id === digitalAsset.id
+                ? {
+                    ...item,
+                    quantity: Number(Math.max(0, item.quantity - quantityDelta).toFixed(8)),
+                    estimatedValue: Number(Math.max(0, item.estimatedValue - payment.amount).toFixed(2)),
+                  }
+                : item
+            )
+          : prev.digitalAssets,
+        ledgerAccounts: linkedLedgerAccount
+          ? prev.ledgerAccounts.map((item) =>
+              item.id === linkedLedgerAccount.id
+                ? {
+                    ...item,
+                    balance: Number((item.balance - payment.amount).toFixed(2)),
+                  }
+                : item
+            )
+          : prev.ledgerAccounts,
+        remittanceStatements: prev.remittanceStatements.map((item) =>
+          settlement?.linkedRemittanceStatementId && item.id === settlement.linkedRemittanceStatementId
+            ? {
+                ...item,
+                status: 'performed',
+              }
+            : item
+        ),
+        instrumentSettlements: prev.instrumentSettlements.map((item) =>
+          settlement?.linkedInstrumentSettlementId && item.id === settlement.linkedInstrumentSettlementId
+            ? {
+                ...item,
+                performanceStatus: 'performed',
+                performedAmount: payment.amount,
+              }
+            : item
+        ),
+        tokens: prev.tokens.map((token) =>
+          linkedTokenIds.includes(token.id)
+            ? {
+                ...token,
+                status: 'verified',
+                verifiedAt: confirmedAt,
+                proofReference:
+                  token.proofReference || `On-chain settlement confirmed by ${confirmer}.`,
+              }
+            : token
+        ),
+      };
+    });
+  };
+
+  useEffect(() => {
+    const pendingWalletPayments = data.payments.filter(
+      (payment) =>
+        payment.method === 'digital_asset' &&
+        payment.direction === 'outgoing' &&
+        payment.releaseStatus === 'released' &&
+        payment.status !== 'settled' &&
+        Boolean(payment.linkedOnChainTransactionId) &&
+        Boolean(
+          payment.linkedOnChainTransactionId &&
+            data.onChainTransactions.find(
+              (record) =>
+                record.id === payment.linkedOnChainTransactionId &&
+                record.status === 'pending' &&
+                record.txHash
+            )
+        )
+    );
+
+    if (!pendingWalletPayments.length || typeof window === 'undefined') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const pollPendingWalletSettlements = async () => {
+      for (const payment of pendingWalletPayments) {
+        if (isCancelled) {
+          return;
+        }
+
+        await handleConfirmWalletSettlement(payment.id, {
+          allowManualFallback: false,
+          silentPending: true,
+        });
+      }
+    };
+
+    void pollPendingWalletSettlements();
+    const intervalId = window.setInterval(() => {
+      void pollPendingWalletSettlements();
+    }, 25000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [data.onChainTransactions, data.payments]);
+
+  const handleOpenBankConnection = (bankAccountId: string) => {
+    setSelectedBankFeedAccountId(bankAccountId);
+    setIsPlaidModalOpen(true);
+  };
+
+  const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
+    if (!selectedBankFeedAccountId) {
+      setIsPlaidModalOpen(false);
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map((account) =>
+        account.id === selectedBankFeedAccountId
+          ? {
+              ...account,
+              connectionType: 'plaid_connected',
+              liveFeedEnabled: true,
+              liveFeedStatus: 'connected',
+              liveConnectionProvider: 'plaid',
+              plaidItemId: payload.itemId,
+              last4:
+                payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || account.last4,
+              achOriginationEnabled: account.achOriginationEnabled ?? true,
+              autoReconcileEnabled: account.autoReconcileEnabled ?? true,
+              onboardingStatus:
+                account.onboardingStatus === 'connected'
+                  ? 'connected'
+                  : ('connected' as const),
+            }
+          : account
+      ),
+    }));
+
+    setIsPlaidModalOpen(false);
+    setSelectedBankFeedAccountId(null);
+    setActiveSubsection('bankFeed');
+  };
+
+  const handleCreateBankFeedRule = (payload: BankFeedRuleSubmitPayload) => {
+    const entity = defaultEntity;
+    if (!entity || !payload.bankAccountId || !payload.name.trim() || !payload.merchantContains.trim()) {
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      bankFeedRules: [
+        {
+          id: `bfr-${Date.now()}`,
+          entityId: entity.id,
+          bankAccountId: payload.bankAccountId,
+          name: payload.name.trim(),
+          merchantContains: payload.merchantContains.trim(),
+          direction: payload.direction,
+          transactionType: payload.transactionType,
+          defaultLedgerAccountId: payload.defaultLedgerAccountId || undefined,
+          counterpartyLabel: payload.counterpartyLabel?.trim() || undefined,
+          memoTemplate: payload.memoTemplate?.trim() || undefined,
+          minAmount: payload.minAmount ? Number(payload.minAmount) : undefined,
+          maxAmount: payload.maxAmount ? Number(payload.maxAmount) : undefined,
+          verificationMode: payload.verificationMode,
+          autoPost: payload.autoPost,
+          autoReconcile: payload.autoReconcile,
+          active: true,
+        },
+        ...(prev.bankFeedRules ?? []),
+      ],
+    }));
+  };
+
+  const handleToggleBankFeedRule = (ruleId: string) => {
+    setData((prev) => ({
+      ...prev,
+      bankFeedRules: prev.bankFeedRules.map((rule) =>
+        rule.id === ruleId ? { ...rule, active: !rule.active } : rule
+      ),
+    }));
+  };
+
+  const handleSyncBankFeed = async (bankAccountId: string) => {
+    setData((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map((account) =>
+        account.id === bankAccountId
+          ? { ...account, liveFeedStatus: 'syncing', liveFeedEnabled: true }
+          : account
+      ),
+    }));
+
+    const bankAccount = bankAccounts.find((account) => account.id === bankAccountId);
+    if (!bankAccount) {
+      return;
+    }
+
+    let syncedTransactions = [] as Awaited<ReturnType<typeof plaidService.syncTransactions>>;
+
+    try {
+      if (bankAccount.connectionType === 'plaid_connected') {
+        syncedTransactions = await plaidService.syncTransactions(
+          bankAccount.plaidItemId || bankAccount.id
+        );
+      }
+    } catch (error) {
+      console.warn('Bank feed sync fell back to local simulation.', error);
+    }
+
+    setData((prev) => syncBankFeedToLedger({
+      data: prev,
+      bankAccountId,
+      plaidTransactions: syncedTransactions,
+    }));
+    setActiveSubsection('bankFeed');
   };
 
   const handlePreviewInvoice = (invoiceId: string) => {
@@ -2146,22 +3419,63 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
       case 'payments':
         return (
-          <EditableRecordSection
-            title="Payments"
-            description="Incoming and outgoing payment postings with linked document application."
-            emptyMessage="No payment records yet."
-            records={payments}
-            getTitle={(record) => record.id}
-            getSubtitle={(record) =>
-              `${record.direction} | ${record.status} | ${record.method} | ${formatCurrency(record.amount, record.currency)}`
+          <RemittanceOperationsWorkspace
+            payments={payments}
+            customers={customers}
+            vendors={vendors}
+            bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
+            ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}
+            treasuryAccounts={
+              defaultEntity
+                ? treasuryAccounts.filter((item) => item.entityId === defaultEntity.id)
+                : treasuryAccounts
             }
-            onSave={(nextRecord) =>
-              setData((prev) => ({
-                ...prev,
-                payments: updateCollectionRecord(prev.payments, nextRecord),
-              }))
+            wallets={defaultEntity ? wallets.filter((item) => item.entityId === defaultEntity.id) : wallets}
+            onChainTransactions={
+              defaultEntity
+                ? data.onChainTransactions.filter((item) => item.entityId === defaultEntity.id)
+                : data.onChainTransactions
             }
+            onApprovePayment={handleApproveOutgoingPayment}
+            onReleasePayment={handleReleaseOutgoingPayment}
+            onConfirmWalletSettlement={handleConfirmWalletSettlement}
+            operationsNotice={operationsNotice}
           />
+        );
+
+      case 'bankFeed':
+        return (
+          <PageSection
+            title="Live Bank Feed"
+            description="Connect bank accounts, set merchant rules, and post live statement activity into the operational ledger with auto-reconcile controls."
+          >
+            <BankFeedWorkspace
+              bankAccounts={
+                defaultEntity
+                  ? bankAccounts.filter((item) => item.entityId === defaultEntity.id)
+                  : bankAccounts
+              }
+              ledgerAccounts={
+                defaultEntity
+                  ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
+                  : ledgerAccounts
+              }
+              rules={
+                defaultEntity
+                  ? bankFeedRules.filter((rule) => rule.entityId === defaultEntity.id)
+                  : bankFeedRules
+              }
+              entries={
+                defaultEntity
+                  ? bankFeedEntries.filter((entry) => entry.entityId === defaultEntity.id)
+                  : bankFeedEntries
+              }
+              onConnectBank={handleOpenBankConnection}
+              onSyncBank={handleSyncBankFeed}
+              onAddRule={handleCreateBankFeedRule}
+              onToggleRule={handleToggleBankFeedRule}
+            />
+          </PageSection>
         );
 
       case 'intercompany':
@@ -2261,6 +3575,19 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         vendors={vendors}
         invoices={standardInvoices}
         bills={bills}
+        bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
+        ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}
+        treasuryAccounts={
+          defaultEntity
+            ? treasuryAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : treasuryAccounts
+        }
+        wallets={defaultEntity ? wallets.filter((item) => item.entityId === defaultEntity.id) : wallets}
+        digitalAssets={
+          defaultEntity
+            ? digitalAssets.filter((item) => item.entityId === defaultEntity.id)
+            : digitalAssets
+        }
         onClose={() => setIsPaymentModalOpen(false)}
         onSubmit={handlePaymentSubmit}
       />
@@ -2301,6 +3628,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         onClose={() => setIsIntercompanyModalOpen(false)}
         onSubmit={handleIntercompanySubmit}
       />
+      {isPlaidModalOpen ? (
+        <PlaidLinkModal
+          onClose={() => {
+            setIsPlaidModalOpen(false);
+            setSelectedBankFeedAccountId(null);
+          }}
+          onConnected={handlePlaidConnected}
+        />
+      ) : null}
 
       <div style={shellStyle}>
         <PageSection
@@ -2317,6 +3653,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               onAddBill={() => setIsBillModalOpen(true)}
               onAddReceipt={() => setIsReceiptModalOpen(true)}
               onGenerateQuote={() => setIsQuoteModalOpen(true)}
+              onManageBankFeed={() => setActiveSubsection('bankFeed')}
               onAddIntercompanyTransfer={() => setIsIntercompanyModalOpen(true)}
             />
 

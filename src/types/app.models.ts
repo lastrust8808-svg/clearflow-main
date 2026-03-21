@@ -5,6 +5,7 @@ export interface User {
   name: string;
   email?: string;
   phone?: string;
+  userHandle?: string;
   primaryContactType?: 'google' | 'email' | 'phone';
   isVerified: boolean;
 }

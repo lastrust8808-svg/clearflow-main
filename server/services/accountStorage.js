@@ -19,8 +19,16 @@ function accountFilesDirectory(accountId) {
   return path.join(accountDirectory(accountId), 'files');
 }
 
+function accountRemittanceDirectory(accountId) {
+  return path.join(accountDirectory(accountId), 'remittance');
+}
+
 function accountFilePath(accountId, fileId) {
   return path.join(accountFilesDirectory(accountId), `${sanitizeSegment(fileId)}.json`);
+}
+
+function accountRemittancePath(accountId, vendorId) {
+  return path.join(accountRemittanceDirectory(accountId), `${sanitizeSegment(vendorId)}.json`);
 }
 
 async function ensureDirectory(targetPath) {
@@ -83,6 +91,43 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
   return {
     accountId,
     fileId,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+export async function loadAccountRemittanceVault(accountId, vendorId) {
+  try {
+    const raw = await fs.readFile(accountRemittancePath(accountId, vendorId), 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
+  const targetDirectory = accountRemittanceDirectory(accountId);
+  await ensureDirectory(targetDirectory);
+  await fs.writeFile(
+    accountRemittancePath(accountId, vendorId),
+    JSON.stringify(
+      {
+        ...payload,
+        accountId,
+        vendorId,
+        savedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  return {
+    accountId,
+    vendorId,
     savedAt: new Date().toISOString(),
   };
 }

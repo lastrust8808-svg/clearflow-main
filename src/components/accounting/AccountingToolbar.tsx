@@ -10,6 +10,7 @@ interface AccountingToolbarProps {
   onAddCustomer: () => void;
   onAddVendor: () => void;
   onRecordPayment: () => void;
+  onManageBankFeed: () => void;
 }
 
 const buttonStyle: CSSProperties = {
@@ -33,6 +34,7 @@ export default function AccountingToolbar({
   onAddCustomer,
   onAddVendor,
   onRecordPayment,
+  onManageBankFeed,
 }: AccountingToolbarProps) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -44,6 +46,7 @@ export default function AccountingToolbar({
       <button type="button" onClick={onAddBill} style={buttonStyle}>+ Add Bill</button>
       <button type="button" onClick={onAddReceipt} style={buttonStyle}>+ Add Receipt</button>
       <button type="button" onClick={onGenerateQuote} style={buttonStyle}>+ Generate Quote</button>
+      <button type="button" onClick={onManageBankFeed} style={buttonStyle}>+ Live Bank Feed</button>
       <button type="button" onClick={onAddIntercompanyTransfer} style={buttonStyle}>+ Intercompany Transfer</button>
     </div>
   );

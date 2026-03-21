@@ -17,6 +17,7 @@ export const subnavItems = [
   { id: 'customers', label: 'Customers' },
   { id: 'vendors', label: 'Vendors' },
   { id: 'payments', label: 'Payments' },
+  { id: 'bankFeed', label: 'Bank Feed' },
   { id: 'intercompany', label: 'Intercompany' },
   { id: 'reconciliation', label: 'Reconciliation' },
 ] as const;

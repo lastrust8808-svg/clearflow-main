@@ -1,5 +1,6 @@
-import RecordEditorCard from '../ui/RecordEditorCard';
+import type { ReactNode } from 'react';
 import PageSection from '../ui/PageSection';
+import WorkbenchRecordCard, { type WorkbenchSummaryItem } from '../ui/WorkbenchRecordCard';
 
 interface EditableRecordSectionProps<T extends { id: string }> {
   title: string;
@@ -8,7 +9,35 @@ interface EditableRecordSectionProps<T extends { id: string }> {
   records: T[];
   getTitle: (record: T) => string;
   getSubtitle: (record: T) => string;
+  getSummaryItems?: (record: T) => WorkbenchSummaryItem[];
+  renderDetails?: (record: T) => ReactNode;
   onSave: (nextRecord: T) => void;
+}
+
+function buildDefaultSummaryItems<T extends { id: string }>(record: T): WorkbenchSummaryItem[] {
+  return Object.entries(record)
+    .filter(([key, value]) => {
+      if (
+        key === 'id' ||
+        key === 'notes' ||
+        key.startsWith('linked') ||
+        value === undefined ||
+        value === null
+      ) {
+        return false;
+      }
+
+      return (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      );
+    })
+    .slice(0, 6)
+    .map(([key, value]) => ({
+      label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase()),
+      value: String(value),
+    }));
 }
 
 export default function EditableRecordSection<T extends { id: string }>({
@@ -18,6 +47,8 @@ export default function EditableRecordSection<T extends { id: string }>({
   records,
   getTitle,
   getSubtitle,
+  getSummaryItems,
+  renderDetails,
   onSave,
 }: EditableRecordSectionProps<T>) {
   return (
@@ -28,12 +59,15 @@ export default function EditableRecordSection<T extends { id: string }>({
         ) : (
           records.map((record) => (
             <div key={record.id}>
-              <RecordEditorCard
+              <WorkbenchRecordCard
                 title={getTitle(record)}
                 subtitle={getSubtitle(record)}
+                summaryItems={getSummaryItems ? getSummaryItems(record) : buildDefaultSummaryItems(record)}
                 record={record}
                 onSave={onSave}
-              />
+              >
+                {renderDetails ? renderDetails(record) : null}
+              </WorkbenchRecordCard>
             </div>
           ))
         )}

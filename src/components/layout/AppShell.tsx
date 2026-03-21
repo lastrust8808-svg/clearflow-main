@@ -8,17 +8,35 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-const navItems: Array<{ id: AppSection; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'entities', label: 'Entities' },
-  { id: 'accounting', label: 'Accounting' },
-  { id: 'ledger', label: 'Ledger' },
-  { id: 'assets', label: 'Assets' },
-  { id: 'transactions', label: 'Transactions' },
-  { id: 'compliance', label: 'Compliance' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'aiStudio', label: 'AI Studio' },
-  { id: 'settings', label: 'Settings' },
+const navGroups: Array<{
+  title: string;
+  items: Array<{ id: AppSection; label: string; hint: string }>;
+}> = [
+  {
+    title: 'Operate',
+    items: [
+      { id: 'overview', label: 'Overview', hint: 'Command center' },
+      { id: 'entities', label: 'Entities', hint: 'Formation and authority' },
+      { id: 'accounting', label: 'Accounting', hint: 'ERP and cash flow' },
+      { id: 'ledger', label: 'Ledger & Treasury', hint: 'Books and reserve control' },
+    ],
+  },
+  {
+    title: 'Control',
+    items: [
+      { id: 'assets', label: 'Assets & Reserve', hint: 'Assets, wallets, custody' },
+      { id: 'transactions', label: 'Transactions', hint: 'Settlement and movement' },
+      { id: 'compliance', label: 'Compliance & Reports', hint: 'Review, reporting, filings' },
+      { id: 'documents', label: 'Documents & Vault', hint: 'Evidence and packets' },
+    ],
+  },
+  {
+    title: 'Build',
+    items: [
+      { id: 'aiStudio', label: 'AI & Resource Studio', hint: 'Generators and libraries' },
+      { id: 'settings', label: 'Settings', hint: 'Workspace and access' },
+    ],
+  },
 ];
 
 export default function AppShell({
@@ -209,37 +227,63 @@ export default function AppShell({
           </div>
         </div>
 
-        <nav style={{ display: 'grid', gap: 8 }}>
-          {navItems.map((item) => {
-            const isActive = item.id === activeSection;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => onSectionChange(item.id)}
+        <nav style={{ display: 'grid', gap: 16 }}>
+          {navGroups.map((group) => (
+            <div key={group.title} style={{ display: 'grid', gap: 8 }}>
+              <div
                 style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  borderRadius: 14,
-                  border: '1px solid',
-                  borderColor: isActive ? 'var(--cf-border-strong)' : 'transparent',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(54, 215, 255, 0.28), rgba(88, 141, 255, 0.18))'
-                    : 'rgba(255, 255, 255, 0.03)',
-                  color: 'var(--cf-text)',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: isActive ? 700 : 500,
-                  boxShadow: isActive
-                    ? '0 10px 28px rgba(54, 215, 255, 0.16)'
-                    : 'none',
-                  transition: 'all 160ms ease',
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.7,
+                  color: 'rgba(255,255,255,0.52)',
+                  padding: '0 8px',
                 }}
               >
-                {item.label}
-              </button>
-            );
-          })}
+                {group.title}
+              </div>
+              {group.items.map((item) => {
+                const isActive = item.id === activeSection;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSectionChange(item.id)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '12px 14px',
+                      borderRadius: 14,
+                      border: '1px solid',
+                      borderColor: isActive ? 'var(--cf-border-strong)' : 'transparent',
+                      background: isActive
+                        ? 'linear-gradient(135deg, rgba(54, 215, 255, 0.28), rgba(88, 141, 255, 0.18))'
+                        : 'rgba(255, 255, 255, 0.03)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: isActive ? 700 : 500,
+                      boxShadow: isActive
+                        ? '0 10px 28px rgba(54, 215, 255, 0.16)'
+                        : 'none',
+                      transition: 'all 160ms ease',
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: isActive ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.6)',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {item.hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 

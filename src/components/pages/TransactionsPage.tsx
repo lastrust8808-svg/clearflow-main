@@ -107,7 +107,8 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Transactions</h1>
         <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
           Every transaction now sits in a settlement flow: route to liquid cash, verify the credit
-          or debit, and tie the journal layer back automatically.
+          or debit, tie the journal layer back automatically, and distinguish internal treasury
+          discharge from bank-rail settlement.
         </p>
       </div>
 
@@ -237,6 +238,10 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                       ? `${flow.reconciliation.status}${flow.clearedInReconciliation ? ' and transaction cleared.' : ' but transaction not cleared yet.'}`
                       : 'No bank or statement reconciliation linked yet.'}
                   </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Discharge method:</strong>{' '}
+                    {flow.settlement?.dischargeMethod ?? 'not designated'}
+                  </div>
                   {flow.interEntityTransfer ? (
                     <div>
                       <strong style={{ color: 'var(--cf-text)' }}>Inter-entity rule:</strong>{' '}
@@ -258,6 +263,68 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                     </div>
                   ) : null}
                 </div>
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Instrument Settlement Desk"
+        description="Track obligations recognized before cash, performance status, and which treasury or bank rail actually discharges the instrument."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.instrumentSettlements.map((record) => (
+            <div key={record.id}>
+              <RecordEditorCard
+                title={record.title}
+                subtitle={`${record.dischargeMethod} · ${record.performanceStatus} · ${formatMoney(record.faceAmount, record.currency)}`}
+                record={record}
+                onSave={(nextRecord) =>
+                  setData((prev) => ({
+                    ...prev,
+                    instrumentSettlements: prev.instrumentSettlements.map((item) =>
+                      item.id === record.id ? nextRecord : item
+                    ),
+                  }))
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Remittance Statements"
+        description="Statements and remittance-check style records that evidence performance, with MICR shown only as informational unless the settlement is bank-backed."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.remittanceStatements.map((record) => (
+            <RecordCard
+              key={record.id}
+              title={record.title}
+              subtitle={`${record.dischargeMethod} · ${record.status} · ${record.statementDate}`}
+            >
+              <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Payer / Payee:</strong>{' '}
+                  {record.payerName} {'->'} {record.payeeName}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Amount:</strong>{' '}
+                  {formatMoney(record.amount, record.currency)}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>MICR mode:</strong>{' '}
+                  {record.micrLine?.mode ?? 'not assigned'}
+                  {record.micrLine?.routingNumber ? ` | routing ${record.micrLine.routingNumber}` : ''}
+                  {record.micrLine?.accountNumberMask ? ` | acct ****${record.micrLine.accountNumberMask}` : ''}
+                </div>
+                {record.notes ? (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Control note:</strong> {record.notes}
+                  </div>
+                ) : null}
               </div>
             </RecordCard>
           ))}
