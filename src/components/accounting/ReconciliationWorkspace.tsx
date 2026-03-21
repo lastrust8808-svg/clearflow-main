@@ -4,6 +4,7 @@ import type {
   PaymentRecord,
   ReconciliationRecord,
 } from '../../types/core';
+import { buildReconciliationCloseMetrics } from '../../services/reconciliationControls.service';
 
 interface ReconciliationWorkspaceProps {
   bankAccounts: BankAccountRecord[];
@@ -22,6 +23,11 @@ interface ReconciliationWorkspaceProps {
   onAcceptLineSuggestion: (reconciliationId: string, lineId: string) => void;
   onFlagLineException: (reconciliationId: string, lineId: string) => void;
   onCreateAdjustingEntry: (reconciliationId: string, lineId: string) => void;
+  onApproveClose: (
+    reconciliationId: string,
+    controllerName: string,
+    overrideReason: string
+  ) => void;
   onMarkCompleted: (reconciliationId: string, closeSummary: string) => void;
 }
 
@@ -36,6 +42,7 @@ export default function ReconciliationWorkspace({
   onAcceptLineSuggestion,
   onFlagLineException,
   onCreateAdjustingEntry,
+  onApproveClose,
   onMarkCompleted,
 }: ReconciliationWorkspaceProps) {
   const [selectedReconciliationId, setSelectedReconciliationId] = useState<string | null>(
@@ -46,12 +53,28 @@ export default function ReconciliationWorkspace({
   const [statementFile, setStatementFile] = useState<File | null>(null);
   const [exceptionNotes, setExceptionNotes] = useState('');
   const [closeSummary, setCloseSummary] = useState('');
+  const [controllerName, setControllerName] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
 
   const selectedReconciliation = useMemo(
     () =>
       reconciliations.find((record) => record.id === selectedReconciliationId) ??
       reconciliations[0],
     [reconciliations, selectedReconciliationId]
+  );
+
+  const selectedBankAccount = useMemo(
+    () =>
+      bankAccounts.find((account) => account.id === selectedReconciliation?.bankAccountId),
+    [bankAccounts, selectedReconciliation]
+  );
+
+  const closeMetrics = useMemo(
+    () =>
+      selectedReconciliation
+        ? buildReconciliationCloseMetrics(selectedReconciliation, selectedBankAccount)
+        : null,
+    [selectedBankAccount, selectedReconciliation]
   );
 
   useEffect(() => {
@@ -61,6 +84,8 @@ export default function ReconciliationWorkspace({
       setStatementFile(null);
       setExceptionNotes('');
       setCloseSummary('');
+      setControllerName('');
+      setOverrideReason('');
       return;
     }
 
@@ -69,6 +94,8 @@ export default function ReconciliationWorkspace({
     setStatementFile(null);
     setExceptionNotes(selectedReconciliation.exceptionNotes ?? '');
     setCloseSummary(selectedReconciliation.closeSummary ?? '');
+    setControllerName(selectedReconciliation.controllerSignoffName ?? '');
+    setOverrideReason(selectedReconciliation.closeOverrideReason ?? '');
   }, [selectedReconciliation]);
 
   return (
@@ -102,9 +129,7 @@ export default function ReconciliationWorkspace({
               }}
             >
               <div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>
-                  {account.accountName}
-                </div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{account.accountName}</div>
                 <div style={{ color: '#94a3b8', marginTop: 6 }}>
                   {account.institutionName} | {account.accountType} | {account.currency}
                 </div>
@@ -118,9 +143,7 @@ export default function ReconciliationWorkspace({
                 }}
               >
                 <div>
-                  <div style={{ color: '#94a3b8', fontSize: 12 }}>
-                    Open Reconciliations
-                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: 12 }}>Open Reconciliations</div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>
                     {accountReconciliations.length}
                   </div>
@@ -131,6 +154,14 @@ export default function ReconciliationWorkspace({
                   </div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>
                     {settledPayments.length}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: '#94a3b8', fontSize: 12 }}>Current Book Balance</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>
+                    {typeof account.currentBalance === 'number'
+                      ? `${account.currency} ${account.currentBalance.toLocaleString()}`
+                      : 'Not tracked'}
                   </div>
                 </div>
                 <div>
@@ -201,6 +232,9 @@ export default function ReconciliationWorkspace({
             </div>
             <div style={{ color: '#94a3b8', marginTop: 6 }}>
               Review status: {selectedReconciliation.statementReviewStatus ?? 'not_imported'}
+            </div>
+            <div style={{ color: '#94a3b8', marginTop: 6 }}>
+              Approval status: {selectedReconciliation.closeApprovalStatus ?? 'pending'}
             </div>
           </div>
 
@@ -273,6 +307,46 @@ export default function ReconciliationWorkspace({
             </label>
           </div>
 
+          {closeMetrics ? (
+            <div
+              style={{
+                display: 'grid',
+                gap: 10,
+                padding: 14,
+                borderRadius: 12,
+                border: '1px solid rgba(148,163,184,0.18)',
+                background: 'rgba(15,23,42,0.35)',
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Close Control Summary</div>
+              <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+                Book ending balance:{' '}
+                <strong>
+                  {selectedBankAccount?.currency ?? 'USD'}{' '}
+                  {closeMetrics.bookEndingBalance.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </strong>
+                {' '}| Difference:{' '}
+                <strong>
+                  {selectedBankAccount?.currency ?? 'USD'}{' '}
+                  {closeMetrics.differenceAmount.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </strong>
+                {' '}| Matched lines: <strong>{closeMetrics.matchedLineCount}</strong>
+                {' '}| Unresolved lines: <strong>{closeMetrics.unresolvedLineCount}</strong>
+              </div>
+              <div style={{ color: closeMetrics.isReadyToApprove ? '#8cebff' : '#f7d37b' }}>
+                {closeMetrics.isReadyToApprove
+                  ? 'This reconciliation is ready for controller approval.'
+                  : closeMetrics.blockedReason}
+              </div>
+            </div>
+          ) : null}
+
           <label style={{ display: 'grid', gap: 6 }}>
             <span>Exception Notes</span>
             <textarea
@@ -311,25 +385,65 @@ export default function ReconciliationWorkspace({
             />
           </label>
 
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Controller Signoff Name</span>
+              <input
+                value={controllerName}
+                onChange={(event) => setControllerName(event.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  minHeight: 44,
+                  borderRadius: 10,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.5)',
+                  color: '#e5e7eb',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Override Reason</span>
+              <input
+                value={overrideReason}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                placeholder="Only use when approving a controlled exception."
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  minHeight: 44,
+                  borderRadius: 10,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.5)',
+                  color: '#e5e7eb',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </label>
+          </div>
+
           <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
-            Cleared transactions:{' '}
-            <strong>{selectedReconciliation.clearedTransactionIds.length}</strong>
+            Cleared transactions: <strong>{selectedReconciliation.clearedTransactionIds.length}</strong>
             {selectedReconciliation.unmatchedTransactionIds?.length ? (
               <>
-                {' '}| Unmatched transactions:{' '}
-                <strong>{selectedReconciliation.unmatchedTransactionIds.length}</strong>
+                {' '}| Unmatched transactions: <strong>{selectedReconciliation.unmatchedTransactionIds.length}</strong>
               </>
             ) : null}
             {selectedReconciliation.statementImportId ? (
               <>
-                {' '}| Statement import job:{' '}
-                <strong>{selectedReconciliation.statementImportId}</strong>
+                {' '}| Statement import job: <strong>{selectedReconciliation.statementImportId}</strong>
               </>
             ) : null}
             {selectedReconciliation.parsedStatementLines?.length ? (
               <>
-                {' '}| Parsed lines:{' '}
-                <strong>{selectedReconciliation.parsedStatementLines.length}</strong>
+                {' '}| Parsed lines: <strong>{selectedReconciliation.parsedStatementLines.length}</strong>
               </>
             ) : null}
           </div>
@@ -381,6 +495,7 @@ export default function ReconciliationWorkspace({
                     {line.suggestedTransactionIds?.length
                       ? ` | tx ${line.suggestedTransactionIds.join(', ')}`
                       : ''}
+                    {line.linkedJournalEntryId ? ` | journal ${line.linkedJournalEntryId}` : ''}
                   </div>
                   {line.notes ? (
                     <div style={{ color: '#d1d5db', fontSize: 13 }}>{line.notes}</div>
@@ -389,9 +504,7 @@ export default function ReconciliationWorkspace({
                     {line.matchStatus === 'suggested' ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          onAcceptLineSuggestion(selectedReconciliation.id, line.id)
-                        }
+                        onClick={() => onAcceptLineSuggestion(selectedReconciliation.id, line.id)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: 10,
@@ -407,9 +520,7 @@ export default function ReconciliationWorkspace({
                     {line.matchStatus !== 'exception' ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          onFlagLineException(selectedReconciliation.id, line.id)
-                        }
+                        onClick={() => onFlagLineException(selectedReconciliation.id, line.id)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: 10,
@@ -425,9 +536,7 @@ export default function ReconciliationWorkspace({
                     {line.matchStatus === 'exception' ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          onCreateAdjustingEntry(selectedReconciliation.id, line.id)
-                        }
+                        onClick={() => onCreateAdjustingEntry(selectedReconciliation.id, line.id)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: 10,
@@ -499,17 +608,40 @@ export default function ReconciliationWorkspace({
             </button>
             <button
               type="button"
+              onClick={() =>
+                onApproveClose(selectedReconciliation.id, controllerName, overrideReason)
+              }
+              style={{
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(126, 242, 255, 0.28)',
+                background: 'rgba(54, 215, 255, 0.12)',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              Approve Close
+            </button>
+            <button
+              type="button"
               onClick={() => onMarkCompleted(selectedReconciliation.id, closeSummary)}
               style={{
                 padding: '10px 14px',
                 borderRadius: 12,
                 border: '1px solid rgba(126, 242, 255, 0.28)',
                 background:
-                  'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                  selectedReconciliation.closeApprovalStatus === 'approved'
+                    ? 'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))'
+                    : 'rgba(255,255,255,0.08)',
                 color: '#fff',
-                cursor: 'pointer',
+                cursor:
+                  selectedReconciliation.closeApprovalStatus === 'approved'
+                    ? 'pointer'
+                    : 'not-allowed',
                 fontWeight: 700,
+                opacity: selectedReconciliation.closeApprovalStatus === 'approved' ? 1 : 0.7,
               }}
+              disabled={selectedReconciliation.closeApprovalStatus !== 'approved'}
             >
               Close Reconciliation
             </button>

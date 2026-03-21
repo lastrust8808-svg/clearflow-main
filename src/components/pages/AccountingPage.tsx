@@ -9,6 +9,12 @@ import {
   queueInvoiceDelivery,
   queueInvoiceExport,
 } from '../../services/erpOperations.service';
+import {
+  downloadInvoicePacket,
+  openInvoiceEmailDraft,
+  resolveInvoiceRecipientEmail,
+} from '../../services/invoiceDelivery.service';
+import { buildReconciliationCloseMetrics } from '../../services/reconciliationControls.service';
 import { parseStatementFileForReconciliation } from '../../services/reconciliationStatement.service';
 import AccountingDashboardSection from '../accounting/AccountingDashboardSection';
 import AccountingToolbar from '../accounting/AccountingToolbar';
@@ -226,7 +232,17 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     if (existingCustomer) {
       return {
         customerId: existingCustomer.id,
-        customers: prev.customers,
+        customers: prev.customers.map((record) =>
+          record.id === existingCustomer.id
+            ? {
+                ...record,
+                email: payload.email || record.email,
+                phone: payload.phone || record.phone,
+                billingAddress: payload.address || record.billingAddress,
+                notes: payload.notes || record.notes,
+              }
+            : record
+        ),
       };
     }
 
@@ -916,14 +932,84 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       return;
     }
 
-    const response = await queueInvoiceDelivery({
-      invoiceId: invoice.id,
-      entityId: invoice.entityId,
-      invoiceNumber: invoice.invoiceNumber,
-      deliveryMethod: invoice.deliveryMethod,
-      recipientEmail: invoice.recipientEmail,
-      internalDeliveryTarget: invoice.internalDeliveryTarget,
-    });
+    const customer = customers.find((item) => item.id === invoice.customerId);
+    const entity = data.entities.find((item) => item.id === invoice.entityId);
+    const recipientEmail = resolveInvoiceRecipientEmail(invoice, customer);
+    const needsPacketDownload = invoice.deliveryMethod !== 'internal_user';
+    const packetDownload = needsPacketDownload
+      ? downloadInvoicePacket({
+          invoice,
+          customer,
+          entity,
+        })
+      : null;
+    const exportResponse = needsPacketDownload
+      ? await queueInvoiceExport({
+          invoiceId: invoice.id,
+          entityId: invoice.entityId,
+          invoiceNumber: invoice.invoiceNumber,
+        })
+      : null;
+    const exportDocumentId = packetDownload
+      ? `doc-export-${invoiceId}-${Date.now()}`
+      : null;
+
+    let deliveryResponse:
+      | Awaited<ReturnType<typeof queueInvoiceDelivery>>
+      | null = null;
+    let deliveryNotes = 'Invoice packet downloaded for manual delivery.';
+    let deliveryStatus: InvoiceRecord['deliveryStatus'] = 'ready_to_send';
+
+    if (invoice.deliveryMethod === 'internal_user') {
+      deliveryResponse = await queueInvoiceDelivery({
+        invoiceId: invoice.id,
+        entityId: invoice.entityId,
+        invoiceNumber: invoice.invoiceNumber,
+        deliveryMethod: invoice.deliveryMethod,
+        recipientEmail,
+        internalDeliveryTarget: invoice.internalDeliveryTarget,
+      });
+      deliveryNotes = `Internal ClearFlow delivery queued for ${
+        invoice.internalDeliveryTarget || 'member'
+      }.`;
+      deliveryStatus = 'sent';
+    } else if (invoice.deliveryMethod === 'email' && recipientEmail) {
+      deliveryResponse = await queueInvoiceDelivery({
+        invoiceId: invoice.id,
+        entityId: invoice.entityId,
+        invoiceNumber: invoice.invoiceNumber,
+        deliveryMethod: invoice.deliveryMethod,
+        recipientEmail,
+        internalDeliveryTarget: invoice.internalDeliveryTarget,
+      });
+      const openedDraft = openInvoiceEmailDraft({
+        invoice,
+        customer,
+        entity,
+        workspaceSettings: data.workspaceSettings,
+        attachmentFileName: packetDownload?.fileName || `${invoice.invoiceNumber}.html`,
+      });
+      deliveryNotes = openedDraft
+        ? `Email draft opened for ${recipientEmail}. Attach ${
+            packetDownload?.fileName || 'the downloaded invoice packet'
+          } and send through your connected mail account.`
+        : `Email is on file for ${recipientEmail}. ${
+            packetDownload?.fileName || 'The invoice packet'
+          } downloaded for manual attachment.`;
+    } else if (invoice.deliveryMethod === 'email') {
+      deliveryNotes = `No client email is on file. ${
+        packetDownload?.fileName || 'The invoice packet'
+      } downloaded so you can attach and send manually once an email is available.`;
+      deliveryStatus = 'draft';
+    } else if (invoice.deliveryMethod === 'export') {
+      deliveryNotes = `${
+        packetDownload?.fileName || 'The invoice packet'
+      } downloaded from the ERP delivery desk for manual attachment or offline delivery.`;
+    } else {
+      deliveryNotes = `${
+        packetDownload?.fileName || 'The invoice packet'
+      } downloaded for manual invoice delivery.`;
+    }
 
     setData((prev) => ({
       ...prev,
@@ -931,21 +1017,40 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         invoice.id === invoiceId
           ? {
               ...invoice,
-              status: invoice.status === 'draft' ? 'sent' : invoice.status,
-              deliveryStatus: 'sent',
-              sentAt: new Date().toISOString(),
-              deliveryJobId: response.job.id,
-              deliveryNotes:
-                invoice.deliveryMethod === 'email'
-                  ? `Email delivery queued to ${invoice.recipientEmail || 'recipient'} in-app.`
-                  : invoice.deliveryMethod === 'internal_user'
-                    ? `Internal ClearFlow delivery queued for ${invoice.internalDeliveryTarget || 'member'}.`
-                    : invoice.deliveryMethod === 'export'
-                      ? 'Invoice prepared for export packet delivery.'
-                      : 'Invoice marked sent from manual delivery workflow.',
+              status: invoice.status === 'draft' ? 'issued' : invoice.status,
+              recipientEmail: recipientEmail || invoice.recipientEmail,
+              deliveryStatus,
+              sentAt:
+                deliveryStatus === 'sent' ? new Date().toISOString() : invoice.sentAt,
+              deliveryJobId: deliveryResponse?.job.id || invoice.deliveryJobId,
+              exportJobId: exportResponse?.job.id || invoice.exportJobId,
+              exportedAt: packetDownload ? new Date().toISOString() : invoice.exportedAt,
+              linkedDocumentIds:
+                exportDocumentId && !invoice.linkedDocumentIds?.includes(exportDocumentId)
+                  ? [exportDocumentId, ...(invoice.linkedDocumentIds ?? [])]
+                  : invoice.linkedDocumentIds,
+              deliveryNotes,
             }
           : invoice
       ),
+      documents: exportDocumentId && packetDownload
+        ? [
+            {
+              id: exportDocumentId,
+              entityId: invoice.entityId,
+              title: `${invoice.invoiceNumber} Export Packet`,
+              category: 'financial',
+              date: new Date().toISOString().slice(0, 10),
+              status: 'final',
+              sourceRecordType: 'document',
+              sourceRecordId: invoiceId,
+              fileName: packetDownload.fileName,
+              mimeType: 'text/html',
+              summary: `Invoice packet prepared for ${invoice.invoiceNumber}.`,
+            },
+            ...(prev.documents ?? []),
+          ]
+        : prev.documents,
     }));
   };
 
@@ -969,6 +1074,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     if (!invoice) {
       return;
     }
+    const customer = customers.find((item) => item.id === invoice.customerId);
+    const entity = data.entities.find((item) => item.id === invoice.entityId);
+    const packetDownload = downloadInvoicePacket({
+      invoice,
+      customer,
+      entity,
+    });
 
     const response = await queueInvoiceExport({
       invoiceId: invoice.id,
@@ -981,12 +1093,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       if (!invoice) return prev;
 
       const exportDocument: DocumentRecord = {
-        id: `doc-export-${invoiceId}`,
+        id: `doc-export-${invoiceId}-${Date.now()}`,
         entityId: invoice.entityId,
         title: `${invoice.invoiceNumber} Export Packet`,
         category: 'financial',
         date: new Date().toISOString().slice(0, 10),
         status: 'final',
+        fileName: packetDownload.fileName,
+        mimeType: 'text/html',
         sourceRecordType: 'document',
         sourceRecordId: invoiceId,
         summary: `Export packet prepared for ${invoice.invoiceNumber}.`,
@@ -1001,7 +1115,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 exportedAt: new Date().toISOString(),
                 exportJobId: response.job.id,
                 linkedDocumentIds: [exportDocument.id, ...(item.linkedDocumentIds ?? [])],
-                deliveryNotes: 'Invoice export packet prepared from ERP delivery desk.',
+                deliveryNotes: `${packetDownload.fileName} downloaded from the ERP delivery desk.`,
               }
             : item
         ),
@@ -1035,6 +1149,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             status: 'open',
             preparedBy: 'ClearFlow Workspace',
             statementReviewStatus: 'not_imported',
+            closeApprovalStatus: 'pending',
           },
           ...(prev.reconciliations ?? []),
         ],
@@ -1147,6 +1262,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 : parsedStatement.lines.length
                   ? 'ready_to_close'
                   : item.statementReviewStatus ?? 'not_imported',
+              closeApprovalStatus: 'pending',
+              controllerSignoffName: undefined,
+              controllerSignoffAt: undefined,
+              closeOverrideReason: undefined,
               notes: [item.notes, parsedStatement.summary].filter(Boolean).join(' | '),
             }
           : item
@@ -1203,6 +1322,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 statementReviewStatus: unmatchedLineIds.length
                   ? 'needs_review'
                   : 'ready_to_close',
+                closeApprovalStatus: 'pending',
+                controllerSignoffName: undefined,
+                controllerSignoffAt: undefined,
+                closeOverrideReason: undefined,
                 status: 'in_review',
               }
             : item
@@ -1259,6 +1382,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 statementReviewStatus: nextUnmatchedLineIds.length
                   ? 'needs_review'
                   : 'ready_to_close',
+                closeApprovalStatus: 'pending',
+                controllerSignoffName: undefined,
+                controllerSignoffAt: undefined,
+                closeOverrideReason: undefined,
                 status: 'in_review',
               }
             : item
@@ -1304,6 +1431,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                     : line
                 ),
                 statementReviewStatus: 'needs_review',
+                closeApprovalStatus: 'pending',
+                controllerSignoffName: undefined,
+                controllerSignoffAt: undefined,
+                closeOverrideReason: undefined,
                 status: 'in_review',
               }
             : item
@@ -1371,6 +1502,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
       return {
         ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === reconciliation.bankAccountId
+            ? {
+                ...account,
+                currentBalance: Number(((account.currentBalance ?? 0) + targetLine.amount).toFixed(2)),
+              }
+            : account
+        ),
         transactions: [nextTransaction, ...(prev.transactions ?? [])],
         journalEntries: [nextJournal, ...(prev.journalEntries ?? [])],
         reconciliations: prev.reconciliations.map((item) =>
@@ -1396,6 +1535,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 statementReviewStatus: nextUnmatchedLineIds.length
                   ? 'needs_review'
                   : 'ready_to_close',
+                closeApprovalStatus: 'pending',
+                controllerSignoffName: undefined,
+                controllerSignoffAt: undefined,
+                closeOverrideReason: undefined,
                 status: 'in_review',
               }
             : item
@@ -1404,12 +1547,71 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     });
   };
 
+  const handleApproveReconciliationClose = (
+    reconciliationId: string,
+    controllerName: string,
+    overrideReason: string
+  ) => {
+    const reconciliation = reconciliations.find((item) => item.id === reconciliationId);
+    if (!reconciliation) {
+      return;
+    }
+
+    const bankAccount = bankAccounts.find((account) => account.id === reconciliation.bankAccountId);
+    const metrics = buildReconciliationCloseMetrics(reconciliation, bankAccount);
+    const normalizedName = controllerName.trim();
+    const normalizedOverride = overrideReason.trim();
+
+    if (!normalizedName) {
+      return;
+    }
+
+    const canApprove = metrics.isReadyToApprove || normalizedOverride.length > 0;
+    if (!canApprove) {
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      reconciliations: prev.reconciliations.map((item) =>
+        item.id === reconciliationId
+          ? {
+              ...item,
+              closeApprovalStatus: 'approved',
+              controllerSignoffName: normalizedName,
+              controllerSignoffAt: new Date().toISOString(),
+              closeOverrideReason: metrics.isReadyToApprove ? undefined : normalizedOverride,
+              notes: metrics.isReadyToApprove
+                ? item.notes
+                : [item.notes, `Controller override approved: ${normalizedOverride}`]
+                    .filter(Boolean)
+                    .join(' | '),
+            }
+          : item
+      ),
+    }));
+  };
+
   const handleMarkReconciliationCompleted = async (
     reconciliationId: string,
     closeSummary: string
   ) => {
     const reconciliation = reconciliations.find((item) => item.id === reconciliationId);
     if (!reconciliation) {
+      return;
+    }
+
+    const bankAccount = bankAccounts.find((account) => account.id === reconciliation.bankAccountId);
+    const metrics = buildReconciliationCloseMetrics(reconciliation, bankAccount);
+    const hasApprovedOverride = Boolean(
+      reconciliation.closeApprovalStatus === 'approved' && reconciliation.closeOverrideReason?.trim()
+    );
+
+    if (reconciliation.closeApprovalStatus !== 'approved') {
+      return;
+    }
+
+    if (!metrics.isReadyToApprove && !hasApprovedOverride) {
       return;
     }
 
@@ -1431,6 +1633,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               closeJobId: response.closeJob.id,
               closeSummary: closeSummary || item.closeSummary,
               statementReviewStatus: 'completed',
+              closeApprovalStatus: 'closed',
             }
           : item
       ),
@@ -1969,6 +2172,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               onAcceptLineSuggestion={handleAcceptReconciliationLineSuggestion}
               onFlagLineException={handleFlagReconciliationLineException}
               onCreateAdjustingEntry={handleCreateReconciliationAdjustingEntry}
+              onApproveClose={handleApproveReconciliationClose}
               onMarkCompleted={handleMarkReconciliationCompleted}
             />
           </PageSection>

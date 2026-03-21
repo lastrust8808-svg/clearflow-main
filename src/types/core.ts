@@ -820,6 +820,7 @@ export interface BankAccountRecord {
   accountType: 'checking' | 'savings' | 'credit_card' | 'custodial' | 'other';
   currency: string;
   status: 'active' | 'inactive';
+  currentBalance?: number;
   linkedLedgerAccountId?: string;
 }
 
@@ -864,6 +865,10 @@ export interface ReconciliationRecord {
   matchedStatementLineIds?: string[];
   unmatchedStatementLineIds?: string[];
   statementReviewStatus?: 'not_imported' | 'needs_review' | 'ready_to_close' | 'completed';
+  closeApprovalStatus?: 'pending' | 'approved' | 'closed';
+  controllerSignoffName?: string;
+  controllerSignoffAt?: string;
+  closeOverrideReason?: string;
   notes?: string;
 }
 

@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { CustomerRecord, InvoiceRecord } from '../../types/core';
+import {
+  getInvoiceDeliveryResolution,
+  resolveInvoiceRecipientEmail,
+} from '../../services/invoiceDelivery.service';
 import PageSection from '../ui/PageSection';
 import RecordCard from '../ui/RecordCard';
 import StatCard from '../ui/StatCard';
@@ -32,14 +36,18 @@ export default function InvoiceOperationsWorkspace({
   onMarkViewed,
   onExport,
 }: InvoiceOperationsWorkspaceProps) {
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(invoices[0]?.id ?? null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
+    invoices[0]?.id ?? null
+  );
 
   const selectedInvoice = useMemo(
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId) ?? invoices[0],
     [invoices, selectedInvoiceId]
   );
 
-  const readyToSend = invoices.filter((invoice) => invoice.deliveryStatus === 'ready_to_send').length;
+  const readyToSend = invoices.filter(
+    (invoice) => invoice.deliveryStatus === 'ready_to_send'
+  ).length;
   const sentCount = invoices.filter((invoice) => invoice.deliveryStatus === 'sent').length;
   const viewedCount = invoices.filter((invoice) => invoice.viewedAt).length;
 
@@ -47,6 +55,12 @@ export default function InvoiceOperationsWorkspace({
     () => new Map(customers.map((customer) => [customer.id, customer])),
     [customers]
   );
+  const selectedCustomer = selectedInvoice
+    ? customerLookup.get(selectedInvoice.customerId)
+    : undefined;
+  const deliveryResolution = selectedInvoice
+    ? getInvoiceDeliveryResolution(selectedInvoice, selectedCustomer)
+    : null;
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -64,7 +78,7 @@ export default function InvoiceOperationsWorkspace({
 
       <PageSection
         title="Invoice Operations"
-        description="Preview, send, export, and mark invoice engagement from the ERP delivery desk."
+        description="Preview, draft, export, and track invoice delivery from the ERP desk."
       >
         <div
           style={{
@@ -100,7 +114,8 @@ export default function InvoiceOperationsWorkspace({
                 >
                   <div style={{ fontWeight: 700 }}>{invoice.invoiceNumber}</div>
                   <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
-                    {invoice.deliveryMethod} · {invoice.deliveryStatus ?? 'draft'} · {invoice.totalAmount} {invoice.currency}
+                    {invoice.deliveryMethod} | {invoice.deliveryStatus ?? 'draft'} |{' '}
+                    {invoice.totalAmount} {invoice.currency}
                   </div>
                 </button>
               ))
@@ -111,42 +126,102 @@ export default function InvoiceOperationsWorkspace({
             title={selectedInvoice?.invoiceNumber ?? 'No Invoice Selected'}
             subtitle={
               selectedInvoice
-                ? `${selectedInvoice.deliveryMethod} · ${selectedInvoice.deliveryStatus ?? 'draft'}`
+                ? `${selectedInvoice.deliveryMethod} | ${
+                    selectedInvoice.deliveryStatus ?? 'draft'
+                  }`
                 : 'Choose an invoice to operate on it.'
             }
           >
             {selectedInvoice ? (
               <div style={{ display: 'grid', gap: 10, color: '#dfe6ef', lineHeight: 1.6 }}>
                 <div>
-                  Customer:{' '}
-                  <strong>{customerLookup.get(selectedInvoice.customerId)?.name ?? selectedInvoice.customerId}</strong>
+                  Customer: <strong>{selectedCustomer?.name ?? selectedInvoice.customerId}</strong>
                 </div>
                 <div>
-                  Amount: <strong>{selectedInvoice.currency} {selectedInvoice.totalAmount.toLocaleString()}</strong>
+                  Recipient Email:{' '}
+                  <strong>
+                    {resolveInvoiceRecipientEmail(selectedInvoice, selectedCustomer) ??
+                      'No email on file'}
+                  </strong>
+                </div>
+                <div>
+                  Delivery Flow:{' '}
+                  <strong>
+                    {deliveryResolution?.emailReady
+                      ? 'Email draft + packet download'
+                      : deliveryResolution?.needsManualAttachment
+                        ? 'Packet download + manual attach'
+                        : 'Internal ClearFlow routing'}
+                  </strong>
+                </div>
+                <div>
+                  Amount:{' '}
+                  <strong>
+                    {selectedInvoice.currency}{' '}
+                    {selectedInvoice.totalAmount.toLocaleString()}
+                  </strong>
                 </div>
                 <div>
                   Due: <strong>{selectedInvoice.dueDate ?? 'Not set'}</strong>
                 </div>
                 <div>
-                  Rail: <strong>{selectedInvoice.paymentRailPreference ?? 'manual'}</strong>
+                  Rail:{' '}
+                  <strong>{selectedInvoice.paymentRailPreference ?? 'manual'}</strong>
                 </div>
                 <div>
-                  Verification: <strong>{selectedInvoice.verificationRequired ? 'required' : 'standard'}</strong>
+                  Verification:{' '}
+                  <strong>
+                    {selectedInvoice.verificationRequired ? 'required' : 'standard'}
+                  </strong>
                 </div>
                 <div>
-                  Notes: <strong>{selectedInvoice.deliveryNotes ?? selectedInvoice.notes ?? 'No delivery notes yet.'}</strong>
+                  Notes:{' '}
+                  <strong>
+                    {selectedInvoice.deliveryNotes ??
+                      selectedInvoice.notes ??
+                      'No delivery notes yet.'}
+                  </strong>
                 </div>
+                {deliveryResolution ? (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(88, 141, 255, 0.08)',
+                      border: '1px solid rgba(126, 242, 255, 0.16)',
+                      color: '#d8ecf8',
+                    }}
+                  >
+                    {deliveryResolution.helperText}
+                  </div>
+                ) : null}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
-                  <button type="button" style={actionButtonStyle} onClick={() => onPreview(selectedInvoice.id)}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => onPreview(selectedInvoice.id)}
+                  >
                     Preview
                   </button>
-                  <button type="button" style={actionButtonStyle} onClick={() => onSend(selectedInvoice.id)}>
-                    Send
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => onSend(selectedInvoice.id)}
+                  >
+                    {deliveryResolution?.actionLabel ?? 'Send'}
                   </button>
-                  <button type="button" style={actionButtonStyle} onClick={() => onMarkViewed(selectedInvoice.id)}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => onMarkViewed(selectedInvoice.id)}
+                  >
                     Mark Viewed
                   </button>
-                  <button type="button" style={actionButtonStyle} onClick={() => onExport(selectedInvoice.id)}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => onExport(selectedInvoice.id)}
+                  >
                     Export Packet
                   </button>
                 </div>

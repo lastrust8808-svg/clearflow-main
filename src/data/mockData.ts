@@ -220,6 +220,7 @@ export const coreMockData: CoreDataBundle = {
       accountType: 'checking',
       currency: 'USD',
       status: 'active',
+      currentBalance: 245035,
       linkedLedgerAccountId: 'led-cash-001',
     },
     {
@@ -231,6 +232,7 @@ export const coreMockData: CoreDataBundle = {
       accountType: 'checking',
       currency: 'USD',
       status: 'active',
+      currentBalance: 41250,
     },
   ],
 
@@ -246,6 +248,7 @@ export const coreMockData: CoreDataBundle = {
       status: 'in_review',
       preparedBy: 'Heather Sabbagh',
       statementReviewStatus: 'needs_review',
+      closeApprovalStatus: 'pending',
       parsedStatementLines: [
         {
           id: 'stmt-001',
@@ -283,6 +286,10 @@ export const coreMockData: CoreDataBundle = {
       status: 'completed',
       preparedBy: 'Heather Sabbagh',
       reviewedBy: 'Controller Review Queue',
+      closeApprovalStatus: 'closed',
+      controllerSignoffName: 'Controller Review Queue',
+      controllerSignoffAt: '2026-03-31T18:45:00Z',
+      statementReviewStatus: 'completed',
     },
   ],
 
