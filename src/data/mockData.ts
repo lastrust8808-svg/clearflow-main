@@ -18,6 +18,7 @@ export const coreMockData: CoreDataBundle = {
         accentColor: '#36d7ff',
         documentLogoText: 'L.A.S. Trust',
         emailFromName: 'L.A.S. Trust Office',
+        replyToEmail: 'trustoffice@clearflow.site',
         invoiceFooterNote: 'Private operating records generated through ClearFlow.',
       },
       numbering: {
@@ -57,6 +58,7 @@ export const coreMockData: CoreDataBundle = {
         accentColor: '#5ba8ff',
         documentLogoText: 'Rockdale Holding',
         emailFromName: 'Rockdale Finance',
+        replyToEmail: 'rockdale@clearflow.site',
         invoiceFooterNote: 'Settlement instructions follow the assigned payment rail.',
       },
       numbering: {

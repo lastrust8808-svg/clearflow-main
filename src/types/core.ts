@@ -248,6 +248,7 @@ export interface EntityRecord {
     accentColor?: string;
     documentLogoText?: string;
     emailFromName?: string;
+    replyToEmail?: string;
     invoiceFooterNote?: string;
   };
   numbering?: {

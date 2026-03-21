@@ -6,6 +6,7 @@ export const ProfileSetup: React.FC = () => {
   const [form, setForm] = useState({
     name: auth.currentUser?.name ?? '',
     email: auth.currentUser?.email ?? '',
+    phone: auth.currentUser?.phone ?? '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -14,8 +15,8 @@ export const ProfileSetup: React.FC = () => {
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.name && form.email) {
-      auth.completeProfileSetup(form.name, form.email);
+    if (form.name && (form.email || form.phone)) {
+      auth.completeProfileSetup(form.name, form.email || undefined, form.phone || undefined);
     }
   };
 
@@ -32,10 +33,15 @@ export const ProfileSetup: React.FC = () => {
             </div>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-400">Email Address</label>
-              <input id="email" name="email" type="email" value={form.email} onChange={handleChange} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2" required />
+              <input id="email" name="email" type="email" value={form.email} onChange={handleChange} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2" />
+            </div>
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-slate-400">Phone Number</label>
+              <input id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2" />
             </div>
           </div>
-          <button type="submit" disabled={!form.name || !form.email} className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500">
+          <p className="text-xs text-slate-400 mt-3">At least one contact method is required.</p>
+          <button type="submit" disabled={!form.name || (!form.email && !form.phone)} className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500">
             Confirm and Enter
           </button>
         </form>

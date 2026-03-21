@@ -3,7 +3,9 @@ import type { CoreDataBundle } from './core';
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string;
+  primaryContactType?: 'google' | 'email' | 'phone';
   isVerified: boolean;
 }
 

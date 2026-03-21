@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { CustomerRecord, InvoiceRecord } from '../../types/core';
+import type { CustomerRecord, EntityRecord, InvoiceRecord } from '../../types/core';
 import {
+  buildInvoiceEmailPayload,
   getInvoiceDeliveryResolution,
   resolveInvoiceRecipientEmail,
 } from '../../services/invoiceDelivery.service';
@@ -12,6 +13,7 @@ import StatCard from '../ui/StatCard';
 interface InvoiceOperationsWorkspaceProps {
   invoices: InvoiceRecord[];
   customers: CustomerRecord[];
+  entities?: EntityRecord[];
   onPreview: (invoiceId: string) => void;
   onSend: (invoiceId: string) => void;
   onMarkViewed: (invoiceId: string) => void;
@@ -31,6 +33,7 @@ const actionButtonStyle: CSSProperties = {
 export default function InvoiceOperationsWorkspace({
   invoices,
   customers,
+  entities = [],
   onPreview,
   onSend,
   onMarkViewed,
@@ -58,8 +61,18 @@ export default function InvoiceOperationsWorkspace({
   const selectedCustomer = selectedInvoice
     ? customerLookup.get(selectedInvoice.customerId)
     : undefined;
+  const selectedEntity = selectedInvoice
+    ? entities.find((entity) => entity.id === selectedInvoice.entityId)
+    : undefined;
   const deliveryResolution = selectedInvoice
     ? getInvoiceDeliveryResolution(selectedInvoice, selectedCustomer)
+    : null;
+  const emailPayload = selectedInvoice
+    ? buildInvoiceEmailPayload({
+        invoice: selectedInvoice,
+        customer: selectedCustomer,
+        entity: selectedEntity,
+      })
     : null;
 
   return (
@@ -153,6 +166,14 @@ export default function InvoiceOperationsWorkspace({
                         ? 'Packet download + manual attach'
                         : 'Internal ClearFlow routing'}
                   </strong>
+                </div>
+                <div>
+                  Visible Sender:{' '}
+                  <strong>{emailPayload?.fromName ?? selectedEntity?.displayName ?? 'ClearFlow'}</strong>
+                </div>
+                <div>
+                  Reply-To:{' '}
+                  <strong>{emailPayload?.replyTo ?? 'Workspace fallback / mailbox default'}</strong>
                 </div>
                 <div>
                   Amount:{' '}

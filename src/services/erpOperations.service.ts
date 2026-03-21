@@ -49,6 +49,7 @@ export async function queueInvoiceDelivery(payload: {
   deliveryMethod?: string;
   recipientEmail?: string;
   internalDeliveryTarget?: string;
+  fromName?: string;
   emailSubject?: string;
   emailTextBody?: string;
   emailHtmlBody?: string;

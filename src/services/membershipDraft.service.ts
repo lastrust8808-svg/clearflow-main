@@ -156,6 +156,7 @@ export function enrichAppDataFromMembershipDraft(appData: AppData): AppData {
       accentColor: '#36d7ff',
       documentLogoText: draft.displayName || draft.legalName,
       emailFromName: draft.displayName || draft.legalName,
+      replyToEmail: draft.representativeEmail || appData.user.email,
       invoiceFooterNote: 'Generated and verified through the ClearFlow operating system.',
     },
     numbering: {

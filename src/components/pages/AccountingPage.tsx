@@ -982,9 +982,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         attachmentFileName: emailPayload.attachmentFileName,
         attachmentHtml: emailPayload.attachmentHtml,
         replyTo: emailPayload.replyTo,
+        fromName: emailPayload.fromName,
       });
       if (deliveryResponse.job.status === 'sent') {
-        deliveryNotes = `Invoice emailed directly to ${recipientEmail} from the configured ClearFlow mail account.`;
+        deliveryNotes = `Invoice emailed directly to ${recipientEmail} as ${emailPayload.fromName} from the configured ClearFlow billing mailbox.`;
         deliveryStatus = 'sent';
       } else {
         exportResponse = await queueInvoiceExport({
@@ -1005,7 +1006,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           attachmentFileName: packetDownload.fileName,
         });
         deliveryNotes = openedDraft
-          ? `Server email is not configured yet. Email draft opened for ${recipientEmail}. Attach ${packetDownload.fileName} and send through your connected mail account.`
+          ? `Server email is not configured yet. Email draft opened for ${recipientEmail} as ${emailPayload.fromName}. Attach ${packetDownload.fileName} and send through your connected mail account.`
           : `Server email is not configured yet. ${packetDownload.fileName} downloaded for manual attachment to ${recipientEmail}.`;
       }
     } else if (invoice.deliveryMethod === 'email') {
@@ -2038,6 +2039,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             <InvoiceOperationsWorkspace
               invoices={standardInvoices}
               customers={customers}
+              entities={data.entities}
               onPreview={handlePreviewInvoice}
               onSend={handleSendInvoice}
               onMarkViewed={handleMarkInvoiceViewed}

@@ -252,6 +252,71 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
             }
           />
         </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Email From Name</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.emailFromName ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  emailFromName: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Reply-To Email</span>
+          <input
+            style={inputStyle}
+            type="email"
+            value={draft.branding?.replyToEmail ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  replyToEmail: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Document Logo Text</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.documentLogoText ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  documentLogoText: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Invoice Footer Note</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.invoiceFooterNote ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  invoiceFooterNote: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
       </div>
 
       <div

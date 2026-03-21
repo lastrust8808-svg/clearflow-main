@@ -1,11 +1,20 @@
 import React, { useEffect } from 'react';
 import { Logo } from '../logo/Logo';
+import type { LocalAuthChallenge, LocalAuthContactType } from '../../services/localAuth.service';
 
 interface WelcomeProps {
   isConfigured: boolean;
   onDevLogin: () => void;
   onStartOnboarding: () => void;
   renderGoogleButton: (elementId: string) => void;
+  pendingCredentialAuth: LocalAuthChallenge | null;
+  onStartCredentialAuth: (input: {
+    contactType: LocalAuthContactType;
+    contactValue: string;
+    name?: string;
+  }) => { success: boolean; error?: string };
+  onVerifyCredentialAuth: (code: string) => { success: boolean; error?: string };
+  onCancelCredentialAuth: () => void;
 }
 
 const platformPillars = [
@@ -32,12 +41,48 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onDevLogin,
   onStartOnboarding,
   renderGoogleButton,
+  pendingCredentialAuth,
+  onStartCredentialAuth,
+  onVerifyCredentialAuth,
+  onCancelCredentialAuth,
 }) => {
+  const [credentialMode, setCredentialMode] = React.useState<LocalAuthContactType>('email');
+  const [contactValue, setContactValue] = React.useState('');
+  const [displayName, setDisplayName] = React.useState('');
+  const [verificationCode, setVerificationCode] = React.useState('');
+  const [credentialError, setCredentialError] = React.useState('');
+
   useEffect(() => {
     if (isConfigured) {
       renderGoogleButton('google-btn-container');
     }
   }, [isConfigured, renderGoogleButton]);
+
+  const handleStartCredentialAuth = () => {
+    const result = onStartCredentialAuth({
+      contactType: credentialMode,
+      contactValue,
+      name: displayName || undefined,
+    });
+
+    if (!result.success) {
+      setCredentialError(result.error || 'Unable to start verification.');
+      return;
+    }
+
+    setCredentialError('');
+    setVerificationCode('');
+  };
+
+  const handleVerifyCredentialAuth = () => {
+    const result = onVerifyCredentialAuth(verificationCode);
+    if (!result.success) {
+      setCredentialError(result.error || 'Unable to verify code.');
+      return;
+    }
+
+    setCredentialError('');
+  };
 
   return (
     <div
@@ -307,6 +352,179 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               Dev Login
             </button>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gap: 12,
+              padding: 18,
+              borderRadius: 22,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Email or Phone Sign-In</div>
+            <div style={{ color: '#c5d7e3', fontSize: 14, lineHeight: 1.6 }}>
+              Create or access a ClearFlow account with a verification code. In this environment,
+              verification codes are shown in-app so you can keep building without waiting on a
+              separate auth vendor.
+            </div>
+            {!pendingCredentialAuth ? (
+              <>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {(['email', 'phone'] as LocalAuthContactType[]).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setCredentialMode(option)}
+                      style={{
+                        minHeight: 42,
+                        padding: '0 14px',
+                        borderRadius: 14,
+                        border:
+                          credentialMode === option
+                            ? '1px solid rgba(126, 242, 255, 0.28)'
+                            : '1px solid rgba(255,255,255,0.08)',
+                        background:
+                          credentialMode === option
+                            ? 'rgba(54, 215, 255, 0.14)'
+                            : 'rgba(255,255,255,0.04)',
+                        color: '#eff6fb',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {option === 'email' ? 'Use Email' : 'Use Phone'}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="Full name (optional until profile setup)"
+                  style={{
+                    minHeight: 46,
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(9, 15, 27, 0.8)',
+                    color: '#fff',
+                    padding: '0 14px',
+                  }}
+                />
+                <input
+                  value={contactValue}
+                  onChange={(event) => setContactValue(event.target.value)}
+                  placeholder={
+                    credentialMode === 'email'
+                      ? 'name@example.com'
+                      : '+1 555 555 5555'
+                  }
+                  style={{
+                    minHeight: 46,
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(9, 15, 27, 0.8)',
+                    color: '#fff',
+                    padding: '0 14px',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleStartCredentialAuth}
+                  style={{
+                    minHeight: 46,
+                    borderRadius: 16,
+                    border: '1px solid rgba(126, 242, 255, 0.24)',
+                    background: 'rgba(54, 215, 255, 0.12)',
+                    color: '#effcff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Send Verification Code
+                </button>
+              </>
+            ) : (
+              <>
+                <div
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    background: 'rgba(54, 215, 255, 0.12)',
+                    border: '1px solid rgba(126, 242, 255, 0.24)',
+                    color: '#dff7fb',
+                    lineHeight: 1.7,
+                  }}
+                >
+                  Code prepared for {pendingCredentialAuth.maskedTarget}.
+                  <br />
+                  Verification code: <strong>{pendingCredentialAuth.codePreview}</strong>
+                </div>
+                <input
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value)}
+                  placeholder="Enter 6-digit code"
+                  style={{
+                    minHeight: 46,
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(9, 15, 27, 0.8)',
+                    color: '#fff',
+                    padding: '0 14px',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleVerifyCredentialAuth}
+                    style={{
+                      minHeight: 46,
+                      flex: 1,
+                      borderRadius: 16,
+                      border: '1px solid rgba(126, 242, 255, 0.24)',
+                      background:
+                        'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                      color: '#fff',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Verify and Continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelCredentialAuth}
+                    style={{
+                      minHeight: 46,
+                      padding: '0 14px',
+                      borderRadius: 16,
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#eff6fb',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+            {credentialError ? (
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: 12,
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.24)',
+                  color: '#fecaca',
+                  fontSize: 14,
+                }}
+              >
+                {credentialError}
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

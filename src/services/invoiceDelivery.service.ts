@@ -213,10 +213,11 @@ export function buildInvoiceEmailPayload(options: {
   const { invoice, customer, entity, workspaceSettings } = options;
   const recipientEmail = resolveInvoiceRecipientEmail(invoice, customer);
   const attachmentFileName = buildInvoicePacketFileName(invoice);
-  const senderName =
+  const fromName =
     entity?.branding?.emailFromName || entity?.displayName || entity?.name || 'ClearFlow';
-  const supportEmail = workspaceSettings?.supportEmail || '';
-  const subject = `${senderName} Invoice ${invoice.invoiceNumber}`;
+  const replyTo =
+    entity?.branding?.replyToEmail || workspaceSettings?.supportEmail || undefined;
+  const subject = `${fromName} Invoice ${invoice.invoiceNumber}`;
   const textBody = [
     `Hello ${customer?.name || 'there'},`,
     '',
@@ -228,7 +229,7 @@ export function buildInvoiceEmailPayload(options: {
       ? `Payment instructions: ${invoice.paymentInstructions}`
       : 'Payment instructions are included in the attached invoice packet.',
     '',
-    supportEmail ? `Reply contact: ${supportEmail}` : '',
+    replyTo ? `Reply contact: ${replyTo}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -236,12 +237,13 @@ export function buildInvoiceEmailPayload(options: {
 
   return {
     recipientEmail,
+    fromName,
     subject,
     textBody,
     htmlBody: attachmentHtml,
     attachmentFileName,
     attachmentHtml,
-    replyTo: supportEmail || undefined,
+    replyTo,
   };
 }
 

@@ -430,6 +430,10 @@ export default function App() {
           renderGoogleButton={auth.renderGoogleButton}
           onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
           onStartOnboarding={() => setEntryStage('pathSelect')}
+          pendingCredentialAuth={auth.pendingCredentialAuth}
+          onStartCredentialAuth={auth.startCredentialAuth}
+          onVerifyCredentialAuth={auth.verifyCredentialAuth}
+          onCancelCredentialAuth={auth.cancelCredentialAuth}
         />
       </Suspense>
     );

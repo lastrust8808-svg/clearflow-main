@@ -2,6 +2,15 @@ import React, { createContext, useState, useEffect, useCallback, ReactNode, useR
 import { AppData, Entity, User } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
+import type {
+  LocalAuthChallenge,
+  LocalAuthContactType,
+} from '../services/localAuth.service';
+import {
+  saveLocalAuthAppData,
+  startLocalAuthChallenge,
+  verifyLocalAuthChallenge,
+} from '../services/localAuth.service';
 import {
   clearStoredMembershipDraft,
   enrichAppDataFromMembershipDraft,
@@ -24,8 +33,10 @@ interface AuthState {
   appData: AppData | null;
   token: string | null;
   apiAccessToken: string | null;
+  localAccountId: string | null;
   status: AuthStatus;
   gsiUser: { name: string, email: string } | null;
+  pendingCredentialAuth: LocalAuthChallenge | null;
 }
 
 interface AuthContextType {
@@ -36,12 +47,20 @@ interface AuthContextType {
   authStatus: AuthStatus;
   savingStatus: SavingStatus;
   appData: AppData | null;
+  pendingCredentialAuth: LocalAuthChallenge | null;
   renderGoogleButton: (elementId: string) => void;
   mockLogin: (name: string, email: string) => void;
+  startCredentialAuth: (input: {
+    contactType: LocalAuthContactType;
+    contactValue: string;
+    name?: string;
+  }) => { success: boolean; error?: string };
+  verifyCredentialAuth: (code: string) => { success: boolean; error?: string };
+  cancelCredentialAuth: () => void;
   updateUser: (user: User) => void;
   updateEntities: (entities: Entity[]) => void;
   updateCoreDataSnapshot: (snapshot: CoreDataBundle) => void;
-  completeProfileSetup: (name: string, email: string) => void;
+  completeProfileSetup: (name: string, email?: string, phone?: string) => void;
   completeVerification: () => void;
   logout: () => void;
   requestDriveAccess: () => void;
@@ -55,7 +74,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     appData: null,
     token: null,
     apiAccessToken: null,
+    localAccountId: null,
     gsiUser: null,
+    pendingCredentialAuth: null,
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfigured] = useState(() => {
@@ -116,7 +137,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // It runs ONLY when appData changes.
     
     // Condition 1: Don't save if not in a valid, authenticated state.
-    if (state.status !== 'authenticated' || !state.apiAccessToken || !state.appData) {
+    if (state.status !== 'authenticated' || !state.appData) {
       return;
     }
     
@@ -128,9 +149,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // If conditions pass, it means a user has made a change.
     setSavingStatus('saving');
-    debouncedSave(state.apiAccessToken, state.appData);
+    if (state.apiAccessToken) {
+      debouncedSave(state.apiAccessToken, state.appData);
+      return;
+    }
 
-  }, [state.appData, state.apiAccessToken, state.status, debouncedSave]);
+    if (state.localAccountId) {
+      try {
+        saveLocalAuthAppData(state.localAccountId, state.appData);
+        setSavingStatus('saved');
+        setTimeout(() => setSavingStatus('idle'), 2500);
+      } catch (err) {
+        console.error('Failed to save local user data:', err);
+        setSavingStatus('error');
+      }
+    }
+
+  }, [state.appData, state.apiAccessToken, state.localAccountId, state.status, debouncedSave]);
   
   useEffect(() => {
     if (state.status === 'pending-gsi' && tokenClient) {
@@ -201,11 +236,80 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const mockLogin = (name: string, email: string) => {
     const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: false };
     setState({
-        ...state,
-        appData: { user: mockUser, entities: [] },
-        token: 'mock-token',
-        status: 'pending-profile-setup'
+      ...state,
+      appData: { user: mockUser, entities: [] },
+      token: 'mock-token',
+      localAccountId: null,
+      status: 'pending-profile-setup'
     });
+  };
+
+  const startCredentialAuth = (input: {
+    contactType: LocalAuthContactType;
+    contactValue: string;
+    name?: string;
+  }) => {
+    const result = startLocalAuthChallenge(input);
+    if (!result.success) {
+      return result;
+    }
+
+    setState((current) => ({
+      ...current,
+      pendingCredentialAuth: result.challenge,
+      gsiUser: null,
+      token: null,
+      apiAccessToken: null,
+      localAccountId: null,
+      appData: null,
+      status: 'unauthenticated',
+    }));
+
+    return { success: true };
+  };
+
+  const verifyCredentialAuth = (code: string) => {
+    const challenge = state.pendingCredentialAuth;
+    if (!challenge) {
+      return { success: false, error: 'Request a verification code first.' };
+    }
+
+    const result = verifyLocalAuthChallenge({
+      contactType: challenge.contactType,
+      contactValue: challenge.contactValue,
+      code,
+    });
+
+    if (!result.success) {
+      return result;
+    }
+
+    const nextStatus: AuthStatus =
+      result.appData.user.isVerified
+        ? 'authenticated'
+        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
+          ? 'pending-verification'
+          : 'pending-profile-setup';
+
+    setState((current) => ({
+      ...current,
+      appData: result.appData,
+      token: 'local-token',
+      apiAccessToken: null,
+      localAccountId: result.userId,
+      gsiUser: null,
+      pendingCredentialAuth: null,
+      status: nextStatus,
+    }));
+
+    return { success: true };
+  };
+
+  const cancelCredentialAuth = () => {
+    setState((current) => ({
+      ...current,
+      pendingCredentialAuth: null,
+    }));
   };
   
   const updateUser = (user: User) => {
@@ -229,13 +333,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const completeProfileSetup = (name: string, email: string) => {
+  const completeProfileSetup = (name: string, email?: string, phone?: string) => {
     if (!state.appData) {
       logout();
       return;
     }
 
-    const updatedUser = { ...state.appData.user, name, email, isVerified: false };
+    const updatedUser = {
+      ...state.appData.user,
+      name,
+      email: email || state.appData.user.email,
+      phone: phone || state.appData.user.phone,
+      isVerified: false,
+    };
     const finalAppData = enrichAppDataFromMembershipDraft({
       ...state.appData,
       user: updatedUser,
@@ -255,6 +365,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else if (state.token === 'mock-token') {
       // Dev login flow, no persistence
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
+    } else if (state.localAccountId) {
+      saveLocalAuthAppData(state.localAccountId, finalAppData);
+      setState((s) => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
     } else {
       // Invalid state, logout
       console.error("Incomplete profile setup attempt without access token or mock token.");
@@ -290,11 +403,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               ),
             }
           : undefined;
+        const nextAppData = state.appData
+          ? { ...state.appData, user: updatedUser, coreDataSnapshot: verifiedSnapshot }
+          : null;
+
+        if (nextAppData && state.localAccountId) {
+          saveLocalAuthAppData(state.localAccountId, nextAppData);
+        }
+
         setState(s => ({
             ...s,
-            appData: s.appData
-              ? { ...s.appData, user: updatedUser, coreDataSnapshot: verifiedSnapshot }
-              : null,
+            appData: nextAppData,
             status: 'authenticated',
         }));
         clearStoredMembershipDraft();
@@ -311,9 +430,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setState({
       token: null,
       apiAccessToken: null,
+      localAccountId: null,
       status: 'unauthenticated',
       appData: null,
       gsiUser: null,
+      pendingCredentialAuth: null,
     });
   };
 
@@ -329,8 +450,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     authStatus: state.status,
     savingStatus: savingStatus,
     appData: state.appData,
+    pendingCredentialAuth: state.pendingCredentialAuth,
     renderGoogleButton,
     mockLogin,
+    startCredentialAuth,
+    verifyCredentialAuth,
+    cancelCredentialAuth,
     updateUser,
     updateEntities,
     updateCoreDataSnapshot,
