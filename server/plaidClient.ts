@@ -4,6 +4,7 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 import dotenv from 'dotenv';
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const PLAID_ENV = process.env.PLAID_ENV || 'sandbox';

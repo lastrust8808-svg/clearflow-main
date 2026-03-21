@@ -9,6 +9,7 @@ import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
 
 // Load environment variables from .env file
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const app = express();
