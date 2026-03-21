@@ -136,6 +136,7 @@ export const coreMockData: CoreDataBundle = {
         digitalWalletAddress: '0x9f6d1c3b4a5e7d8c9b0a1e2f3d4c5b6a7f8e9d0c',
         digitalWalletNetwork: 'Ethereum',
         digitalAssetSymbol: 'USDC',
+        digitalPayoutTemplate: 'stablecoin',
         verificationStatus: 'routing_valid',
         lastValidatedAt: '2026-03-11T09:45:00.000Z',
       },

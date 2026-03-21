@@ -308,6 +308,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       digitalWalletAddress?: string;
       digitalWalletNetwork?: string;
       digitalAssetSymbol?: string;
+      digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
     },
   ) => {
     const normalizedName = payload.name?.trim();
@@ -325,6 +326,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             digitalWalletAddress: payload.digitalWalletAddress || undefined,
             digitalWalletNetwork: payload.digitalWalletNetwork || undefined,
             digitalAssetSymbol: payload.digitalAssetSymbol || undefined,
+            digitalPayoutTemplate: payload.digitalPayoutTemplate || undefined,
             verificationStatus:
               payload.routingNumber?.length === 9 ? ('routing_valid' as const) : ('unverified' as const),
             lastValidatedAt:

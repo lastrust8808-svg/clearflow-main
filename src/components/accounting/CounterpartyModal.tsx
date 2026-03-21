@@ -78,6 +78,9 @@ export default function CounterpartyModal({
   const [digitalWalletAddress, setDigitalWalletAddress] = useState('');
   const [digitalWalletNetwork, setDigitalWalletNetwork] = useState('Ethereum');
   const [digitalAssetSymbol, setDigitalAssetSymbol] = useState('');
+  const [digitalPayoutTemplate, setDigitalPayoutTemplate] = useState<
+    'stablecoin' | 'native_asset' | 'manual_confirmation'
+  >('stablecoin');
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +99,7 @@ export default function CounterpartyModal({
     setDigitalWalletAddress('');
     setDigitalWalletNetwork('Ethereum');
     setDigitalAssetSymbol('');
+    setDigitalPayoutTemplate('stablecoin');
   }, [open, mode]);
 
   if (!open) return null;
@@ -168,7 +172,18 @@ export default function CounterpartyModal({
                   <option value="Solana">Solana</option>
                 </select>
               </div>
-              <input value={digitalAssetSymbol} onChange={(e) => setDigitalAssetSymbol(e.target.value)} placeholder="Preferred digital asset symbol (USDC, ETH, BTC, SOL)" style={inputStyle} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <input value={digitalAssetSymbol} onChange={(e) => setDigitalAssetSymbol(e.target.value)} placeholder="Preferred digital asset symbol (USDC, ETH, BTC, SOL)" style={inputStyle} />
+                <select
+                  value={digitalPayoutTemplate}
+                  onChange={(e) => setDigitalPayoutTemplate(e.target.value as typeof digitalPayoutTemplate)}
+                  style={inputStyle}
+                >
+                  <option value="stablecoin">Stablecoin payout</option>
+                  <option value="native_asset">Native-asset payout</option>
+                  <option value="manual_confirmation">Manual release required</option>
+                </select>
+              </div>
             </div>
           ) : null}
           <textarea
@@ -200,6 +215,7 @@ export default function CounterpartyModal({
                 digitalWalletAddress: digitalWalletAddress || undefined,
                 digitalWalletNetwork: digitalWalletAddress ? digitalWalletNetwork : undefined,
                 digitalAssetSymbol: digitalAssetSymbol || undefined,
+                digitalPayoutTemplate: digitalWalletAddress ? digitalPayoutTemplate : undefined,
               })
             }
             style={buttonStyle}

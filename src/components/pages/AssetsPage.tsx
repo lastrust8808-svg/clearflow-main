@@ -87,6 +87,12 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 { label: 'Estimated Value', value: asset.estimatedValue.toLocaleString() },
                 { label: 'Classification', value: asset.classification },
                 { label: 'Custody', value: `${asset.custodyStatus} / ${asset.complianceStatus}` },
+                {
+                  label: 'Execution',
+                  value: asset.contractAddress
+                    ? `${asset.symbol || asset.name} contract ready`
+                    : 'Native or manual asset flow',
+                },
               ]}
               record={asset}
               onSave={(nextRecord) =>

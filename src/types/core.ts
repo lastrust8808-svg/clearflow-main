@@ -844,6 +844,7 @@ export interface VendorRecord {
     digitalWalletAddress?: string;
     digitalWalletNetwork?: string;
     digitalAssetSymbol?: string;
+    digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
     verificationStatus?: 'unverified' | 'routing_valid' | 'verified' | 'invalid';
     lastValidatedAt?: string;
     storedInVault?: boolean;

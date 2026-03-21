@@ -98,6 +98,11 @@ export default function WalletConnectionWorkspace({
       connected: data.wallets.filter((wallet) => wallet.connectionStatus === 'connected').length,
       syncing: data.wallets.filter((wallet) => wallet.connectionStatus === 'syncing').length,
       treasuryLinked: data.wallets.filter((wallet) => wallet.linkedTreasuryAccountId).length,
+      evmReady: data.wallets.filter((wallet) =>
+        ['ethereum', 'base', 'polygon'].some((network) =>
+          wallet.network.toLowerCase().includes(network)
+        )
+      ).length,
     }),
     [data.wallets]
   );
@@ -214,6 +219,12 @@ export default function WalletConnectionWorkspace({
               Syncing
             </span>
             <strong style={{ fontSize: 24 }}>{walletCounts.syncing}</strong>
+          </div>
+          <div style={statTileStyle}>
+            <span style={{ fontSize: 12, color: '#7dd3fc', textTransform: 'uppercase' }}>
+              EVM Ready
+            </span>
+            <strong style={{ fontSize: 24 }}>{walletCounts.evmReady}</strong>
           </div>
         </div>
 

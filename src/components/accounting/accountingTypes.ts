@@ -74,6 +74,7 @@ export interface CounterpartySubmitPayload {
   digitalWalletAddress?: string;
   digitalWalletNetwork?: string;
   digitalAssetSymbol?: string;
+  digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
 }
 
 export interface BillSubmitPayload {

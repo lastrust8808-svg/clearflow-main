@@ -287,6 +287,16 @@ export default function RemittanceOperationsWorkspace({
                         </div>
                       </div>
                     ) : null}
+                    {payment.method === 'digital_asset' ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Payout Profile</strong>
+                        <div>
+                          {vendor?.paymentInstructions?.digitalPayoutTemplate || 'stablecoin'} |{' '}
+                          {vendor?.paymentInstructions?.digitalAssetSymbol || 'asset not set'} |{' '}
+                          {vendor?.paymentInstructions?.digitalWalletNetwork || 'network not set'}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div

@@ -210,6 +210,11 @@ export default function PaymentRecordModal({
     return digitalAssets.filter((record) => record.walletId === linkedWalletId);
   }, [digitalAssets, linkedWalletId]);
 
+  const selectedDigitalAsset = useMemo(
+    () => digitalAssets.find((record) => record.id === linkedDigitalAssetId),
+    [digitalAssets, linkedDigitalAssetId]
+  );
+
   const vendorInstructionReady =
     method === 'digital_asset'
       ? Boolean(selectedVendor?.paymentInstructions?.digitalWalletAddress)
@@ -228,6 +233,45 @@ export default function PaymentRecordModal({
     requiresSettlementExecution ||
     method === 'digital_asset' ||
     treasuryOptions.length > 0;
+
+  useEffect(() => {
+    if (method !== 'digital_asset' || !selectedVendor) {
+      return;
+    }
+
+    const preferredSymbol = selectedVendor.paymentInstructions?.digitalAssetSymbol?.toUpperCase();
+    const preferredNetwork = selectedVendor.paymentInstructions?.digitalWalletNetwork;
+
+    if (!linkedDigitalAssetId && preferredSymbol) {
+      const suggestedAsset = digitalAssets.find(
+        (asset) =>
+          asset.symbol?.toUpperCase() === preferredSymbol &&
+          (!preferredNetwork || asset.network === preferredNetwork)
+      );
+
+      if (suggestedAsset) {
+        setLinkedDigitalAssetId(suggestedAsset.id);
+        if (suggestedAsset.walletId) {
+          setLinkedWalletId((current) => current || suggestedAsset.walletId || '');
+        }
+      }
+    }
+  }, [
+    digitalAssets,
+    linkedDigitalAssetId,
+    method,
+    selectedVendor,
+  ]);
+
+  useEffect(() => {
+    if (method !== 'digital_asset' || !selectedDigitalAsset?.walletId) {
+      return;
+    }
+
+    if (!linkedWalletId) {
+      setLinkedWalletId(selectedDigitalAsset.walletId);
+    }
+  }, [linkedWalletId, method, selectedDigitalAsset]);
 
   if (!open) return null;
 
@@ -488,6 +532,30 @@ export default function PaymentRecordModal({
               </div>
             ) : null}
 
+            {method === 'digital_asset' && selectedVendor ? (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(56,189,248,0.25)',
+                  background: 'rgba(8,47,73,0.24)',
+                  color: '#dbeafe',
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                }}
+              >
+                Preferred payout profile:{' '}
+                {selectedVendor.paymentInstructions?.digitalPayoutTemplate || 'stablecoin'} |{' '}
+                {selectedVendor.paymentInstructions?.digitalAssetSymbol || 'asset not set'} |{' '}
+                {selectedVendor.paymentInstructions?.digitalWalletNetwork || 'network not set'}
+                {selectedDigitalAsset
+                  ? ` | matched asset: ${selectedDigitalAsset.symbol || selectedDigitalAsset.name}`
+                  : preferredSymbolMissing(selectedVendor)
+                    ? ' | add a preferred asset symbol to auto-match treasury liquidity'
+                    : ''}
+              </div>
+            ) : null}
+
             {direction === 'outgoing' ? (
               <div
                 style={{
@@ -572,4 +640,8 @@ export default function PaymentRecordModal({
       </div>
     </div>
   );
+}
+
+function preferredSymbolMissing(vendor?: VendorRecord) {
+  return !vendor?.paymentInstructions?.digitalAssetSymbol;
 }
