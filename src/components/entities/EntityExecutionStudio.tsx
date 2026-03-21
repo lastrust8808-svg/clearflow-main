@@ -8,6 +8,10 @@ import type {
   EntityRecord,
   TokenRecord,
 } from '../../types/core';
+import {
+  buildBankOnboardingChecklist,
+  buildExecutionDocumentBody,
+} from '../../services/entityExecutionTemplates.service';
 
 type ExecutionType =
   | 'formation_packet'
@@ -103,6 +107,8 @@ export default function EntityExecutionStudio({
     setFormState({
       signerName: entity?.representativeName || '',
       signerRole: entity?.representativeRole || 'Authorized Representative',
+      signerEmail: entity?.branding?.replyToEmail || '',
+      signerPhone: '',
       signerDate: new Date().toISOString().slice(0, 10),
       institutionName: '',
       accountName: `${entity?.displayName || entity?.name || 'Entity'} Operating`,
@@ -163,6 +169,8 @@ export default function EntityExecutionStudio({
     category: DocumentRecord['category'],
     summary: string,
     date: string,
+    templateKey?: DocumentRecord['templateKey'],
+    generatedBody?: string,
     linkedAuthorityRecordIds?: string[],
     linkedComplianceTagIds?: string[],
     linkedTokenIds?: string[]
@@ -173,6 +181,9 @@ export default function EntityExecutionStudio({
     category,
     date,
     status: 'draft',
+    templateKey,
+    outputStatus: 'drafting',
+    generatedBody,
     summary,
     linkedAuthorityRecordIds,
     linkedComplianceTagIds,
@@ -211,14 +222,18 @@ export default function EntityExecutionStudio({
       const nextBankAccounts = [...prev.bankAccounts];
 
       if (executionType === 'formation_packet') {
-        const formationMemo = createDocument(
+        const formationDocument = createDocument(
           entity.id,
           formState.documentTitle || `${entity.displayName || entity.name} Formation Packet`,
           'governing',
           'Formation packet covering legal identity, governing setup, and launch controls.',
-          formState.formationDate
+          formState.formationDate,
+          'formation_packet',
+          buildExecutionDocumentBody('formation_packet', entity, {
+            notes: formState.notes,
+          })
         );
-        nextDocuments.push(formationMemo);
+        nextDocuments.push(formationDocument);
         nextTags.push(
           createComplianceTag(
             entity.id,
@@ -237,6 +252,8 @@ export default function EntityExecutionStudio({
             'Confirm EIN, tax classification, and filing setup.'
           )
         );
+        nextTags[0].linkedDocumentIds = [formationDocument.id];
+        nextTags[1].linkedDocumentIds = [formationDocument.id];
       }
 
       if (executionType === 'signer_assignment') {
@@ -244,9 +261,12 @@ export default function EntityExecutionStudio({
           id: buildId('auth'),
           entityId: entity.id,
           personName: formState.signerName || entity.representativeName || 'Authorized Signer',
+          signerEmail: formState.signerEmail || undefined,
+          signerPhone: formState.signerPhone || undefined,
           recordType: 'client_authorization',
           effectiveDate: formState.signerDate,
           clientAuthorizationStatus: 'active',
+          approvalStatus: 'pending_acceptance',
           notes: `${formState.signerRole || 'Authorized Representative'} signer assignment created from execution studio.`,
         };
         nextAuthorityRecords.push(authorityRecord);
@@ -278,6 +298,14 @@ export default function EntityExecutionStudio({
             'authority_record',
             'Signer authority packet covering designation, scope, and reply-to/contact posture.',
             formState.signerDate,
+            'signer_assignment',
+            buildExecutionDocumentBody('signer_assignment', entity, {
+              signerName: authorityRecord.personName,
+              signerRole: formState.signerRole,
+              signerEmail: authorityRecord.signerEmail,
+              signerPhone: authorityRecord.signerPhone,
+              effectiveDate: formState.signerDate,
+            }),
             [authorityRecord.id],
             undefined,
             authorityToken ? [authorityToken.id] : undefined
@@ -291,9 +319,30 @@ export default function EntityExecutionStudio({
           formState.documentTitle || `${entity.displayName || entity.name} Banking Setup Packet`,
           'financial',
           'Banking setup rail for account opening, settlement defaults, and control owner signoff.',
+          formState.signerDate,
+          'banking_setup',
+          buildExecutionDocumentBody('banking_setup', entity, {
+            institutionName: formState.institutionName,
+            signerName: formState.signerName,
+            notes: formState.notes,
+          })
+        );
+        const taxSupportDocument = createDocument(
+          entity.id,
+          `${entity.displayName || entity.name} Tax Registration Support`,
+          'tax',
+          'Upload EIN confirmation, tax registration support, or substitute authority.',
+          formState.signerDate
+        );
+        const authoritySupportDocument = createDocument(
+          entity.id,
+          `${entity.displayName || entity.name} Banking Authority Resolution`,
+          'authority_record',
+          'Attach banking resolution, signer memo, or board/member authority approval.',
           formState.signerDate
         );
         nextDocuments.push(bankSetupMemo);
+        nextDocuments.push(taxSupportDocument, authoritySupportDocument);
         nextTags.push(
           createComplianceTag(
             entity.id,
@@ -304,6 +353,11 @@ export default function EntityExecutionStudio({
             'Collect authority packet, tax forms, and bank onboarding support.'
           )
         );
+        nextTags[0].linkedDocumentIds = [
+          bankSetupMemo.id,
+          taxSupportDocument.id,
+          authoritySupportDocument.id,
+        ];
 
         nextBankAccounts.unshift({
           id: buildId('bank'),
@@ -318,6 +372,13 @@ export default function EntityExecutionStudio({
             prev.workspaceSettings.baseCurrency,
           status: 'inactive',
           currentBalance: 0,
+          linkedDocumentIds: [bankSetupMemo.id, taxSupportDocument.id, authoritySupportDocument.id],
+          onboardingStatus: 'collecting',
+          onboardingChecklist: buildBankOnboardingChecklist({
+            packetDocumentId: bankSetupMemo.id,
+            taxDocumentId: taxSupportDocument.id,
+            authorityDocumentId: authoritySupportDocument.id,
+          }),
         });
       }
 
@@ -327,7 +388,11 @@ export default function EntityExecutionStudio({
           formState.documentTitle || `${entity.displayName || entity.name} Governing Agreement`,
           'governing',
           'Draft governing agreement or operating control memo linked to the entity record.',
-          formState.signerDate
+          formState.signerDate,
+          'operating_agreement',
+          buildExecutionDocumentBody('operating_agreement', entity, {
+            notes: formState.notes,
+          })
         );
         nextDocuments.push(governingDocument);
         nextTags.push(
@@ -340,17 +405,24 @@ export default function EntityExecutionStudio({
             'Finalize governing document, signatures, and board/member consent.'
           )
         );
+        nextTags[0].linkedDocumentIds = [governingDocument.id];
       }
 
       if (executionType === 'compliance_kickoff') {
+        const kickoffDocument = createDocument(
+          entity.id,
+          formState.documentTitle || `${entity.displayName || entity.name} Compliance Kickoff Memo`,
+          'compliance',
+          'Launch memo for recurring filings, reporting, and control deadlines.',
+          formState.signerDate,
+          'compliance_kickoff',
+          buildExecutionDocumentBody('compliance_kickoff', entity, {
+            effectiveDate: formState.signerDate,
+            notes: formState.notes,
+          })
+        );
         nextDocuments.push(
-          createDocument(
-            entity.id,
-            formState.documentTitle || `${entity.displayName || entity.name} Compliance Kickoff Memo`,
-            'compliance',
-            'Launch memo for recurring filings, reporting, and control deadlines.',
-            formState.signerDate
-          )
+          kickoffDocument
         );
         nextTags.push(
           createComplianceTag(
@@ -378,6 +450,9 @@ export default function EntityExecutionStudio({
             'Start vault retention and core records support review.'
           )
         );
+        nextTags.forEach((tag) => {
+          tag.linkedDocumentIds = [kickoffDocument.id];
+        });
       }
 
       return {
@@ -493,6 +568,22 @@ export default function EntityExecutionStudio({
               onChange={(event) => updateField('signerRole', event.target.value)}
             />
           </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Signer Email</span>
+            <input
+              style={inputStyle}
+              value={formState.signerEmail || ''}
+              onChange={(event) => updateField('signerEmail', event.target.value)}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Signer Phone</span>
+            <input
+              style={inputStyle}
+              value={formState.signerPhone || ''}
+              onChange={(event) => updateField('signerPhone', event.target.value)}
+            />
+          </label>
         </div>
       )}
 
@@ -522,6 +613,15 @@ export default function EntityExecutionStudio({
           </label>
         </div>
       )}
+
+      <label style={{ display: 'grid', gap: 6 }}>
+        <span>Execution Notes</span>
+        <textarea
+          style={{ ...inputStyle, minHeight: 110 }}
+          value={formState.notes || ''}
+          onChange={(event) => updateField('notes', event.target.value)}
+        />
+      </label>
 
       <div
         style={{

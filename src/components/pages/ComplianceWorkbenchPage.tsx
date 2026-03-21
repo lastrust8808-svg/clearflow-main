@@ -4,12 +4,15 @@ import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
 
-interface CompliancePageProps {
+interface ComplianceWorkbenchPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
 
-export default function CompliancePage({ data, setData }: CompliancePageProps) {
+export default function ComplianceWorkbenchPage({
+  data,
+  setData,
+}: ComplianceWorkbenchPageProps) {
   const reviewCount = data.complianceTags.filter((item) => item.status === 'review').length;
   const digitalReviewCount = data.digitalAssetCompliance.filter(
     (item) =>
@@ -43,9 +46,46 @@ export default function CompliancePage({ data, setData }: CompliancePageProps) {
         <div style={{ display: 'grid', gap: 16 }}>
           {data.complianceTags.map((item) => (
             <div key={item.id}>
+              {item.linkedDocumentIds?.length ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    marginBottom: 10,
+                  }}
+                >
+                  <div style={{ color: '#9ca3af', fontSize: 13 }}>
+                    Linked docs:{' '}
+                    {item.linkedDocumentIds
+                      .map((id) => data.documents.find((doc) => doc.id === id)?.title || id)
+                      .join(' | ')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = item.linkedDocumentIds?.[0];
+                      if (targetId) {
+                        window.location.hash = `documents:${targetId}`;
+                      }
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(96,165,250,0.4)',
+                      background: 'rgba(37,99,235,0.18)',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Open Kickoff Doc
+                  </button>
+                </div>
+              ) : null}
               <RecordEditorCard
                 title={item.label}
-                subtitle={`${item.category} · ${item.status}`}
+                subtitle={`${item.category} Â· ${item.status}`}
                 record={item}
                 onSave={(nextRecord) =>
                   setData((prev) => ({
@@ -61,13 +101,16 @@ export default function CompliancePage({ data, setData }: CompliancePageProps) {
         </div>
       </PageSection>
 
-      <PageSection title="Digital Asset Classification" description="Editable digital compliance records.">
+      <PageSection
+        title="Digital Asset Classification"
+        description="Editable digital compliance records."
+      >
         <div style={{ display: 'grid', gap: 16 }}>
           {data.digitalAssetCompliance.map((item) => (
             <div key={item.id}>
               <RecordEditorCard
                 title={item.assetType}
-                subtitle={`Custody: ${item.custodyModel} · Flag: ${item.securitiesCommodityPaymentFlag}`}
+                subtitle={`Custody: ${item.custodyModel} Â· Flag: ${item.securitiesCommodityPaymentFlag}`}
                 record={item}
                 onSave={(nextRecord) =>
                   setData((prev) => ({

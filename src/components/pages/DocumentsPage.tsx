@@ -13,6 +13,10 @@ interface DocumentsPageProps {
 
 export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const focusedDocumentId =
+    typeof window !== 'undefined' && window.location.hash.startsWith('#documents:')
+      ? window.location.hash.replace('#documents:', '')
+      : null;
   const finalCount = data.documents.filter((item) => item.status === 'final').length;
   const draftCount = data.documents.filter((item) => item.status === 'draft').length;
   const verifiedTokenCount = data.tokens.filter((item) => item.status === 'verified').length;
@@ -45,6 +49,92 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
         <div style={{ display: 'grid', gap: 16 }}>
           {data.documents.map((doc) => (
             <div key={doc.id}>
+              {doc.generatedBody ? (
+                <div
+                  style={{
+                    marginBottom: 10,
+                    padding: 14,
+                    borderRadius: 14,
+                    border:
+                      doc.id === focusedDocumentId
+                        ? '1px solid rgba(126, 242, 255, 0.5)'
+                        : '1px solid rgba(255,255,255,0.08)',
+                    background:
+                      doc.id === focusedDocumentId
+                        ? 'rgba(54, 215, 255, 0.08)'
+                        : 'rgba(10, 11, 24, 0.5)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div style={{ color: '#9ca3af', fontSize: 13 }}>
+                      Template: {doc.templateKey || 'custom'} | Output:{' '}
+                      {doc.outputStatus || 'drafting'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {(['drafting', 'review', 'ready', 'executed'] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() =>
+                            setData((prev) => ({
+                              ...prev,
+                              documents: prev.documents.map((item) =>
+                                item.id === doc.id ? { ...item, outputStatus: status } : item
+                              ),
+                            }))
+                          }
+                          style={{
+                            padding: '7px 10px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            background:
+                              doc.outputStatus === status
+                                ? 'rgba(37,99,235,0.22)'
+                                : 'rgba(255,255,255,0.04)',
+                            color: '#e5e7eb',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                          }}
+                        >
+                          Mark {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea
+                    value={doc.generatedBody}
+                    onChange={(event) =>
+                      setData((prev) => ({
+                        ...prev,
+                        documents: prev.documents.map((item) =>
+                          item.id === doc.id
+                            ? { ...item, generatedBody: event.target.value }
+                            : item
+                        ),
+                      }))
+                    }
+                    style={{
+                      width: '100%',
+                      minHeight: 180,
+                      background: 'rgba(10, 11, 24, 0.78)',
+                      color: '#fff6fd',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: 14,
+                      padding: 12,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    }}
+                  />
+                </div>
+              ) : null}
               {(doc.fileName || doc.sourceFileId) && (
                 <div
                   style={{
@@ -89,7 +179,7 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
               )}
               <RecordEditorCard
                 title={doc.title}
-                subtitle={`${doc.category} | ${doc.status} | ${doc.date}`}
+                subtitle={`${doc.category} | ${doc.status} | ${doc.date}${doc.id === focusedDocumentId ? ' | focused' : ''}`}
                 record={doc}
                 onSave={(nextRecord) =>
                   setData((prev) => ({

@@ -400,9 +400,14 @@ export interface AuthorityRecord {
   entityId: string;
   personName: string;
   recordType: AuthorityRecordType;
+  signerEmail?: string;
+  signerPhone?: string;
   effectiveDate?: string;
   expirationDate?: string;
   clientAuthorizationStatus?: 'active' | 'limited' | 'revoked' | 'unknown';
+  approvalStatus?: 'draft' | 'pending_acceptance' | 'accepted' | 'declined';
+  acceptedAt?: string;
+  acceptedBy?: string;
   linkedTokenIds?: string[];
   linkedDocumentIds?: string[];
   notes?: string;
@@ -507,6 +512,15 @@ export interface ComplianceTagRecord {
   status: ComplianceStatus;
   dueDate?: string;
   jurisdiction?: string;
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
+export interface BankOnboardingChecklistItem {
+  id: string;
+  label: string;
+  status: 'pending' | 'ready' | 'completed';
+  linkedDocumentId?: string;
   notes?: string;
 }
 
@@ -537,6 +551,14 @@ export interface DocumentRecord {
   category: DocumentCategory;
   date: string;
   status: 'draft' | 'final' | 'archived';
+  templateKey?:
+    | 'formation_packet'
+    | 'signer_assignment'
+    | 'banking_setup'
+    | 'operating_agreement'
+    | 'compliance_kickoff';
+  outputStatus?: 'drafting' | 'review' | 'ready' | 'executed';
+  generatedBody?: string;
   fileName?: string;
   mimeType?: string;
   sizeBytes?: number;
@@ -823,6 +845,9 @@ export interface BankAccountRecord {
   status: 'active' | 'inactive';
   currentBalance?: number;
   linkedLedgerAccountId?: string;
+  linkedDocumentIds?: string[];
+  onboardingStatus?: 'draft' | 'collecting' | 'ready' | 'submitted' | 'connected';
+  onboardingChecklist?: BankOnboardingChecklistItem[];
 }
 
 export interface ReconciliationStatementLineRecord {

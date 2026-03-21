@@ -13,7 +13,7 @@ const LedgerPage = lazy(() => import('../components/pages/LedgerPage'));
 const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
 const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
 const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
-const CompliancePage = lazy(() => import('../components/pages/CompliancePage'));
+const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
 const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
 const AIStudioPage = lazy(() => import('../components/pages/AIStudioPage'));
 const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
@@ -45,6 +45,7 @@ const Welcome = lazy(() =>
 
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
+const DOCUMENT_HASH_PREFIX = '#documents:';
 
 type EntryStage = 'welcome' | 'pathSelect' | 'membership';
 
@@ -213,6 +214,19 @@ function loadSectionForUser(userId: string) {
   return 'overview' as AppSection;
 }
 
+function parseHashSection(hashValue: string): AppSection | null {
+  if (!hashValue) {
+    return null;
+  }
+
+  if (hashValue.startsWith(DOCUMENT_HASH_PREFIX)) {
+    return 'documents';
+  }
+
+  const normalized = hashValue.replace('#', '');
+  return allowedSections.includes(normalized as AppSection) ? (normalized as AppSection) : null;
+}
+
 function loadDataForUser(userId: string, authEntities: Entity[], coreDataSnapshot?: CoreDataBundle) {
   const scopedKey = buildScopedKey(DATA_STORAGE_KEY, userId);
   const mappedEntities = mapAuthEntitiesToCore(authEntities);
@@ -320,8 +334,22 @@ export default function App() {
     );
 
     setData(nextData);
-    setActiveSection(loadSectionForUser(currentUserId));
+    const hashSection =
+      typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
+    setActiveSection(hashSection || loadSectionForUser(currentUserId));
   }, [auth.authStatus, auth.appData?.coreDataSnapshot, auth.appData?.entities, currentUserId]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const nextSection = parseHashSection(window.location.hash);
+      if (nextSection) {
+        setActiveSection(nextSection);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !currentUserId) {
