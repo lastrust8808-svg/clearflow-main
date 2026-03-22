@@ -1520,6 +1520,20 @@ export const coreMockData: CoreDataBundle = {
       description: 'Organize payer/payee data, status checks, and filing packet support for 1099 workflows.',
       outputTypes: ['CSV', 'PDF', 'Checklist'],
     },
+    {
+      id: 'ai-011',
+      name: 'Trust Administration Packet Builder',
+      category: 'legal',
+      description: 'Create trustee administration packets, minutes, distribution support, and fiduciary review notes.',
+      outputTypes: ['DOCX', 'PDF', 'Checklist'],
+    },
+    {
+      id: 'ai-012',
+      name: 'Identifier Research Assistant',
+      category: 'compliance',
+      description: 'Build a research packet for issuer support, identifier mapping, and source evidence tracking.',
+      outputTypes: ['PDF', 'Markdown', 'Checklist'],
+    },
   ],
 
   bankFeedRules: [

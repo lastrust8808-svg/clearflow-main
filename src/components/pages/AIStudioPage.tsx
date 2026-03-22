@@ -184,6 +184,110 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     }));
   };
 
+  const launchTrustAdministrationPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Trust Administration Packet`,
+      category: 'authority_record',
+      summary:
+        'Trustee operation packet for notices, minutes, authority support, and beneficiary administration notes.',
+      body: `# Trust Administration Packet
+
+Trust: ${primaryEntity.displayName || primaryEntity.name}
+
+## Included Drafts
+- Trustee action minutes
+- Distribution review memo
+- Beneficiary communication log
+- Authority and duty checklist
+- Reserve and remittance review page
+`,
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [document, ...prev.documents],
+    }));
+  };
+
+  const launch1099PrepPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} 1099 Filing Prep Packet`,
+      category: 'tax',
+      summary:
+        '1099 prep packet with payer setup, vendor readiness review, and filing checklist for IRIS/FIRE.',
+      body: `# 1099 Filing Prep Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Filing Prep
+- Confirm payer legal name and tax ID
+- Review vendor classification and W-9 collection
+- Reconcile reportable payment totals
+- Select filing path: IRIS or FIRE
+- Retain filing proof and exception notes
+`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: '1099 Filing Prep Verification Token',
+      proofReference: 'Issued when the 1099 prep packet is generated for controlled review.',
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [{ ...document, linkedTokenIds: [token.id] }, ...prev.documents],
+      tokens: [token, ...prev.tokens],
+    }));
+  };
+
+  const launchIdentifierResearchPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Identifier Research Packet`,
+      category: 'compliance',
+      summary:
+        'Research packet for CUSIP-adjacent identifier review, issuer lookup, and evidence logging.',
+      body: `# Identifier Research Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Research Sources
+- OpenFIGI mapping
+- SEC EDGAR issuer and filing search
+- EMMA for municipal records
+- Internal instrument register cross-check
+
+## Evidence Log
+- Identifier searched
+- Source used
+- Match confidence
+- Supporting filing or document reference
+`,
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [document, ...prev.documents],
+    }));
+  };
+
   const launchPromissoryNote = () => {
     if (!primaryEntity) {
       return;
@@ -297,11 +401,32 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       onAction: launchPurchaseAgreement,
     },
     {
+      title: 'Trust Administration Packet',
+      subtitle: 'Trustee minutes, beneficiary notes, and authority support',
+      detail: 'Create a trustee-facing administration packet for decisions, distributions, and fiduciary recordkeeping.',
+      actionLabel: 'Create Packet',
+      onAction: launchTrustAdministrationPacket,
+    },
+    {
       title: 'Promissory Note Into Ledger',
       subtitle: 'Instrument, obligation, token, and journal draft in one move',
       detail: 'Create a note package that lands directly in instruments, obligations, documents, tokens, and journals.',
       actionLabel: 'Draft Note Package',
       onAction: launchPromissoryNote,
+    },
+    {
+      title: '1099 Filing Prep',
+      subtitle: 'IRIS/FIRE readiness and filing packet support',
+      detail: 'Assemble a filing-prep packet with payer review, payee readiness, and controlled evidence support.',
+      actionLabel: 'Create 1099 Packet',
+      onAction: launch1099PrepPacket,
+    },
+    {
+      title: 'Identifier Research Packet',
+      subtitle: 'CUSIP-adjacent issuer and instrument lookup support',
+      detail: 'Create a structured research packet for identifier mapping, issuer support, and document evidence.',
+      actionLabel: 'Create Research Packet',
+      onAction: launchIdentifierResearchPacket,
     },
     {
       title: 'Logo Creator Brief',
