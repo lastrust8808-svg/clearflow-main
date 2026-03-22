@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build && vite preview --host 127.0.0.1 --port 3001 --strictPort",
+    "dev:author": "vite --host 127.0.0.1 --port 3001 --strictPort",
     "server:dev": "node server.js",
     "build": "vite build",
     "lint": "tsc --noEmit",
