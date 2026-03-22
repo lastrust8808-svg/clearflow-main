@@ -120,6 +120,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [tokenClient, setTokenClient] = useState<any>(null);
   const [savingStatus, setSavingStatus] = useState<SavingStatus>('idle');
   const initialDataLoaded = useRef(false);
+  const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
+  const googleClientsInitializedRef = useRef(false);
 
 
   const handleCredentialResponse = useCallback((response: any) => {
@@ -219,45 +221,107 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [state.status, state.apiAccessToken, state.gsiUser]);
 
   useEffect(() => {
-    const initializeGsi = () => {
-      if (!isConfigured) {
-        setIsInitialized(true);
-        return;
+    setIsInitialized(true);
+  }, []);
+
+  const ensureGoogleClients = useCallback(async () => {
+    if (!isConfigured) {
+      return false;
+    }
+
+    if (typeof google !== 'undefined' && google.accounts) {
+      if (!googleClientsInitializedRef.current) {
+        google.accounts.id.initialize({
+          client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+          auto_select: false,
+        });
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
+          callback: handleAccessTokenResponse,
+        });
+        setTokenClient(client);
+        googleClientsInitializedRef.current = true;
       }
+
+      return true;
+    }
+
+    if (!googleScriptPromiseRef.current) {
+      googleScriptPromiseRef.current = new Promise<void>((resolve, reject) => {
+        const existingScript = document.querySelector<HTMLScriptElement>(
+          'script[data-clearflow-google="true"]'
+        );
+
+        if (existingScript) {
+          existingScript.addEventListener('load', () => resolve(), { once: true });
+          existingScript.addEventListener(
+            'error',
+            () => reject(new Error('Google sign-in script failed to load.')),
+            { once: true }
+          );
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.dataset.clearflowGoogle = 'true';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Google sign-in script failed to load.'));
+        document.head.appendChild(script);
+      });
+    }
+
+    try {
+      await googleScriptPromiseRef.current;
+    } catch (error) {
+      console.warn('Unable to load Google sign-in script.', error);
+      googleScriptPromiseRef.current = null;
+      return false;
+    }
+
+    if (typeof google !== 'undefined' && google.accounts && !googleClientsInitializedRef.current) {
       google.accounts.id.initialize({
-        // FIX: Access GOOGLE_CLIENT_ID from the custom window.process object.
         client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
         callback: handleCredentialResponse,
         auto_select: false,
       });
       const client = google.accounts.oauth2.initTokenClient({
-        // FIX: Access GOOGLE_CLIENT_ID from the custom window.process object.
         client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
         callback: handleAccessTokenResponse,
       });
       setTokenClient(client);
-    };
+      googleClientsInitializedRef.current = true;
+    }
 
-    setIsInitialized(true);
-
-    const intervalId = setInterval(() => {
-      if (typeof google !== 'undefined' && google.accounts) {
-        clearInterval(intervalId);
-        initializeGsi();
-      }
-    }, 100);
-    return () => clearInterval(intervalId);
-  }, [handleCredentialResponse, handleAccessTokenResponse, isConfigured]);
+    return typeof google !== 'undefined' && !!google.accounts;
+  }, [handleAccessTokenResponse, handleCredentialResponse, isConfigured]);
 
   const renderGoogleButton = useCallback((elementId: string) => {
-    if (isInitialized && isConfigured && document.getElementById(elementId)) {
-      google.accounts.id.renderButton(
-        document.getElementById(elementId),
-        { theme: 'outline', size: 'large', type: 'standard', text: 'signin_with', width: '280' }
-      );
+    if (!isInitialized || !isConfigured) {
+      return;
     }
-  }, [isInitialized, isConfigured]);
+
+    void ensureGoogleClients().then((ready) => {
+      const target = document.getElementById(elementId);
+      if (!ready || !target || typeof google === 'undefined' || !google.accounts) {
+        return;
+      }
+
+      target.replaceChildren();
+      google.accounts.id.renderButton(target, {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        text: 'signin_with',
+        width: '280',
+      });
+    });
+  }, [ensureGoogleClients, isConfigured, isInitialized]);
 
   const mockLogin = (name: string, email: string) => {
     const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: false };

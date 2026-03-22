@@ -151,18 +151,13 @@ export const Welcome: React.FC<WelcomeProps> = ({
     <div
       style={{
         minHeight: '100vh',
-        position: 'relative',
-        overflow: 'hidden',
-        background:
-          'linear-gradient(135deg, #140b1d 0%, #19132a 48%, #0c1523 100%)',
-        color: '#fff6fd',
-        fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
+        background: '#101826',
+        color: '#f8fbff',
+        fontFamily: '"Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
       }}
     >
       <div
         style={{
-          position: 'relative',
-          zIndex: 1,
           maxWidth: 1220,
           margin: '0 auto',
           minHeight: '100vh',
@@ -177,9 +172,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
           style={{
             borderRadius: 32,
             padding: 32,
-            background: 'rgba(20, 18, 34, 0.94)',
-            border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 18px 48px rgba(9, 5, 17, 0.24)',
+            background: '#162235',
+            border: '1px solid #23344c',
             display: 'grid',
             gap: 24,
           }}
@@ -192,9 +186,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 gap: 10,
                 padding: '10px 14px',
                 borderRadius: 999,
-                background: 'rgba(54, 215, 255, 0.12)',
-                border: '1px solid rgba(126, 242, 255, 0.24)',
-                color: '#8cebff',
+                background: '#173549',
+                border: '1px solid #23607e',
+                color: '#9fe8ff',
                 fontSize: 12,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
@@ -203,7 +197,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               ClearFlow Core OS
             </div>
-            <div style={{ color: '#c5d7e3', fontSize: 14 }}>
+            <div style={{ color: '#c9d8e6', fontSize: 14 }}>
               Private treasury, accounting, assets, records, and operations
             </div>
           </div>
@@ -219,7 +213,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
               style={{
                 fontSize: 18,
                 lineHeight: 1.75,
-                color: '#d9e7ef',
+                color: '#d7e3ee',
                 maxWidth: 760,
               }}
             >
@@ -243,8 +237,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 style={{
                   borderRadius: 20,
                   padding: '16px 18px',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: '#1a2940',
+                  border: '1px solid #273a57',
                   color: '#edf6fb',
                   lineHeight: 1.6,
                 }}
@@ -259,9 +253,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
           style={{
             borderRadius: 30,
             padding: 28,
-            background: 'rgba(23, 19, 37, 0.96)',
-            border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 18px 48px rgba(9, 5, 17, 0.24)',
+            background: '#162235',
+            border: '1px solid #23344c',
             display: 'grid',
             gap: 18,
           }}
@@ -299,9 +292,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background:
-                      'linear-gradient(135deg, rgba(33, 194, 198, 0.14), rgba(88, 141, 255, 0.12))',
-                    border: '1px solid rgba(126, 242, 255, 0.22)',
+                    background: '#183145',
+                    border: '1px solid #255573',
                     display: 'grid',
                     gap: 12,
                   }}
@@ -316,9 +308,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       minHeight: 50,
                       borderRadius: 16,
-                      border: '1px solid rgba(126, 242, 255, 0.28)',
-                      background:
-                        'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                      border: '1px solid #2e7aa1',
+                      background: '#1d7ea2',
                       color: '#fff',
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -333,8 +324,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: '#1a2940',
+                    border: '1px solid #273a57',
                     display: 'grid',
                     gap: 12,
                   }}
@@ -350,8 +341,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       minHeight: 48,
                       borderRadius: 16,
-                      border: '1px solid rgba(126, 242, 255, 0.2)',
-                      background: 'rgba(54, 215, 255, 0.1)',
+                      border: '1px solid #2d607d',
+                      background: '#1b3650',
                       color: '#ecfeff',
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -392,8 +383,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     minHeight: 42,
                     padding: '0 14px',
                     borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid #2b3c55',
+                    background: '#1a2940',
                     color: '#eff6fb',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -409,9 +400,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   gap: 12,
                   padding: 18,
                   borderRadius: 22,
-                  background:
-                    'linear-gradient(135deg, rgba(54, 215, 255, 0.12), rgba(88, 141, 255, 0.08))',
-                  border: '1px solid rgba(126, 242, 255, 0.2)',
+                  background: '#183145',
+                  border: '1px solid #255573',
                 }}
               >
                 <div style={{ fontSize: 18, fontWeight: 800 }}>Sign in with Google</div>
@@ -428,8 +418,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   gap: 12,
                   padding: 18,
                   borderRadius: 22,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: '#1a2940',
+                  border: '1px solid #273a57',
                 }}
               >
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -447,12 +437,12 @@ export const Welcome: React.FC<WelcomeProps> = ({
                         borderRadius: 14,
                         border:
                           backupAuthMode === mode
-                            ? '1px solid rgba(126, 242, 255, 0.28)'
-                            : '1px solid rgba(255,255,255,0.08)',
+                            ? '1px solid #2e7aa1'
+                            : '1px solid #2b3c55',
                         background:
                           backupAuthMode === mode
-                            ? 'rgba(54, 215, 255, 0.14)'
-                            : 'rgba(255,255,255,0.04)',
+                            ? '#183145'
+                            : '#1a2940',
                         color: '#eff6fb',
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -515,12 +505,12 @@ export const Welcome: React.FC<WelcomeProps> = ({
                                 borderRadius: 14,
                                 border:
                                   credentialMode === option
-                                    ? '1px solid rgba(126, 242, 255, 0.28)'
-                                    : '1px solid rgba(255,255,255,0.08)',
+                                    ? '1px solid #2e7aa1'
+                                    : '1px solid #2b3c55',
                                 background:
                                   credentialMode === option
-                                    ? 'rgba(54, 215, 255, 0.14)'
-                                    : 'rgba(255,255,255,0.04)',
+                                    ? '#183145'
+                                    : '#1a2940',
                                 color: '#eff6fb',
                                 fontWeight: 700,
                                 cursor: 'pointer',
@@ -561,8 +551,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                           style={{
                             borderRadius: 16,
                             padding: 14,
-                            background: 'rgba(54, 215, 255, 0.12)',
-                            border: '1px solid rgba(126, 242, 255, 0.24)',
+                            background: '#183145',
+                            border: '1px solid #255573',
                             color: '#dff7fb',
                             lineHeight: 1.7,
                           }}
@@ -618,8 +608,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                               minHeight: 46,
                               padding: '0 14px',
                               borderRadius: 16,
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              background: 'rgba(255,255,255,0.04)',
+                              border: '1px solid #2b3c55',
+                              background: '#1a2940',
                               color: '#eff6fb',
                               fontWeight: 600,
                               cursor: 'pointer',
@@ -638,8 +628,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       borderRadius: 14,
                       padding: 12,
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      border: '1px solid rgba(239, 68, 68, 0.24)',
+                      background: '#3a1e27',
+                      border: '1px solid #7a3241',
                       color: '#fecaca',
                       fontSize: 14,
                     }}
@@ -656,8 +646,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     minHeight: 42,
                     borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid #2b3c55',
+                    background: '#1a2940',
                     color: '#cbd5e1',
                     fontWeight: 600,
                     cursor: 'pointer',
