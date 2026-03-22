@@ -15,13 +15,11 @@ export default function RecordCard({
   return (
     <div
       style={{
-        background:
-          'linear-gradient(180deg, rgba(24, 37, 67, 0.88) 0%, rgba(19, 18, 42, 0.9) 100%)',
+        background: 'var(--cf-panel-strong)',
         border: '1px solid var(--cf-border)',
         borderRadius: 18,
         padding: 16,
         boxShadow: 'var(--cf-shadow)',
-        backdropFilter: 'blur(18px)',
       }}
     >
       <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>

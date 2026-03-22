@@ -39,6 +39,19 @@ const Verification = lazy(() =>
   }))
 );
 
+const preloadWorkspacePages = [
+  () => import('../components/pages/OverviewPage'),
+  () => import('../components/pages/EntitiesPage'),
+  () => import('../components/pages/LedgerPage'),
+  () => import('../components/pages/AccountingPage'),
+  () => import('../components/pages/AssetsPage'),
+  () => import('../components/pages/TransactionsPage'),
+  () => import('../components/pages/ComplianceWorkbenchPage'),
+  () => import('../components/pages/DocumentsPage'),
+  () => import('../components/pages/AiStudioPage'),
+  () => import('../components/pages/SettingsPage'),
+];
+
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
 const DOCUMENT_HASH_PREFIX = '#documents:';
@@ -240,6 +253,19 @@ function parseHashSection(hashValue: string): AppSection | null {
   return allowedSections.includes(normalized as AppSection) ? (normalized as AppSection) : null;
 }
 
+function buildSectionHash(section: AppSection) {
+  return `#${section}`;
+}
+
+function replaceWindowHash(hashValue: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const nextUrl = `${window.location.pathname}${window.location.search}${hashValue}`;
+  window.history.replaceState(null, '', nextUrl);
+}
+
 function loadDataForUser(userId: string, authEntities: Entity[], coreDataSnapshot?: CoreDataBundle) {
   const scopedKey = buildScopedKey(DATA_STORAGE_KEY, userId);
   const mappedEntities = mapAuthEntitiesToCore(authEntities);
@@ -352,6 +378,14 @@ export default function App({
       return;
     }
 
+    void Promise.all(preloadWorkspacePages.map((loadPage) => loadPage().catch(() => null)));
+  }, [auth.authStatus, currentUserId]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId) {
+      return;
+    }
+
     if (hydratedUserIdRef.current === currentUserId) {
       return;
     }
@@ -386,14 +420,18 @@ export default function App({
     initializedSectionUserIdRef.current = currentUserId;
     const hashSection =
       typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
-    setActiveSection(hashSection || loadSectionForUser(currentUserId));
+    const nextSection = hashSection || loadSectionForUser(currentUserId);
+    setActiveSection(nextSection);
+    if (typeof window !== 'undefined' && !window.location.hash.startsWith(DOCUMENT_HASH_PREFIX)) {
+      replaceWindowHash(buildSectionHash(nextSection));
+    }
   }, [auth.authStatus, currentUserId]);
 
   useEffect(() => {
     const handleHashChange = () => {
       const nextSection = parseHashSection(window.location.hash);
       if (nextSection) {
-        setActiveSection(nextSection);
+        setActiveSection((previous) => (previous === nextSection ? previous : nextSection));
       }
     };
 
@@ -445,6 +483,11 @@ export default function App({
       setData((prev) => ({ ...prev, entities: mappedAuthEntities }));
     }
   }, [auth.authStatus, data.entities.length, mappedAuthEntities]);
+
+  const handleSectionChange = (nextSection: AppSection) => {
+    setActiveSection((previous) => (previous === nextSection ? previous : nextSection));
+    replaceWindowHash(buildSectionHash(nextSection));
+  };
 
   const renderSection = () => {
     switch (activeSection) {
@@ -562,7 +605,7 @@ export default function App({
   return (
     <AppShell
       activeSection={activeSection}
-      onSectionChange={setActiveSection}
+      onSectionChange={handleSectionChange}
       workspaceSettings={data.workspaceSettings}
     >
       <Suspense fallback={<SuspenseShell title="Loading Workspace" />}>

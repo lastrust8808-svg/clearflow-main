@@ -23,15 +23,13 @@ export default function RecordEditorCard<T>({
   return (
     <div
       style={{
-        background:
-          'linear-gradient(180deg, rgba(24, 37, 67, 0.88) 0%, rgba(19, 18, 42, 0.9) 100%)',
+        background: 'var(--cf-panel-strong)',
         border: '1px solid var(--cf-border)',
         borderRadius: 18,
         padding: 16,
         display: 'grid',
         gap: 12,
         boxShadow: 'var(--cf-shadow)',
-        backdropFilter: 'blur(18px)',
       }}
     >
       <div>
@@ -60,6 +58,7 @@ export default function RecordEditorCard<T>({
 
           <div>
             <button
+              type="button"
               onClick={() => setIsEditing(true)}
               style={{
                 padding: '10px 14px',
@@ -96,6 +95,7 @@ export default function RecordEditorCard<T>({
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
+              type="button"
               onClick={() => {
                 try {
                   const parsed = JSON.parse(draft) as T;
@@ -120,6 +120,7 @@ export default function RecordEditorCard<T>({
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 setDraft(JSON.stringify(record, null, 2));
                 setIsEditing(false);

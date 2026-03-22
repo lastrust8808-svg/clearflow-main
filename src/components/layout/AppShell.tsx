@@ -68,8 +68,8 @@ export default function AppShell({
     ocean_luxe: {
       bg: '#120816',
       bgSecondary: '#20112b',
-      panel: 'rgba(31, 18, 48, 0.78)',
-      panelStrong: 'rgba(46, 26, 68, 0.88)',
+      panel: '#1a1b31',
+      panelStrong: '#202643',
       border: 'rgba(126, 242, 255, 0.18)',
       borderStrong: 'rgba(97, 218, 251, 0.45)',
       text: '#fff6fd',
@@ -77,18 +77,16 @@ export default function AppShell({
       accentSoft: '#8cebff',
       accentCool: '#7ef2ff',
       accentGold: '#f7d37b',
-      shadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
-      pageBackground:
-        'radial-gradient(circle at top left, rgba(54, 215, 255, 0.22), transparent 28%), radial-gradient(circle at 80% 0%, rgba(72, 159, 255, 0.18), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.12), transparent 22%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
-      sidebarBackground:
-        'linear-gradient(180deg, rgba(26, 36, 70, 0.92) 0%, rgba(16, 14, 34, 0.92) 100%)',
-      sparkleOpacity: 0.35,
+      shadow: '0 10px 28px rgba(9, 5, 17, 0.22)',
+      pageBackground: 'linear-gradient(180deg, #10172a 0%, #11182c 100%)',
+      sidebarBackground: '#11192b',
+      sparkleOpacity: 0,
     },
     midnight_gold: {
       bg: '#141010',
       bgSecondary: '#231818',
-      panel: 'rgba(34, 21, 24, 0.82)',
-      panelStrong: 'rgba(48, 31, 34, 0.9)',
+      panel: '#20191d',
+      panelStrong: '#2b2227',
       border: 'rgba(247, 211, 123, 0.18)',
       borderStrong: 'rgba(247, 211, 123, 0.46)',
       text: '#fff7ef',
@@ -96,18 +94,16 @@ export default function AppShell({
       accentSoft: '#ffe4a3',
       accentCool: '#ffd980',
       accentGold: '#f7d37b',
-      shadow: '0 24px 80px rgba(15, 7, 7, 0.48)',
-      pageBackground:
-        'radial-gradient(circle at top left, rgba(247, 211, 123, 0.18), transparent 28%), radial-gradient(circle at 75% 0%, rgba(152, 109, 74, 0.15), transparent 24%), radial-gradient(circle at 15% 100%, rgba(255, 244, 211, 0.12), transparent 22%), linear-gradient(135deg, #140f11 0%, #201516 45%, #0f1117 100%)',
-      sidebarBackground:
-        'linear-gradient(180deg, rgba(49, 30, 22, 0.92) 0%, rgba(18, 14, 16, 0.92) 100%)',
-      sparkleOpacity: 0.24,
+      shadow: '0 10px 28px rgba(15, 7, 7, 0.22)',
+      pageBackground: 'linear-gradient(180deg, #171215 0%, #141316 100%)',
+      sidebarBackground: '#181519',
+      sparkleOpacity: 0,
     },
     glitter_pop: {
       bg: '#150c21',
       bgSecondary: '#271638',
-      panel: 'rgba(38, 20, 59, 0.8)',
-      panelStrong: 'rgba(58, 33, 86, 0.92)',
+      panel: '#221934',
+      panelStrong: '#2b2140',
       border: 'rgba(132, 230, 255, 0.2)',
       borderStrong: 'rgba(132, 230, 255, 0.46)',
       text: '#fff8ff',
@@ -115,18 +111,16 @@ export default function AppShell({
       accentSoft: '#9ef5ff',
       accentCool: '#79dcff',
       accentGold: '#ffd9a3',
-      shadow: '0 24px 80px rgba(20, 8, 34, 0.5)',
-      pageBackground:
-        'radial-gradient(circle at top left, rgba(121, 220, 255, 0.24), transparent 26%), radial-gradient(circle at 78% 8%, rgba(255, 190, 222, 0.18), transparent 24%), radial-gradient(circle at 20% 100%, rgba(255, 217, 163, 0.12), transparent 20%), linear-gradient(135deg, #150c21 0%, #211333 44%, #101827 100%)',
-      sidebarBackground:
-        'linear-gradient(180deg, rgba(42, 24, 67, 0.94) 0%, rgba(17, 15, 39, 0.94) 100%)',
-      sparkleOpacity: 0.42,
+      shadow: '0 10px 28px rgba(20, 8, 34, 0.24)',
+      pageBackground: 'linear-gradient(180deg, #181224 0%, #151928 100%)',
+      sidebarBackground: '#17152a',
+      sparkleOpacity: 0,
     },
     quiet_stewardship: {
       bg: '#0d1317',
       bgSecondary: '#162127',
-      panel: 'rgba(18, 31, 36, 0.82)',
-      panelStrong: 'rgba(24, 42, 49, 0.9)',
+      panel: '#162126',
+      panelStrong: '#1b2a31',
       border: 'rgba(126, 242, 255, 0.14)',
       borderStrong: 'rgba(126, 242, 255, 0.32)',
       text: '#eff8f7',
@@ -134,12 +128,10 @@ export default function AppShell({
       accentSoft: '#9de7de',
       accentCool: '#7bdad0',
       accentGold: '#dccf92',
-      shadow: '0 24px 80px rgba(5, 12, 14, 0.42)',
-      pageBackground:
-        'radial-gradient(circle at top left, rgba(123, 218, 208, 0.18), transparent 28%), radial-gradient(circle at 82% 0%, rgba(100, 164, 170, 0.14), transparent 22%), radial-gradient(circle at 20% 100%, rgba(220, 207, 146, 0.12), transparent 20%), linear-gradient(135deg, #0d1317 0%, #121d22 45%, #0a1014 100%)',
-      sidebarBackground:
-        'linear-gradient(180deg, rgba(18, 34, 39, 0.94) 0%, rgba(10, 17, 21, 0.94) 100%)',
-      sparkleOpacity: 0.18,
+      shadow: '0 10px 28px rgba(5, 12, 14, 0.18)',
+      pageBackground: 'linear-gradient(180deg, #0f171c 0%, #10181d 100%)',
+      sidebarBackground: '#10181d',
+      sparkleOpacity: 0,
     },
   };
 
@@ -172,19 +164,6 @@ export default function AppShell({
         fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
       }}
     >
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          opacity: Math.min(themePalette.sparkleOpacity, 0.18),
-          backgroundImage:
-            'radial-gradient(rgba(255,255,255,0.35) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.18) 0.8px, transparent 0.8px)',
-          backgroundPosition: '0 0, 18px 18px',
-          backgroundSize: '36px 36px',
-        }}
-      />
       <aside
         style={{
           position: 'relative',
@@ -192,7 +171,7 @@ export default function AppShell({
           borderRight: '1px solid var(--cf-border)',
           padding: '24px 16px',
           background: themePalette.sidebarBackground,
-          boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.05)',
+          boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
         }}
       >
         <div style={{ marginBottom: 24 }}>
@@ -253,15 +232,13 @@ export default function AppShell({
                       border: '1px solid',
                       borderColor: isActive ? 'var(--cf-border-strong)' : 'transparent',
                       background: isActive
-                        ? 'linear-gradient(135deg, rgba(54, 215, 255, 0.28), rgba(88, 141, 255, 0.18))'
+                        ? 'rgba(33, 120, 168, 0.42)'
                         : 'rgba(255, 255, 255, 0.03)',
                       color: 'var(--cf-text)',
                       cursor: 'pointer',
                       fontSize: 14,
                       fontWeight: isActive ? 700 : 500,
-                      boxShadow: isActive
-                        ? '0 10px 28px rgba(54, 215, 255, 0.16)'
-                        : 'none',
+                      boxShadow: 'none',
                       display: 'grid',
                       gap: 4,
                     }}
@@ -289,6 +266,7 @@ export default function AppShell({
           position: 'relative',
           zIndex: 1,
           padding: 24,
+          background: 'transparent',
         }}
       >
         {children}

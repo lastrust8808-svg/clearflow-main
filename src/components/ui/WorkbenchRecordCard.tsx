@@ -39,13 +39,11 @@ export default function WorkbenchRecordCard<T>({
   return (
     <div
       style={{
-        background:
-          'linear-gradient(180deg, rgba(25, 40, 72, 0.9) 0%, rgba(18, 19, 42, 0.92) 100%)',
+        background: 'var(--cf-panel-strong)',
         border: '1px solid var(--cf-border)',
         borderRadius: 18,
         padding: 16,
         boxShadow: 'var(--cf-shadow)',
-        backdropFilter: 'blur(18px)',
         display: 'grid',
         gap: 14,
       }}

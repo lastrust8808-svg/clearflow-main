@@ -64,15 +64,13 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
   return (
     <div
       style={{
-        background:
-          'linear-gradient(180deg, rgba(24, 37, 67, 0.88) 0%, rgba(19, 18, 42, 0.9) 100%)',
+        background: 'var(--cf-panel-strong)',
         border: '1px solid var(--cf-border)',
         borderRadius: 18,
         padding: 18,
         display: 'grid',
         gap: 18,
         boxShadow: 'var(--cf-shadow)',
-        backdropFilter: 'blur(18px)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -422,6 +420,7 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button
+          type="button"
           onClick={() => onSave(draft)}
           style={{
             padding: '10px 14px',
@@ -438,6 +437,7 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
         </button>
 
         <button
+          type="button"
           onClick={() => setDraft(entity)}
           style={{
             padding: '10px 14px',
