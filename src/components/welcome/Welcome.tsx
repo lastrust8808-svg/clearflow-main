@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Logo } from '../logo/Logo';
 import type { LocalAuthChallenge, LocalAuthContactType } from '../../services/localAuth.service';
 
 interface WelcomeProps {
@@ -162,9 +161,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
           margin: '0 auto',
           minHeight: '100vh',
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.12fr) minmax(360px, 0.9fr)',
-          gap: 28,
-          alignItems: 'center',
+          gridTemplateColumns: '1fr',
+          gap: 20,
+          alignContent: 'center',
           padding: '32px 20px',
         }}
       >
@@ -203,11 +202,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
           </div>
 
           <div style={{ display: 'grid', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <Logo height={72} />
-              <div style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05 }}>
-                Finance, records, compliance, and cash flow in one place.
-              </div>
+            <div style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05 }}>
+              Finance, records, compliance, and cash flow in one place.
             </div>
             <div
               style={{
