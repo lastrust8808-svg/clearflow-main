@@ -154,25 +154,11 @@ export const Welcome: React.FC<WelcomeProps> = ({
         position: 'relative',
         overflow: 'hidden',
         background:
-          'radial-gradient(circle at top left, rgba(54, 215, 255, 0.2), transparent 25%), radial-gradient(circle at 80% 10%, rgba(88, 141, 255, 0.16), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.12), transparent 20%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
+          'linear-gradient(135deg, #140b1d 0%, #19132a 48%, #0c1523 100%)',
         color: '#fff6fd',
         fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
       }}
     >
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          opacity: 0.14,
-          backgroundImage:
-            'radial-gradient(rgba(255,255,255,0.34) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.16) 0.8px, transparent 0.8px)',
-          backgroundPosition: '0 0, 18px 18px',
-          backgroundSize: '36px 36px',
-        }}
-      />
-
       <div
         style={{
           position: 'relative',
@@ -191,9 +177,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
           style={{
             borderRadius: 32,
             padding: 32,
-            background: 'rgba(24, 18, 42, 0.74)',
+            background: 'rgba(20, 18, 34, 0.94)',
             border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
+            boxShadow: '0 18px 48px rgba(9, 5, 17, 0.24)',
             display: 'grid',
             gap: 24,
           }}
@@ -273,9 +259,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
           style={{
             borderRadius: 30,
             padding: 28,
-            background: 'rgba(28, 19, 45, 0.86)',
+            background: 'rgba(23, 19, 37, 0.96)',
             border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
+            boxShadow: '0 18px 48px rgba(9, 5, 17, 0.24)',
             display: 'grid',
             gap: 18,
           }}

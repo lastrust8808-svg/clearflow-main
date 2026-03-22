@@ -445,7 +445,7 @@ export default function App() {
     }
   };
 
-  if (!auth.isInitialized) {
+  if (!auth.isInitialized && auth.authStatus !== 'unauthenticated') {
     return (
       <LoadingShell
         title="Preparing ClearFlow"

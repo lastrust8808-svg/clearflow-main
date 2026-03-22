@@ -237,8 +237,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         callback: handleAccessTokenResponse,
       });
       setTokenClient(client);
-      setIsInitialized(true);
     };
+
+    setIsInitialized(true);
 
     const intervalId = setInterval(() => {
       if (typeof google !== 'undefined' && google.accounts) {
