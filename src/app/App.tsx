@@ -45,6 +45,11 @@ const DOCUMENT_HASH_PREFIX = '#documents:';
 
 type EntryStage = 'welcome' | 'pathSelect' | 'membership';
 
+interface AppProps {
+  initialEntryStage?: EntryStage;
+  initialWelcomeView?: 'landing' | 'signin';
+}
+
 const allowedSections: AppSection[] = [
   'overview',
   'accounting',
@@ -302,9 +307,12 @@ function SuspenseShell({ title }: { title: string }) {
   );
 }
 
-export default function App() {
+export default function App({
+  initialEntryStage = 'welcome',
+  initialWelcomeView = 'landing',
+}: AppProps) {
   const auth = useAuth();
-  const [entryStage, setEntryStage] = useState<EntryStage>('welcome');
+  const [entryStage, setEntryStage] = useState<EntryStage>(initialEntryStage);
   const [selectedOnboardingPath, setSelectedOnboardingPath] =
     useState<OnboardingPath>('business_entity');
   const [activeSection, setActiveSection] = useState<AppSection>('overview');
@@ -483,6 +491,7 @@ export default function App() {
 
     return (
       <Welcome
+        initialView={initialWelcomeView}
         isConfigured={auth.isConfigured}
         renderGoogleButton={auth.renderGoogleButton}
         onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { LocalAuthChallenge, LocalAuthContactType } from '../../services/localAuth.service';
 
 interface WelcomeProps {
+  initialView?: 'landing' | 'signin';
   isConfigured: boolean;
   onDevLogin: () => void;
   onStartOnboarding: () => void;
@@ -56,6 +57,7 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 
 export const Welcome: React.FC<WelcomeProps> = ({
+  initialView = 'landing',
   isConfigured,
   onDevLogin,
   onStartOnboarding,
@@ -66,7 +68,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onSignInWithPassword,
   onCancelCredentialAuth,
 }) => {
-  const [entryView, setEntryView] = useState<EntryView>('landing');
+  const [entryView, setEntryView] = useState<EntryView>(initialView);
   const [isGoogleUiVisible, setIsGoogleUiVisible] = useState(false);
   const [backupAuthMode, setBackupAuthMode] = useState<BackupAuthMode>('password');
   const [credentialMode, setCredentialMode] = useState<LocalAuthContactType>('email');
