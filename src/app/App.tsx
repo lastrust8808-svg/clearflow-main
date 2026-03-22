@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSection, CoreDataBundle, EntityRecord } from '../types/core';
 import type { Entity } from '../types/app.models';
 import { useAuth } from '../hooks/useAuth';
@@ -317,6 +317,8 @@ export default function App({
     useState<OnboardingPath>('business_entity');
   const [activeSection, setActiveSection] = useState<AppSection>('overview');
   const [data, setData] = useState<CoreDataBundle>(coreMockData);
+  const hydratedUserIdRef = useRef<string | null>(null);
+  const initializedSectionUserIdRef = useRef<string | null>(null);
 
   const currentUserId = auth.currentUser?.id ?? null;
 
@@ -336,6 +338,8 @@ export default function App({
       setActiveSection('overview');
       setData(coreMockData);
       setDocumentVaultScope(null);
+      hydratedUserIdRef.current = null;
+      initializedSectionUserIdRef.current = null;
     }
   }, [auth.authStatus]);
 
@@ -348,26 +352,42 @@ export default function App({
       return;
     }
 
+    if (hydratedUserIdRef.current === currentUserId) {
+      return;
+    }
+
     const nextData = loadDataForUser(
       currentUserId,
       auth.appData?.entities ?? [],
       auth.appData?.coreDataSnapshot
     );
-    const nextDataSignature = JSON.stringify(nextData);
-
-    if (nextDataSignature !== dataSignature) {
-      setData(nextData);
-    }
-    const hashSection =
-      typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
-    setActiveSection(hashSection || loadSectionForUser(currentUserId));
+    hydratedUserIdRef.current = currentUserId;
+    setData((previous) => {
+      const previousSignature = JSON.stringify(previous);
+      const nextSignature = JSON.stringify(nextData);
+      return previousSignature === nextSignature ? previous : nextData;
+    });
   }, [
     auth.authStatus,
     auth.appData?.coreDataSnapshot,
     auth.appData?.entities,
     currentUserId,
-    dataSignature,
   ]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId) {
+      return;
+    }
+
+    if (initializedSectionUserIdRef.current === currentUserId) {
+      return;
+    }
+
+    initializedSectionUserIdRef.current = currentUserId;
+    const hashSection =
+      typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
+    setActiveSection(hashSection || loadSectionForUser(currentUserId));
+  }, [auth.authStatus, currentUserId]);
 
   useEffect(() => {
     const handleHashChange = () => {
