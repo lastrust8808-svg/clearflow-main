@@ -67,6 +67,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onCancelCredentialAuth,
 }) => {
   const [entryView, setEntryView] = useState<EntryView>('landing');
+  const [isGoogleUiVisible, setIsGoogleUiVisible] = useState(false);
   const [backupAuthMode, setBackupAuthMode] = useState<BackupAuthMode>('password');
   const [credentialMode, setCredentialMode] = useState<LocalAuthContactType>('email');
   const [contactValue, setContactValue] = useState('');
@@ -80,10 +81,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (entryView === 'signin' && isConfigured) {
+    if (entryView === 'signin' && isConfigured && isGoogleUiVisible) {
       renderGoogleButton('google-btn-container');
     }
-  }, [entryView, isConfigured, renderGoogleButton]);
+  }, [entryView, isConfigured, isGoogleUiVisible, renderGoogleButton]);
 
   const handleStartCredentialAuth = async () => {
     setIsSubmitting(true);
@@ -333,7 +334,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setEntryView('signin')}
+                    onClick={() => {
+                      setIsGoogleUiVisible(false);
+                      setEntryView('signin');
+                    }}
                     style={{
                       minHeight: 48,
                       borderRadius: 16,
@@ -372,6 +376,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    setIsGoogleUiVisible(false);
                     setEntryView('landing');
                     setCredentialError('');
                   }}
@@ -405,7 +410,31 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   This is the preferred sign-in path for ClearFlow and will be the main route for
                   restoring user workspaces.
                 </div>
-                <div id="google-btn-container" style={{ minHeight: 44 }} />
+                {!isGoogleUiVisible ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsGoogleUiVisible(true)}
+                    style={{
+                      minHeight: 48,
+                      borderRadius: 16,
+                      border: '1px solid #2e7aa1',
+                      background: '#1d7ea2',
+                      color: '#fff',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      fontSize: 15,
+                    }}
+                  >
+                    Continue with Google
+                  </button>
+                ) : null}
+                <div
+                  id="google-btn-container"
+                  style={{
+                    display: isGoogleUiVisible ? 'block' : 'none',
+                    minHeight: isGoogleUiVisible ? 44 : 0,
+                  }}
+                />
               </div>
 
               <div

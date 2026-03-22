@@ -8,5 +8,8 @@ export default defineConfig({
     port: 3001,
     strictPort: true,
     hmr: false,
-  }
+    watch: {
+      ignored: ['**/dist/**', '**/server/storage-data/**', '**/.git/**'],
+    },
+  },
 })
