@@ -7,17 +7,17 @@ import AppShell from '../components/layout/AppShell';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
+import OverviewPage from '../components/pages/OverviewPage';
+import EntitiesPage from '../components/pages/EntitiesPage';
+import LedgerPage from '../components/pages/LedgerPage';
+import AccountingPage from '../components/pages/AccountingPage';
+import AssetsPage from '../components/pages/AssetsPage';
+import TransactionsPage from '../components/pages/TransactionsPage';
+import CompliancePage from '../components/pages/ComplianceWorkbenchPage';
+import DocumentsPage from '../components/pages/DocumentsPage';
+import AIStudioPage from '../components/pages/AiStudioPage';
+import SettingsPage from '../components/pages/SettingsPage';
 
-const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
-const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
-const LedgerPage = lazy(() => import('../components/pages/LedgerPage'));
-const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
-const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
-const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
-const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
-const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
-const AIStudioPage = lazy(() => import('../components/pages/AiStudioPage'));
-const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
 const MembershipEstablishment = lazy(() =>
   import('../components/membership-establishment/MembershipEstablishment').then((module) => ({
     default: module.MembershipEstablishment,
@@ -38,19 +38,6 @@ const Verification = lazy(() =>
     default: module.Verification,
   }))
 );
-
-const preloadWorkspacePages = [
-  () => import('../components/pages/OverviewPage'),
-  () => import('../components/pages/EntitiesPage'),
-  () => import('../components/pages/LedgerPage'),
-  () => import('../components/pages/AccountingPage'),
-  () => import('../components/pages/AssetsPage'),
-  () => import('../components/pages/TransactionsPage'),
-  () => import('../components/pages/ComplianceWorkbenchPage'),
-  () => import('../components/pages/DocumentsPage'),
-  () => import('../components/pages/AiStudioPage'),
-  () => import('../components/pages/SettingsPage'),
-];
 
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
@@ -378,14 +365,6 @@ export default function App({
       return;
     }
 
-    void Promise.all(preloadWorkspacePages.map((loadPage) => loadPage().catch(() => null)));
-  }, [auth.authStatus, currentUserId]);
-
-  useEffect(() => {
-    if (auth.authStatus !== 'authenticated' || !currentUserId) {
-      return;
-    }
-
     if (hydratedUserIdRef.current === currentUserId) {
       return;
     }
@@ -608,9 +587,7 @@ export default function App({
       onSectionChange={handleSectionChange}
       workspaceSettings={data.workspaceSettings}
     >
-      <Suspense fallback={<SuspenseShell title="Loading Workspace" />}>
-        {renderSection()}
-      </Suspense>
+      {renderSection()}
     </AppShell>
   );
 }
