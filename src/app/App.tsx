@@ -15,7 +15,7 @@ import AssetsPage from '../components/pages/AssetsPage';
 import TransactionsPage from '../components/pages/TransactionsPage';
 import CompliancePage from '../components/pages/ComplianceWorkbenchPage';
 import DocumentsPage from '../components/pages/DocumentsPage';
-import AIStudioPage from '../components/pages/AiStudioPage';
+import AIStudioPage from '../components/pages/AIStudioPage';
 import SettingsPage from '../components/pages/SettingsPage';
 
 const MembershipEstablishment = lazy(() =>
