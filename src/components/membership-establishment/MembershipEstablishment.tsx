@@ -1,4 +1,5 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../../hooks/useAuth';
 import {
   saveOnboardingDraft,
   uploadOnboardingFile,
@@ -14,7 +15,7 @@ import {
 interface MembershipEstablishmentProps {
   selectedPath: OnboardingPath;
   onBack: () => void;
-  onContinueToLogin: (draft: MembershipIntakeDraft) => void;
+  onContinue: (draft: MembershipIntakeDraft) => void;
 }
 
 const pathLabels: Record<OnboardingPath, string> = {
@@ -29,8 +30,9 @@ const pathLabels: Record<OnboardingPath, string> = {
 export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = ({
   selectedPath,
   onBack,
-  onContinueToLogin,
+  onContinue,
 }) => {
+  const auth = useAuth();
   const [form, setForm] = useState({
     legalName: '',
     displayName: '',
@@ -59,7 +61,25 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const requiresEin = selectedPath !== 'personal';
+  const isPersonalPath = selectedPath === 'personal';
+  const requiresEin = !isPersonalPath;
+
+  useEffect(() => {
+    if (!isPersonalPath || !auth.currentUser) {
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      legalName: prev.legalName || auth.currentUser?.name || '',
+      displayName: prev.displayName || auth.currentUser?.name || '',
+      representativeName: prev.representativeName || auth.currentUser?.name || '',
+      representativeEmail: prev.representativeEmail || auth.currentUser?.email || '',
+      representativePhone: prev.representativePhone || auth.currentUser?.phone || '',
+      representativeRole: prev.representativeRole || 'Individual',
+      authorizedRepresentative: true,
+    }));
+  }, [auth.currentUser, isPersonalPath]);
 
   const pathSummary = useMemo(() => {
     switch (selectedPath) {
@@ -72,7 +92,7 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
       case 'private_membership':
         return 'Collect organizer or steward details, structure information, and controlled-access administration data.';
       case 'personal':
-        return 'Collect individual identity and account intake details without entity-EIN requirements.';
+        return 'Collect individual identity and account intake details without business-entity authority requirements.';
       case 'other_custom':
       default:
         return 'Collect the closest available structure details for custom review and guided intake.';
@@ -81,25 +101,35 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
 
   const isFormReady =
     form.legalName.trim() &&
-    form.representativeName.trim() &&
-    form.representativeEmail.trim() &&
-    form.representativeRole.trim() &&
-    form.authorizedRepresentative &&
     form.googleIdentityMatch &&
-    (!requiresEin || form.ein.trim());
+    (!requiresEin || form.ein.trim()) &&
+    (isPersonalPath
+      ? true
+      : Boolean(
+          form.representativeName.trim() &&
+            form.representativeEmail.trim() &&
+            form.representativeRole.trim() &&
+            form.authorizedRepresentative
+        ));
 
   const buildDraft = (): MembershipIntakeDraft => ({
     selectedPath,
     legalName: form.legalName,
     displayName: form.displayName,
     ein: form.ein,
-    representativeName: form.representativeName,
-    representativeEmail: form.representativeEmail,
-    representativePhone: form.representativePhone,
-    representativeRole: form.representativeRole,
+    representativeName: isPersonalPath
+      ? auth.currentUser?.name || form.legalName
+      : form.representativeName,
+    representativeEmail: isPersonalPath
+      ? auth.currentUser?.email || ''
+      : form.representativeEmail,
+    representativePhone: isPersonalPath
+      ? auth.currentUser?.phone || ''
+      : form.representativePhone,
+    representativeRole: isPersonalPath ? 'Individual' : form.representativeRole,
     stateOfFormation: form.stateOfFormation,
     country: form.country,
-    authorizedRepresentative: form.authorizedRepresentative,
+    authorizedRepresentative: isPersonalPath ? true : form.authorizedRepresentative,
     googleIdentityMatch: form.googleIdentityMatch,
     trustType: form.trustType,
     exemptClassification: form.exemptClassification,
@@ -140,8 +170,8 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
       setSaveMessage('Submitting onboarding draft...');
       await submitOnboardingDraft(backendDraftId);
 
-      setSaveMessage('Draft saved. Continue to secure sign-in...');
-      onContinueToLogin(draft);
+      setSaveMessage('Draft saved. Continue to profile setup...');
+      onContinue(draft);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to save onboarding draft.');
       setSaveMessage('');
@@ -180,13 +210,13 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Legal Entity / Account Name
+                  {isPersonalPath ? 'Individual Full Name' : 'Legal Entity / Account Name'}
                 </label>
                 <input
                   value={form.legalName}
                   onChange={(e) => update('legalName', e.target.value)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-                  placeholder="Enter the legal name"
+                  placeholder={isPersonalPath ? 'Enter your full legal name' : 'Enter the legal name'}
                 />
               </div>
 
@@ -214,7 +244,7 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
                 />
               </div>
 
-              {requiresEin && (
+              {requiresEin ? (
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     EIN
@@ -224,6 +254,18 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
                     onChange={(e) => update('ein', e.target.value)}
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
                     placeholder="XX-XXXXXXX"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-200">
+                    SSN / Tax ID
+                  </label>
+                  <input
+                    value={form.ein}
+                    onChange={(e) => update('ein', e.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                    placeholder="Optional personal tax identifier"
                   />
                 </div>
               )}
@@ -240,53 +282,61 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Representative Full Name
-                </label>
-                <input
-                  value={form.representativeName}
-                  onChange={(e) => update('representativeName', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-                  placeholder="Full name"
-                />
-              </div>
+              {!isPersonalPath ? (
+                <>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Representative Full Name
+                    </label>
+                    <input
+                      value={form.representativeName}
+                      onChange={(e) => update('representativeName', e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Full name"
+                    />
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Representative Email
-                </label>
-                <input
-                  value={form.representativeEmail}
-                  onChange={(e) => update('representativeEmail', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-                  placeholder="Email address"
-                />
-              </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Representative Email
+                    </label>
+                    <input
+                      value={form.representativeEmail}
+                      onChange={(e) => update('representativeEmail', e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Email address"
+                    />
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Representative Phone
-                </label>
-                <input
-                  value={form.representativePhone}
-                  onChange={(e) => update('representativePhone', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-                  placeholder="Phone number"
-                />
-              </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Representative Phone
+                    </label>
+                    <input
+                      value={form.representativePhone}
+                      onChange={(e) => update('representativePhone', e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Phone number"
+                    />
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Role / Title / Capacity
-                </label>
-                <input
-                  value={form.representativeRole}
-                  onChange={(e) => update('representativeRole', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-                  placeholder="Trustee, Manager, Officer, Administrator, etc."
-                />
-              </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Role / Title / Capacity
+                    </label>
+                    <input
+                      value={form.representativeRole}
+                      onChange={(e) => update('representativeRole', e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Trustee, Manager, Officer, Administrator, etc."
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="md:col-span-2 rounded-2xl border border-cyan-500/15 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+                  Personal intake uses your signed-in Google identity as the individual account holder, so separate representative and authority fields are not required here.
+                </div>
+              )}
 
               {selectedPath === 'trust_estate' && (
                 <div className="md:col-span-2">
@@ -381,17 +431,21 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
 
           <aside className="space-y-6">
             <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5">
-              <h3 className="text-lg font-semibold text-white">Identity + Authority</h3>
+              <h3 className="text-lg font-semibold text-white">
+                {isPersonalPath ? 'Identity Confirmation' : 'Identity + Authority'}
+              </h3>
               <div className="mt-4 space-y-3">
-                <label className="flex items-start gap-3 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={form.authorizedRepresentative}
-                    onChange={(e) => update('authorizedRepresentative', e.target.checked)}
-                    className="mt-1"
-                  />
-                  <span>I confirm that I am authorized to act for or represent this entity or account.</span>
-                </label>
+                {!isPersonalPath ? (
+                  <label className="flex items-start gap-3 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={form.authorizedRepresentative}
+                      onChange={(e) => update('authorizedRepresentative', e.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>I confirm that I am authorized to act for or represent this entity or account.</span>
+                  </label>
+                ) : null}
 
                 <label className="flex items-start gap-3 text-sm text-slate-300">
                   <input
@@ -411,7 +465,9 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
                 {isFormReady ? 'Ready' : 'In Progress'}
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                Complete the intake details, confirm authority, and continue into secure sign-in to proceed.
+                {isPersonalPath
+                  ? 'Confirm your individual intake details and continue into profile setup.'
+                  : 'Complete the intake details, confirm authority, and continue into profile setup.'}
               </p>
 
               {saveMessage && (
@@ -432,7 +488,7 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
                 disabled={!isFormReady || isSaving}
                 className="mt-5 w-full rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                {isSaving ? 'Saving...' : 'Continue to Secure Sign-In'}
+                {isSaving ? 'Saving...' : 'Continue to Profile Setup'}
               </button>
             </div>
           </aside>

@@ -42,12 +42,61 @@ const Verification = lazy(() =>
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
 const DOCUMENT_HASH_PREFIX = '#documents:';
+const ONBOARDING_INTENT_STORAGE_KEY = 'clearflow-onboarding-intent';
+const ONBOARDING_STAGE_STORAGE_KEY = 'clearflow-onboarding-stage';
 
-type EntryStage = 'welcome' | 'pathSelect' | 'membership';
+type WelcomeIntent = 'existing' | 'new';
+type PostAuthOnboardingStage = 'pathSelect' | 'membership' | 'profile';
 
 interface AppProps {
-  initialEntryStage?: EntryStage;
   initialWelcomeView?: 'landing' | 'signin';
+}
+
+function loadStoredOnboardingIntent(): WelcomeIntent {
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_INTENT_STORAGE_KEY);
+    return raw === 'new' ? 'new' : 'existing';
+  } catch {
+    return 'existing';
+  }
+}
+
+function setStoredOnboardingIntent(intent: WelcomeIntent) {
+  try {
+    window.localStorage.setItem(ONBOARDING_INTENT_STORAGE_KEY, intent);
+  } catch {
+    // ignore local storage errors
+  }
+}
+
+function loadStoredOnboardingStage(): PostAuthOnboardingStage {
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_STAGE_STORAGE_KEY);
+    if (raw === 'membership' || raw === 'profile') {
+      return raw;
+    }
+  } catch {
+    // ignore local storage errors
+  }
+
+  return 'pathSelect';
+}
+
+function setStoredOnboardingStage(stage: PostAuthOnboardingStage) {
+  try {
+    window.localStorage.setItem(ONBOARDING_STAGE_STORAGE_KEY, stage);
+  } catch {
+    // ignore local storage errors
+  }
+}
+
+function clearStoredOnboardingFlow() {
+  try {
+    window.localStorage.removeItem(ONBOARDING_INTENT_STORAGE_KEY);
+    window.localStorage.removeItem(ONBOARDING_STAGE_STORAGE_KEY);
+  } catch {
+    // ignore local storage errors
+  }
 }
 
 const allowedSections: AppSection[] = [
@@ -400,13 +449,16 @@ function preloadWorkspaceSection(section: AppSection) {
 }
 
 export default function App({
-  initialEntryStage = 'welcome',
   initialWelcomeView = 'landing',
 }: AppProps) {
   const auth = useAuth();
-  const [entryStage, setEntryStage] = useState<EntryStage>(initialEntryStage);
   const [selectedOnboardingPath, setSelectedOnboardingPath] =
     useState<OnboardingPath>('business_entity');
+  const [welcomeIntent, setWelcomeIntent] = useState<WelcomeIntent>(() =>
+    loadStoredOnboardingIntent()
+  );
+  const [postAuthOnboardingStage, setPostAuthOnboardingStage] =
+    useState<PostAuthOnboardingStage>(() => loadStoredOnboardingStage());
   const [activeSection, setActiveSection] = useState<AppSection>('overview');
   const [data, setData] = useState<CoreDataBundle>(coreMockData);
   const hydratedUserIdRef = useRef<string | null>(null);
@@ -426,12 +478,22 @@ export default function App({
 
   useEffect(() => {
     if (auth.authStatus === 'unauthenticated') {
-      setEntryStage('welcome');
       setActiveSection('overview');
       setData(coreMockData);
       setDocumentVaultScope(null);
       hydratedUserIdRef.current = null;
       initializedSectionUserIdRef.current = null;
+    }
+  }, [auth.authStatus]);
+
+  useEffect(() => {
+    if (
+      auth.authStatus === 'pending-verification' ||
+      auth.authStatus === 'authenticated'
+    ) {
+      clearStoredOnboardingFlow();
+      setWelcomeIntent('existing');
+      setPostAuthOnboardingStage('profile');
     }
   }, [auth.authStatus]);
 
@@ -590,44 +652,25 @@ export default function App({
   }
 
   if (auth.authStatus === 'unauthenticated') {
-    if (entryStage === 'pathSelect') {
-      return (
-        <Suspense fallback={<SuspenseShell title="Loading Onboarding Paths" />}>
-          <OnboardingPathSelect
-            onBack={() => setEntryStage('welcome')}
-            onSelectPath={(path) => {
-              setSelectedOnboardingPath(path);
-              setEntryStage('membership');
-            }}
-          />
-        </Suspense>
-      );
-    }
-
-    if (entryStage === 'membership') {
-      return (
-        <Suspense fallback={<SuspenseShell title="Loading Secure Intake" />}>
-          <MembershipEstablishment
-            selectedPath={selectedOnboardingPath}
-            onBack={() => setEntryStage('pathSelect')}
-            onContinueToLogin={() => setEntryStage('welcome')}
-          />
-        </Suspense>
-      );
-    }
-
     return (
       <Welcome
         initialView={initialWelcomeView}
+        initialIntent={welcomeIntent}
         isConfigured={auth.isConfigured}
         renderGoogleButton={auth.renderGoogleButton}
         onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
-        onStartOnboarding={() => setEntryStage('pathSelect')}
-        pendingCredentialAuth={auth.pendingCredentialAuth}
-        onStartCredentialAuth={auth.startCredentialAuth}
-        onVerifyCredentialAuth={auth.verifyCredentialAuth}
-        onSignInWithPassword={auth.signInWithPassword}
-        onCancelCredentialAuth={auth.cancelCredentialAuth}
+        onStartNewMember={() => {
+          setWelcomeIntent('new');
+          setStoredOnboardingIntent('new');
+          setPostAuthOnboardingStage('pathSelect');
+          setStoredOnboardingStage('pathSelect');
+        }}
+        onStartExistingMember={() => {
+          setWelcomeIntent('existing');
+          setStoredOnboardingIntent('existing');
+          setPostAuthOnboardingStage('profile');
+          setStoredOnboardingStage('profile');
+        }}
       />
     );
   }
@@ -642,6 +685,45 @@ export default function App({
   }
 
   if (auth.authStatus === 'pending-profile-setup') {
+    if (welcomeIntent === 'new' && postAuthOnboardingStage === 'pathSelect') {
+      return (
+        <Suspense fallback={<SuspenseShell title="Loading Onboarding Paths" />}>
+          <OnboardingPathSelect
+            onBack={() => {
+              auth.logout();
+              setWelcomeIntent('new');
+              setStoredOnboardingIntent('new');
+              setPostAuthOnboardingStage('pathSelect');
+              setStoredOnboardingStage('pathSelect');
+            }}
+            onSelectPath={(path) => {
+              setSelectedOnboardingPath(path);
+              setPostAuthOnboardingStage('membership');
+              setStoredOnboardingStage('membership');
+            }}
+          />
+        </Suspense>
+      );
+    }
+
+    if (welcomeIntent === 'new' && postAuthOnboardingStage === 'membership') {
+      return (
+        <Suspense fallback={<SuspenseShell title="Loading Secure Intake" />}>
+          <MembershipEstablishment
+            selectedPath={selectedOnboardingPath}
+            onBack={() => {
+              setPostAuthOnboardingStage('pathSelect');
+              setStoredOnboardingStage('pathSelect');
+            }}
+            onContinue={() => {
+              setPostAuthOnboardingStage('profile');
+              setStoredOnboardingStage('profile');
+            }}
+          />
+        </Suspense>
+      );
+    }
+
     return (
       <Suspense fallback={<SuspenseShell title="Loading Profile Setup" />}>
         <ProfileSetup />
