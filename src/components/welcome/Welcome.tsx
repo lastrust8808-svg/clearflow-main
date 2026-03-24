@@ -81,6 +81,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
   const [signInPassword, setSignInPassword] = useState('');
   const [credentialError, setCredentialError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canUseDevAccess =
+    !isConfigured ||
+    (typeof window !== 'undefined' &&
+      ['localhost', '127.0.0.1'].includes(window.location.hostname));
 
   useEffect(() => {
     if (entryView === 'signin' && isConfigured && isGoogleUiVisible) {
@@ -666,7 +670,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 ) : null}
               </div>
 
-              {!isConfigured ? (
+              {canUseDevAccess ? (
                 <button
                   type="button"
                   onClick={onDevLogin}
@@ -680,7 +684,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  Local build access
+                  Local dev sign in
                 </button>
               ) : null}
             </>
