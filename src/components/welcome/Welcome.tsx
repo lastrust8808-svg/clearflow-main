@@ -56,6 +56,37 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+const splitShellStyle: React.CSSProperties = {
+  maxWidth: 1240,
+  margin: '0 auto',
+  minHeight: '100vh',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+  gap: 24,
+  alignItems: 'center',
+  padding: '36px 22px',
+};
+
+const leftHeroPanelStyle: React.CSSProperties = {
+  borderRadius: 32,
+  padding: 34,
+  background: 'linear-gradient(180deg, rgba(20, 39, 61, 0.96), rgba(17, 31, 49, 0.98))',
+  border: '1px solid rgba(107, 221, 255, 0.22)',
+  display: 'grid',
+  gap: 22,
+  boxShadow: '0 24px 70px rgba(5, 12, 20, 0.28)',
+};
+
+const rightEntryPanelStyle: React.CSSProperties = {
+  borderRadius: 30,
+  padding: 28,
+  background: 'linear-gradient(180deg, rgba(18, 34, 54, 0.98), rgba(15, 28, 44, 0.98))',
+  border: '1px solid rgba(94, 203, 236, 0.18)',
+  display: 'grid',
+  gap: 18,
+  boxShadow: '0 22px 60px rgba(5, 12, 20, 0.24)',
+};
+
 export const Welcome: React.FC<WelcomeProps> = ({
   initialView = 'landing',
   isConfigured,
@@ -157,33 +188,14 @@ export const Welcome: React.FC<WelcomeProps> = ({
     <div
       style={{
         minHeight: '100vh',
-        background: '#101826',
+        background:
+          'linear-gradient(135deg, #0d1726 0%, #102033 52%, #13283e 100%)',
         color: '#f8fbff',
         fontFamily: '"Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
       }}
     >
-      <div
-        style={{
-          maxWidth: 1220,
-          margin: '0 auto',
-          minHeight: '100vh',
-          display: 'grid',
-          gridTemplateColumns: '1fr',
-          gap: 20,
-          alignContent: 'center',
-          padding: '32px 20px',
-        }}
-      >
-        <section
-          style={{
-            borderRadius: 32,
-            padding: 32,
-            background: '#162235',
-            border: '1px solid #23344c',
-            display: 'grid',
-            gap: 24,
-          }}
-        >
+      <div style={splitShellStyle}>
+        <section style={leftHeroPanelStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div
               style={{
@@ -192,8 +204,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 gap: 10,
                 padding: '10px 14px',
                 borderRadius: 999,
-                background: '#173549',
-                border: '1px solid #23607e',
+                background: 'rgba(28, 81, 112, 0.62)',
+                border: '1px solid rgba(118, 229, 255, 0.26)',
                 color: '#9fe8ff',
                 fontSize: 12,
                 letterSpacing: 2,
@@ -209,13 +221,13 @@ export const Welcome: React.FC<WelcomeProps> = ({
           </div>
 
           <div style={{ display: 'grid', gap: 16 }}>
-            <div style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05 }}>
+            <div style={{ fontSize: 46, fontWeight: 800, lineHeight: 1.03, maxWidth: 720 }}>
               Finance, records, compliance, and cash flow in one place.
             </div>
             <div
               style={{
                 fontSize: 18,
-                lineHeight: 1.75,
+                lineHeight: 1.78,
                 color: '#d7e3ee',
                 maxWidth: 760,
               }}
@@ -240,8 +252,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 style={{
                   borderRadius: 20,
                   padding: '16px 18px',
-                  background: '#1a2940',
-                  border: '1px solid #273a57',
+                  background: 'rgba(23, 43, 67, 0.9)',
+                  border: '1px solid rgba(94, 203, 236, 0.16)',
                   color: '#edf6fb',
                   lineHeight: 1.6,
                 }}
@@ -252,16 +264,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
           </div>
         </section>
 
-        <section
-          style={{
-            borderRadius: 30,
-            padding: 28,
-            background: '#162235',
-            border: '1px solid #23344c',
-            display: 'grid',
-            gap: 18,
-          }}
-        >
+        <section style={rightEntryPanelStyle}>
           {entryView === 'landing' ? (
             <>
               <div>
@@ -295,8 +298,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background: '#183145',
-                    border: '1px solid #255573',
+                    background: 'rgba(23, 59, 84, 0.88)',
+                    border: '1px solid rgba(71, 178, 214, 0.34)',
                     display: 'grid',
                     gap: 12,
                   }}
@@ -311,8 +314,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       minHeight: 50,
                       borderRadius: 16,
-                      border: '1px solid #2e7aa1',
-                      background: '#1d7ea2',
+                      border: '1px solid rgba(89, 209, 240, 0.52)',
+                      background: 'linear-gradient(135deg, #1f91b4, #2db8cf)',
                       color: '#fff',
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -327,8 +330,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background: '#1a2940',
-                    border: '1px solid #273a57',
+                    background: 'rgba(21, 40, 63, 0.88)',
+                    border: '1px solid rgba(70, 125, 163, 0.34)',
                     display: 'grid',
                     gap: 12,
                   }}
@@ -347,8 +350,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       minHeight: 48,
                       borderRadius: 16,
-                      border: '1px solid #2d607d',
-                      background: '#1b3650',
+                      border: '1px solid rgba(83, 147, 191, 0.42)',
+                      background: 'linear-gradient(135deg, #214666, #2a6286)',
                       color: '#ecfeff',
                       fontWeight: 800,
                       cursor: 'pointer',
