@@ -104,6 +104,17 @@ const sectionButtonStyle = (isActive: boolean): CSSProperties => ({
   fontWeight: isActive ? 700 : 500,
 });
 
+function parseAccountingSubsectionHash(hashValue: string): AccountingSection | null {
+  if (!hashValue.startsWith('#accounting:')) {
+    return null;
+  }
+
+  const normalized = hashValue.replace('#accounting:', '');
+  return subnavItems.some((item) => item.id === normalized)
+    ? (normalized as AccountingSection)
+    : null;
+}
+
 export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [activeSubsection, setActiveSubsection] =
     useState<AccountingSection>('dashboard');
@@ -124,6 +135,21 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
   const [operationsNotice, setOperationsNotice] = useState('');
+
+  useEffect(() => {
+    const applyHash = () => {
+      const nextSubsection = parseAccountingSubsectionHash(window.location.hash);
+      if (nextSubsection) {
+        setActiveSubsection((previous) =>
+          previous === nextSubsection ? previous : nextSubsection,
+        );
+      }
+    };
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
 
   const invoices = data.invoices ?? [];
   const bills = data.bills ?? [];
@@ -5668,6 +5694,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               onRecordPayment={() => setIsPaymentModalOpen(true)}
               onRequestDirectDeposit={() => {
                 setActiveSubsection('payroll');
+                if (typeof window !== 'undefined') {
+                  window.location.hash = '#accounting:payroll';
+                }
                 setIsDirectDepositModalOpen(true);
               }}
               onAddJournalEntry={() => setIsJournalModalOpen(true)}
@@ -5675,7 +5704,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               onAddReceipt={() => setIsReceiptModalOpen(true)}
               onAddPresentment={() => setIsCouponPresentmentModalOpen(true)}
               onGenerateQuote={() => setIsQuoteModalOpen(true)}
-              onManageBankFeed={() => setActiveSubsection('bankFeed')}
+              onManageBankFeed={() => {
+                setActiveSubsection('bankFeed');
+                if (typeof window !== 'undefined') {
+                  window.location.hash = '#accounting:bankFeed';
+                }
+              }}
               onAddIntercompanyTransfer={() => setIsIntercompanyModalOpen(true)}
             />
 
@@ -5684,7 +5718,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveSubsection(item.id)}
+                  onClick={() => {
+                    setActiveSubsection(item.id);
+                    if (typeof window !== 'undefined') {
+                      window.location.hash = `#accounting:${item.id}`;
+                    }
+                  }}
                   style={sectionButtonStyle(item.id === activeSubsection)}
                 >
                   {item.label}

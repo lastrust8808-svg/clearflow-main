@@ -255,7 +255,7 @@ function parseHashSection(hashValue: string): AppSection | null {
     return 'documents';
   }
 
-  const normalized = hashValue.replace('#', '');
+  const normalized = hashValue.replace('#', '').split(':')[0];
   return allowedSections.includes(normalized as AppSection) ? (normalized as AppSection) : null;
 }
 

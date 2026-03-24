@@ -13,37 +13,44 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
-    0
+    0,
   );
   const settlementReviewItems = settlementFlows.filter(
     (item) =>
       item.hasCoverageGap ||
       item.derivedAutoReconcileStatus !== 'matched' ||
-      !item.verificationReady
+      !item.verificationReady,
   ).length;
   const liquidCashReadyCount = settlementFlows.filter((item) => item.liquidCashReady).length;
   const autoReconciledCount = settlementFlows.filter(
-    (item) => item.derivedAutoReconcileStatus === 'matched'
+    (item) => item.derivedAutoReconcileStatus === 'matched',
   ).length;
   const privateTreasuryCount = data.treasuryAccounts.filter(
-    (item) => item.originatingAuthority === 'private_ledger_only'
+    (item) => item.originatingAuthority === 'private_ledger_only',
   ).length;
   const instrumentDischargeCount = data.instrumentSettlements.filter(
-    (item) => item.dischargeMethod === 'instrument_performance'
+    (item) => item.dischargeMethod === 'instrument_performance',
   ).length;
   const employeeCount = data.employees.length;
   const filingQueueCount = data.taxReportingLinks.filter(
-    (item) => item.status === 'draft' || item.status === 'corrected'
+    (item) => item.status === 'draft' || item.status === 'corrected',
   ).length;
   const directDepositCount = data.directDepositAuthorizations.filter(
-    (item) => item.status === 'returned' || item.status === 'verified'
+    (item) => item.status === 'returned' || item.status === 'verified',
   ).length;
-  const reviewItems = [
-    ...data.complianceTags.filter((item) => item.status === 'review'),
-    ...data.digitalAssetCompliance.filter(
-      (item) => item.sourceOfFundsRecordStatus !== 'complete'
-    ),
-  ].length + settlementReviewItems;
+  const recurringPaymentCount = data.payments.filter(
+    (item) => item.recurringSchedule?.enabled,
+  ).length;
+  const recurringObligationCount = data.obligations.filter(
+    (item) => item.recurringSchedule?.enabled,
+  ).length;
+  const reviewItems =
+    [
+      ...data.complianceTags.filter((item) => item.status === 'review'),
+      ...data.digitalAssetCompliance.filter(
+        (item) => item.sourceOfFundsRecordStatus !== 'complete',
+      ),
+    ].length + settlementReviewItems;
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -178,22 +185,32 @@ export default function OverviewPage({ data }: OverviewPageProps) {
           {[
             {
               title: 'Accounting',
-              subtitle: `${data.payments.length} payments · ${data.bankFeedEntries.length} bank entries`,
-              hash: '#accounting',
+              subtitle: `${data.payments.length} payments | ${data.bankFeedEntries.length} bank entries`,
+              hash: '#accounting:dashboard',
+            },
+            {
+              title: 'Recurring',
+              subtitle: `${recurringPaymentCount} payment schedules | ${recurringObligationCount} obligation cycles`,
+              hash: '#accounting:recurring',
+            },
+            {
+              title: 'Payroll',
+              subtitle: `${employeeCount} workers | ${directDepositCount} direct deposit returns`,
+              hash: '#accounting:payroll',
             },
             {
               title: 'Documents',
-              subtitle: `${data.documents.length} vault records · ${data.tokens.length} tokens`,
+              subtitle: `${data.documents.length} vault records | ${data.tokens.length} tokens`,
               hash: '#documents',
             },
             {
               title: 'Compliance',
-              subtitle: `${filingQueueCount} filing items · ${reviewItems} review items`,
+              subtitle: `${filingQueueCount} filing items | ${reviewItems} review items`,
               hash: '#compliance',
             },
             {
               title: 'Entities',
-              subtitle: `${data.entities.length} profiles · ${data.authorityRecords.length} authority records`,
+              subtitle: `${data.entities.length} profiles | ${data.authorityRecords.length} authority records`,
               hash: '#entities',
             },
           ].map((item) => (
