@@ -8,18 +8,18 @@ class UserDataService {
     private fileId: string | null = sessionStorage.getItem(FILE_ID_KEY);
 
     async loadUserData(accessToken: string): Promise<AppData | null> {
-        if (!this.fileId) {
-            this.fileId = await googleDriveService.findFileInAppDataFolder(accessToken, FILE_NAME);
-            if (this.fileId) {
-                sessionStorage.setItem(FILE_ID_KEY, this.fileId);
-            }
-        }
-
-        if (!this.fileId) {
-            return null; // File doesn't exist, new user.
-        }
-
         try {
+            if (!this.fileId) {
+                this.fileId = await googleDriveService.findFileInAppDataFolder(accessToken, FILE_NAME);
+                if (this.fileId) {
+                    sessionStorage.setItem(FILE_ID_KEY, this.fileId);
+                }
+            }
+
+            if (!this.fileId) {
+                return null; // File doesn't exist, new user.
+            }
+
             return await googleDriveService.getFileContent(accessToken, this.fileId);
         } catch (error) {
             console.error("Error loading user data, treating as new user.", error);

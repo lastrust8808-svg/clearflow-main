@@ -204,14 +204,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const checkDrive = async () => {
       if (state.status === 'pending-drive-check' && state.apiAccessToken && state.gsiUser) {
-        const loadedData = await userDataService.loadUserData(state.apiAccessToken);
-        if (loadedData) { // Existing user
-          if (loadedData.user.isVerified) {
-            setState(current => ({ ...current, status: 'authenticated', appData: loadedData, gsiUser: null }));
-          } else {
-            setState(current => ({ ...current, status: 'pending-verification', appData: loadedData, gsiUser: null }));
+        try {
+          const loadedData = await userDataService.loadUserData(state.apiAccessToken);
+          if (loadedData) { // Existing user
+            if (loadedData.user.isVerified) {
+              setState(current => ({ ...current, status: 'authenticated', appData: loadedData, gsiUser: null }));
+            } else {
+              setState(current => ({ ...current, status: 'pending-verification', appData: loadedData, gsiUser: null }));
+            }
+          } else { // New user
+            const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false };
+            const newAppData: AppData = { user: newUser, entities: [] };
+            setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
           }
-        } else { // New user
+        } catch (error) {
+          console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
           const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false };
           const newAppData: AppData = { user: newUser, entities: [] };
           setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
