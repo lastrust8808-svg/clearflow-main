@@ -20,6 +20,7 @@ interface RemittanceOperationsWorkspaceProps {
   treasuryAccounts: TreasuryAccountRecord[];
   wallets: WalletRecord[];
   onChainTransactions: OnChainTransactionRecord[];
+  onConfirmCompliance: (paymentId: string) => void;
   onApprovePayment: (paymentId: string) => void;
   onReleasePayment: (paymentId: string) => void;
   onConfirmWalletSettlement: (paymentId: string) => void;
@@ -98,6 +99,7 @@ export default function RemittanceOperationsWorkspace({
   treasuryAccounts,
   wallets,
   onChainTransactions,
+  onConfirmCompliance,
   onApprovePayment,
   onReleasePayment,
   onConfirmWalletSettlement,
@@ -174,15 +176,22 @@ export default function RemittanceOperationsWorkspace({
             </div>
           ) : (
             remittancePayments.map((payment) => {
+              const needsComplianceConfirmation =
+                payment.complianceConfirmationStatus === 'pending';
               const needsReview =
-                payment.settlementExecution?.processorStatus === 'requires_review' ||
-                payment.settlementExecution?.processorStatus === 'blocked';
+                !needsComplianceConfirmation &&
+                (payment.settlementExecution?.processorStatus === 'requires_review' ||
+                  payment.settlementExecution?.processorStatus === 'blocked');
+              const canConfirmCompliance =
+                needsComplianceConfirmation && payment.releaseStatus !== 'released';
               const canApprove =
                 !needsReview &&
+                !needsComplianceConfirmation &&
                 payment.approvalStatus !== 'approved' &&
                 payment.releaseStatus !== 'released';
               const canRelease =
                 !needsReview &&
+                !needsComplianceConfirmation &&
                 payment.releaseStatus !== 'released' &&
                 (payment.approvalStatus === 'approved' ||
                   payment.approvalStatus === 'not_required');
@@ -216,8 +225,19 @@ export default function RemittanceOperationsWorkspace({
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={badgeStyle(needsReview ? 'warn' : 'info')}>
+                      <span style={badgeStyle(needsReview || needsComplianceConfirmation ? 'warn' : 'info')}>
                         {payment.settlementExecution?.processorStatus || payment.status}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          payment.complianceConfirmationStatus === 'confirmed'
+                            ? 'good'
+                            : payment.complianceConfirmationStatus === 'pending'
+                              ? 'warn'
+                              : 'neutral'
+                        )}
+                      >
+                        compliance: {payment.complianceConfirmationStatus || 'not_required'}
                       </span>
                       <span
                         style={badgeStyle(
@@ -308,6 +328,18 @@ export default function RemittanceOperationsWorkspace({
                         </div>
                       </div>
                     ) : null}
+                    {payment.recurringSchedule?.enabled ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Recurring</strong>
+                        <div>
+                          {payment.recurringSchedule.frequency || 'scheduled'} every{' '}
+                          {payment.recurringSchedule.interval || 1}
+                          {payment.recurringSchedule.nextRunDate
+                            ? ` | next ${payment.recurringSchedule.nextRunDate}`
+                            : ''}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div
@@ -323,12 +355,21 @@ export default function RemittanceOperationsWorkspace({
                       lineHeight: 1.6,
                     }}
                   >
-                    {payment.settlementExecution?.executionReason ||
+                    {payment.complianceConfirmationNote ||
+                      payment.settlementExecution?.executionReason ||
                       payment.notes ||
                       'Settlement is ready for operator review.'}
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => onConfirmCompliance(payment.id)}
+                      disabled={!canConfirmCompliance}
+                      style={buttonStyle(!canConfirmCompliance)}
+                    >
+                      Confirm Compliance
+                    </button>
                     <button
                       type="button"
                       onClick={() => onApprovePayment(payment.id)}

@@ -120,6 +120,12 @@ export default function PaymentRecordModal({
   const [urgency, setUrgency] = useState<'instant' | 'same_day' | 'standard' | 'final'>(
     'standard'
   );
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] =
+    useState<NonNullable<PaymentSubmitPayload['recurringFrequency']>>('monthly');
+  const [recurringInterval, setRecurringInterval] = useState('1');
+  const [recurringNextRunDate, setRecurringNextRunDate] = useState('');
+  const [recurringAutoPost, setRecurringAutoPost] = useState(false);
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -138,6 +144,11 @@ export default function PaymentRecordModal({
     setLinkedDigitalAssetId('');
     setDischargeMethod('bank_rail_payment');
     setUrgency('standard');
+    setRecurringEnabled(false);
+    setRecurringFrequency('monthly');
+    setRecurringInterval('1');
+    setRecurringNextRunDate(new Date().toISOString().slice(0, 10));
+    setRecurringAutoPost(false);
     setNotes('');
   }, [open]);
 
@@ -610,6 +621,75 @@ export default function PaymentRecordModal({
           style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
         />
 
+        <div
+          style={{
+            display: 'grid',
+            gap: 12,
+            padding: 14,
+            borderRadius: 14,
+            border: '1px solid rgba(148,163,184,0.2)',
+            background: 'rgba(15,23,42,0.36)',
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#e5e7eb' }}>
+            <input
+              type="checkbox"
+              checked={recurringEnabled}
+              onChange={(event) => setRecurringEnabled(event.target.checked)}
+            />
+            Make this payment or obligation recurring
+          </label>
+          {recurringEnabled ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <select
+                value={recurringFrequency}
+                onChange={(event) =>
+                  setRecurringFrequency(
+                    event.target.value as NonNullable<PaymentSubmitPayload['recurringFrequency']>
+                  )
+                }
+                style={inputStyle}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="semimonthly">Semimonthly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annually">Annually</option>
+              </select>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={recurringInterval}
+                onChange={(event) => setRecurringInterval(event.target.value)}
+                placeholder="Interval"
+                style={inputStyle}
+              />
+              <input
+                type="date"
+                value={recurringNextRunDate}
+                onChange={(event) => setRecurringNextRunDate(event.target.value)}
+                style={inputStyle}
+              />
+              <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={recurringAutoPost}
+                  onChange={(event) => setRecurringAutoPost(event.target.checked)}
+                />
+                Auto-post future runs when controls allow
+              </label>
+            </div>
+          ) : null}
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} style={buttonStyle}>
             Close
@@ -631,6 +711,11 @@ export default function PaymentRecordModal({
                 linkedDigitalAssetId: linkedDigitalAssetId || undefined,
                 dischargeMethod,
                 urgency,
+                recurringEnabled,
+                recurringFrequency,
+                recurringInterval,
+                recurringNextRunDate: recurringNextRunDate || undefined,
+                recurringAutoPost,
                 linkedInvoiceId: linkedInvoiceId || undefined,
                 linkedBillId: linkedBillId || undefined,
                 notes,

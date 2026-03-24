@@ -1,7 +1,7 @@
 import { geminiService } from './gemini.service';
 import type { AnalysisResult } from '../types/app.models';
 
-type IntakeKind = 'bill' | 'receipt';
+type IntakeKind = 'bill' | 'receipt' | 'coupon';
 
 export interface IntakeExtractionResult {
   status: 'manual' | 'extracted' | 'needs_review' | 'failed';
@@ -35,6 +35,7 @@ function extractDateFromText(text: string | undefined) {
 function categorizeDocument(documentType: string | undefined) {
   if (!documentType) return undefined;
   const normalized = documentType.toLowerCase();
+  if (normalized.includes('coupon')) return 'Coupon Presentment';
   if (normalized.includes('fuel')) return 'Fuel';
   if (normalized.includes('travel')) return 'Travel';
   if (normalized.includes('meal')) return 'Meals';

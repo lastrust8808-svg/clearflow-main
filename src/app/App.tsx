@@ -9,14 +9,14 @@ import { setDocumentVaultScope } from '../services/documentVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 import OverviewPage from '../components/pages/OverviewPage';
 import EntitiesPage from '../components/pages/EntitiesPage';
-import LedgerPage from '../components/pages/LedgerPage';
 import AccountingPage from '../components/pages/AccountingPage';
-import AssetsPage from '../components/pages/AssetsPage';
-import TransactionsPage from '../components/pages/TransactionsPage';
-import CompliancePage from '../components/pages/ComplianceWorkbenchPage';
-import DocumentsPage from '../components/pages/DocumentsPage';
-import AIStudioPage from '../components/pages/AIStudioPage';
-import SettingsPage from '../components/pages/SettingsPage';
+const LedgerPage = lazy(() => import('../components/pages/LedgerPage'));
+const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
+const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
+const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
+const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
+const AIStudioPage = lazy(() => import('../components/pages/AIStudioPage'));
+const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
 
 const MembershipEstablishment = lazy(() =>
   import('../components/membership-establishment/MembershipEstablishment').then((module) => ({
@@ -136,6 +136,8 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     receipts: [],
     expenses: [],
     payments: [],
+    employees: [],
+    directDepositAuthorizations: [],
     bankAccounts: [],
     reconciliations: [],
     accountingPeriods: [],
@@ -144,6 +146,11 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     treasuryAccounts: [],
     instrumentSettlements: [],
     remittanceStatements: [],
+    couponPresentments: [],
+    movementIdentifiers: [],
+    returnEvents: [],
+    reclamationEvents: [],
+    taxReportingLinks: [],
     ledgerAccounts: [],
     assets: [],
     wallets: [],
@@ -180,6 +187,9 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     receipts: candidate.receipts ?? coreMockData.receipts,
     expenses: candidate.expenses ?? coreMockData.expenses,
     payments: candidate.payments ?? coreMockData.payments,
+    employees: candidate.employees ?? coreMockData.employees,
+    directDepositAuthorizations:
+      candidate.directDepositAuthorizations ?? coreMockData.directDepositAuthorizations,
     bankAccounts: candidate.bankAccounts ?? coreMockData.bankAccounts,
     reconciliations: candidate.reconciliations ?? coreMockData.reconciliations,
     accountingPeriods: candidate.accountingPeriods ?? coreMockData.accountingPeriods,
@@ -190,6 +200,15 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
       candidate.instrumentSettlements ?? coreMockData.instrumentSettlements,
     remittanceStatements:
       candidate.remittanceStatements ?? coreMockData.remittanceStatements,
+    couponPresentments:
+      candidate.couponPresentments ?? coreMockData.couponPresentments,
+    movementIdentifiers:
+      candidate.movementIdentifiers ?? coreMockData.movementIdentifiers,
+    returnEvents: candidate.returnEvents ?? coreMockData.returnEvents,
+    reclamationEvents:
+      candidate.reclamationEvents ?? coreMockData.reclamationEvents,
+    taxReportingLinks:
+      candidate.taxReportingLinks ?? coreMockData.taxReportingLinks,
     ledgerAccounts: candidate.ledgerAccounts ?? coreMockData.ledgerAccounts,
     assets: candidate.assets ?? coreMockData.assets,
     wallets: candidate.wallets ?? coreMockData.wallets,
@@ -318,6 +337,57 @@ function SuspenseShell({ title }: { title: string }) {
       subtitle="Loading the next ClearFlow workspace surface."
     />
   );
+}
+
+function WorkspaceSectionLoading({ title }: { title: string }) {
+  return (
+    <div
+      style={{
+        borderRadius: 22,
+        border: '1px solid rgba(126, 242, 255, 0.16)',
+        background: 'rgba(15,23,42,0.48)',
+        padding: 24,
+        color: '#e5eef7',
+        display: 'grid',
+        gap: 10,
+        minHeight: 240,
+        alignContent: 'center',
+      }}
+    >
+      <div style={{ fontSize: 24, fontWeight: 800 }}>{title}</div>
+      <div style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+        Loading the next ClearFlow workspace without dropping the main shell.
+      </div>
+    </div>
+  );
+}
+
+function preloadWorkspaceSection(section: AppSection) {
+  switch (section) {
+    case 'ledger':
+      void import('../components/pages/LedgerPage');
+      break;
+    case 'assets':
+      void import('../components/pages/AssetsPage');
+      break;
+    case 'transactions':
+      void import('../components/pages/TransactionsPage');
+      break;
+    case 'compliance':
+      void import('../components/pages/ComplianceWorkbenchPage');
+      break;
+    case 'documents':
+      void import('../components/pages/DocumentsPage');
+      break;
+    case 'aiStudio':
+      void import('../components/pages/AIStudioPage');
+      break;
+    case 'settings':
+      void import('../components/pages/SettingsPage');
+      break;
+    default:
+      break;
+  }
 }
 
 export default function App({
@@ -464,9 +534,15 @@ export default function App({
   }, [auth.authStatus, data.entities.length, mappedAuthEntities]);
 
   const handleSectionChange = (nextSection: AppSection) => {
+    preloadWorkspaceSection(nextSection);
     setActiveSection((previous) => (previous === nextSection ? previous : nextSection));
     replaceWindowHash(buildSectionHash(nextSection));
   };
+
+  useEffect(() => {
+    preloadWorkspaceSection('ledger');
+    preloadWorkspaceSection('documents');
+  }, []);
 
   const renderSection = () => {
     switch (activeSection) {
@@ -587,7 +663,9 @@ export default function App({
       onSectionChange={handleSectionChange}
       workspaceSettings={data.workspaceSettings}
     >
-      {renderSection()}
+      <Suspense fallback={<WorkspaceSectionLoading title="Loading Workspace" />}>
+        {renderSection()}
+      </Suspense>
     </AppShell>
   );
 }

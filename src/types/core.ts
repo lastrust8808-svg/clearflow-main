@@ -214,12 +214,25 @@ export type WalletConnectionStatus =
   | 'attention_needed';
 
 export type WalletExecutionSupport = 'live_broadcast' | 'manual_release' | 'read_only';
+export type RailNamespace =
+  | 'commercial_ach'
+  | 'federal_ach_green_book'
+  | 'treasury_check_gold_book'
+  | 'fedwire'
+  | 'irs_reporting';
 
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
 export type InterEntitySettlementMode = 'mirrored_halves' | 'cross_entity_clearing';
 
 export type TokenStatus = 'draft' | 'issued' | 'verified' | 'revoked';
+export type RecurrenceFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+  | 'quarterly'
+  | 'annually';
 
 export type TokenSubjectType =
   | 'entity'
@@ -429,6 +442,14 @@ export interface ObligationRecord {
   linkedInstrumentIds?: string[];
   linkedDocumentIds?: string[];
   gainOrLossOnDischarge?: number;
+  recurringSchedule?: {
+    enabled: boolean;
+    frequency?: RecurrenceFrequency;
+    interval?: number;
+    nextDueDate?: string;
+    autoCreatePresentment?: boolean;
+    note?: string;
+  };
 }
 
 export interface AuthorityRecord {
@@ -626,7 +647,13 @@ export interface DocumentRecord {
   sizeBytes?: number;
   uploadedAt?: string;
   sourceFileId?: string;
-  sourceRecordType?: 'bill' | 'receipt' | 'document' | 'reconciliation';
+  sourceRecordType?:
+    | 'bill'
+    | 'receipt'
+    | 'document'
+    | 'reconciliation'
+    | 'coupon_presentment'
+    | 'direct_deposit_request';
   sourceRecordId?: string;
   linkedAssetIds?: string[];
   linkedWalletIds?: string[];
@@ -696,6 +723,11 @@ export interface WorkspaceSettingsRecord {
   autoReconcileJournalEntries: boolean;
   requireDocumentLinksForSettlements: boolean;
   digitalAssetVerificationRequired: boolean;
+  requireVerifiedVendorBankInstructions: boolean;
+  achReleaseReviewThreshold: number;
+  wireReleaseReviewThreshold: number;
+  statementImportAbsoluteHoldThreshold: number;
+  statementImportHighRiskKeywords: string[];
   supportEmail?: string;
   vaultRetentionPolicy: 'core_records_permanent' | 'seven_years' | 'custom';
   customRetentionNotes?: string;
@@ -768,6 +800,118 @@ export interface RemittanceStatementRecord {
     mode: 'informational_only' | 'bank_backed';
   };
   status: 'draft' | 'issued' | 'accepted' | 'performed';
+  notes?: string;
+}
+
+export interface CouponPresentmentRecord {
+  id: string;
+  entityId: string;
+  title: string;
+  couponReference?: string;
+  instrumentId?: string;
+  obligationId?: string;
+  instrumentSettlementId?: string;
+  treasuryAccountId?: string;
+  sourceBankAccountId?: string;
+  sourceLedgerAccountId?: string;
+  receiverName: string;
+  receiverAccountLabel?: string;
+  presentmentDate: string;
+  dueDate?: string;
+  amount: number;
+  currency: string;
+  dischargeMethod: DischargeMethod;
+  sourceType: 'photo' | 'upload' | 'manual';
+  status: 'draft' | 'presented' | 'accepted' | 'performed' | 'exception';
+  linkedPaymentId?: string;
+  linkedSettlementId?: string;
+  linkedJournalEntryId?: string;
+  linkedRemittanceStatementId?: string;
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
+  extractionSummary?: string;
+  extractedReceiverName?: string;
+  extractedAmount?: number;
+  extractedDueDate?: string;
+  notes?: string;
+}
+
+export interface MovementIdentifierRecord {
+  id: string;
+  entityId: string;
+  railNamespace: RailNamespace;
+  movementType:
+    | 'payment'
+    | 'return'
+    | 'reclamation'
+    | 'wire'
+    | 'tax_report'
+    | 'coupon_presentment';
+  linkedPaymentId?: string;
+  linkedSettlementId?: string;
+  linkedRemittanceStatementId?: string;
+  linkedCouponPresentmentId?: string;
+  primaryIdentifier: string;
+  secondaryIdentifier?: string;
+  secCode?: string;
+  traceNumber?: string;
+  imad?: string;
+  omad?: string;
+  routingNumber?: string;
+  effectiveDate?: string;
+  returnDeadline?: string;
+  status: 'draft' | 'active' | 'returned' | 'closed' | 'corrected';
+  notes?: string;
+}
+
+export interface ReturnEventRecord {
+  id: string;
+  entityId: string;
+  railNamespace: Extract<RailNamespace, 'commercial_ach' | 'federal_ach_green_book' | 'fedwire'>;
+  linkedMovementIdentifierId: string;
+  linkedPaymentId?: string;
+  linkedSettlementId?: string;
+  eventDate: string;
+  code: string;
+  reason: string;
+  changeCode?: string;
+  correctionStatus: 'pending' | 'corrected' | 'waived' | 'closed';
+  status: 'open' | 'resolved' | 'exception';
+  notes?: string;
+}
+
+export interface ReclamationEventRecord {
+  id: string;
+  entityId: string;
+  railNamespace: 'treasury_check_gold_book';
+  linkedMovementIdentifierId: string;
+  linkedRemittanceStatementId?: string;
+  reclamationDate: string;
+  reclamationType:
+    | 'forged_endorsement'
+    | 'post_death'
+    | 'material_alteration'
+    | 'other';
+  claimNumber?: string;
+  status: 'open' | 'contested' | 'resolved';
+  deadlineDate?: string;
+  notes?: string;
+}
+
+export interface TaxReportingLinkRecord {
+  id: string;
+  entityId: string;
+  railNamespace: 'irs_reporting';
+  linkedPaymentId?: string;
+  counterpartyName: string;
+  tinLast4?: string;
+  tinMatchStatus: 'not_checked' | 'matched' | 'mismatch' | 'pending';
+  formType?: '1099-NEC' | '1099-MISC' | '1099-INT' | '1099-DIV' | 'other';
+  filingChannel?: 'IRIS' | 'FIRE' | 'manual';
+  tcc?: string;
+  submissionId?: string;
+  correctionStatus: 'none' | 'pending' | 'corrected';
+  status: 'draft' | 'filed' | 'accepted' | 'corrected';
   notes?: string;
 }
 
@@ -1032,6 +1176,10 @@ export interface PaymentRecord {
   approvalStatus?: 'not_required' | 'pending' | 'approved' | 'rejected';
   approvedBy?: string;
   approvedAt?: string;
+  complianceConfirmationStatus?: 'not_required' | 'pending' | 'confirmed';
+  complianceConfirmedBy?: string;
+  complianceConfirmedAt?: string;
+  complianceConfirmationNote?: string;
   releaseStatus?: 'not_applicable' | 'queued' | 'ready_to_release' | 'released';
   releasedBy?: string;
   releasedAt?: string;
@@ -1057,6 +1205,54 @@ export interface PaymentRecord {
     vendorInstructionVerified?: boolean;
     simulatedProcessing?: boolean;
   };
+  recurringSchedule?: {
+    enabled: boolean;
+    frequency?: RecurrenceFrequency;
+    interval?: number;
+    nextRunDate?: string;
+    autoPostEnabled?: boolean;
+    note?: string;
+  };
+  notes?: string;
+}
+
+export interface EmployeeRecord {
+  id: string;
+  entityId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  title?: string;
+  department?: string;
+  status: 'active' | 'onboarding' | 'inactive';
+  employeeType: 'employee' | 'contractor' | 'officer';
+  compensationType: 'salary' | 'hourly' | 'contract';
+  paySchedule: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  annualSalary?: number;
+  hourlyRate?: number;
+  defaultHoursPerPeriod?: number;
+  startDate?: string;
+  linkedDocumentIds?: string[];
+  directDepositRequestId?: string;
+  notes?: string;
+}
+
+export interface DirectDepositAuthorizationRecord {
+  id: string;
+  entityId: string;
+  employeeId: string;
+  requestEmail: string;
+  status: 'draft' | 'sent' | 'returned' | 'verified' | 'declined';
+  formDeliveryMethod: 'email' | 'manual';
+  requestedAt?: string;
+  returnedAt?: string;
+  verifiedAt?: string;
+  requestTokenId?: string;
+  linkedDocumentIds?: string[];
+  routingLast4?: string;
+  accountLast4?: string;
+  accountType?: 'checking' | 'savings' | 'other';
+  signatureName?: string;
   notes?: string;
 }
 
@@ -1081,6 +1277,12 @@ export interface BankAccountRecord {
   plaidItemId?: string;
   lastFeedSyncAt?: string;
   autoReconcileEnabled?: boolean;
+  statementImportPolicy?:
+    | 'review_all'
+    | 'auto_post_all'
+    | 'auto_post_credits_only'
+    | 'auto_post_under_threshold';
+  statementAutoPostThreshold?: number;
   routingNumber?: string;
   accountNumber?: string;
   achOriginationEnabled?: boolean;
@@ -1171,6 +1373,8 @@ export interface CoreDataBundle {
   receipts: ReceiptRecord[];
   expenses: ExpenseRecord[];
   payments: PaymentRecord[];
+  employees: EmployeeRecord[];
+  directDepositAuthorizations: DirectDepositAuthorizationRecord[];
   bankAccounts: BankAccountRecord[];
   reconciliations: ReconciliationRecord[];
   accountingPeriods: AccountingPeriodRecord[];
@@ -1179,6 +1383,11 @@ export interface CoreDataBundle {
   treasuryAccounts: TreasuryAccountRecord[];
   instrumentSettlements: InstrumentSettlementRecord[];
   remittanceStatements: RemittanceStatementRecord[];
+  couponPresentments: CouponPresentmentRecord[];
+  movementIdentifiers: MovementIdentifierRecord[];
+  returnEvents: ReturnEventRecord[];
+  reclamationEvents: ReclamationEventRecord[];
+  taxReportingLinks: TaxReportingLinkRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   assets: AssetRecord[];
   wallets: WalletRecord[];

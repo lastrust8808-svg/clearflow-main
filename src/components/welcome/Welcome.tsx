@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import type { LocalAuthChallenge, LocalAuthContactType } from '../../services/localAuth.service';
+import type {
+  LocalAuthChallenge,
+  LocalAuthContactType,
+} from '../../services/localAuth.service';
+import { Logo } from '../logo/Logo';
 
 interface WelcomeProps {
   initialView?: 'landing' | 'signin';
@@ -7,85 +11,42 @@ interface WelcomeProps {
   onDevLogin: () => void;
   onStartOnboarding: () => void;
   renderGoogleButton: (elementId: string) => void;
-  pendingCredentialAuth: LocalAuthChallenge | null;
-  onStartCredentialAuth: (input: {
+  pendingCredentialAuth?: LocalAuthChallenge | null;
+  onStartCredentialAuth?: (input: {
     contactType: LocalAuthContactType;
     contactValue: string;
     name?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  onVerifyCredentialAuth: (input: {
+  onVerifyCredentialAuth?: (input: {
     code: string;
     userHandle?: string;
     password?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  onSignInWithPassword: (input: {
+  onSignInWithPassword?: (input: {
     identifier: string;
     password: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  onCancelCredentialAuth: () => void;
+  onCancelCredentialAuth?: () => void;
 }
 
 const platformPillars = [
   'Entity management and authority records',
-  'ERP accounting, invoices, receipts, and reconciliation',
-  'Assets, wallets, settlements, and treasury controls',
+  'ERP accounting, receipts, invoices, and reconciliation',
+  'Asset registry, wallets, and settlement controls',
   'Documents, compliance workflows, and AI generators',
 ];
 
-type EntryView = 'landing' | 'signin';
-type BackupAuthMode = 'password' | 'verification';
-
-const inputStyle: React.CSSProperties = {
-  minHeight: 48,
-  borderRadius: 16,
-  border: '1px solid rgba(255,255,255,0.1)',
-  background: 'rgba(9, 15, 27, 0.82)',
-  color: '#fff',
-  padding: '0 14px',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  minHeight: 46,
-  borderRadius: 16,
-  border: '1px solid rgba(126, 242, 255, 0.18)',
-  background: 'rgba(54, 215, 255, 0.08)',
-  color: '#effcff',
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-const splitShellStyle: React.CSSProperties = {
-  maxWidth: 1240,
-  margin: '0 auto',
-  minHeight: '100vh',
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-  gap: 24,
-  alignItems: 'center',
-  padding: '36px 22px',
-};
-
-const leftHeroPanelStyle: React.CSSProperties = {
-  borderRadius: 32,
-  padding: 34,
-  background: 'linear-gradient(180deg, rgba(20, 39, 61, 0.96), rgba(17, 31, 49, 0.98))',
-  border: '1px solid rgba(107, 221, 255, 0.22)',
-  display: 'grid',
-  gap: 22,
-  boxShadow: '0 24px 70px rgba(5, 12, 20, 0.28)',
-};
-
-const rightEntryPanelStyle: React.CSSProperties = {
-  borderRadius: 30,
-  padding: 28,
-  background: 'linear-gradient(180deg, rgba(18, 34, 54, 0.98), rgba(15, 28, 44, 0.98))',
-  border: '1px solid rgba(94, 203, 236, 0.18)',
-  display: 'grid',
-  gap: 18,
-  boxShadow: '0 22px 60px rgba(5, 12, 20, 0.24)',
-};
+const moduleLabels = [
+  'Overview',
+  'Entities',
+  'Accounting',
+  'Ledger',
+  'Assets',
+  'Transactions',
+  'Compliance',
+  'Documents',
+  'AI Studio',
+];
 
 export const Welcome: React.FC<WelcomeProps> = ({
   initialView = 'landing',
@@ -93,109 +54,71 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onDevLogin,
   onStartOnboarding,
   renderGoogleButton,
-  pendingCredentialAuth,
-  onStartCredentialAuth,
-  onVerifyCredentialAuth,
-  onSignInWithPassword,
-  onCancelCredentialAuth,
 }) => {
-  const [entryView, setEntryView] = useState<EntryView>(initialView);
-  const [isGoogleUiVisible, setIsGoogleUiVisible] = useState(false);
-  const [backupAuthMode, setBackupAuthMode] = useState<BackupAuthMode>('password');
-  const [credentialMode, setCredentialMode] = useState<LocalAuthContactType>('email');
-  const [contactValue, setContactValue] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [backupUserHandle, setBackupUserHandle] = useState('');
-  const [backupPassword, setBackupPassword] = useState('');
-  const [signInIdentifier, setSignInIdentifier] = useState('');
-  const [signInPassword, setSignInPassword] = useState('');
-  const [credentialError, setCredentialError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [entryView, setEntryView] = useState<'landing' | 'signin'>(initialView);
   const canUseDevAccess =
-    !isConfigured ||
-    (typeof window !== 'undefined' &&
-      ['localhost', '127.0.0.1'].includes(window.location.hostname));
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
   useEffect(() => {
-    if (entryView === 'signin' && isConfigured && isGoogleUiVisible) {
+    if (isConfigured && entryView === 'signin') {
       renderGoogleButton('google-btn-container');
     }
-  }, [entryView, isConfigured, isGoogleUiVisible, renderGoogleButton]);
-
-  const handleStartCredentialAuth = async () => {
-    setIsSubmitting(true);
-    try {
-      const result = await onStartCredentialAuth({
-        contactType: credentialMode,
-        contactValue,
-        name: displayName || undefined,
-      });
-
-      if (!result.success) {
-        setCredentialError(result.error || 'Unable to start verification.');
-        return;
-      }
-
-      setCredentialError('');
-      setVerificationCode('');
-      setBackupUserHandle('');
-      setBackupPassword('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleVerifyCredentialAuth = async () => {
-    setIsSubmitting(true);
-    try {
-      const result = await onVerifyCredentialAuth({
-        code: verificationCode,
-        userHandle: backupUserHandle || undefined,
-        password: backupPassword || undefined,
-      });
-      if (!result.success) {
-        setCredentialError(result.error || 'Unable to verify code.');
-        return;
-      }
-
-      setCredentialError('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePasswordSignIn = async () => {
-    setIsSubmitting(true);
-    try {
-      const result = await onSignInWithPassword({
-        identifier: signInIdentifier,
-        password: signInPassword,
-      });
-
-      if (!result.success) {
-        setCredentialError(result.error || 'Unable to sign in.');
-        return;
-      }
-
-      setCredentialError('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  }, [entryView, isConfigured, renderGoogleButton]);
 
   return (
     <div
       style={{
         minHeight: '100vh',
+        position: 'relative',
+        overflow: 'hidden',
         background:
-          'linear-gradient(135deg, #0d1726 0%, #102033 52%, #13283e 100%)',
-        color: '#f8fbff',
-        fontFamily: '"Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+          'radial-gradient(circle at top left, rgba(54, 215, 255, 0.2), transparent 25%), radial-gradient(circle at 80% 10%, rgba(88, 141, 255, 0.16), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.12), transparent 20%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
+        color: '#fff6fd',
+        fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
       }}
     >
-      <div style={splitShellStyle}>
-        <section style={leftHeroPanelStyle}>
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          opacity: 0.3,
+          backgroundImage:
+            'radial-gradient(rgba(255,255,255,0.34) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.16) 0.8px, transparent 0.8px)',
+          backgroundPosition: '0 0, 18px 18px',
+          backgroundSize: '36px 36px',
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 75%)',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          maxWidth: 1220,
+          margin: '0 auto',
+          minHeight: '100vh',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.2fr) minmax(340px, 0.88fr)',
+          gap: 28,
+          alignItems: 'center',
+          padding: '32px 20px',
+        }}
+      >
+        <section
+          style={{
+            borderRadius: 32,
+            padding: 32,
+            background: 'rgba(24, 18, 42, 0.74)',
+            border: '1px solid rgba(126, 242, 255, 0.16)',
+            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
+            backdropFilter: 'blur(18px)',
+            display: 'grid',
+            gap: 24,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div
               style={{
@@ -204,9 +127,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 gap: 10,
                 padding: '10px 14px',
                 borderRadius: 999,
-                background: 'rgba(28, 81, 112, 0.62)',
-                border: '1px solid rgba(118, 229, 255, 0.26)',
-                color: '#9fe8ff',
+                background: 'rgba(54, 215, 255, 0.12)',
+                border: '1px solid rgba(126, 242, 255, 0.24)',
+                color: '#8cebff',
                 fontSize: 12,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
@@ -215,27 +138,45 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               ClearFlow Core OS
             </div>
-            <div style={{ color: '#c9d8e6', fontSize: 14 }}>
-              Private treasury, accounting, assets, records, and operations
+            <div style={{ color: '#c5d7e3', fontSize: 14 }}>
+              Integrated Financial Management with wealth-operator energy
             </div>
           </div>
 
           <div style={{ display: 'grid', gap: 16 }}>
-            <div style={{ fontSize: 46, fontWeight: 800, lineHeight: 1.03, maxWidth: 720 }}>
-              Finance, records, compliance, and cash flow in one place.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <Logo height={72} />
+              <div>
+                <div style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05 }}>
+                  Finance, records, compliance, and cash flow in one place.
+                </div>
+              </div>
             </div>
             <div
               style={{
                 fontSize: 18,
-                lineHeight: 1.78,
-                color: '#d7e3ee',
+                lineHeight: 1.75,
+                color: '#d9e7ef',
                 maxWidth: 760,
               }}
             >
               ClearFlow is built to feel like a real financial operating system, not a pile of
               disconnected tools. The goal is one workspace for entity setup, ERP accounting,
-              asset control, transaction visibility, compliance tracking, document vaulting, and
-              AI-guided workflow generation.
+              asset control, treasury and settlement visibility, compliance tracking, document
+              vaulting, and AI-guided workflow generation.
+            </div>
+            <div
+              style={{
+                fontSize: 16,
+                lineHeight: 1.8,
+                color: '#b9cbda',
+                maxWidth: 760,
+              }}
+            >
+              This is where users can create and manage entities, keep their books aligned,
+              register assets and wallets, reconcile money movement, retain supporting documents,
+              and generate the records needed to keep wealth structures and business operations
+              moving cleanly.
             </div>
           </div>
 
@@ -252,8 +193,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 style={{
                   borderRadius: 20,
                   padding: '16px 18px',
-                  background: 'rgba(23, 43, 67, 0.9)',
-                  border: '1px solid rgba(94, 203, 236, 0.16)',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
                   color: '#edf6fb',
                   lineHeight: 1.6,
                 }}
@@ -262,9 +203,38 @@ export const Welcome: React.FC<WelcomeProps> = ({
               </div>
             ))}
           </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {moduleLabels.map((label) => (
+              <div
+                key={label}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(126, 242, 255, 0.14)',
+                  color: '#d8ecf6',
+                  fontSize: 13,
+                }}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section style={rightEntryPanelStyle}>
+        <section
+          style={{
+            borderRadius: 30,
+            padding: 28,
+            background: 'rgba(28, 19, 45, 0.86)',
+            border: '1px solid rgba(126, 242, 255, 0.16)',
+            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
+            backdropFilter: 'blur(20px)',
+            display: 'grid',
+            gap: 20,
+          }}
+        >
           {entryView === 'landing' ? (
             <>
               <div>
@@ -283,8 +253,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   Choose how you want to enter ClearFlow
                 </div>
                 <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                  Keep the first step simple: new users start secure setup, existing members go
-                  straight into sign-in with Google first and backup access underneath.
+                  New members start secure onboarding. Existing members continue to the
+                  Google-first sign-in step to restore their workspace.
                 </div>
               </div>
 
@@ -298,13 +268,14 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background: 'rgba(23, 59, 84, 0.88)',
-                    border: '1px solid rgba(71, 178, 214, 0.34)',
+                    background:
+                      'linear-gradient(180deg, rgba(54, 215, 255, 0.12), rgba(54, 215, 255, 0.05))',
+                    border: '1px solid rgba(126, 242, 255, 0.24)',
                     display: 'grid',
                     gap: 12,
                   }}
                 >
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>New User Signup</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>New Member Signup</div>
                   <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
                     Start onboarding for a new workspace, entity setup, and operating profile.
                   </div>
@@ -314,8 +285,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     style={{
                       minHeight: 50,
                       borderRadius: 16,
-                      border: '1px solid rgba(89, 209, 240, 0.52)',
-                      background: 'linear-gradient(135deg, #1f91b4, #2db8cf)',
+                      border: '1px solid rgba(126, 242, 255, 0.28)',
+                      background:
+                        'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
                       color: '#fff',
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -330,30 +302,27 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   style={{
                     borderRadius: 24,
                     padding: 22,
-                    background: 'rgba(21, 40, 63, 0.88)',
-                    border: '1px solid rgba(70, 125, 163, 0.34)',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
                     display: 'grid',
                     gap: 12,
                   }}
                 >
                   <div style={{ fontSize: 22, fontWeight: 800 }}>Existing Member Sign In</div>
                   <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Use Google sign-in as the main path, or use backup email, phone, or user ID
-                    access when needed.
+                    Continue to the secure sign-in step and use Google auth to restore your
+                    account.
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsGoogleUiVisible(false);
-                      setEntryView('signin');
-                    }}
+                    onClick={() => setEntryView('signin')}
                     style={{
                       minHeight: 48,
                       borderRadius: 16,
-                      border: '1px solid rgba(83, 147, 191, 0.42)',
-                      background: 'linear-gradient(135deg, #214666, #2a6286)',
-                      color: '#ecfeff',
-                      fontWeight: 800,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#eff6fb',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       fontSize: 15,
                     }}
@@ -365,7 +334,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
             </>
           ) : (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                 <div>
                   <div
                     style={{
@@ -373,28 +342,27 @@ export const Welcome: React.FC<WelcomeProps> = ({
                       textTransform: 'uppercase',
                       letterSpacing: 2,
                       color: '#8cebff',
-                      marginBottom: 8,
+                      marginBottom: 10,
                     }}
                   >
                     Existing Member Sign In
                   </div>
-                  <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.15 }}>
-                    Google first, backup access second
+                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
+                    Restore your ClearFlow workspace
+                  </div>
+                  <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
+                    Google sign-in is the primary path for existing members.
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsGoogleUiVisible(false);
-                    setEntryView('landing');
-                    setCredentialError('');
-                  }}
+                  onClick={() => setEntryView('landing')}
                   style={{
                     minHeight: 42,
                     padding: '0 14px',
                     borderRadius: 14,
-                    border: '1px solid #2b3c55',
-                    background: '#1a2940',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.04)',
                     color: '#eff6fb',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -406,44 +374,16 @@ export const Welcome: React.FC<WelcomeProps> = ({
 
               <div
                 style={{
-                  display: 'grid',
-                  gap: 12,
                   padding: 18,
                   borderRadius: 22,
-                  background: '#183145',
-                  border: '1px solid #255573',
+                  background:
+                    'linear-gradient(135deg, rgba(54, 215, 255, 0.12), rgba(88, 141, 255, 0.08))',
+                  border: '1px solid rgba(126, 242, 255, 0.2)',
+                  color: '#dff7fb',
+                  lineHeight: 1.7,
                 }}
               >
-                <div style={{ fontSize: 18, fontWeight: 800 }}>Sign in with Google</div>
-                <div style={{ color: '#dff7fb', lineHeight: 1.7 }}>
-                  This is the preferred sign-in path for ClearFlow and will be the main route for
-                  restoring user workspaces.
-                </div>
-                {!isGoogleUiVisible ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsGoogleUiVisible(true)}
-                    style={{
-                      minHeight: 48,
-                      borderRadius: 16,
-                      border: '1px solid #2e7aa1',
-                      background: '#1d7ea2',
-                      color: '#fff',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      fontSize: 15,
-                    }}
-                  >
-                    Continue with Google
-                  </button>
-                ) : null}
-                <div
-                  id="google-btn-container"
-                  style={{
-                    display: isGoogleUiVisible ? 'block' : 'none',
-                    minHeight: isGoogleUiVisible ? 44 : 0,
-                  }}
-                />
+                Use Google to enter the workspace tied to your existing account and saved data.
               </div>
 
               <div
@@ -452,223 +392,25 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   gap: 12,
                   padding: 18,
                   borderRadius: 22,
-                  background: '#1a2940',
-                  border: '1px solid #273a57',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {(['password', 'verification'] as BackupAuthMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => {
-                        setBackupAuthMode(mode);
-                        setCredentialError('');
-                      }}
-                      style={{
-                        minHeight: 42,
-                        padding: '0 14px',
-                        borderRadius: 14,
-                        border:
-                          backupAuthMode === mode
-                            ? '1px solid #2e7aa1'
-                            : '1px solid #2b3c55',
-                        background:
-                          backupAuthMode === mode
-                            ? '#183145'
-                            : '#1a2940',
-                        color: '#eff6fb',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {mode === 'password' ? 'Backup Sign In' : 'Use Verification'}
-                    </button>
-                  ))}
-                </div>
-
-                {backupAuthMode === 'password' ? (
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    <div style={{ color: '#c5d7e3', fontSize: 14, lineHeight: 1.6 }}>
-                      Enter your email, phone number, or user ID with your password.
-                    </div>
-                    <input
-                      value={signInIdentifier}
-                      onChange={(event) => setSignInIdentifier(event.target.value)}
-                      placeholder="Email, phone number, or user ID"
-                      style={inputStyle}
-                    />
-                    <input
-                      value={signInPassword}
-                      onChange={(event) => setSignInPassword(event.target.value)}
-                      placeholder="Password"
-                      type="password"
-                      style={inputStyle}
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePasswordSignIn}
-                      disabled={isSubmitting}
-                      style={{
-                        ...secondaryButtonStyle,
-                        background:
-                          'linear-gradient(135deg, rgba(33, 194, 198, 0.85), rgba(72, 179, 214, 0.74))',
-                        color: '#ffffff',
-                      }}
-                    >
-                      {isSubmitting ? 'Signing In...' : 'Sign In'}
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    <div style={{ color: '#c5d7e3', fontSize: 14, lineHeight: 1.6 }}>
-                      Use verification if you need backup access or want to set a password for a
-                      local fallback account.
-                    </div>
-                    {!pendingCredentialAuth ? (
-                      <>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          {(['email', 'phone'] as LocalAuthContactType[]).map((option) => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setCredentialMode(option)}
-                              style={{
-                                minHeight: 42,
-                                padding: '0 14px',
-                                borderRadius: 14,
-                                border:
-                                  credentialMode === option
-                                    ? '1px solid #2e7aa1'
-                                    : '1px solid #2b3c55',
-                                background:
-                                  credentialMode === option
-                                    ? '#183145'
-                                    : '#1a2940',
-                                color: '#eff6fb',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              {option === 'email' ? 'Use Email' : 'Use Phone'}
-                            </button>
-                          ))}
-                        </div>
-                        <input
-                          value={displayName}
-                          onChange={(event) => setDisplayName(event.target.value)}
-                          placeholder="Full name (optional)"
-                          style={inputStyle}
-                        />
-                        <input
-                          value={contactValue}
-                          onChange={(event) => setContactValue(event.target.value)}
-                          placeholder={
-                            credentialMode === 'email'
-                              ? 'name@example.com'
-                              : '+1 555 555 5555'
-                          }
-                          style={inputStyle}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleStartCredentialAuth()}
-                          disabled={isSubmitting}
-                          style={secondaryButtonStyle}
-                        >
-                          {isSubmitting ? 'Preparing...' : 'Send Verification Code'}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div
-                          style={{
-                            borderRadius: 16,
-                            padding: 14,
-                            background: '#183145',
-                            border: '1px solid #255573',
-                            color: '#dff7fb',
-                            lineHeight: 1.7,
-                          }}
-                        >
-                          {pendingCredentialAuth.deliveryMessage ||
-                            `Verification prepared for ${pendingCredentialAuth.maskedTarget}.`}
-                          {pendingCredentialAuth.deliveryMode === 'in_app_preview' &&
-                          pendingCredentialAuth.codePreview ? (
-                            <>
-                              <br />
-                              Verification code: <strong>{pendingCredentialAuth.codePreview}</strong>
-                            </>
-                          ) : null}
-                        </div>
-                        <input
-                          value={verificationCode}
-                          onChange={(event) => setVerificationCode(event.target.value)}
-                          placeholder="Enter 6-digit code"
-                          style={inputStyle}
-                        />
-                        <input
-                          value={backupUserHandle}
-                          onChange={(event) => setBackupUserHandle(event.target.value)}
-                          placeholder="User ID for backup sign-in (optional)"
-                          style={inputStyle}
-                        />
-                        <input
-                          value={backupPassword}
-                          onChange={(event) => setBackupPassword(event.target.value)}
-                          placeholder="Password for backup sign-in (optional)"
-                          type="password"
-                          style={inputStyle}
-                        />
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            onClick={handleVerifyCredentialAuth}
-                            disabled={isSubmitting}
-                            style={{
-                              ...secondaryButtonStyle,
-                              flex: 1,
-                              background:
-                                'linear-gradient(135deg, rgba(33, 194, 198, 0.85), rgba(72, 179, 214, 0.74))',
-                              color: '#ffffff',
-                            }}
-                          >
-                            {isSubmitting ? 'Verifying...' : 'Verify and Continue'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={onCancelCredentialAuth}
-                            style={{
-                              minHeight: 46,
-                              padding: '0 14px',
-                              borderRadius: 16,
-                              border: '1px solid #2b3c55',
-                              background: '#1a2940',
-                              color: '#eff6fb',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {credentialError ? (
+                <div id="google-btn-container" style={{ minHeight: 44 }} />
+                {!isConfigured ? (
                   <div
                     style={{
-                      borderRadius: 14,
-                      padding: 12,
-                      background: '#3a1e27',
-                      border: '1px solid #7a3241',
-                      color: '#fecaca',
+                      borderRadius: 16,
+                      padding: 14,
+                      background: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.24)',
+                      color: '#fcdca4',
                       fontSize: 14,
+                      lineHeight: 1.6,
                     }}
                   >
-                    {credentialError}
+                    Google sign-in is not configured yet in this environment, so dev login is still
+                    available for local build work.
                   </div>
                 ) : null}
               </div>
@@ -678,16 +420,17 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   type="button"
                   onClick={onDevLogin}
                   style={{
-                    minHeight: 42,
-                    borderRadius: 14,
-                    border: '1px solid #2b3c55',
-                    background: '#1a2940',
-                    color: '#cbd5e1',
+                    minHeight: 46,
+                    borderRadius: 16,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.04)',
+                    color: '#eff6fb',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    fontSize: 14,
                   }}
                 >
-                  Local dev sign in
+                  Dev Login
                 </button>
               ) : null}
             </>

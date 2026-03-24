@@ -12,4 +12,40 @@ export default defineConfig({
       ignored: ['**/dist/**', '**/server/storage-data/**', '**/.git/**'],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalized = id.replace(/\\/g, '/')
+
+          if (normalized.includes('node_modules')) {
+            if (
+              normalized.includes('/react/') ||
+              normalized.includes('/react-dom/') ||
+              normalized.includes('/scheduler/')
+            ) {
+              return 'vendor-react'
+            }
+
+            if (
+              normalized.includes('/react-plaid-link/') ||
+              normalized.includes('/plaid/')
+            ) {
+              return 'vendor-banking'
+            }
+
+            if (
+              normalized.includes('/@google/genai/') ||
+              normalized.includes('/rxjs/') ||
+              normalized.includes('/zustand/')
+            ) {
+              return 'vendor-platform'
+            }
+
+            return 'vendor-misc'
+          }
+        },
+      },
+    },
+  },
 })

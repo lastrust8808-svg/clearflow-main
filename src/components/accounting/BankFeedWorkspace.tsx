@@ -12,6 +12,13 @@ interface BankFeedWorkspaceProps {
   ledgerAccounts: LedgerAccountRecord[];
   rules: BankFeedRuleRecord[];
   entries: BankFeedEntryRecord[];
+  onAddManualBankAccount: () => void;
+  onAddManualTransaction: () => void;
+  onUpdateImportPolicy: (
+    bankAccountId: string,
+    policy: NonNullable<BankAccountRecord['statementImportPolicy']>,
+    threshold?: number,
+  ) => void;
   onConnectBank: (bankAccountId: string) => void;
   onSyncBank: (bankAccountId: string) => void;
   onAddRule: (payload: BankFeedRuleSubmitPayload) => void;
@@ -34,6 +41,9 @@ export default function BankFeedWorkspace({
   ledgerAccounts,
   rules,
   entries,
+  onAddManualBankAccount,
+  onAddManualTransaction,
+  onUpdateImportPolicy,
   onConnectBank,
   onSyncBank,
   onAddRule,
@@ -90,9 +100,114 @@ export default function BankFeedWorkspace({
         .slice(0, 10),
     [entries, selectedBankAccountId]
   );
+  const selectedBankAccount = useMemo(
+    () => bankAccounts.find((account) => account.id === selectedBankAccountId),
+    [bankAccounts, selectedBankAccountId],
+  );
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onAddManualBankAccount}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(126, 242, 255, 0.28)',
+            background:
+              'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Add Bank Account Manually
+        </button>
+        <button
+          type="button"
+          onClick={onAddManualTransaction}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.25)',
+            background: 'rgba(15,23,42,0.55)',
+            color: '#e5e7eb',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Enter Bank Transaction
+        </button>
+      </div>
+
+      {selectedBankAccount ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 12,
+            borderRadius: 18,
+            padding: 18,
+            background: 'rgba(15,23,42,0.45)',
+            border: '1px solid rgba(148,163,184,0.2)',
+            color: '#e5e7eb',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Statement Import Hardening</div>
+            <div style={{ color: '#94a3b8', marginTop: 6 }}>
+              Control how aggressively this account auto-posts unmatched statement lines into the
+              accounting engine.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Import Policy</span>
+              <select
+                value={selectedBankAccount.statementImportPolicy ?? 'review_all'}
+                onChange={(event) =>
+                  onUpdateImportPolicy(
+                    selectedBankAccount.id,
+                    event.target.value as NonNullable<BankAccountRecord['statementImportPolicy']>,
+                    selectedBankAccount.statementAutoPostThreshold,
+                  )
+                }
+                style={inputStyle}
+              >
+                <option value="review_all">Review all unmatched lines</option>
+                <option value="auto_post_under_threshold">Auto-post under threshold</option>
+                <option value="auto_post_credits_only">Auto-post credits only</option>
+                <option value="auto_post_all">Auto-post all parsed lines</option>
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Auto-Post Threshold</span>
+              <input
+                type="number"
+                step="0.01"
+                value={selectedBankAccount.statementAutoPostThreshold ?? ''}
+                onChange={(event) =>
+                  onUpdateImportPolicy(
+                    selectedBankAccount.id,
+                    selectedBankAccount.statementImportPolicy ?? 'review_all',
+                    Number(event.target.value || 0),
+                  )
+                }
+                disabled={(selectedBankAccount.statementImportPolicy ?? 'review_all') !== 'auto_post_under_threshold'}
+                style={inputStyle}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
+
       <div
         style={{
           display: 'grid',
@@ -100,6 +215,20 @@ export default function BankFeedWorkspace({
           gap: 14,
         }}
       >
+        {bankAccounts.length === 0 ? (
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 18,
+              border: '1px dashed rgba(148,163,184,0.28)',
+              background: 'rgba(15,23,42,0.32)',
+              color: '#cbd5e1',
+            }}
+          >
+            No bank accounts are set up yet. Add one manually to begin statement imports,
+            manual transaction entry, or future live feed connection.
+          </div>
+        ) : null}
         {bankAccounts.map((account) => (
           <div
             key={account.id}
@@ -134,6 +263,9 @@ export default function BankFeedWorkspace({
               Connection: <strong>{account.liveConnectionProvider ?? account.connectionType ?? 'manual'}</strong>
               <br />
               Auto reconcile: <strong>{account.autoReconcileEnabled === false ? 'off' : 'on'}</strong>
+              <br />
+              Statement policy:{' '}
+              <strong>{account.statementImportPolicy ?? 'review_all'}</strong>
               <br />
               Last sync:{' '}
               <strong>{account.lastFeedSyncAt ? new Date(account.lastFeedSyncAt).toLocaleString() : 'not yet'}</strong>

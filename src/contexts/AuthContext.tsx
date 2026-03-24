@@ -324,13 +324,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [ensureGoogleClients, isConfigured, isInitialized]);
 
   const mockLogin = (name: string, email: string) => {
-    const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: false };
+    const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: true };
     setState({
       ...state,
       appData: { user: mockUser, entities: [] },
       token: 'mock-token',
       localAccountId: null,
-      status: 'pending-profile-setup'
+      status: 'authenticated'
     });
   };
 

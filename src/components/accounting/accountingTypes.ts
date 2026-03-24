@@ -7,9 +7,13 @@ export type AccountingSection =
   | 'bills'
   | 'expenses'
   | 'receipts'
+  | 'presentments'
+  | 'railOps'
   | 'customers'
   | 'vendors'
   | 'payments'
+  | 'recurring'
+  | 'payroll'
   | 'bankFeed'
   | 'intercompany'
   | 'reconciliation';
@@ -101,6 +105,30 @@ export interface ReceiptSubmitPayload {
   parsedNotes: string;
 }
 
+export interface CouponPresentmentSubmitPayload {
+  mode: 'camera' | 'upload' | 'manual';
+  title: string;
+  receiverName: string;
+  receiverAccountLabel: string;
+  couponReference: string;
+  presentmentDate: string;
+  dueDate: string;
+  amount: string;
+  obligationId?: string;
+  instrumentSettlementId?: string;
+  treasuryAccountId?: string;
+  sourceBankAccountId?: string;
+  sourceLedgerAccountId?: string;
+  dischargeMethod:
+    | 'internal_ledger_credit'
+    | 'instrument_performance'
+    | 'bank_rail_payment'
+    | 'mixed_discharge';
+  uploadedFileName: string;
+  uploadedFile?: File | null;
+  parsedNotes: string;
+}
+
 export interface JournalSubmitPayload {
   entryNumber: string;
   entryDate: string;
@@ -128,9 +156,49 @@ export interface PaymentSubmitPayload {
     | 'bank_rail_payment'
     | 'mixed_discharge';
   urgency?: 'instant' | 'same_day' | 'standard' | 'final';
+  recurringEnabled?: boolean;
+  recurringFrequency?:
+    | 'weekly'
+    | 'biweekly'
+    | 'semimonthly'
+    | 'monthly'
+    | 'quarterly'
+    | 'annually';
+  recurringInterval?: string;
+  recurringNextRunDate?: string;
+  recurringAutoPost?: boolean;
   notes: string;
   linkedInvoiceId?: string;
   linkedBillId?: string;
+}
+
+export interface EmployeeSubmitPayload {
+  fullName: string;
+  email: string;
+  phone?: string;
+  title?: string;
+  department?: string;
+  employeeType: 'employee' | 'contractor' | 'officer';
+  compensationType: 'salary' | 'hourly' | 'contract';
+  paySchedule: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  annualSalary?: string;
+  hourlyRate?: string;
+  defaultHoursPerPeriod?: string;
+  startDate?: string;
+  notes?: string;
+}
+
+export interface DirectDepositRequestSubmitPayload {
+  employeeId: string;
+  requestEmail: string;
+  sendByEmail: boolean;
+  notes?: string;
+  uploadedFile?: File | null;
+  uploadedFileName?: string;
+  signatureName?: string;
+  routingNumber?: string;
+  accountNumber?: string;
+  accountType?: 'checking' | 'savings' | 'other';
 }
 
 export interface BankFeedRuleSubmitPayload {
@@ -146,6 +214,33 @@ export interface BankFeedRuleSubmitPayload {
   maxAmount?: string;
   verificationMode: 'bank_confirmation' | 'internal_control_token' | 'manual_review';
   autoPost: boolean;
+  autoReconcile: boolean;
+}
+
+export interface ManualBankAccountSubmitPayload {
+  institutionName: string;
+  accountName: string;
+  accountType: 'checking' | 'savings' | 'credit_card' | 'custodial' | 'other';
+  currency: string;
+  routingNumber?: string;
+  accountNumber?: string;
+  openingBalance?: string;
+  linkedLedgerAccountId?: string;
+  achOriginationEnabled: boolean;
+  wireEnabled: boolean;
+}
+
+export interface ManualBankTransactionSubmitPayload {
+  bankAccountId: string;
+  postedDate: string;
+  description: string;
+  amount: string;
+  direction: 'credit' | 'debit';
+  transactionType: 'income' | 'expense' | 'deposit' | 'withdrawal';
+  ledgerAccountId?: string;
+  counterpartyLabel?: string;
+  memo?: string;
+  verificationMode: 'bank_confirmation' | 'internal_control_token' | 'manual_review';
   autoReconcile: boolean;
 }
 

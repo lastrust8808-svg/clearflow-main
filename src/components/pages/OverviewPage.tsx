@@ -31,6 +31,13 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const instrumentDischargeCount = data.instrumentSettlements.filter(
     (item) => item.dischargeMethod === 'instrument_performance'
   ).length;
+  const employeeCount = data.employees.length;
+  const filingQueueCount = data.taxReportingLinks.filter(
+    (item) => item.status === 'draft' || item.status === 'corrected'
+  ).length;
+  const directDepositCount = data.directDepositAuthorizations.filter(
+    (item) => item.status === 'returned' || item.status === 'verified'
+  ).length;
   const reviewItems = [
     ...data.complianceTags.filter((item) => item.status === 'review'),
     ...data.digitalAssetCompliance.filter(
@@ -68,6 +75,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Instrument Discharges" value={instrumentDischargeCount} />
         <StatCard label="Liquid Cash Ready" value={liquidCashReadyCount} />
         <StatCard label="Auto Reconciled" value={autoReconciledCount} />
+        <StatCard label="Employees" value={employeeCount} />
+        <StatCard label="Tax Filing Queue" value={filingQueueCount} />
+        <StatCard label="Direct Deposit Returns" value={directDepositCount} />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
 
@@ -151,6 +161,65 @@ export default function OverviewPage({ data }: OverviewPageProps) {
               The first pass is ready for structured generators instead of isolated one-off tools.
             </div>
           </RecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Operator Hotspots"
+        description="Fast routes into the desks that now have active records flowing through them."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {[
+            {
+              title: 'Accounting',
+              subtitle: `${data.payments.length} payments · ${data.bankFeedEntries.length} bank entries`,
+              hash: '#accounting',
+            },
+            {
+              title: 'Documents',
+              subtitle: `${data.documents.length} vault records · ${data.tokens.length} tokens`,
+              hash: '#documents',
+            },
+            {
+              title: 'Compliance',
+              subtitle: `${filingQueueCount} filing items · ${reviewItems} review items`,
+              hash: '#compliance',
+            },
+            {
+              title: 'Entities',
+              subtitle: `${data.entities.length} profiles · ${data.authorityRecords.length} authority records`,
+              hash: '#entities',
+            },
+          ].map((item) => (
+            <RecordCard key={item.title} title={item.title} subtitle={item.subtitle}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.hash = item.hash;
+                  }
+                }}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open {item.title}
+              </button>
+            </RecordCard>
+          ))}
         </div>
       </PageSection>
     </div>

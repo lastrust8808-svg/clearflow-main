@@ -1,9 +1,11 @@
 ﻿import type { Dispatch, SetStateAction } from 'react';
+import { useState } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import PageSection from '../ui/PageSection';
 import EntityProfileCard from '../entities/EntityProfileCard';
 import EntityResourceStudio from '../entities/EntityResourceStudio';
 import EntityExecutionStudio from '../entities/EntityExecutionStudio';
+import EntityQuickAddModal from '../entities/EntityQuickAddModal';
 import StatCard from '../ui/StatCard';
 
 interface EntitiesPageProps {
@@ -12,6 +14,7 @@ interface EntitiesPageProps {
 }
 
 export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
+  const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const activeEntities = data.entities.filter((entity) => entity.status === 'active').length;
   const tokenEnabledEntities = data.entities.filter(
     (entity) => entity.operationalDefaults?.autoIssueVerificationTokens
@@ -25,11 +28,137 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      <EntityQuickAddModal
+        open={isEntityModalOpen}
+        onClose={() => setIsEntityModalOpen(false)}
+        onSubmit={(payload) => {
+          const stamp = Date.now();
+          const entityId = `ent-${stamp}`;
+          const authorityId = `auth-${stamp}`;
+          const documentId = `doc-${stamp}`;
+          const tokenId = `tok-${stamp}`;
+          const entityDisplayName = payload.displayName.trim() || payload.name.trim();
+          setData((prev) => ({
+            ...prev,
+            entities: [
+              {
+                id: entityId,
+                name: payload.name.trim(),
+                displayName: entityDisplayName,
+                type: payload.type,
+                jurisdiction: payload.jurisdiction.trim() || undefined,
+                country: payload.country.trim() || undefined,
+                formationDate: new Date().toISOString().slice(0, 10),
+                status: 'active',
+                representativeName: payload.representativeName.trim() || undefined,
+                representativeRole: payload.representativeRole.trim() || undefined,
+                branding: {
+                  accentColor: prev.workspaceSettings.preferredAccentColor || '#36d7ff',
+                  documentLogoText: entityDisplayName,
+                  emailFromName: entityDisplayName,
+                  invoiceFooterNote: 'Operational records generated through ClearFlow.',
+                },
+                numbering: {
+                  invoicePrefix: 'INV',
+                  quotePrefix: 'QTE',
+                  billPrefix: 'BILL',
+                  receiptPrefix: 'RCPT',
+                  journalPrefix: 'JE',
+                  nextInvoiceSequence: 1,
+                  nextQuoteSequence: 1,
+                  nextBillSequence: 1,
+                  nextReceiptSequence: 1,
+                  nextJournalSequence: 1,
+                },
+                operationalDefaults: {
+                  baseCurrency: prev.workspaceSettings.baseCurrency,
+                  fiscalYearStartMonth: 1,
+                  defaultSettlementPath: prev.workspaceSettings.defaultSettlementPath,
+                  interEntitySettlementMode: prev.workspaceSettings.defaultInterEntitySettlementMode,
+                  autoIssueVerificationTokens: prev.workspaceSettings.autoIssueVerificationTokens,
+                  autoReconcileLedgerLinks: prev.workspaceSettings.autoReconcileJournalEntries,
+                },
+              },
+              ...prev.entities,
+            ],
+            authorityRecords: [
+              {
+                id: authorityId,
+                entityId,
+                personName: payload.representativeName.trim() || entityDisplayName,
+                recordType:
+                  payload.type === 'trust'
+                    ? 'trustee_authority'
+                    : ('manager_authority' as const),
+                effectiveDate: new Date().toISOString().slice(0, 10),
+                clientAuthorizationStatus: 'active',
+                linkedTokenIds: [tokenId],
+                linkedDocumentIds: [documentId],
+                notes: 'Created automatically during entity setup.',
+              },
+              ...prev.authorityRecords,
+            ],
+            documents: [
+              {
+                id: documentId,
+                entityId,
+                title: `${entityDisplayName} Setup Packet`,
+                category: 'authority_record',
+                date: new Date().toISOString().slice(0, 10),
+                status: 'draft',
+                templateKey: 'formation_packet',
+                outputStatus: 'drafting',
+                linkedAuthorityRecordIds: [authorityId],
+                linkedTokenIds: [tokenId],
+                summary: 'Initial setup packet created automatically from the entity profile flow.',
+              },
+              ...prev.documents,
+            ],
+            tokens: [
+              {
+                id: tokenId,
+                entityId,
+                subjectType: 'authority_record',
+                subjectId: authorityId,
+                label: `${entityDisplayName} Authority Token`,
+                status: 'issued',
+                tokenStandard: 'internal-proof',
+                tokenReference: `AUTH-${stamp}`,
+                issuedAt: new Date().toISOString(),
+                proofReference: 'Issued automatically from entity creation.',
+              },
+              ...prev.tokens,
+            ],
+          }));
+          setIsEntityModalOpen(false);
+          if (typeof window !== 'undefined') {
+            window.location.hash = `documents:${documentId}`;
+          }
+        }}
+      />
       <div>
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Entities</h1>
         <p style={{ color: '#9ca3af', marginBottom: 0 }}>
           Entity records, workspace identity, and operational defaults for the operating system.
         </p>
+        <div style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => setIsEntityModalOpen(true)}
+            style={{
+              padding: '10px 14px',
+              minHeight: 42,
+              borderRadius: 10,
+              border: '1px solid rgba(126,242,255,0.28)',
+              background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            + Add Entity
+          </button>
+        </div>
       </div>
 
       <div

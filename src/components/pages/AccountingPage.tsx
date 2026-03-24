@@ -28,17 +28,24 @@ import {
 } from '../../services/walletExecution.service';
 import AccountingDashboardSection from '../accounting/AccountingDashboardSection';
 import AccountingToolbar from '../accounting/AccountingToolbar';
+import BankAccountManualModal from '../accounting/BankAccountManualModal';
 import BankFeedWorkspace from '../accounting/BankFeedWorkspace';
 import BillIntakeModal from '../accounting/BillIntakeModal';
+import CouponPresentmentModal from '../accounting/CouponPresentmentModal';
 import CounterpartyModal from '../accounting/CounterpartyModal';
+import DirectDepositRequestModal from '../accounting/DirectDepositRequestModal';
 import EditableRecordSection from '../accounting/EditableRecordSection';
+import EmployeeModal from '../accounting/EmployeeModal';
 import InterEntityTransferModal from '../accounting/InterEntityTransferModal';
 import InvoiceOperationsWorkspace from '../accounting/InvoiceOperationsWorkspace';
 import InvoiceQuickAddModal from '../accounting/InvoiceQuickAddModal';
 import JournalEntryModal from '../accounting/JournalEntryModal';
+import ManualBankTransactionModal from '../accounting/ManualBankTransactionModal';
 import PaymentRecordModal from '../accounting/PaymentRecordModal';
+import PayrollWorkspace from '../accounting/PayrollWorkspace';
 import QuoteBuilderModal from '../accounting/QuoteBuilderModal';
 import ReconciliationWorkspace from '../accounting/ReconciliationWorkspace';
+import RecurringCommitmentsWorkspace from '../accounting/RecurringCommitmentsWorkspace';
 import RemittanceOperationsWorkspace from '../accounting/RemittanceOperationsWorkspace';
 import ReceiptIntakeModal from '../accounting/ReceiptIntakeModal';
 import { PlaidLinkModal } from '../plaid-link-modal/PlaidLinkModal';
@@ -46,10 +53,15 @@ import type {
   AccountingSection,
   BankFeedRuleSubmitPayload,
   BillSubmitPayload,
+  CouponPresentmentSubmitPayload,
   CounterpartySubmitPayload,
+  DirectDepositRequestSubmitPayload,
+  EmployeeSubmitPayload,
   InterEntityTransferSubmitPayload,
   InvoiceSubmitPayload,
   JournalSubmitPayload,
+  ManualBankAccountSubmitPayload,
+  ManualBankTransactionSubmitPayload,
   PaymentSubmitPayload,
   QuoteSubmitPayload,
   ReceiptSubmitPayload,
@@ -98,11 +110,16 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isCouponPresentmentModalOpen, setIsCouponPresentmentModalOpen] = useState(false);
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isIntercompanyModalOpen, setIsIntercompanyModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(false);
+  const [isManualBankAccountModalOpen, setIsManualBankAccountModalOpen] = useState(false);
+  const [isManualBankTransactionModalOpen, setIsManualBankTransactionModalOpen] = useState(false);
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [isDirectDepositModalOpen, setIsDirectDepositModalOpen] = useState(false);
   const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
@@ -112,6 +129,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const bills = data.bills ?? [];
   const expenses = data.expenses ?? [];
   const receipts = data.receipts ?? [];
+  const couponPresentments = data.couponPresentments ?? [];
+  const employees = data.employees ?? [];
+  const directDepositAuthorizations = data.directDepositAuthorizations ?? [];
   const customers = data.customers ?? [];
   const vendors = data.vendors ?? [];
   const payments = data.payments ?? [];
@@ -123,6 +143,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const reconciliations = data.reconciliations ?? [];
   const ledgerAccounts = data.ledgerAccounts ?? [];
   const treasuryAccounts = data.treasuryAccounts ?? [];
+  const instrumentSettlements = data.instrumentSettlements ?? [];
+  const obligations = data.obligations ?? [];
+  const movementIdentifiers = data.movementIdentifiers ?? [];
+  const returnEvents = data.returnEvents ?? [];
+  const reclamationEvents = data.reclamationEvents ?? [];
+  const taxReportingLinks = data.taxReportingLinks ?? [];
   const wallets = data.wallets ?? [];
   const digitalAssets = data.digitalAssets ?? [];
 
@@ -130,6 +156,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const standardInvoices = invoices.filter((record) => !isQuoteRecord(record));
   const stats = useMemo(() => buildAccountingStats(data, journalEntries), [data, journalEntries]);
   const defaultEntity = getPrimaryEntity(data);
+  const defaultPayrollEntity =
+    data.entities.find((entity) =>
+      entity.type === 'llc' ||
+      entity.type === 'corporation' ||
+      entity.type === 'partnership' ||
+      entity.type === 'nonprofit'
+    ) || defaultEntity;
 
   const mapSettlementPathToPaymentRail = (
     path: SettlementPath,
@@ -146,6 +179,36 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       default:
         return 'ach';
     }
+  };
+
+  const resolveSettlementExecutionSourceType = ({
+    sourceBankAccountId,
+    sourceLedgerAccountId,
+    treasuryAccountId,
+  }: {
+    sourceBankAccountId?: string;
+    sourceLedgerAccountId?: string;
+    treasuryAccountId?: string;
+  }) =>
+    sourceBankAccountId
+      ? ('bank_account' as const)
+      : sourceLedgerAccountId || treasuryAccountId
+        ? ('ledger_account' as const)
+        : ('manual_remittance' as const);
+
+  const resolveSettlementExecutionRail = (
+    method: PaymentSubmitPayload['method'],
+    urgency?: PaymentSubmitPayload['urgency']
+  ) => {
+    if (method === 'wire') {
+      return 'Fedwire' as const;
+    }
+
+    if (method === 'ach') {
+      return urgency === 'same_day' ? ('SameDayACH' as const) : ('StandardACH' as const);
+    }
+
+    return 'None' as const;
   };
 
   const resolveIssueDate = (value?: string) => value || new Date().toISOString().slice(0, 10);
@@ -412,7 +475,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     folder: 'bills' | 'receipts' | 'documents';
     title: string;
     summary: string;
-    sourceRecordType: 'bill' | 'receipt' | 'document' | 'reconciliation';
+    sourceRecordType:
+      | 'bill'
+      | 'receipt'
+      | 'document'
+      | 'reconciliation'
+      | 'coupon_presentment'
+      | 'direct_deposit_request';
     sourceRecordId: string;
     file?: File | null;
     date: string;
@@ -448,6 +517,124 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       console.warn('Failed to persist uploaded source document.', error);
       return null;
     }
+  };
+
+  const addDaysToIsoDate = (value: string, days: number) => {
+    const next = new Date(`${value}T12:00:00.000Z`);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next.toISOString().slice(0, 10);
+  };
+
+  const buildNumericReference = (seed: number, length = 15) =>
+    String(seed).replace(/\D/g, '').padStart(length, '0').slice(-length);
+
+  const startOfCurrentMonthIso = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  };
+
+  const endOfCurrentMonthIso = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  };
+
+  const ensureOperationalReconciliationForBank = (
+    prev: CoreDataBundle,
+    bankAccount: CoreDataBundle['bankAccounts'][number],
+    preparedBy: string,
+  ) => {
+    const existing =
+      prev.reconciliations.find(
+        (item) =>
+          item.bankAccountId === bankAccount.id &&
+          (item.status === 'open' || item.status === 'in_review'),
+      ) ||
+      prev.reconciliations.find(
+        (item) =>
+          item.bankAccountId === bankAccount.id &&
+          item.periodStart === startOfCurrentMonthIso() &&
+          item.periodEnd === endOfCurrentMonthIso(),
+      );
+
+    if (existing) {
+      return { record: existing, reconciliations: prev.reconciliations };
+    }
+
+    const nextRecord = {
+      id: `rec-${bankAccount.id}-${Date.now()}`,
+      entityId: bankAccount.entityId,
+      bankAccountId: bankAccount.id,
+      periodStart: startOfCurrentMonthIso(),
+      periodEnd: endOfCurrentMonthIso(),
+      statementEndingBalance: bankAccount.currentBalance ?? 0,
+      clearedTransactionIds: [],
+      status: 'open' as const,
+      preparedBy,
+      statementReviewStatus: 'not_imported' as const,
+      closeApprovalStatus: 'pending' as const,
+    };
+
+    return {
+      record: nextRecord,
+      reconciliations: [nextRecord, ...(prev.reconciliations ?? [])],
+    };
+  };
+
+  const applyOperationalReconciliationStatus = ({
+    prev,
+    bankAccount,
+    transactionId,
+    state,
+    note,
+    preparedBy,
+  }: {
+    prev: CoreDataBundle;
+    bankAccount?: CoreDataBundle['bankAccounts'][number];
+    transactionId: string;
+    state: 'pending' | 'matched' | 'exception';
+    note: string;
+    preparedBy: string;
+  }) => {
+    if (!bankAccount) {
+      return {
+        linkedReconciliationId: undefined,
+        reconciliations: prev.reconciliations,
+      };
+    }
+
+    const { record, reconciliations } = ensureOperationalReconciliationForBank(
+      prev,
+      bankAccount,
+      preparedBy,
+    );
+    const nextReconciliations = reconciliations.map((item) => {
+      if (item.id !== record.id) {
+        return item;
+      }
+
+      const nextClearedTransactionIds =
+        state === 'matched'
+          ? Array.from(new Set([...(item.clearedTransactionIds ?? []), transactionId]))
+          : (item.clearedTransactionIds ?? []).filter((id) => id !== transactionId);
+      const nextUnmatchedTransactionIds =
+        state === 'pending' || state === 'exception'
+          ? Array.from(new Set([...(item.unmatchedTransactionIds ?? []), transactionId]))
+          : (item.unmatchedTransactionIds ?? []).filter((id) => id !== transactionId);
+      const nextNotes = Array.from(new Set([item.notes, note].filter(Boolean))).join(' | ');
+
+      return {
+        ...item,
+        clearedTransactionIds: nextClearedTransactionIds,
+        unmatchedTransactionIds: nextUnmatchedTransactionIds,
+        status: state === 'matched' ? ('in_review' as const) : ('open' as const),
+        notes: nextNotes || item.notes,
+      };
+    });
+
+    return {
+      linkedReconciliationId: record.id,
+      reconciliations: nextReconciliations,
+    };
   };
 
   const handleInvoiceSubmit = (payload: InvoiceSubmitPayload) => {
@@ -756,6 +943,538 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     setIsReceiptModalOpen(false);
   };
 
+  const handleCouponPresentmentSubmit = async (payload: CouponPresentmentSubmitPayload) => {
+    const entity = data.entities[0];
+    if (!entity) {
+      return;
+    }
+
+    const stamp = Date.now();
+    const presentmentDate = payload.presentmentDate || new Date().toISOString().slice(0, 10);
+    const presentmentId = `cpn-${stamp}`;
+    const paymentId = `pay-${stamp}`;
+    const transactionId = `txn-${stamp}`;
+    const settlementId = `set-${stamp}`;
+    const journalId = `je-${stamp}`;
+    const remittanceStatementId = `remit-${stamp}`;
+    const extraction = await analyzeAccountingUpload('coupon', payload.uploadedFile);
+    const resolvedAmount = Number(payload.amount || 0) || extraction.amount || 0;
+    if (!resolvedAmount) {
+      return;
+    }
+
+    const sourceDocument = await persistUploadDocument({
+      entityId: entity.id,
+      folder: 'documents',
+      title: payload.title || payload.couponReference || `${entity.displayName || entity.name} Coupon Presentment`,
+      summary:
+        payload.parsedNotes ||
+        extraction.summary ||
+        'Coupon presentment intake source for remittance and performance settlement.',
+      sourceRecordType: 'coupon_presentment',
+      sourceRecordId: presentmentId,
+      file: payload.uploadedFile,
+      date: presentmentDate,
+    });
+
+    setData((prev) => {
+      const currentEntity = prev.entities[0];
+      if (!currentEntity) {
+        return prev;
+      }
+
+      const selectedTreasuryAccount = payload.treasuryAccountId
+        ? prev.treasuryAccounts.find((account) => account.id === payload.treasuryAccountId)
+        : prev.treasuryAccounts.find(
+            (account) => account.entityId === currentEntity.id && account.remittanceEnabled
+          );
+      const sourceBankAccount = payload.sourceBankAccountId
+        ? prev.bankAccounts.find((account) => account.id === payload.sourceBankAccountId)
+        : undefined;
+      const sourceLedgerAccount = payload.sourceLedgerAccountId
+        ? prev.ledgerAccounts.find((account) => account.id === payload.sourceLedgerAccountId)
+        : selectedTreasuryAccount?.linkedLedgerAccountId
+          ? prev.ledgerAccounts.find(
+              (account) => account.id === selectedTreasuryAccount.linkedLedgerAccountId
+            )
+          : prev.ledgerAccounts.find(
+              (account) =>
+                account.entityId === currentEntity.id &&
+                (account.remittanceEligible ||
+                  account.remittanceClassification === 'cash' ||
+                  account.remittanceClassification === 'obligation')
+            );
+      const linkedObligation = payload.obligationId
+        ? prev.obligations.find((record) => record.id === payload.obligationId)
+        : undefined;
+      const existingInstrumentSettlement = payload.instrumentSettlementId
+        ? prev.instrumentSettlements.find((record) => record.id === payload.instrumentSettlementId)
+        : undefined;
+      const linkedInstrument = existingInstrumentSettlement?.instrumentId
+        ? prev.instruments.find((record) => record.id === existingInstrumentSettlement.instrumentId)
+        : linkedObligation?.linkedInstrumentIds?.[0]
+          ? prev.instruments.find((record) => record.id === linkedObligation.linkedInstrumentIds?.[0])
+          : undefined;
+
+      const shouldIssueToken = shouldAutoIssueTokens(currentEntity, prev.workspaceSettings);
+      const token: TokenRecord | null = shouldIssueToken
+        ? {
+            id: `tok-${stamp}`,
+            entityId: currentEntity.id,
+            subjectType: 'settlement',
+            subjectId: settlementId,
+            label: `${payload.couponReference || 'Coupon'} Performance Token`,
+            status: 'issued',
+            tokenStandard: 'internal-proof',
+            tokenReference: `CPN-${stamp}`,
+            issuedAt: new Date().toISOString(),
+            proofReference: 'Issued automatically from coupon presentment and settlement controls.',
+            notes:
+              payload.parsedNotes ||
+              extraction.summary ||
+              'Coupon presentment proof token issued from ERP workflow.',
+          }
+        : null;
+
+      const dischargeCompletesPerformance =
+        payload.dischargeMethod === 'instrument_performance' ||
+        payload.dischargeMethod === 'internal_ledger_credit';
+      const settlementPath: SettlementPath =
+        payload.dischargeMethod === 'bank_rail_payment'
+          ? sourceBankAccount?.wireEnabled
+            ? 'wire'
+            : 'ach'
+          : payload.dischargeMethod === 'mixed_discharge'
+            ? 'mixed'
+            : 'internal_ledger';
+
+      const nextInstrumentSettlement =
+        existingInstrumentSettlement
+          ? {
+              ...existingInstrumentSettlement,
+              treasuryAccountId:
+                selectedTreasuryAccount?.id || existingInstrumentSettlement.treasuryAccountId,
+              linkedSettlementId: settlementId,
+              linkedTransactionId: transactionId,
+              linkedDocumentIds: sourceDocument
+                ? Array.from(
+                    new Set([sourceDocument.id, ...(existingInstrumentSettlement.linkedDocumentIds ?? [])])
+                  )
+                : existingInstrumentSettlement.linkedDocumentIds,
+              linkedTokenIds: token
+                ? Array.from(
+                    new Set([token.id, ...(existingInstrumentSettlement.linkedTokenIds ?? [])])
+                  )
+                : existingInstrumentSettlement.linkedTokenIds,
+              performedAmount: Number(
+                (existingInstrumentSettlement.performedAmount + resolvedAmount).toFixed(2)
+              ),
+              performanceStatus:
+                dischargeCompletesPerformance &&
+                existingInstrumentSettlement.performedAmount + resolvedAmount >=
+                  existingInstrumentSettlement.faceAmount
+                  ? 'performed'
+                  : 'presented',
+              remittanceReference:
+                payload.couponReference || existingInstrumentSettlement.remittanceReference,
+              notes:
+                payload.parsedNotes ||
+                extraction.summary ||
+                existingInstrumentSettlement.notes,
+            }
+          : {
+              id: `ins-${stamp}`,
+              entityId: currentEntity.id,
+              title:
+                payload.title ||
+                `${linkedObligation?.title || linkedInstrument?.title || 'Coupon'} Presentment`,
+              instrumentId: linkedInstrument?.id,
+              obligationId: linkedObligation?.id,
+              treasuryAccountId: selectedTreasuryAccount?.id,
+              linkedSettlementId: settlementId,
+              linkedTransactionId: transactionId,
+              linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+              linkedTokenIds: token ? [token.id] : undefined,
+              dischargeMethod: payload.dischargeMethod,
+              recognitionBasis: 'obligation_recognized_before_cash',
+              performanceStatus: dischargeCompletesPerformance ? 'performed' : 'presented',
+              faceAmount: linkedObligation?.amount || resolvedAmount,
+              performedAmount: dischargeCompletesPerformance ? resolvedAmount : 0,
+              currency: 'USD',
+              effectiveDate: presentmentDate,
+              dueDate: payload.dueDate || extraction.date,
+              remittanceReference: payload.couponReference || `CPN-${stamp}`,
+              notes:
+                payload.parsedNotes ||
+                extraction.summary ||
+                'Created from coupon presentment workflow.',
+            };
+
+      const remittanceStatement = {
+        id: remittanceStatementId,
+        entityId: currentEntity.id,
+        title:
+          payload.title ||
+          `${payload.couponReference || 'Coupon'} Remittance Statement`,
+        statementDate: presentmentDate,
+        payerName: currentEntity.displayName || currentEntity.name,
+        payeeName: payload.receiverName || extraction.vendorOrMerchantName || 'Receiver',
+        amount: resolvedAmount,
+        currency: 'USD',
+        dischargeMethod: payload.dischargeMethod,
+        treasuryAccountId: selectedTreasuryAccount?.id,
+        linkedInstrumentSettlementId: nextInstrumentSettlement.id,
+        linkedSettlementId: settlementId,
+        linkedObligationIds: linkedObligation ? [linkedObligation.id] : undefined,
+        linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+        micrLine: {
+          routingNumber:
+            payload.dischargeMethod === 'bank_rail_payment'
+              ? sourceBankAccount?.routingNumber
+              : undefined,
+          accountNumberMask:
+            payload.dischargeMethod === 'bank_rail_payment'
+              ? sourceBankAccount?.last4 || sourceBankAccount?.accountNumber?.slice(-4)
+              : sourceLedgerAccount?.code,
+          serialNumber: String(stamp).slice(-6),
+          mode:
+            payload.dischargeMethod === 'bank_rail_payment' && sourceBankAccount
+              ? 'bank_backed'
+              : 'informational_only',
+        },
+        status: dischargeCompletesPerformance ? 'performed' : 'issued',
+        notes:
+          payload.parsedNotes ||
+          extraction.summary ||
+          'Generated from coupon presentment workflow.',
+      };
+
+      const paymentRecord = {
+        id: paymentId,
+        entityId: currentEntity.id,
+        direction: 'outgoing' as const,
+        counterpartyType: 'other' as const,
+        paymentDate: presentmentDate,
+        amount: resolvedAmount,
+        currency: 'USD',
+        method:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? (sourceBankAccount?.wireEnabled ? 'wire' : 'check')
+            : ('other' as const),
+        status:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('initiated' as const)
+            : ('settled' as const),
+        linkedTransactionIds: [transactionId],
+        linkedSettlementId: settlementId,
+        linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+        sourceBankAccountId: sourceBankAccount?.id,
+        sourceLedgerAccountId: sourceLedgerAccount?.id,
+        treasuryAccountId: selectedTreasuryAccount?.id,
+        dischargeMethod: payload.dischargeMethod,
+        approvalStatus: 'approved' as const,
+        approvedBy: currentEntity.representativeName || 'ClearFlow Operator',
+        approvedAt: new Date().toISOString(),
+        releaseStatus:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('ready_to_release' as const)
+            : ('released' as const),
+        releasedBy:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? undefined
+            : currentEntity.representativeName || 'ClearFlow Operator',
+        releasedAt:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? undefined
+            : new Date().toISOString(),
+        releaseTokenId: token?.id,
+        notes:
+          payload.receiverAccountLabel ||
+          payload.parsedNotes ||
+          extraction.summary ||
+          undefined,
+      };
+      const couponOperationalReconciliation = applyOperationalReconciliationStatus({
+        prev,
+        bankAccount: sourceBankAccount,
+        transactionId,
+        state:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? 'pending'
+            : 'matched',
+        note:
+          payload.parsedNotes ||
+          extraction.summary ||
+          'Operational coupon presentment generated from ERP remittance workflow.',
+        preparedBy: 'ERP Coupon Presentment',
+      });
+
+      const settlementRecord = {
+        id: settlementId,
+        entityId: currentEntity.id,
+        linkedTransactionId: transactionId,
+        linkedPaymentId: paymentId,
+        linkedJournalEntryIds: [journalId],
+        linkedReconciliationId: couponOperationalReconciliation.linkedReconciliationId,
+        linkedInstrumentSettlementId: nextInstrumentSettlement.id,
+        linkedRemittanceStatementId: remittanceStatementId,
+        path: settlementPath,
+        dischargeMethod: payload.dischargeMethod,
+        direction: 'outgoing' as const,
+        status:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('routing' as const)
+            : payload.dischargeMethod === 'mixed_discharge'
+              ? ('verifying' as const)
+              : ('settled' as const),
+        liquidCashStage:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('liquid_cash_pending' as const)
+            : ('liquid_cash_released' as const),
+        verificationMethod:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('bank_confirmation' as const)
+            : ('internal_control_token' as const),
+        verificationStatus:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? ('pending' as const)
+            : ('verified' as const),
+        verificationReference:
+          payload.receiverAccountLabel ||
+          `Coupon presentment issued to ${payload.receiverName || extraction.vendorOrMerchantName || 'receiver'}.`,
+        tokenizedProofId: token?.id,
+        linkedTokenIds: token ? [token.id] : undefined,
+        grossAmount: resolvedAmount,
+        settledAmount: resolvedAmount,
+        currency: 'USD',
+        initiatedAt: presentmentDate,
+        expectedSettlementDate: payload.dueDate || extraction.date || presentmentDate,
+        actualSettlementDate: dischargeCompletesPerformance ? presentmentDate : undefined,
+        originSourceType: sourceBankAccount
+          ? 'bank_account'
+          : sourceLedgerAccount || selectedTreasuryAccount
+            ? 'ledger_account'
+            : 'manual_remittance',
+        executionRail:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? sourceBankAccount?.wireEnabled
+              ? 'Fedwire'
+              : 'StandardACH'
+            : sourceLedgerAccount || selectedTreasuryAccount
+              ? 'LedgerRemittance'
+              : 'None',
+        processorStatus:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? 'processing'
+            : 'settled',
+        executionReason:
+          payload.dischargeMethod === 'instrument_performance'
+            ? 'Coupon performance posted against the linked obligation and instrument.'
+            : payload.dischargeMethod === 'internal_ledger_credit'
+              ? 'Coupon discharged internally through ledger and treasury remittance controls.'
+              : payload.dischargeMethod === 'mixed_discharge'
+                ? 'Coupon presentment issued pending mixed settlement completion.'
+                : 'Coupon presentment queued to bank rail.',
+        executionReference: payload.couponReference || `CPN-${stamp}`,
+        releasedAt: dischargeCompletesPerformance ? new Date().toISOString() : undefined,
+        releasedBy:
+          dischargeCompletesPerformance
+            ? currentEntity.representativeName || 'ClearFlow Operator'
+            : undefined,
+        reserveBacked: selectedTreasuryAccount?.treasuryType === 'reserve',
+        requiresManualReview: payload.dischargeMethod === 'mixed_discharge',
+        autoReconcileStatus:
+          payload.dischargeMethod === 'bank_rail_payment' ? 'pending' : 'matched',
+        notes:
+          payload.parsedNotes ||
+          extraction.summary ||
+          'Posted from coupon presentment workflow.',
+      };
+
+      const transactionRecord = {
+        id: transactionId,
+        entityId: currentEntity.id,
+        type: 'withdrawal' as const,
+        title:
+          payload.title ||
+          `${payload.couponReference || 'Coupon'} Presentment to ${payload.receiverName || extraction.vendorOrMerchantName || 'receiver'}`,
+        amount: resolvedAmount,
+        currency: 'USD',
+        date: presentmentDate,
+        status:
+          payload.dischargeMethod === 'bank_rail_payment' ? ('pending' as const) : ('posted' as const),
+        linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+        linkedSettlementId: settlementId,
+        linkedPaymentIds: [paymentId],
+        linkedJournalEntryIds: [journalId],
+        linkedTokenIds: token ? [token.id] : undefined,
+        notes:
+          payload.receiverAccountLabel ||
+          payload.parsedNotes ||
+          extraction.summary ||
+          undefined,
+      };
+
+      const journalEntry = {
+        id: journalId,
+        entityId: currentEntity.id,
+        entryNumber: buildEntityScopedNumber(
+          currentEntity,
+          'journal',
+          '',
+          String(getEntityNextSequence(currentEntity, 'journal'))
+        ),
+        entryDate: presentmentDate,
+        memo:
+          payload.title ||
+          `${payload.couponReference || 'Coupon'} presentment for ${payload.receiverName || extraction.vendorOrMerchantName || 'receiver'}`,
+        debitAccount:
+          linkedObligation?.title ||
+          existingInstrumentSettlement?.title ||
+          '2105 Remittance Obligations Clearing',
+        creditAccount:
+          sourceLedgerAccount
+            ? `${sourceLedgerAccount.code} ${sourceLedgerAccount.name}`
+            : selectedTreasuryAccount?.name ||
+              sourceBankAccount?.accountName ||
+              '1000 Operating Cash',
+        amount: resolvedAmount,
+        status: 'posted' as const,
+        source: 'system' as const,
+        linkedTransactionIds: [transactionId],
+        linkedSettlementIds: [settlementId],
+        autoReconcileStatus:
+          payload.dischargeMethod === 'bank_rail_payment' ? 'pending' : 'matched',
+        linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+        verificationRequired: payload.dischargeMethod !== 'bank_rail_payment',
+      };
+      const nextCouponMovementIdentifier =
+        payload.dischargeMethod === 'bank_rail_payment' && sourceBankAccount
+          ? sourceBankAccount.wireEnabled
+            ? {
+                id: `mid-${stamp}`,
+                entityId: currentEntity.id,
+                railNamespace: 'fedwire' as const,
+                movementType: 'wire' as const,
+                linkedPaymentId: paymentId,
+                linkedSettlementId: settlementId,
+                linkedRemittanceStatementId: remittanceStatementId,
+                linkedCouponPresentmentId: presentmentId,
+                primaryIdentifier: `IMAD-${buildNumericReference(stamp, 20)}`,
+                secondaryIdentifier: `OMAD-${buildNumericReference(stamp + 29, 20)}`,
+                imad: `IMAD-${buildNumericReference(stamp, 20)}`,
+                omad: `OMAD-${buildNumericReference(stamp + 29, 20)}`,
+                routingNumber: sourceBankAccount.routingNumber,
+                effectiveDate: presentmentDate,
+                status: 'active' as const,
+                notes:
+                  'Fedwire movement identifiers generated automatically from coupon presentment release.',
+              }
+            : {
+                id: `mid-${stamp}`,
+                entityId: currentEntity.id,
+                railNamespace: 'treasury_check_gold_book' as const,
+                movementType: 'coupon_presentment' as const,
+                linkedPaymentId: paymentId,
+                linkedSettlementId: settlementId,
+                linkedRemittanceStatementId: remittanceStatementId,
+                linkedCouponPresentmentId: presentmentId,
+                primaryIdentifier: `CPN-${payload.couponReference || stamp}`,
+                secondaryIdentifier: remittanceStatement.micrLine.serialNumber,
+                routingNumber: sourceBankAccount.routingNumber,
+                effectiveDate: presentmentDate,
+                returnDeadline: addDaysToIsoDate(presentmentDate, 30),
+                status: 'active' as const,
+                notes:
+                  'Bank-backed coupon presentment reference generated for remittance and reclamation tracking.',
+              }
+          : undefined;
+      const couponPresentment = {
+        id: presentmentId,
+        entityId: currentEntity.id,
+        title:
+          payload.title ||
+          `${payload.couponReference || 'Coupon'} Presentment`,
+        couponReference: payload.couponReference || undefined,
+        instrumentId: linkedInstrument?.id,
+        obligationId: linkedObligation?.id,
+        instrumentSettlementId: nextInstrumentSettlement.id,
+        treasuryAccountId: selectedTreasuryAccount?.id,
+        sourceBankAccountId: sourceBankAccount?.id,
+        sourceLedgerAccountId: sourceLedgerAccount?.id,
+        receiverName: payload.receiverName || extraction.vendorOrMerchantName || 'Receiver',
+        receiverAccountLabel: payload.receiverAccountLabel || undefined,
+        presentmentDate,
+        dueDate: payload.dueDate || extraction.date,
+        amount: resolvedAmount,
+        currency: 'USD',
+        dischargeMethod: payload.dischargeMethod,
+        sourceType: payload.mode === 'camera' ? 'photo' : payload.mode,
+        status:
+          payload.dischargeMethod === 'bank_rail_payment'
+            ? 'presented'
+            : dischargeCompletesPerformance
+              ? 'performed'
+              : 'accepted',
+        linkedPaymentId: paymentId,
+        linkedSettlementId: settlementId,
+        linkedJournalEntryId: journalId,
+        linkedRemittanceStatementId: remittanceStatementId,
+        linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+        linkedTokenIds: token ? [token.id] : undefined,
+        extractionSummary: extraction.summary,
+        extractedReceiverName: extraction.vendorOrMerchantName,
+        extractedAmount: extraction.amount,
+        extractedDueDate: extraction.date,
+        notes:
+          payload.parsedNotes ||
+          extraction.summary ||
+          'Coupon presentment recorded from accounting workflow.',
+      };
+
+      return {
+        ...prev,
+        entities: prev.entities.map((item) =>
+          item.id === currentEntity.id ? incrementEntitySequence(item, 'journal') : item
+        ),
+        payments: [paymentRecord, ...(prev.payments ?? [])],
+        settlements: [settlementRecord, ...(prev.settlements ?? [])],
+        reconciliations: couponOperationalReconciliation.reconciliations,
+        remittanceStatements: [remittanceStatement, ...(prev.remittanceStatements ?? [])],
+        couponPresentments: [couponPresentment, ...(prev.couponPresentments ?? [])],
+        transactions: [transactionRecord, ...(prev.transactions ?? [])],
+        journalEntries: [journalEntry, ...(prev.journalEntries ?? [])],
+        instrumentSettlements: existingInstrumentSettlement
+          ? prev.instrumentSettlements.map((item) =>
+              item.id === existingInstrumentSettlement.id ? nextInstrumentSettlement : item
+            )
+          : [nextInstrumentSettlement, ...(prev.instrumentSettlements ?? [])],
+        obligations: linkedObligation
+          ? prev.obligations.map((item) =>
+              item.id === linkedObligation.id
+                ? {
+                    ...item,
+                    status:
+                      dischargeCompletesPerformance && resolvedAmount >= item.amount
+                        ? ('satisfied' as const)
+                        : item.status,
+                    gainOrLossOnDischarge: item.gainOrLossOnDischarge ?? 0,
+                  }
+                : item
+            )
+          : prev.obligations,
+        tokens: token ? [token, ...(prev.tokens ?? [])] : prev.tokens,
+        documents: sourceDocument ? [sourceDocument, ...(prev.documents ?? [])] : prev.documents,
+        movementIdentifiers: nextCouponMovementIdentifier
+          ? [nextCouponMovementIdentifier, ...(prev.movementIdentifiers ?? [])]
+          : prev.movementIdentifiers,
+      };
+    });
+
+    setActiveSubsection('presentments');
+    setIsCouponPresentmentModalOpen(false);
+  };
+
   const handleCounterpartySubmit = (payload: CounterpartySubmitPayload) => {
     if (!counterpartyModalMode) {
       return;
@@ -872,12 +1591,32 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       payload.direction === 'outgoing' &&
       payload.counterpartyType === 'vendor' &&
       (payload.method === 'ach' || payload.method === 'wire');
+    const policyReleaseHoldReason =
+      requiresSettlementExecution &&
+      data.workspaceSettings.requireVerifiedVendorBankInstructions &&
+      selectedVendor?.paymentInstructions?.verificationStatus !== 'verified'
+        ? 'Vendor bank instructions must be fully verified before release.'
+        : requiresSettlementExecution &&
+            payload.method === 'wire' &&
+            amount >= data.workspaceSettings.wireReleaseReviewThreshold
+          ? `Wire amount exceeds the release review threshold of ${formatCurrency(
+              data.workspaceSettings.wireReleaseReviewThreshold,
+              entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
+            )}.`
+          : requiresSettlementExecution &&
+              payload.method === 'ach' &&
+              amount >= data.workspaceSettings.achReleaseReviewThreshold
+            ? `ACH amount exceeds the release review threshold of ${formatCurrency(
+                data.workspaceSettings.achReleaseReviewThreshold,
+                entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
+              )}.`
+            : undefined;
     const requiresWalletExecution =
       payload.direction === 'outgoing' &&
       payload.counterpartyType === 'vendor' &&
       payload.method === 'digital_asset' &&
       Boolean(selectedWallet);
-    const settlementExecutionResponse = requiresSettlementExecution
+    const settlementExecutionResponse = requiresSettlementExecution && !policyReleaseHoldReason
       ? await executeSettlementProcessing({
           entityId: entity.id,
           paymentId,
@@ -963,7 +1702,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         prev.workspaceSettings.digitalAssetVerificationRequired ||
         Boolean(sourceLedgerAccount) ||
         Boolean(selectedTreasuryAccount) ||
-        requiresSettlementExecution;
+        requiresSettlementExecution ||
+        Boolean(policyReleaseHoldReason);
       const settlementToken = shouldIssueSettlementToken
         ? {
             id: `tok-${settlementId}`,
@@ -992,7 +1732,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           }
         : null;
       const paymentStatus =
-        settlementExecutionResponse?.execution.processorStatus === 'blocked'
+        policyReleaseHoldReason
+          ? ('initiated' as const)
+          : settlementExecutionResponse?.execution.processorStatus === 'blocked'
           ? ('failed' as const)
           : settlementExecutionResponse?.execution.processorStatus === 'settled'
             ? ('settled' as const)
@@ -1002,7 +1744,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 ? ('initiated' as const)
               : ('settled' as const);
       const settlementStatus =
-        settlementExecutionResponse?.execution.processorStatus === 'blocked' ||
+        policyReleaseHoldReason
+          ? ('exception' as const)
+          : settlementExecutionResponse?.execution.processorStatus === 'blocked' ||
         settlementExecutionResponse?.execution.processorStatus === 'requires_review'
           ? ('exception' as const)
           : settlementExecutionResponse?.execution
@@ -1042,11 +1786,17 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         treasuryAccountId: selectedTreasuryAccount?.id,
         dischargeMethod: resolvedDischargeMethod,
         approvalStatus:
-          requiresSettlementExecution || requiresWalletExecution
+          requiresSettlementExecution || requiresWalletExecution || Boolean(policyReleaseHoldReason)
             ? ('pending' as const)
             : ('not_required' as const),
+        complianceConfirmationStatus: policyReleaseHoldReason
+          ? ('pending' as const)
+          : ('not_required' as const),
+        complianceConfirmedBy: undefined,
+        complianceConfirmedAt: undefined,
+        complianceConfirmationNote: policyReleaseHoldReason,
         releaseStatus:
-          requiresSettlementExecution || requiresWalletExecution
+          requiresSettlementExecution || requiresWalletExecution || Boolean(policyReleaseHoldReason)
             ? ('queued' as const)
             : ('not_applicable' as const),
         releaseTokenId: settlementToken?.id,
@@ -1057,10 +1807,25 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               processorStatus: settlementExecutionResponse.execution.processorStatus,
               executionReason: settlementExecutionResponse.execution.executionReason,
               executionReference: settlementExecutionResponse.execution.executionReference,
-              vendorInstructionVerified:
-                settlementExecutionResponse.execution.vendorInstructionVerified,
-              simulatedProcessing: settlementExecutionResponse.execution.simulatedProcessing,
-            }
+                vendorInstructionVerified:
+                  settlementExecutionResponse.execution.vendorInstructionVerified,
+                simulatedProcessing: settlementExecutionResponse.execution.simulatedProcessing,
+              }
+          : policyReleaseHoldReason
+            ? {
+                sourceType: resolveSettlementExecutionSourceType({
+                  sourceBankAccountId: sourceBankAccount?.id,
+                  sourceLedgerAccountId: sourceLedgerAccount?.id,
+                  treasuryAccountId: selectedTreasuryAccount?.id,
+                }),
+                executionRail: resolveSettlementExecutionRail(payload.method, payload.urgency),
+                processorStatus: 'requires_review',
+                executionReason: policyReleaseHoldReason,
+                executionReference: `HOLD-${stamp}`,
+                vendorInstructionVerified:
+                  selectedVendor?.paymentInstructions?.verificationStatus === 'verified',
+                simulatedProcessing: true,
+              }
           : requiresWalletExecution
             ? {
                 sourceType: selectedTreasuryAccount || sourceLedgerAccount ? 'ledger_account' : 'manual_remittance',
@@ -1072,8 +1837,22 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 simulatedProcessing: true,
               }
           : undefined,
+        recurringSchedule: payload.recurringEnabled
+          ? {
+              enabled: true,
+              frequency: payload.recurringFrequency,
+              interval: Number(payload.recurringInterval || 1),
+              nextRunDate:
+                payload.recurringNextRunDate || payload.paymentDate || new Date().toISOString().slice(0, 10),
+              autoPostEnabled: payload.recurringAutoPost,
+              note: 'Recurring payment template created from ERP payment posting.',
+            }
+          : {
+              enabled: false,
+            },
         notes:
           payload.notes ||
+          policyReleaseHoldReason ||
           settlementExecutionResponse?.execution.executionReason ||
           undefined,
       };
@@ -1196,12 +1975,31 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 'Generated automatically from accounting payment discharge selection.',
             }
           : undefined;
+      const operationalReconciliation = applyOperationalReconciliationStatus({
+        prev,
+        bankAccount: sourceBankAccount,
+        transactionId,
+        state:
+          settlementExecutionResponse?.execution.processorStatus === 'blocked' ||
+          settlementExecutionResponse?.execution.processorStatus === 'requires_review'
+            ? 'exception'
+            : paymentStatus === 'settled'
+              ? 'matched'
+              : sourceBankAccount
+                ? 'pending'
+                : 'matched',
+        note:
+          settlementExecutionResponse?.execution.executionReason ||
+          `Operational ${payload.method} movement generated from ERP payment posting.`,
+        preparedBy: 'ERP Payment Posting',
+      });
       const nextSettlement = {
         id: settlementId,
         entityId: entity.id,
         linkedTransactionId: transactionId,
         linkedPaymentId: paymentId,
         linkedJournalEntryIds: [journalId],
+        linkedReconciliationId: operationalReconciliation.linkedReconciliationId,
         linkedOnChainRecordId: onChainTransactionId,
         linkedInstrumentSettlementId: nextInstrumentSettlement?.id,
         linkedRemittanceStatementId: nextRemittanceStatement.id,
@@ -1227,6 +2025,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               : ('liquid_cash_released' as const),
         verificationMethod: settlementExecutionResponse
           ? settlementExecutionResponse.execution.verificationMethod
+          : policyReleaseHoldReason
+            ? ('manual_override' as const)
           : payload.method === 'digital_asset'
             ? ('wallet_confirmation' as const)
             : settlementToken
@@ -1234,12 +2034,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               : ('bank_confirmation' as const),
         verificationStatus: settlementExecutionResponse
           ? settlementExecutionResponse.execution.verificationStatus
+          : policyReleaseHoldReason
+            ? ('exception' as const)
           : requiresWalletExecution
             ? ('pending' as const)
           : settlementToken || payload.method === 'digital_asset'
             ? ('pending' as const)
             : ('verified' as const),
         verificationReference:
+          policyReleaseHoldReason ||
           settlementExecutionResponse?.execution.executionReason ||
           (payload.method === 'digital_asset'
             ? 'Awaiting token or wallet verification.'
@@ -1269,6 +2072,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           settlementExecutionResponse?.execution.rail ||
           (payload.method === 'digital_asset' ? ('None' as const) : undefined),
         processorStatus:
+          (policyReleaseHoldReason ? ('requires_review' as const) : undefined) ||
           settlementExecutionResponse?.execution.processorStatus ||
           (requiresWalletExecution
             ? ('queued' as const)
@@ -1276,6 +2080,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               ? ('settled' as const)
               : undefined),
         executionReason:
+          policyReleaseHoldReason ||
           settlementExecutionResponse?.execution.executionReason ||
           (requiresWalletExecution
             ? 'Wallet settlement is queued for release and chain confirmation.'
@@ -1291,15 +2096,19 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           settlementStatus === 'exception'
             ? ('exception' as const)
             : prev.workspaceSettings.autoReconcileJournalEntries
-              ? ('pending' as const)
+              ? sourceBankAccount && paymentStatus !== 'settled'
+                ? ('pending' as const)
+                : ('matched' as const)
               : undefined,
         requiresManualReview:
           payload.method === 'digital_asset' ||
           prev.workspaceSettings.requireDocumentLinksForSettlements ||
+          Boolean(policyReleaseHoldReason) ||
           settlementExecutionResponse?.execution.processorStatus === 'requires_review' ||
           settlementExecutionResponse?.execution.processorStatus === 'blocked',
         notes:
           payload.notes ||
+          policyReleaseHoldReason ||
           settlementExecutionResponse?.execution.executionReason ||
           undefined,
       };
@@ -1360,13 +2169,129 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         autoReconcileStatus:
           (entity.operationalDefaults?.autoReconcileLedgerLinks ??
             prev.workspaceSettings.autoReconcileJournalEntries)
-            ? (settlementStatus === 'exception' ? ('exception' as const) : ('pending' as const))
+            ? settlementStatus === 'exception'
+              ? ('exception' as const)
+              : sourceBankAccount && paymentStatus !== 'settled'
+                ? ('pending' as const)
+                : ('matched' as const)
             : undefined,
         verificationRequired:
           prev.workspaceSettings.requireDocumentLinksForSettlements ||
           Boolean(settlementExecutionResponse) ||
           Boolean(sourceLedgerAccount),
       };
+      const paymentRailNamespace =
+        payload.method === 'wire'
+          ? ('fedwire' as const)
+          : payload.method === 'ach'
+            ? (sourceBankAccount?.institutionName?.toLowerCase().includes('treasury')
+                ? ('federal_ach_green_book' as const)
+                : ('commercial_ach' as const))
+            : undefined;
+      const nextMovementIdentifier = paymentRailNamespace
+        ? {
+            id: `mid-${stamp}`,
+            entityId: entity.id,
+            railNamespace: paymentRailNamespace,
+            movementType: payload.method === 'wire' ? ('wire' as const) : ('payment' as const),
+            linkedPaymentId: paymentId,
+            linkedSettlementId: settlementId,
+            linkedRemittanceStatementId: nextRemittanceStatement.id,
+            primaryIdentifier:
+              payload.method === 'wire'
+                ? `IMAD-${buildNumericReference(stamp, 20)}`
+                : `ACH-${paymentId.toUpperCase()}`,
+            secondaryIdentifier:
+              payload.method === 'wire'
+                ? `OMAD-${buildNumericReference(stamp + 47, 20)}`
+                : `BATCH-${(entity.displayName || entity.name).replace(/[^A-Z0-9]/gi, '').slice(0, 8).toUpperCase()}-${nextPayment.paymentDate.replaceAll('-', '')}`,
+            secCode:
+              payload.method === 'ach'
+                ? payload.counterpartyType === 'vendor'
+                  ? 'CCD'
+                  : payload.counterpartyType === 'customer'
+                    ? 'PPD'
+                    : 'CTX'
+                : undefined,
+            traceNumber:
+              payload.method === 'ach'
+                ? `${sourceBankAccount?.routingNumber?.slice(0, 8) || '02100002'}${buildNumericReference(stamp, 7)}`
+                : undefined,
+            imad:
+              payload.method === 'wire'
+                ? `IMAD-${buildNumericReference(stamp, 20)}`
+                : undefined,
+            omad:
+              payload.method === 'wire'
+                ? `OMAD-${buildNumericReference(stamp + 47, 20)}`
+                : undefined,
+            routingNumber: sourceBankAccount?.routingNumber,
+            effectiveDate: nextPayment.paymentDate,
+            returnDeadline:
+              payload.method === 'ach'
+                ? addDaysToIsoDate(nextPayment.paymentDate, 2)
+                : undefined,
+            status:
+              settlementExecutionResponse?.execution.processorStatus === 'blocked'
+                ? ('returned' as const)
+                : ('active' as const),
+            notes:
+              payload.method === 'wire'
+                ? 'Fedwire identifiers generated automatically from ERP payment posting.'
+                : `ACH movement identifiers generated automatically for ${paymentRailNamespace === 'federal_ach_green_book' ? 'federal' : 'commercial'} rail tracking.`,
+          }
+        : undefined;
+      const nextTaxReportingLink =
+        payload.direction === 'outgoing' &&
+        payload.counterpartyType === 'vendor' &&
+        amount >= 600 &&
+        selectedVendor
+          ? {
+              id: `tax-${stamp}`,
+              entityId: entity.id,
+              railNamespace: 'irs_reporting' as const,
+              linkedPaymentId: paymentId,
+              counterpartyName: selectedVendor.name,
+              tinLast4: undefined,
+              tinMatchStatus: 'not_checked' as const,
+              formType: '1099-NEC' as const,
+              filingChannel: 'IRIS' as const,
+              correctionStatus: 'none' as const,
+              status: 'draft' as const,
+              notes:
+                'Created automatically from a vendor disbursement meeting the current 1099 review threshold. Confirm form type, TIN match, and filing applicability before submission.',
+            }
+          : undefined;
+      const nextReturnEvent =
+        nextMovementIdentifier &&
+        paymentRailNamespace &&
+        settlementExecutionResponse?.execution &&
+        (settlementExecutionResponse.execution.processorStatus === 'requires_review' ||
+          settlementExecutionResponse.execution.processorStatus === 'blocked')
+          ? {
+              id: `ret-${stamp}`,
+              entityId: entity.id,
+              railNamespace: paymentRailNamespace,
+              linkedMovementIdentifierId: nextMovementIdentifier.id,
+              linkedPaymentId: paymentId,
+              linkedSettlementId: settlementId,
+              eventDate: nextPayment.paymentDate,
+              code:
+                settlementExecutionResponse.execution.processorStatus === 'blocked'
+                  ? 'BLOCKED_PRE_RELEASE'
+                  : 'REVIEW_REQUIRED',
+              reason:
+                settlementExecutionResponse.execution.executionReason ||
+                'Processor flagged the movement before final release; confirm the true rail return or investigation code if one is later issued.',
+              correctionStatus: 'pending' as const,
+              status:
+                settlementExecutionResponse.execution.processorStatus === 'blocked'
+                  ? ('exception' as const)
+                  : ('open' as const),
+              notes:
+                'Created automatically from remittance controls because the movement did not clear cleanly on first pass.',
+            }
+          : undefined;
 
       const nextInvoices = linkedInvoice
         ? prev.invoices.map((invoice) =>
@@ -1519,6 +2444,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         bills: nextBills,
         payments: [nextPayment, ...(prev.payments ?? [])],
         bankAccounts: nextBankAccounts,
+        reconciliations: operationalReconciliation.reconciliations,
         ledgerAccounts: nextLedgerAccounts,
         treasuryAccounts: nextTreasuryAccounts,
         wallets: nextWallets,
@@ -1534,6 +2460,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           : prev.onChainTransactions,
         journalEntries: [nextJournal, ...(prev.journalEntries ?? [])],
         tokens: settlementToken ? [settlementToken, ...(prev.tokens ?? [])] : prev.tokens,
+        movementIdentifiers: nextMovementIdentifier
+          ? [nextMovementIdentifier, ...(prev.movementIdentifiers ?? [])]
+          : prev.movementIdentifiers,
+        returnEvents: nextReturnEvent
+          ? [nextReturnEvent, ...(prev.returnEvents ?? [])]
+          : prev.returnEvents,
+        taxReportingLinks: nextTaxReportingLink
+          ? [nextTaxReportingLink, ...(prev.taxReportingLinks ?? [])]
+          : prev.taxReportingLinks,
       };
     });
 
@@ -1563,6 +2498,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         payment.direction !== 'outgoing' ||
         payment.counterpartyType !== 'vendor' ||
         (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
+        payment.complianceConfirmationStatus === 'pending' ||
         settlement?.processorStatus === 'requires_review' ||
         settlement?.processorStatus === 'blocked'
       ) {
@@ -1614,6 +2550,123 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                   `Approved for remittance release by ${approver}.`,
               }
             : token
+        ),
+        movementIdentifiers: prev.movementIdentifiers.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                status: item.status === 'returned' ? item.status : 'active',
+                notes:
+                  item.notes ||
+                  `Approved for release by ${approver} through the ERP remittance desk.`,
+              }
+            : item
+        ),
+        taxReportingLinks: prev.taxReportingLinks.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                notes:
+                  item.notes ||
+                  `Payment approved by ${approver}; 1099 review remains required before filing.`,
+              }
+            : item
+        ),
+      };
+    });
+  };
+
+  const handleConfirmRemittanceCompliance = (paymentId: string) => {
+    const approvalAt = new Date().toISOString();
+    const approver =
+      defaultEntity?.representativeName ||
+      defaultEntity?.displayName ||
+      data.workspaceSettings.workspaceName ||
+      'ClearFlow Operator';
+
+    setData((prev) => {
+      const payment = prev.payments.find((item) => item.id === paymentId);
+      if (!payment) {
+        return prev;
+      }
+
+      const settlement = payment.linkedSettlementId
+        ? prev.settlements.find((item) => item.id === payment.linkedSettlementId)
+        : undefined;
+
+      if (
+        payment.direction !== 'outgoing' ||
+        payment.counterpartyType !== 'vendor' ||
+        (payment.method !== 'ach' && payment.method !== 'wire') ||
+        payment.complianceConfirmationStatus !== 'pending'
+      ) {
+        return prev;
+      }
+
+      const confirmationNote =
+        payment.complianceConfirmationNote ||
+        payment.settlementExecution?.executionReason ||
+        'Compliance controls confirmed by the acting authority.';
+
+      return {
+        ...prev,
+        payments: prev.payments.map((item) =>
+          item.id === paymentId
+            ? {
+                ...item,
+                complianceConfirmationStatus: 'confirmed',
+                complianceConfirmedBy: approver,
+                complianceConfirmedAt: approvalAt,
+                complianceConfirmationNote: confirmationNote,
+                approvalStatus: 'approved',
+                approvedBy: approver,
+                approvedAt: approvalAt,
+                releaseStatus: item.releaseStatus === 'released' ? 'released' : 'ready_to_release',
+                settlementExecution: item.settlementExecution
+                  ? {
+                      ...item.settlementExecution,
+                      processorStatus: 'queued',
+                      executionReason: `Compliance confirmed by ${approver}. ${confirmationNote}`,
+                      executionReference:
+                        item.settlementExecution.executionReference || `CONF-${paymentId.toUpperCase()}`,
+                      simulatedProcessing: true,
+                    }
+                  : item.settlementExecution,
+                notes: item.notes || `Compliance confirmed by ${approver} for remittance release.`,
+              }
+            : item
+        ),
+        settlements: prev.settlements.map((item) =>
+          item.id === payment.linkedSettlementId
+            ? {
+                ...item,
+                status: item.status === 'settled' ? item.status : ('routing' as const),
+                processorStatus: 'queued',
+                verificationStatus: 'pending',
+                verificationReference: `Compliance confirmed by ${approver}; ready for remittance release.`,
+                requiresManualReview: false,
+                notes:
+                  item.notes ||
+                  `Compliance controls confirmed by ${approver} through the remittance desk.`,
+              }
+            : item
+        ),
+        movementIdentifiers: prev.movementIdentifiers.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                status: item.status === 'returned' ? item.status : 'active',
+                notes: `Compliance confirmed by ${approver}. ${item.notes || confirmationNote}`,
+              }
+            : item
+        ),
+        taxReportingLinks: prev.taxReportingLinks.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                notes: `Compliance confirmed by ${approver}; ${item.notes || '1099 review remains required before filing.'}`,
+              }
+            : item
         ),
       };
     });
@@ -1705,6 +2758,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         payment.counterpartyType !== 'vendor' ||
         (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
         payment.releaseStatus === 'released' ||
+        payment.complianceConfirmationStatus === 'pending' ||
         (payment.approvalStatus !== 'approved' && payment.approvalStatus !== 'not_required') ||
         settlement?.processorStatus === 'requires_review' ||
         settlement?.processorStatus === 'blocked'
@@ -1716,6 +2770,20 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       const treasuryAccount = payment.treasuryAccountId
         ? prev.treasuryAccounts.find((account) => account.id === payment.treasuryAccountId)
         : undefined;
+      const sourceBankAccount = payment.sourceBankAccountId
+        ? prev.bankAccounts.find((account) => account.id === payment.sourceBankAccountId)
+        : undefined;
+      const releaseReconciliation = applyOperationalReconciliationStatus({
+        prev,
+        bankAccount: sourceBankAccount,
+        transactionId: payment.linkedTransactionIds?.[0] || payment.id,
+        state: payment.method === 'digital_asset' ? 'pending' : 'matched',
+        note:
+          payment.method === 'digital_asset'
+            ? 'Released to digital-asset settlement controls and waiting for final confirmation.'
+            : `Released by ${releaser} through the ERP remittance desk.`,
+        preparedBy: 'ERP Release Controls',
+      });
 
       return {
         ...prev,
@@ -1767,7 +2835,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                       : `Released by ${releaser} and waiting for on-chain confirmation.`
                     : `Released by ${releaser} through the remittance control desk.`,
                 executionReference: walletExecution?.txHash || item.executionReference,
-                autoReconcileStatus: payment.method === 'digital_asset' ? item.autoReconcileStatus : 'pending',
+                autoReconcileStatus: payment.method === 'digital_asset' ? item.autoReconcileStatus : 'matched',
               }
             : item
         ),
@@ -1811,6 +2879,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 : account
             )
           : prev.treasuryAccounts,
+        reconciliations: releaseReconciliation.reconciliations,
         tokens: prev.tokens.map((token) =>
           linkedTokenIds.includes(token.id)
             ? {
@@ -1822,6 +2891,32 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                   `Released by ${releaser} through the remittance control desk.`,
               }
             : token
+        ),
+        movementIdentifiers: prev.movementIdentifiers.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                status:
+                  payment.method === 'digital_asset'
+                    ? item.status
+                    : settlement?.processorStatus === 'blocked'
+                      ? 'returned'
+                      : 'closed',
+                notes:
+                  item.notes ||
+                  `Released by ${releaser} through the ERP remittance desk.`,
+              }
+            : item
+        ),
+        taxReportingLinks: prev.taxReportingLinks.map((item) =>
+          item.linkedPaymentId === paymentId
+            ? {
+                ...item,
+                notes:
+                  item.notes ||
+                  `Payment released by ${releaser}; retain supporting records for filing review.`,
+              }
+            : item
         ),
       };
     });
@@ -2105,6 +3200,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || account.last4,
               achOriginationEnabled: account.achOriginationEnabled ?? true,
               autoReconcileEnabled: account.autoReconcileEnabled ?? true,
+              statementImportPolicy: account.statementImportPolicy ?? 'auto_post_under_threshold',
+              statementAutoPostThreshold: account.statementAutoPostThreshold ?? 5000,
               onboardingStatus:
                 account.onboardingStatus === 'connected'
                   ? 'connected'
@@ -2116,6 +3213,253 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
     setIsPlaidModalOpen(false);
     setSelectedBankFeedAccountId(null);
+    setActiveSubsection('bankFeed');
+  };
+
+  const handleAddManualBankAccount = (payload: ManualBankAccountSubmitPayload) => {
+    const entity = defaultEntity;
+    if (!entity || !payload.institutionName.trim() || !payload.accountName.trim()) {
+      return;
+    }
+
+    setData((prev) => {
+      const stamp = Date.now();
+      const openingBalance = Number(payload.openingBalance || 0);
+      const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
+      const existingLedgerAccount = linkedLedgerAccountId
+        ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
+        : undefined;
+      const generatedLedgerAccount = existingLedgerAccount
+        ? undefined
+        : {
+            id: `led-bank-${stamp}`,
+            entityId: entity.id,
+            code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
+            name: `${payload.accountName.trim()} Cash`,
+            accountType: 'asset' as const,
+            currency: payload.currency || prev.workspaceSettings.baseCurrency,
+            balance: openingBalance,
+            remittanceEligible: true,
+            remittanceClassification: 'cash' as const,
+          };
+      const bankAccountId = `bank-${stamp}`;
+
+      return {
+        ...prev,
+        bankAccounts: [
+          {
+            id: bankAccountId,
+            entityId: entity.id,
+            institutionName: payload.institutionName.trim(),
+            accountName: payload.accountName.trim(),
+            last4: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+            accountType: payload.accountType,
+            currency: payload.currency || prev.workspaceSettings.baseCurrency,
+            status: 'active',
+            currentBalance: openingBalance,
+            linkedLedgerAccountId: existingLedgerAccount?.id || generatedLedgerAccount?.id,
+            onboardingStatus: 'ready',
+            connectionType: 'manual_bank',
+            liveFeedEnabled: false,
+            liveFeedStatus: 'disconnected',
+            liveConnectionProvider: 'manual',
+            autoReconcileEnabled: true,
+            statementImportPolicy: 'review_all',
+            statementAutoPostThreshold: 1000,
+            routingNumber: payload.routingNumber || undefined,
+            accountNumber: payload.accountNumber || undefined,
+            achOriginationEnabled: payload.achOriginationEnabled,
+            wireEnabled: payload.wireEnabled,
+          },
+          ...(prev.bankAccounts ?? []),
+        ],
+        ledgerAccounts: generatedLedgerAccount
+          ? [generatedLedgerAccount, ...(prev.ledgerAccounts ?? [])]
+          : prev.ledgerAccounts,
+      };
+    });
+
+    setIsManualBankAccountModalOpen(false);
+    setActiveSubsection('bankFeed');
+  };
+
+  const handleAddManualBankTransaction = (payload: ManualBankTransactionSubmitPayload) => {
+    const entity = defaultEntity;
+    if (!entity) {
+      return;
+    }
+
+    const absoluteAmount = Number(payload.amount || 0);
+    if (!payload.bankAccountId || !absoluteAmount || !payload.description.trim()) {
+      return;
+    }
+
+    setData((prev) => {
+      const bankAccount = prev.bankAccounts.find((account) => account.id === payload.bankAccountId);
+      if (!bankAccount) {
+        return prev;
+      }
+
+      const stamp = Date.now();
+      const transactionId = `txn-${stamp}`;
+      const journalId = `je-${stamp}`;
+      const tokenId = `tok-${stamp}`;
+      const entryId = `bfe-${stamp}`;
+      const linkedLedgerAccount =
+        (payload.ledgerAccountId
+          ? prev.ledgerAccounts.find((account) => account.id === payload.ledgerAccountId)
+          : undefined) ||
+        (bankAccount.linkedLedgerAccountId
+          ? prev.ledgerAccounts.find((account) => account.id === bankAccount.linkedLedgerAccountId)
+          : undefined);
+      const autoReconcileState = payload.autoReconcile ? 'matched' : 'pending';
+      const operationalReconciliation = applyOperationalReconciliationStatus({
+        prev,
+        bankAccount,
+        transactionId,
+        state: autoReconcileState,
+        note:
+          payload.memo?.trim() ||
+          `Manual bank transaction entered for ${bankAccount.accountName}.`,
+        preparedBy: 'Manual Bank Entry',
+      });
+      const nextToken =
+        payload.verificationMode === 'internal_control_token'
+          ? {
+              id: tokenId,
+              entityId: entity.id,
+              subjectType: 'transaction' as const,
+              subjectId: transactionId,
+              label: 'Manual Bank Entry Control Token',
+              status: payload.autoReconcile ? ('verified' as const) : ('issued' as const),
+              tokenStandard: 'internal-proof',
+              tokenReference: `MBE-${stamp}`,
+              issuedAt: new Date().toISOString(),
+              verifiedAt: payload.autoReconcile ? new Date().toISOString() : undefined,
+              proofReference:
+                'Issued automatically from manual bank transaction entry controls.',
+              notes: payload.memo?.trim() || payload.description.trim(),
+            }
+          : undefined;
+      const nextTransaction = {
+        id: transactionId,
+        entityId: entity.id,
+        type:
+          payload.transactionType === 'income'
+            ? ('income' as const)
+            : payload.transactionType === 'deposit'
+              ? ('deposit' as const)
+              : payload.transactionType === 'withdrawal'
+                ? ('withdrawal' as const)
+                : ('expense' as const),
+        title: payload.description.trim(),
+        amount: absoluteAmount,
+        currency: bankAccount.currency,
+        date: payload.postedDate,
+        status: 'posted' as const,
+        linkedLedgerAccountIds: linkedLedgerAccount ? [linkedLedgerAccount.id] : undefined,
+        linkedJournalEntryIds: [journalId],
+        linkedTokenIds: nextToken ? [nextToken.id] : undefined,
+        notes: payload.memo?.trim() || payload.counterpartyLabel?.trim() || undefined,
+      };
+      const nextJournal = {
+        id: journalId,
+        entityId: entity.id,
+        entryNumber: buildEntityScopedNumber(
+          entity,
+          'journal',
+          '',
+          String(getEntityNextSequence(entity, 'journal')),
+        ),
+        entryDate: payload.postedDate,
+        memo: payload.memo?.trim() || payload.description.trim(),
+        debitAccount:
+          payload.direction === 'credit'
+            ? `${linkedLedgerAccount?.code || '1000'} ${linkedLedgerAccount?.name || 'Operating Cash'}`
+            : payload.transactionType === 'expense'
+              ? '6850 Operating Expense Clearing'
+              : '2100 Clearing Payables',
+        creditAccount:
+          payload.direction === 'credit'
+            ? payload.transactionType === 'income'
+              ? '4000 Operating Income'
+              : '2300 Unapplied Cash'
+            : `${linkedLedgerAccount?.code || '1000'} ${linkedLedgerAccount?.name || 'Operating Cash'}`,
+        amount: absoluteAmount,
+        status: 'posted' as const,
+        source: 'system' as const,
+        linkedTransactionIds: [transactionId],
+        autoReconcileStatus: payload.autoReconcile ? ('matched' as const) : ('pending' as const),
+        verificationRequired: payload.verificationMode !== 'bank_confirmation',
+      };
+      const nextFeedEntry = {
+        id: entryId,
+        entityId: entity.id,
+        bankAccountId: bankAccount.id,
+        sourceProvider: 'manual' as const,
+        externalTransactionId: `manual-${stamp}`,
+        postedDate: payload.postedDate,
+        amount: payload.direction === 'credit' ? absoluteAmount : -absoluteAmount,
+        direction: payload.direction,
+        description: payload.description.trim(),
+        merchantName: payload.counterpartyLabel?.trim() || payload.description.trim(),
+        importedAt: new Date().toISOString(),
+        status: payload.autoReconcile ? ('reconciled' as const) : ('posted' as const),
+        linkedTransactionId: transactionId,
+        linkedJournalEntryId: journalId,
+        linkedReconciliationId: operationalReconciliation.linkedReconciliationId,
+        linkedTokenIds: nextToken ? [nextToken.id] : undefined,
+        verificationStatus:
+          payload.verificationMode === 'bank_confirmation'
+            ? ('verified' as const)
+            : payload.autoReconcile
+              ? ('verified' as const)
+              : ('pending' as const),
+        notes: payload.memo?.trim() || undefined,
+      };
+
+      return {
+        ...prev,
+        entities: prev.entities.map((item) =>
+          item.id === entity.id ? incrementEntitySequence(item, 'journal') : item,
+        ),
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === bankAccount.id
+            ? {
+                ...account,
+                currentBalance: Number(
+                  (
+                    (account.currentBalance ?? 0) +
+                    (payload.direction === 'credit' ? absoluteAmount : -absoluteAmount)
+                  ).toFixed(2),
+                ),
+              }
+            : account,
+        ),
+        ledgerAccounts: linkedLedgerAccount
+          ? prev.ledgerAccounts.map((account) =>
+              account.id === linkedLedgerAccount.id
+                ? {
+                    ...account,
+                    balance: Number(
+                      (
+                        account.balance +
+                        (payload.direction === 'credit' ? absoluteAmount : -absoluteAmount)
+                      ).toFixed(2),
+                    ),
+                  }
+                : account,
+            )
+          : prev.ledgerAccounts,
+        transactions: [nextTransaction, ...(prev.transactions ?? [])],
+        journalEntries: [nextJournal, ...(prev.journalEntries ?? [])],
+        bankFeedEntries: [nextFeedEntry, ...(prev.bankFeedEntries ?? [])],
+        reconciliations: operationalReconciliation.reconciliations,
+        tokens: nextToken ? [nextToken, ...(prev.tokens ?? [])] : prev.tokens,
+      };
+    });
+
+    setIsManualBankTransactionModalOpen(false);
     setActiveSubsection('bankFeed');
   };
 
@@ -2151,11 +3495,205 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     }));
   };
 
+  const handleAddEmployee = (payload: EmployeeSubmitPayload) => {
+    const entity = defaultPayrollEntity;
+    if (!entity || !payload.fullName.trim() || !payload.email.trim()) {
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      employees: [
+        {
+          id: `emp-${Date.now()}`,
+          entityId: entity.id,
+          fullName: payload.fullName.trim(),
+          email: payload.email.trim(),
+          phone: payload.phone?.trim() || undefined,
+          title: payload.title?.trim() || undefined,
+          department: payload.department?.trim() || undefined,
+          status: 'active',
+          employeeType: payload.employeeType,
+          compensationType: payload.compensationType,
+          paySchedule: payload.paySchedule,
+          annualSalary: payload.annualSalary ? Number(payload.annualSalary) : undefined,
+          hourlyRate: payload.hourlyRate ? Number(payload.hourlyRate) : undefined,
+          defaultHoursPerPeriod: payload.defaultHoursPerPeriod
+            ? Number(payload.defaultHoursPerPeriod)
+            : undefined,
+          startDate: payload.startDate || undefined,
+          linkedDocumentIds: [],
+          notes: payload.notes?.trim() || undefined,
+        },
+        ...(prev.employees ?? []),
+      ],
+    }));
+
+    setIsEmployeeModalOpen(false);
+    setActiveSubsection('payroll');
+  };
+
+  const handleDirectDepositRequestSubmit = async (payload: DirectDepositRequestSubmitPayload) => {
+    if (!payload.employeeId) {
+      return;
+    }
+
+    const employee = employees.find((item) => item.id === payload.employeeId);
+    if (!employee) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const entity = data.entities.find((item) => item.id === employee.entityId) || defaultPayrollEntity;
+    if (!entity) {
+      return;
+    }
+
+    const requestId = `dda-${Date.now()}`;
+    const tokenId = `tok-${requestId}`;
+    const requestDocumentId = `doc-${requestId}`;
+
+    let returnedFormDocument: DocumentRecord | null = null;
+    if (payload.uploadedFile) {
+      returnedFormDocument = await persistUploadDocument({
+        entityId: entity.id,
+        folder: 'documents',
+        title: `Direct Deposit Return - ${employee.fullName}`,
+        summary: 'Returned signed direct deposit authorization retained to the payroll profile.',
+        sourceRecordType: 'direct_deposit_request',
+        sourceRecordId: requestId,
+        file: payload.uploadedFile,
+        date: now.slice(0, 10),
+      });
+    }
+
+    const requestDocument: DocumentRecord = {
+      id: requestDocumentId,
+      entityId: entity.id,
+      title: `Direct Deposit Authorization Request - ${employee.fullName}`,
+      category: 'financial',
+      date: now.slice(0, 10),
+      status: 'final',
+      sourceRecordType: 'direct_deposit_request',
+      sourceRecordId: requestId,
+      linkedTokenIds: [tokenId],
+      summary: 'Payroll direct deposit request packet generated for employee onboarding.',
+    };
+
+    const requestToken: TokenRecord = {
+      id: tokenId,
+      entityId: entity.id,
+      subjectType: 'document',
+      subjectId: returnedFormDocument?.id || requestDocumentId,
+      label: `Direct Deposit Authorization - ${employee.fullName}`,
+      status: payload.uploadedFile ? 'verified' : 'issued',
+      tokenStandard: 'internal-proof',
+      tokenReference: `DDA-${Date.now()}`,
+      issuedAt: now,
+      verifiedAt: payload.uploadedFile ? now : undefined,
+      proofReference: payload.uploadedFile
+        ? 'Signed direct deposit return retained to employee profile.'
+        : 'Authorization request issued through payroll onboarding controls.',
+      notes: payload.notes?.trim() || undefined,
+    };
+
+    const requestRecord = {
+      id: requestId,
+      entityId: entity.id,
+      employeeId: employee.id,
+      requestEmail: payload.requestEmail.trim() || employee.email,
+      status: payload.uploadedFile
+        ? (payload.routingNumber && payload.accountNumber ? 'verified' : 'returned')
+        : payload.sendByEmail
+          ? 'sent'
+          : 'draft',
+      formDeliveryMethod: payload.sendByEmail ? ('email' as const) : ('manual' as const),
+      requestedAt: now,
+      returnedAt: payload.uploadedFile ? now : undefined,
+      verifiedAt:
+        payload.uploadedFile && payload.routingNumber && payload.accountNumber ? now : undefined,
+      requestTokenId: tokenId,
+      linkedDocumentIds: [
+        requestDocument.id,
+        ...(returnedFormDocument ? [returnedFormDocument.id] : []),
+      ],
+      routingLast4: payload.routingNumber ? payload.routingNumber.slice(-4) : undefined,
+      accountLast4: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+      accountType: payload.accountType,
+      signatureName: payload.signatureName?.trim() || undefined,
+      notes: payload.notes?.trim() || undefined,
+    };
+
+    if (payload.sendByEmail && payload.requestEmail.trim() && typeof window !== 'undefined') {
+      const subject = encodeURIComponent(`Direct Deposit Authorization - ${entity.displayName || entity.name}`);
+      const body = encodeURIComponent(
+        `Hello ${employee.fullName},\n\nPlease complete and return your direct deposit authorization for payroll setup in ClearFlow.\n\nEntity: ${entity.displayName || entity.name}\nWorker: ${employee.fullName}\nReference: ${requestId}\n\nOnce signed, return the completed form so it can be retained to your payroll profile.\n`
+      );
+      window.open(`mailto:${payload.requestEmail.trim()}?subject=${subject}&body=${body}`, '_blank');
+    }
+
+    setData((prev) => ({
+      ...prev,
+      employees: prev.employees.map((item) =>
+        item.id === employee.id
+          ? {
+              ...item,
+              directDepositRequestId: requestId,
+              linkedDocumentIds: Array.from(
+                new Set([
+                  ...(item.linkedDocumentIds ?? []),
+                  requestDocument.id,
+                  ...(returnedFormDocument ? [returnedFormDocument.id] : []),
+                ])
+              ),
+            }
+          : item
+      ),
+      directDepositAuthorizations: [requestRecord, ...(prev.directDepositAuthorizations ?? [])],
+      documents: [
+        requestDocument,
+        ...(returnedFormDocument ? [returnedFormDocument] : []),
+        ...(prev.documents ?? []),
+      ],
+      tokens: [requestToken, ...(prev.tokens ?? [])],
+    }));
+
+    setOperationsNotice(
+      payload.uploadedFile
+        ? `Retained signed direct deposit form for ${employee.fullName} and linked it into payroll.`
+        : `Prepared a direct deposit authorization request for ${employee.fullName}.`
+    );
+    setIsDirectDepositModalOpen(false);
+    setActiveSubsection('payroll');
+  };
+
   const handleToggleBankFeedRule = (ruleId: string) => {
     setData((prev) => ({
       ...prev,
       bankFeedRules: prev.bankFeedRules.map((rule) =>
         rule.id === ruleId ? { ...rule, active: !rule.active } : rule
+      ),
+    }));
+  };
+
+  const handleUpdateBankImportPolicy = (
+    bankAccountId: string,
+    policy: NonNullable<CoreDataBundle['bankAccounts'][number]['statementImportPolicy']>,
+    threshold?: number,
+  ) => {
+    setData((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map((account) =>
+        account.id === bankAccountId
+          ? {
+              ...account,
+              statementImportPolicy: policy,
+              statementAutoPostThreshold:
+                policy === 'auto_post_under_threshold'
+                  ? threshold ?? account.statementAutoPostThreshold ?? 2500
+                  : threshold ?? account.statementAutoPostThreshold,
+            }
+          : account,
       ),
     }));
   };
@@ -2550,41 +4088,293 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       exceptionNotes,
     });
 
-    setData((prev) => ({
-      ...prev,
-      reconciliations: prev.reconciliations.map((item) =>
-        item.id === reconciliationId
-          ? {
-              ...item,
-              statementEndingBalance,
-              statementFileName:
-                statementDocument?.fileName || statementFileName || item.statementFileName,
-              statementImportedAt: new Date().toISOString(),
-              statementImportId: response.importJob.id,
-              exceptionNotes: exceptionNotes || item.exceptionNotes,
-              linkedDocumentIds: statementDocument
-                ? [statementDocument.id, ...(item.linkedDocumentIds ?? [])]
-                : item.linkedDocumentIds,
-              parsedStatementLines: parsedStatement.lines,
-              matchedStatementLineIds: parsedStatement.matchedLineIds,
-              unmatchedStatementLineIds: parsedStatement.unmatchedLineIds,
-              statementReviewStatus: parsedStatement.unmatchedLineIds.length
-                ? 'needs_review'
-                : parsedStatement.lines.length
-                  ? 'ready_to_close'
-                  : item.statementReviewStatus ?? 'not_imported',
-              closeApprovalStatus: 'pending',
-              controllerSignoffName: undefined,
-              controllerSignoffAt: undefined,
-              closeOverrideReason: undefined,
-              notes: [item.notes, parsedStatement.summary].filter(Boolean).join(' | '),
-            }
-          : item
-      ),
-      documents: statementDocument
-        ? [statementDocument, ...(prev.documents ?? [])]
-        : prev.documents,
-    }));
+    setData((prev) => {
+      const currentReconciliation = prev.reconciliations.find((item) => item.id === reconciliationId);
+      const bankAccount = prev.bankAccounts.find((item) => item.id === reconciliation.bankAccountId);
+      const entity = currentReconciliation
+        ? prev.entities.find((item) => item.id === currentReconciliation.entityId)
+        : undefined;
+
+      if (!currentReconciliation || !bankAccount || !entity) {
+        return prev;
+      }
+
+      const importPolicy = bankAccount.statementImportPolicy ?? 'review_all';
+      const importThreshold = bankAccount.statementAutoPostThreshold ?? 2500;
+      const absoluteHoldThreshold = prev.workspaceSettings.statementImportAbsoluteHoldThreshold;
+      const suspiciousKeywords = prev.workspaceSettings.statementImportHighRiskKeywords ?? [];
+      let journalSequenceOffset = 0;
+      const autoImportedTransactions: CoreDataBundle['transactions'] = [];
+      const autoImportedJournals: CoreDataBundle['journalEntries'] = [];
+      const autoImportedFeedEntries: CoreDataBundle['bankFeedEntries'] = [];
+      const autoImportedTokens: CoreDataBundle['tokens'] = [];
+      const nextClearedTransactionIds = [...(currentReconciliation.clearedTransactionIds ?? [])];
+      const nextMatchedLineIds: string[] = [];
+      const nextUnmatchedLineIds: string[] = [];
+
+      const nextParsedLines = parsedStatement.lines.map((line) => {
+        if (line.matchStatus === 'suggested' && line.suggestedTransactionIds?.length) {
+          nextMatchedLineIds.push(line.id);
+          nextClearedTransactionIds.push(...line.suggestedTransactionIds);
+          return {
+            ...line,
+            matchStatus: 'matched' as const,
+            resolvedAt: new Date().toISOString(),
+            notes:
+              line.notes ||
+              'Matched automatically from existing ERP payment and transaction history during statement import.',
+          };
+        }
+
+        if (!line.amount) {
+          nextUnmatchedLineIds.push(line.id);
+          return line;
+        }
+
+        const shouldAutoPostLine =
+          importPolicy === 'auto_post_all'
+            ? true
+            : importPolicy === 'auto_post_credits_only'
+              ? line.direction === 'credit'
+              : importPolicy === 'auto_post_under_threshold'
+                ? Math.abs(line.amount) <= importThreshold
+                : false;
+        const hitsHighRiskKeyword = suspiciousKeywords.some((keyword) =>
+          line.description.toLowerCase().includes(keyword.toLowerCase()),
+        );
+        const exceedsAbsoluteHoldThreshold = Math.abs(line.amount) >= absoluteHoldThreshold;
+
+        if (!shouldAutoPostLine || hitsHighRiskKeyword || exceedsAbsoluteHoldThreshold) {
+          nextUnmatchedLineIds.push(line.id);
+          return {
+            ...line,
+            matchStatus: 'exception' as const,
+            notes:
+              line.notes ||
+              hitsHighRiskKeyword
+                ? 'Held for review because the description hit a high-risk keyword rule.'
+                : exceedsAbsoluteHoldThreshold
+                  ? `Held for review because the amount exceeded the hard stop threshold of ${formatCurrency(
+                      absoluteHoldThreshold,
+                      bankAccount.currency,
+                    )}.`
+                  : `Held for review by ${importPolicy === 'review_all' ? 'account policy' : 'statement import hardening controls'}.`,
+          };
+        }
+
+        const existingImportedEntry = (prev.bankFeedEntries ?? []).find(
+          (entry) =>
+            entry.bankAccountId === bankAccount.id &&
+            entry.postedDate === line.postedDate &&
+            entry.description === line.description &&
+            Number(entry.amount.toFixed(2)) === Number(line.amount.toFixed(2)),
+        );
+
+        if (existingImportedEntry?.linkedTransactionId) {
+          nextMatchedLineIds.push(line.id);
+          nextClearedTransactionIds.push(existingImportedEntry.linkedTransactionId);
+          return {
+            ...line,
+            matchStatus: 'matched' as const,
+            suggestedTransactionIds: [existingImportedEntry.linkedTransactionId],
+            linkedJournalEntryId: existingImportedEntry.linkedJournalEntryId,
+            resolvedAt: new Date().toISOString(),
+            notes:
+              'Matched to an existing imported accounting movement during statement load.',
+          };
+        }
+
+        const stamp = Date.now() + journalSequenceOffset;
+        journalSequenceOffset += 1;
+        const transactionId = `txn-stmt-${stamp}`;
+        const journalId = `je-stmt-${stamp}`;
+        const tokenId = `tok-stmt-${stamp}`;
+        const linkedLedgerAccount =
+          (bankAccount.linkedLedgerAccountId
+            ? prev.ledgerAccounts.find((item) => item.id === bankAccount.linkedLedgerAccountId)
+            : undefined) ||
+          prev.ledgerAccounts.find(
+            (item) =>
+              item.entityId === entity.id &&
+              item.remittanceClassification === 'cash',
+          );
+        const nextToken =
+          prev.workspaceSettings.requireDocumentLinksForSettlements
+            ? {
+                id: tokenId,
+                entityId: entity.id,
+                subjectType: 'transaction' as const,
+                subjectId: transactionId,
+                label: 'Statement Import Verification Token',
+                status: 'verified' as const,
+                tokenStandard: 'internal-proof',
+                tokenReference: `STM-${stamp}`,
+                issuedAt: new Date().toISOString(),
+                verifiedAt: new Date().toISOString(),
+                proofReference:
+                  'Verified automatically from statement import and reconciliation parsing controls.',
+                notes: line.description,
+              }
+            : undefined;
+
+        autoImportedTransactions.push({
+          id: transactionId,
+          entityId: entity.id,
+          type: line.direction === 'credit' ? 'deposit' : 'withdrawal',
+          title: line.description,
+          amount: Math.abs(line.amount),
+          currency: bankAccount.currency,
+          date: line.postedDate,
+          status: 'posted',
+          linkedLedgerAccountIds: linkedLedgerAccount ? [linkedLedgerAccount.id] : undefined,
+          linkedJournalEntryIds: [journalId],
+          linkedTokenIds: nextToken ? [nextToken.id] : undefined,
+          notes: 'Auto-created from statement import into the operational ledger.',
+        });
+        autoImportedJournals.push({
+          id: journalId,
+          entityId: entity.id,
+          entryNumber: buildEntityScopedNumber(
+            entity,
+            'journal',
+            '',
+            String(getEntityNextSequence(entity, 'journal') + journalSequenceOffset - 1),
+          ),
+          entryDate: line.postedDate,
+          memo: `Statement import: ${line.description}`,
+          debitAccount:
+            line.direction === 'credit'
+              ? `${linkedLedgerAccount?.code || '1000'} ${linkedLedgerAccount?.name || 'Operating Cash'}`
+              : '6850 Statement Import Expense Clearing',
+          creditAccount:
+            line.direction === 'credit'
+              ? '2300 Unapplied Cash'
+              : `${linkedLedgerAccount?.code || '1000'} ${linkedLedgerAccount?.name || 'Operating Cash'}`,
+          amount: Math.abs(line.amount),
+          status: 'posted',
+          source: 'system',
+          linkedTransactionIds: [transactionId],
+          autoReconcileStatus: 'matched',
+          verificationRequired: Boolean(nextToken),
+        });
+        autoImportedFeedEntries.push({
+          id: `bfe-stmt-${stamp}`,
+          entityId: entity.id,
+          bankAccountId: bankAccount.id,
+          sourceProvider: 'manual',
+          externalTransactionId: `stmt-${reconciliationId}-${line.id}`,
+          postedDate: line.postedDate,
+          description: line.description,
+          merchantName: line.description,
+          amount: line.amount,
+          direction: line.direction,
+          importedAt: new Date().toISOString(),
+          status: 'reconciled',
+          linkedTransactionId: transactionId,
+          linkedJournalEntryId: journalId,
+          linkedReconciliationId: reconciliationId,
+          linkedTokenIds: nextToken ? [nextToken.id] : undefined,
+          verificationStatus: nextToken ? 'verified' : 'verified',
+          notes: 'Created automatically from statement import.',
+        });
+        if (nextToken) {
+          autoImportedTokens.push(nextToken);
+        }
+        nextMatchedLineIds.push(line.id);
+        nextClearedTransactionIds.push(transactionId);
+
+        return {
+          ...line,
+          matchStatus: 'matched' as const,
+          suggestedTransactionIds: [transactionId],
+          linkedJournalEntryId: journalId,
+          resolvedAt: new Date().toISOString(),
+          notes:
+            'Auto-posted into accounting from statement import and cleared into reconciliation.',
+        };
+      });
+
+      return {
+        ...prev,
+        entities: prev.entities.map((item) =>
+          item.id === entity.id
+            ? {
+                ...incrementEntitySequence(item, 'journal'),
+                numbering: item.numbering
+                  ? {
+                      ...item.numbering,
+                      nextJournalSequence:
+                        getEntityNextSequence(item, 'journal') + journalSequenceOffset,
+                    }
+                  : item.numbering,
+              }
+            : item,
+        ),
+        bankAccounts: prev.bankAccounts.map((item) =>
+          item.id === bankAccount.id
+            ? {
+                ...item,
+                currentBalance: statementEndingBalance,
+              }
+            : item,
+        ),
+        ledgerAccounts: prev.ledgerAccounts.map((item) => {
+          const importedDelta = autoImportedTransactions
+            .filter((transaction) => transaction.linkedLedgerAccountIds?.includes(item.id))
+            .reduce(
+              (sum, transaction) =>
+                sum +
+                (transaction.type === 'deposit' ? transaction.amount : -transaction.amount),
+              0,
+            );
+
+          return importedDelta
+            ? {
+                ...item,
+                balance: Number((item.balance + importedDelta).toFixed(2)),
+              }
+            : item;
+        }),
+        transactions: [...autoImportedTransactions, ...(prev.transactions ?? [])],
+        journalEntries: [...autoImportedJournals, ...(prev.journalEntries ?? [])],
+        bankFeedEntries: [...autoImportedFeedEntries, ...(prev.bankFeedEntries ?? [])],
+        tokens: [...autoImportedTokens, ...(prev.tokens ?? [])],
+        reconciliations: prev.reconciliations.map((item) =>
+          item.id === reconciliationId
+            ? {
+                ...item,
+                statementEndingBalance,
+                statementFileName:
+                  statementDocument?.fileName || statementFileName || item.statementFileName,
+                statementImportedAt: new Date().toISOString(),
+                statementImportId: response.importJob.id,
+                exceptionNotes: exceptionNotes || item.exceptionNotes,
+                linkedDocumentIds: statementDocument
+                  ? [statementDocument.id, ...(item.linkedDocumentIds ?? [])]
+                  : item.linkedDocumentIds,
+                parsedStatementLines: nextParsedLines,
+                clearedTransactionIds: Array.from(new Set(nextClearedTransactionIds)),
+                matchedStatementLineIds: Array.from(new Set(nextMatchedLineIds)),
+                unmatchedStatementLineIds: Array.from(new Set(nextUnmatchedLineIds)),
+                statementReviewStatus: nextUnmatchedLineIds.length
+                  ? 'needs_review'
+                  : nextParsedLines.length
+                    ? 'ready_to_close'
+                    : item.statementReviewStatus ?? 'not_imported',
+                closeApprovalStatus: 'pending',
+                controllerSignoffName: undefined,
+                controllerSignoffAt: undefined,
+                closeOverrideReason: undefined,
+                status: nextUnmatchedLineIds.length ? 'in_review' : 'in_review',
+                notes: [item.notes, parsedStatement.summary].filter(Boolean).join(' | '),
+              }
+            : item,
+        ),
+        documents: statementDocument
+          ? [statementDocument, ...(prev.documents ?? [])]
+          : prev.documents,
+      };
+    });
   };
 
   const handleApplySuggestedReconciliationMatches = (reconciliationId: string) => {
@@ -3277,6 +5067,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             stats={stats}
             journalDrafts={journalEntries}
             bills={bills}
+            payments={payments}
+            expenses={expenses}
+            receipts={receipts}
+            employees={employees}
+            directDepositAuthorizations={directDepositAuthorizations}
+            taxReportingLinks={taxReportingLinks}
           />
         );
 
@@ -3427,6 +5223,96 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           />
         );
 
+      case 'presentments':
+        return (
+          <EditableRecordSection
+            title="Coupon Presentments"
+            description="Photo, upload, or manual coupon presentments that post directly into remittance, settlement, and ERP journals."
+            emptyMessage="No coupon or performance presentments recorded yet."
+            records={couponPresentments}
+            getTitle={(record) => record.title ?? record.id}
+            getSubtitle={(record) =>
+              `${record.status} | ${record.dischargeMethod} | ${formatCurrency(record.amount, record.currency)}`
+            }
+            onSave={(nextRecord) =>
+              setData((prev) => ({
+                ...prev,
+                couponPresentments: updateCollectionRecord(prev.couponPresentments, nextRecord),
+              }))
+            }
+          />
+        );
+
+      case 'railOps':
+        return (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <EditableRecordSection
+              title="Movement Identifiers"
+              description="ACH traces, Fedwire IMAD/OMAD, Treasury references, and IRS-linked movement IDs."
+              emptyMessage="No rail identifiers recorded yet."
+              records={movementIdentifiers}
+              getTitle={(record) => record.primaryIdentifier}
+              getSubtitle={(record) =>
+                `${record.railNamespace} | ${record.movementType} | ${record.status}`
+              }
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  movementIdentifiers: updateCollectionRecord(prev.movementIdentifiers, nextRecord),
+                }))
+              }
+            />
+            <EditableRecordSection
+              title="Return Events"
+              description="Commercial or federal ACH return and change events tied back to the original movement."
+              emptyMessage="No return events recorded yet."
+              records={returnEvents}
+              getTitle={(record) => `${record.code} - ${record.reason}`}
+              getSubtitle={(record) =>
+                `${record.railNamespace} | ${record.status} | correction ${record.correctionStatus}`
+              }
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  returnEvents: updateCollectionRecord(prev.returnEvents, nextRecord),
+                }))
+              }
+            />
+            <EditableRecordSection
+              title="Reclamation Events"
+              description="Gold Book-style Treasury check reclamation controls and follow-up status."
+              emptyMessage="No reclamation events recorded yet."
+              records={reclamationEvents}
+              getTitle={(record) => record.claimNumber || record.id}
+              getSubtitle={(record) =>
+                `${record.railNamespace} | ${record.reclamationType} | ${record.status}`
+              }
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  reclamationEvents: updateCollectionRecord(prev.reclamationEvents, nextRecord),
+                }))
+              }
+            />
+            <EditableRecordSection
+              title="IRS Reporting Links"
+              description="TIN match status, form type, TCC, and submission tracking tied back to movement records."
+              emptyMessage="No IRS reporting links recorded yet."
+              records={taxReportingLinks}
+              getTitle={(record) => `${record.counterpartyName} ${record.formType || 'reporting link'}`}
+              getSubtitle={(record) =>
+                `${record.railNamespace} | ${record.status} | TIN ${record.tinMatchStatus}`
+              }
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  taxReportingLinks: updateCollectionRecord(prev.taxReportingLinks, nextRecord),
+                }))
+              }
+            />
+          </div>
+        );
+
       case 'payments':
         return (
           <RemittanceOperationsWorkspace
@@ -3446,10 +5332,62 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 ? data.onChainTransactions.filter((item) => item.entityId === defaultEntity.id)
                 : data.onChainTransactions
             }
+            onConfirmCompliance={handleConfirmRemittanceCompliance}
             onApprovePayment={handleApproveOutgoingPayment}
             onReleasePayment={handleReleaseOutgoingPayment}
             onConfirmWalletSettlement={handleConfirmWalletSettlement}
             operationsNotice={operationsNotice}
+          />
+        );
+
+      case 'recurring':
+        return (
+          <RecurringCommitmentsWorkspace
+            entities={data.entities}
+            payments={
+              defaultEntity
+                ? payments.filter((item) => item.entityId === defaultEntity.id)
+                : payments
+            }
+            obligations={
+              defaultEntity
+                ? obligations.filter((item) => item.entityId === defaultEntity.id)
+                : obligations
+            }
+            onUpdatePayment={(paymentId, updater) =>
+              setData((prev) => ({
+                ...prev,
+                payments: prev.payments.map((item) =>
+                  item.id === paymentId ? updater(item) : item,
+                ),
+              }))
+            }
+            onUpdateObligation={(obligationId, updater) =>
+              setData((prev) => ({
+                ...prev,
+                obligations: prev.obligations.map((item) =>
+                  item.id === obligationId ? updater(item) : item,
+                ),
+              }))
+            }
+          />
+        );
+
+      case 'payroll':
+        return (
+          <PayrollWorkspace
+            employees={
+              defaultPayrollEntity
+                ? employees.filter((item) => item.entityId === defaultPayrollEntity.id)
+                : employees
+            }
+            directDepositAuthorizations={
+              defaultPayrollEntity
+                ? directDepositAuthorizations.filter((item) => item.entityId === defaultPayrollEntity.id)
+                : directDepositAuthorizations
+            }
+            onAddEmployee={() => setIsEmployeeModalOpen(true)}
+            onRequestDirectDeposit={() => setIsDirectDepositModalOpen(true)}
           />
         );
 
@@ -3482,6 +5420,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               }
               onConnectBank={handleOpenBankConnection}
               onSyncBank={handleSyncBankFeed}
+              onAddManualBankAccount={() => setIsManualBankAccountModalOpen(true)}
+              onAddManualTransaction={() => setIsManualBankTransactionModalOpen(true)}
+              onUpdateImportPolicy={handleUpdateBankImportPolicy}
               onAddRule={handleCreateBankFeedRule}
               onToggleRule={handleToggleBankFeedRule}
             />
@@ -3574,6 +5515,28 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         onClose={() => setIsBillModalOpen(false)}
         onSubmit={handleBillSubmit}
       />
+      <CouponPresentmentModal
+        open={isCouponPresentmentModalOpen}
+        obligations={defaultEntity ? obligations.filter((item) => item.entityId === defaultEntity.id) : obligations}
+        instrumentSettlements={
+          defaultEntity
+            ? instrumentSettlements.filter((item) => item.entityId === defaultEntity.id)
+            : instrumentSettlements
+        }
+        treasuryAccounts={
+          defaultEntity
+            ? treasuryAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : treasuryAccounts
+        }
+        bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
+        ledgerAccounts={
+          defaultEntity
+            ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : ledgerAccounts
+        }
+        onClose={() => setIsCouponPresentmentModalOpen(false)}
+        onSubmit={handleCouponPresentmentSubmit}
+      />
       <ReceiptIntakeModal
         open={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
@@ -3648,6 +5611,49 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         />
       ) : null}
 
+      <BankAccountManualModal
+        isOpen={isManualBankAccountModalOpen}
+        ledgerAccounts={
+          defaultEntity
+            ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : ledgerAccounts
+        }
+        defaultCurrency={data.workspaceSettings.baseCurrency}
+        onClose={() => setIsManualBankAccountModalOpen(false)}
+        onSubmit={handleAddManualBankAccount}
+      />
+
+      <ManualBankTransactionModal
+        isOpen={isManualBankTransactionModalOpen}
+        bankAccounts={
+          defaultEntity
+            ? bankAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : bankAccounts
+        }
+        ledgerAccounts={
+          defaultEntity
+            ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : ledgerAccounts
+        }
+        onClose={() => setIsManualBankTransactionModalOpen(false)}
+        onSubmit={handleAddManualBankTransaction}
+      />
+      <EmployeeModal
+        open={isEmployeeModalOpen}
+        onClose={() => setIsEmployeeModalOpen(false)}
+        onSubmit={handleAddEmployee}
+      />
+      <DirectDepositRequestModal
+        open={isDirectDepositModalOpen}
+        employees={
+          defaultPayrollEntity
+            ? employees.filter((item) => item.entityId === defaultPayrollEntity.id)
+            : employees
+        }
+        onClose={() => setIsDirectDepositModalOpen(false)}
+        onSubmit={handleDirectDepositRequestSubmit}
+      />
+
       <div style={shellStyle}>
         <PageSection
           title="Accounting"
@@ -3657,11 +5663,17 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             <AccountingToolbar
               onAddCustomer={() => setCounterpartyModalMode('customer')}
               onAddVendor={() => setCounterpartyModalMode('vendor')}
+              onAddEmployee={() => setIsEmployeeModalOpen(true)}
               onAddInvoice={() => setIsInvoiceModalOpen(true)}
               onRecordPayment={() => setIsPaymentModalOpen(true)}
+              onRequestDirectDeposit={() => {
+                setActiveSubsection('payroll');
+                setIsDirectDepositModalOpen(true);
+              }}
               onAddJournalEntry={() => setIsJournalModalOpen(true)}
               onAddBill={() => setIsBillModalOpen(true)}
               onAddReceipt={() => setIsReceiptModalOpen(true)}
+              onAddPresentment={() => setIsCouponPresentmentModalOpen(true)}
               onGenerateQuote={() => setIsQuoteModalOpen(true)}
               onManageBankFeed={() => setActiveSubsection('bankFeed')}
               onAddIntercompanyTransfer={() => setIsIntercompanyModalOpen(true)}

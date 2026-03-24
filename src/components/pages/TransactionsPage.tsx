@@ -295,6 +295,40 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
       </PageSection>
 
       <PageSection
+        title="Obligation Schedules"
+        description="Open obligations, recurring performance schedules, and what is expected to be presented or discharged next."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.obligations.map((obligation) => (
+            <RecordCard
+              key={obligation.id}
+              title={obligation.title}
+              subtitle={`${obligation.obligationType} · ${obligation.status} · ${formatMoney(obligation.amount, 'USD')}`}
+            >
+              <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Payment medium:</strong>{' '}
+                  {obligation.paymentMedium}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Recurring schedule:</strong>{' '}
+                  {obligation.recurringSchedule?.enabled
+                    ? `${obligation.recurringSchedule.frequency || 'scheduled'} every ${
+                        obligation.recurringSchedule.interval || 1
+                      }${obligation.recurringSchedule.nextDueDate ? ` | next ${obligation.recurringSchedule.nextDueDate}` : ''}`
+                    : 'Not marked recurring'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Auto presentment:</strong>{' '}
+                  {obligation.recurringSchedule?.autoCreatePresentment ? 'Enabled' : 'Manual'}
+                </div>
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
         title="Remittance Statements"
         description="Statements and remittance-check style records that evidence performance, with MICR shown only as informational unless the settlement is bank-backed."
       >

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
-import { downloadDocumentFile } from '../../services/documentVault.service';
+import { downloadDocumentFile, saveDocumentFile } from '../../services/documentVault.service';
+import DocumentUploadModal from '../documents/DocumentUploadModal';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -13,6 +14,7 @@ interface DocumentsPageProps {
 
 export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const focusedDocumentId =
     typeof window !== 'undefined' && window.location.hash.startsWith('#documents:')
       ? window.location.hash.replace('#documents:', '')
@@ -23,11 +25,69 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      <DocumentUploadModal
+        open={isUploadModalOpen}
+        entities={data.entities}
+        onClose={() => setIsUploadModalOpen(false)}
+        onSubmit={async (payload) => {
+          if (!payload.entityId || !payload.title.trim() || !payload.file) {
+            return;
+          }
+
+          const stamp = Date.now();
+          const fileMetadata = await saveDocumentFile(`doc-upload-${stamp}`, payload.file);
+          setData((prev) => ({
+            ...prev,
+            documents: [
+              {
+                id: `doc-upload-${stamp}`,
+                entityId: payload.entityId,
+                title: payload.title.trim(),
+                category: payload.category,
+                date: payload.date,
+                status: 'final',
+                fileName: fileMetadata.fileName,
+                mimeType: fileMetadata.mimeType,
+                sizeBytes: fileMetadata.sizeBytes,
+                uploadedAt: fileMetadata.uploadedAt,
+                sourceFileId: fileMetadata.sourceFileId,
+                sourceRecordType: 'document',
+                sourceRecordId: `doc-upload-${stamp}`,
+                vaultPath: `/vault/${payload.entityId}/documents/${fileMetadata.fileName}`,
+                summary: payload.summary.trim() || 'Uploaded through the document vault desk.',
+              },
+              ...prev.documents,
+            ],
+          }));
+          setIsUploadModalOpen(false);
+          if (typeof window !== 'undefined') {
+            window.location.hash = `documents:doc-upload-${stamp}`;
+          }
+        }}
+      />
       <div>
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Documents & Vault</h1>
         <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
           Vault-linked records for custody, issuance, reserve, authority, legal support, and ERP source files.
         </p>
+        <div style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => setIsUploadModalOpen(true)}
+            style={{
+              padding: '10px 14px',
+              minHeight: 42,
+              borderRadius: 10,
+              border: '1px solid rgba(126,242,255,0.28)',
+              background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            + Upload Document
+          </button>
+        </div>
       </div>
 
       <div
@@ -60,13 +120,6 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 { label: 'Vault Path', value: doc.vaultPath || 'Vault path not assigned' },
                 { label: 'Source File', value: doc.fileName || 'No stored file' },
               ]}
-              record={doc}
-              onSave={(nextRecord) =>
-                setData((prev) => ({
-                  ...prev,
-                  documents: prev.documents.map((item) => (item.id === doc.id ? nextRecord : item)),
-                }))
-              }
               actionSlot={
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {(doc.fileName || doc.sourceFileId) && doc.sourceFileId ? (
@@ -182,15 +235,6 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 { label: 'Amount', value: `${statement.currency} ${statement.amount.toLocaleString()}` },
                 { label: 'MICR Mode', value: statement.micrLine?.mode || 'Not assigned' },
               ]}
-              record={statement}
-              onSave={(nextRecord) =>
-                setData((prev) => ({
-                  ...prev,
-                  remittanceStatements: prev.remittanceStatements.map((item) =>
-                    item.id === statement.id ? nextRecord : item
-                  ),
-                }))
-              }
             >
               {statement.notes || 'Use advanced edit to alter MICR references, linked obligations, and performance notes.'}
             </WorkbenchRecordCard>
@@ -206,15 +250,6 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 { label: 'Performed', value: `${settlement.currency} ${settlement.performedAmount.toLocaleString()}` },
                 { label: 'Treasury', value: settlement.treasuryAccountId || 'No treasury source' },
               ]}
-              record={settlement}
-              onSave={(nextRecord) =>
-                setData((prev) => ({
-                  ...prev,
-                  instrumentSettlements: prev.instrumentSettlements.map((item) =>
-                    item.id === settlement.id ? nextRecord : item
-                  ),
-                }))
-              }
             >
               {settlement.notes || 'Use advanced edit to control linked settlement, instrument, and remittance references.'}
             </WorkbenchRecordCard>
@@ -238,13 +273,6 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 { label: 'Network', value: token.network || 'Off-chain' },
                 { label: 'Issued', value: token.issuedAt },
               ]}
-              record={token}
-              onSave={(nextRecord) =>
-                setData((prev) => ({
-                  ...prev,
-                  tokens: prev.tokens.map((item) => (item.id === token.id ? nextRecord : item)),
-                }))
-              }
             >
               {token.proofReference || 'Use advanced edit to add proof references, revocation notes, and subject metadata.'}
             </WorkbenchRecordCard>
