@@ -12,6 +12,8 @@ export const ProfileSetup: React.FC = () => {
   });
 
   const requiresBackupFields = auth.isLocalCredentialFlow;
+  const wantsBackupCredentials =
+    requiresBackupFields || Boolean(form.userHandle.trim() || form.password.trim());
   const suggestedHandle = useMemo(() => {
     if (form.userHandle.trim()) {
       return form.userHandle.trim();
@@ -35,8 +37,8 @@ export const ProfileSetup: React.FC = () => {
         form.name,
         form.email || undefined,
         form.phone || undefined,
-        requiresBackupFields ? suggestedHandle || undefined : undefined,
-        requiresBackupFields && form.password.trim() ? form.password : undefined
+        wantsBackupCredentials ? suggestedHandle || undefined : undefined,
+        wantsBackupCredentials && form.password.trim() ? form.password : undefined
       );
     }
   };
@@ -90,44 +92,40 @@ export const ProfileSetup: React.FC = () => {
                 className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
               />
             </div>
-            {requiresBackupFields ? (
-              <>
-                <div>
-                  <label htmlFor="userHandle" className="block text-sm font-medium text-slate-400">
-                    User ID
-                  </label>
-                  <input
-                    id="userHandle"
-                    name="userHandle"
-                    type="text"
-                    value={form.userHandle}
-                    onChange={handleChange}
-                    placeholder={suggestedHandle || 'your.userid'}
-                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-slate-400">
-                    Backup Password
-                  </label>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={form.password}
-                    onChange={handleChange}
-                    placeholder="Set a password for backup sign-in"
-                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
-                  />
-                </div>
-              </>
-            ) : null}
+            <div>
+              <label htmlFor="userHandle" className="block text-sm font-medium text-slate-400">
+                Backup User ID
+              </label>
+              <input
+                id="userHandle"
+                name="userHandle"
+                type="text"
+                value={form.userHandle}
+                onChange={handleChange}
+                placeholder={suggestedHandle || 'your.userid'}
+                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-400">
+                Backup Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Set a password for backup sign-in"
+                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+              />
+            </div>
           </div>
           <p className="text-xs text-slate-400 mt-3">
             At least one contact method is required.
             {requiresBackupFields
-              ? ' Add a user ID and password now if you want backup sign-in beyond Google.'
-              : ''}
+              ? ' Add a user ID and password now to complete backup access.'
+              : ' Google is still the primary sign-in path. These backup credentials are optional, but recommended.'}
           </p>
           <button
             type="submit"

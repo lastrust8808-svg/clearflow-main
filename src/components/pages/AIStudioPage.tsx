@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   AIWorkflowRecord,
@@ -19,6 +20,18 @@ interface AIStudioPageProps {
 
 const researchLinks = [
   {
+    title: 'Treasury Green Book',
+    subtitle: 'Federal ACH guidance and returns',
+    url: 'https://fiscal.treasury.gov/reference-guidance/green-book/index.html',
+    detail: 'Reference Treasury guidance for federal ACH formats, returns, NOCs, and payment operations.',
+  },
+  {
+    title: 'Treasury Gold Book',
+    subtitle: 'Treasury check reclamation guidance',
+    url: 'https://fiscal.treasury.gov/files/reference-guidance/gold-book/gold-book-full.pdf',
+    detail: 'Review Treasury check reclamation procedures and exception handling for check-related payment operations.',
+  },
+  {
     title: 'IRS IRIS Portal',
     subtitle: 'File Forms 1099 online',
     url: 'https://www.irs.gov/filing/e-file-forms-1099-with-iris',
@@ -29,6 +42,12 @@ const researchLinks = [
     subtitle: 'Bulk information return filing',
     url: 'https://fire.irs.gov/',
     detail: 'Use FIRE when a reporting team needs the traditional information return submission path.',
+  },
+  {
+    title: 'IRS TIN Matching',
+    subtitle: 'Taxpayer ID verification reference',
+    url: 'https://www.irs.gov/tax-professionals/taxpayer-identification-number-tin-matching',
+    detail: 'Use TIN matching guidance when preparing 1099 filing controls and payee verification workflows.',
   },
   {
     title: 'SEC EDGAR Search',
@@ -49,6 +68,12 @@ const researchLinks = [
     detail: 'Use FIGI mapping when CUSIP-adjacent identifier research is needed across public market datasets.',
   },
   {
+    title: 'Federal Reserve Fedwire',
+    subtitle: 'Wire operations reference',
+    url: 'https://www.frbservices.org/financial-services/wires/',
+    detail: 'Review Fedwire operating guidance, identifiers, and service references for wire movement controls.',
+  },
+  {
     title: 'Cornell LII UCC Library',
     subtitle: 'Commercial law reference',
     url: 'https://www.law.cornell.edu/ucc',
@@ -58,6 +83,18 @@ const researchLinks = [
 
 function openLink(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function focusDocument(documentId: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = `#documents:${documentId}`;
+  }
+}
+
+function focusRoute(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
 }
 
 function buildGeneratedDocument(input: {
@@ -103,10 +140,73 @@ function buildInternalToken(input: {
   };
 }
 
+function buildComplianceTag(input: {
+  entityId: string;
+  label: string;
+  category: 'tax' | 'reporting' | 'authority' | 'risk' | 'entity' | 'jurisdiction' | 'asset' | 'digital_asset';
+  status?: 'ok' | 'review' | 'restricted' | 'unknown';
+  dueDate?: string;
+  notes?: string;
+  linkedDocumentIds?: string[];
+}): CoreDataBundle['complianceTags'][number] {
+  return {
+    id: `cmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    entityId: input.entityId,
+    label: input.label,
+    category: input.category,
+    status: input.status ?? 'review',
+    dueDate: input.dueDate,
+    notes: input.notes,
+    linkedDocumentIds: input.linkedDocumentIds,
+  };
+}
+
 export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const primaryEntity = data.entities[0];
   const digitalCount = data.aiWorkflows.filter((item) => item.category === 'digital_asset').length;
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
+  const laneCounts = useMemo(
+    () => ({
+      legal: data.aiWorkflows.filter((item) => item.category === 'legal').length,
+      financial: data.aiWorkflows.filter((item) => item.category === 'financial').length,
+      operations: data.aiWorkflows.filter((item) => item.category === 'operations').length,
+    }),
+    [data.aiWorkflows],
+  );
+
+  const appendDocument = (document: DocumentRecord, tokens: TokenRecord[] = []) => {
+    setData((prev) => ({
+      ...prev,
+      documents: [document, ...prev.documents],
+      tokens: tokens.length ? [...tokens, ...prev.tokens] : prev.tokens,
+    }));
+    focusDocument(document.id);
+  };
+
+  const appendDocumentBundle = ({
+    document,
+    tokens = [],
+    complianceTags = [],
+    taxReportingLinks = [],
+  }: {
+    document: DocumentRecord;
+    tokens?: TokenRecord[];
+    complianceTags?: CoreDataBundle['complianceTags'];
+    taxReportingLinks?: CoreDataBundle['taxReportingLinks'];
+  }) => {
+    setData((prev) => ({
+      ...prev,
+      documents: [document, ...prev.documents],
+      tokens: tokens.length ? [...tokens, ...prev.tokens] : prev.tokens,
+      complianceTags: complianceTags.length
+        ? [...complianceTags, ...prev.complianceTags]
+        : prev.complianceTags,
+      taxReportingLinks: taxReportingLinks.length
+        ? [...taxReportingLinks, ...prev.taxReportingLinks]
+        : prev.taxReportingLinks,
+    }));
+    focusDocument(document.id);
+  };
 
   const launchBusinessPacket = () => {
     if (!primaryEntity) {
@@ -121,10 +221,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Business Document Packet\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\n\n## Included Drafts\n- Operating resolution\n- Vendor onboarding cover letter\n- Banking support memo\n- Internal control checklist\n`,
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-    }));
+    appendDocument(document);
   };
 
   const launchTrusteePacket = () => {
@@ -140,10 +237,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Trustee Help Packet\n\nTrust: ${primaryEntity.displayName || primaryEntity.name}\n\n## Trustee Checklist\n- Confirm authority documents are linked\n- Review current obligations and reserves\n- Update signer roles and communication paths\n- Prepare next compliance actions\n`,
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-    }));
+    appendDocument(document);
   };
 
   const launchLogoBrief = () => {
@@ -159,10 +253,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Logo Creator Brief\n\nBrand: ${primaryEntity.displayName || primaryEntity.name}\nAccent: ${primaryEntity.branding?.accentColor || data.workspaceSettings.preferredAccentColor || '#36d7ff'}\n\n## Goals\n- Luxe but youthful\n- Credible for finance and trusteeship\n- Strong icon for invoices, vault packets, and the sidebar shell\n`,
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-    }));
+    appendDocument(document);
   };
 
   const launchPurchaseAgreement = () => {
@@ -178,10 +269,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Purchase Agreement Draft\n\nSeller: ____________________\nBuyer: ${primaryEntity.displayName || primaryEntity.name}\n\n## Purchase Terms\n- Asset or rights being acquired\n- Consideration and settlement method\n- Transfer documents and closing deliverables\n- Default, cure, and dispute language\n`,
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-    }));
+    appendDocument(document);
   };
 
   const launchTrustAdministrationPacket = () => {
@@ -208,10 +296,7 @@ Trust: ${primaryEntity.displayName || primaryEntity.name}
 `,
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-    }));
+    appendDocument(document);
   };
 
   const launch1099PrepPacket = () => {
@@ -246,11 +331,38 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       proofReference: 'Issued when the 1099 prep packet is generated for controlled review.',
     });
 
-    setData((prev) => ({
-      ...prev,
-      documents: [{ ...document, linkedTokenIds: [token.id] }, ...prev.documents],
-      tokens: [token, ...prev.tokens],
-    }));
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} 1099 readiness review`,
+      category: 'tax',
+      dueDate: new Date().toISOString().slice(0, 10),
+      notes: 'Generated from AI Studio to track 1099 prep and filing readiness.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const taxReportingLink = {
+      id: `trl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      railNamespace: 'irs_reporting' as const,
+      counterpartyName: `${primaryEntity.displayName || primaryEntity.name} reporting queue`,
+      tinMatchStatus: 'not_checked' as const,
+      formType: '1099-MISC' as const,
+      filingChannel: 'IRIS' as const,
+      correctionStatus: 'none' as const,
+      status: 'draft' as const,
+      notes: 'Created from AI Studio 1099 filing prep flow for controlled review before filing.',
+    };
+
+    appendDocumentBundle({
+      document: {
+        ...document,
+        linkedTokenIds: [token.id],
+        linkedComplianceTagIds: [complianceTag.id],
+      },
+      tokens: [token],
+      complianceTags: [complianceTag],
+      taxReportingLinks: [taxReportingLink],
+    });
   };
 
   const launchIdentifierResearchPacket = () => {
@@ -282,10 +394,388 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
 `,
     });
 
+    appendDocument(document);
+  };
+
+  const launchOperatingResolution = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Operating Resolution`,
+      category: 'governing',
+      summary:
+        'Board, manager, or trustee operating resolution draft for banking authority, treasury control, and settlement approval posture.',
+      body: `# Operating Resolution\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\n\n## Resolution Topics\n- Treasury and reserve authority\n- Banking and settlement authority\n- Token and document control standards\n- Officer / trustee execution authority\n- Record retention and reporting cadence\n`,
+      templateKey: 'operating_agreement',
+    });
+
+    appendDocument(document);
+  };
+
+  const launchContractorPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Contractor Engagement Packet`,
+      category: 'contract',
+      summary:
+        'Independent contractor packet with scope, payment terms, 1099 posture, and onboarding checklist.',
+      body: `# Contractor Engagement Packet\n\nHiring Entity: ${primaryEntity.displayName || primaryEntity.name}\n\n## Included Drafts\n- Contractor agreement shell\n- Scope of work page\n- Payment and reimbursement terms\n- 1099 / tax collection checklist\n- File return and vault retention notes\n`,
+    });
+
+    appendDocument(document);
+  };
+
+  const launchW9CollectionPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} W-9 Collection Packet`,
+      category: 'tax',
+      summary:
+        'Payee tax-intake packet for W-9 collection, TIN review, and vendor reporting support.',
+      body: `# W-9 Collection Packet\n\nPayer: ${primaryEntity.displayName || primaryEntity.name}\n\n## Intake Steps\n- Request signed W-9 or equivalent taxpayer certification\n- Verify legal name and tax classification\n- Record TIN match result when available\n- Link retained form to vendor profile and 1099 queue\n`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} payee tax intake`,
+      category: 'tax',
+      notes: 'Collect and retain signed tax forms before 1099 filing or higher-risk vendor disbursement.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const taxReportingLink = {
+      id: `trl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      railNamespace: 'irs_reporting' as const,
+      counterpartyName: 'Pending payee tax intake',
+      tinMatchStatus: 'not_checked' as const,
+      formType: 'other' as const,
+      filingChannel: 'manual' as const,
+      correctionStatus: 'none' as const,
+      status: 'draft' as const,
+      notes: 'Created from W-9 collection packet to track payee tax intake and retained forms.',
+    };
+
+    appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+      taxReportingLinks: [taxReportingLink],
+    });
+  };
+
+  const launchDistributionMemo = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Distribution Review Memo`,
+      category: 'legal_memo',
+      summary:
+        'Trust or entity distribution review memo for authority, reserves, beneficiaries, and remittance support.',
+      body: `# Distribution Review Memo\n\nEntity or Trust: ${primaryEntity.displayName || primaryEntity.name}\n\n## Review Points\n- Governing document authority\n- Available reserve and treasury posture\n- Intended recipient / beneficiary\n- Tax and reporting treatment\n- Remittance statement and evidence support\n`,
+    });
+
+    appendDocument(document);
+  };
+
+  const launchSecuredNotePackage = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const stamp = Date.now();
+    const instrumentId = `ins-secured-${stamp}`;
+    const obligationId = `obl-secured-${stamp}`;
+    const documentId = `doc-secured-note-${stamp}`;
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'instrument',
+      subjectId: instrumentId,
+      label: 'Secured Note Package Verification Token',
+      proofReference: 'Issued automatically when a secured note package is drafted from the studio.',
+    });
+
+    const instrument: InstrumentRecord = {
+      id: instrumentId,
+      entityId: primaryEntity.id,
+      title: `Secured Note Draft ${new Date().toISOString().slice(0, 10)}`,
+      instrumentType: 'promissory_note',
+      issueDate: new Date().toISOString().slice(0, 10),
+      denominationValue: 25000,
+      paymentMedium: 'mixed_contractual_tender',
+      obligationType: 'secured_private_obligation',
+      performanceSecurityStatus: 'posted',
+      linkedDocumentIds: [documentId],
+      notes: 'Studio-generated secured note package for collateral-aware ledger setup.',
+    };
+
+    const obligation: ObligationRecord = {
+      id: obligationId,
+      entityId: primaryEntity.id,
+      title: `Secured Note Obligation ${new Date().toISOString().slice(0, 10)}`,
+      obligationType: 'secured_private_obligation',
+      amount: 25000,
+      paymentMedium: 'mixed_contractual_tender',
+      status: 'open',
+      linkedInstrumentIds: [instrumentId],
+      linkedDocumentIds: [documentId],
+      gainOrLossOnDischarge: 0,
+    };
+
+    const document: DocumentRecord = {
+      ...buildGeneratedDocument({
+        entityId: primaryEntity.id,
+        title: `Secured Note Collateral Packet ${new Date().toISOString().slice(0, 10)}`,
+        category: 'financial',
+        summary:
+          'Secured note packet with collateral schedule, performance terms, and verification support.',
+        body: `# Secured Note Package\n\nBorrower: ____________________\nLender: ${primaryEntity.displayName || primaryEntity.name}\nPrincipal: 25,000.00 USD\n\n## Collateral Schedule\n- Collateral description\n- Perfection or control support\n- Default and cure process\n- Treasury and remittance path\n`,
+      }),
+      id: documentId,
+      linkedInstrumentIds: [instrumentId],
+      linkedTokenIds: [token.id],
+    };
+
     setData((prev) => ({
       ...prev,
+      instruments: [instrument, ...prev.instruments],
+      obligations: [obligation, ...prev.obligations],
       documents: [document, ...prev.documents],
+      tokens: [token, ...prev.tokens],
     }));
+    focusDocument(document.id);
+  };
+
+  const launchSecurityAgreement = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Security Agreement Draft`,
+      category: 'contract',
+      summary:
+        'Security agreement draft for collateral description, remedies, and control documentation.',
+      body: `# Security Agreement Draft\n\nSecured Party: ${primaryEntity.displayName || primaryEntity.name}\nDebtor: ____________________\n\n## Core Sections\n- Collateral description and schedules\n- Rights in proceeds and substitutions\n- Default and remedies\n- Control or perfection support\n- Notice and cure requirements\n`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: 'Security Agreement Draft Token',
+      proofReference: 'Issued when a security agreement package is generated for controlled drafting.',
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedTokenIds: [token.id] },
+      tokens: [token],
+    });
+  };
+
+  const launchTreasuryControlMemo = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Treasury Control Memo`,
+      category: 'financial',
+      summary:
+        'Treasury control memo for reserve posture, release authority, remittance sequence, and settlement evidence.',
+      body: `# Treasury Control Memo
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Treasury Scope
+- Reserve account posture and liquidity lanes
+- Settlement release authority and compliance-confirm posture
+- Private-ledger discharge vs bank-rail discharge rules
+- Evidence retention for remittance, returns, and exception handling
+- Treasury-to-ERP posting checkpoints
+`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: 'Treasury Control Memo Token',
+      proofReference: 'Issued automatically when a treasury control memo is generated.',
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedTokenIds: [token.id] },
+      tokens: [token],
+    });
+  };
+
+  const launchBusinessBankingPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Business Banking Setup Packet`,
+      category: 'financial',
+      summary:
+        'Business banking onboarding packet for KYB support, treasury mapping, signer support, and account-opening evidence.',
+      templateKey: 'banking_setup',
+      body: `# Business Banking Setup Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Included Support
+- Entity profile and formation summary
+- Signer and authority record checklist
+- Treasury operating account request
+- Bank-feed and reconciliation setup plan
+- Required uploads and return path for the institution
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} banking onboarding review`,
+      category: 'reporting',
+      notes: 'Created from AI Studio to support business banking onboarding and retained packet workflow.',
+      linkedDocumentIds: [document.id],
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchPayrollOnboardingPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Payroll Onboarding Packet`,
+      category: 'financial',
+      summary:
+        'Payroll onboarding packet for employee intake, direct-deposit authorization, withholding, and record retention.',
+      body: `# Payroll Onboarding Packet
+
+Employer: ${primaryEntity.displayName || primaryEntity.name}
+
+## Included Drafts
+- Employee onboarding checklist
+- Direct deposit authorization request cover note
+- Withholding and tax intake checklist
+- Payroll record retention instructions
+- ERP setup and ledger mapping notes
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} payroll intake review`,
+      category: 'tax',
+      notes: 'Created from the payroll onboarding packet to track withholding and payroll intake readiness.',
+      linkedDocumentIds: [document.id],
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchBeneficialOwnershipPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Beneficial Ownership Packet`,
+      category: 'compliance',
+      summary:
+        'Ownership and control packet for banking, tax, and compliance onboarding with retained authority support.',
+      body: `# Beneficial Ownership Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Packet Checklist
+- Ownership and control persons
+- Signer authority mapping
+- Tax ID and jurisdiction support
+- Banking / treasury ownership attestations
+- Retained evidence for onboarding and compliance review
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} ownership and control review`,
+      category: 'authority',
+      notes: 'Generated from AI Studio to support beneficial ownership and authority review.',
+      linkedDocumentIds: [document.id],
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launch1031ExchangePacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} 1031 Exchange Planning Packet`,
+      category: 'tax',
+      summary:
+        '1031 exchange planning packet for relinquished property, replacement property, intermediary steps, and timing controls.',
+      body: `# 1031 Exchange Planning Packet
+
+Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Planning Sections
+- Relinquished property summary
+- Replacement property targets
+- Qualified intermediary coordination notes
+- Identification and closing timeline controls
+- Ledger and reserve impact review
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} 1031 exchange review`,
+      category: 'tax',
+      notes: 'Created from AI Studio to track 1031 exchange planning, document support, and timing controls.',
+      linkedDocumentIds: [document.id],
+    });
+
+    appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
   };
 
   const launchPromissoryNote = () => {
@@ -370,12 +860,14 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
         ...prev.journalEntries,
       ],
     }));
+    focusDocument(document.id);
   };
 
   const studioTools: Array<{
     title: string;
     subtitle: string;
     detail: string;
+    lane: 'entity' | 'trust' | 'ledger' | 'compliance' | 'operations';
     actionLabel: string;
     onAction: () => void;
   }> = [
@@ -383,27 +875,71 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       title: 'Business Docs Builder',
       subtitle: 'Packets for operating, vendor, and bank support',
       detail: 'Create a working draft packet for business-facing documents and operating controls.',
+      lane: 'entity',
       actionLabel: 'Create Packet',
       onAction: launchBusinessPacket,
+    },
+    {
+      title: 'Operating Resolution',
+      subtitle: 'Authority and treasury control language',
+      detail: 'Create an operating resolution draft for banking authority, settlement controls, and records policy.',
+      lane: 'entity',
+      actionLabel: 'Draft Resolution',
+      onAction: launchOperatingResolution,
     },
     {
       title: 'Trustee Support Desk',
       subtitle: 'Help for trustees and authority workflows',
       detail: 'Spin up a trustee guidance packet with duties, authority reminders, and next-action planning.',
+      lane: 'trust',
       actionLabel: 'Create Trustee Packet',
       onAction: launchTrusteePacket,
+    },
+    {
+      title: 'Distribution Review Memo',
+      subtitle: 'Trust and entity distribution review support',
+      detail: 'Create a memo for authority, reserve posture, beneficiary treatment, and remittance evidence.',
+      lane: 'trust',
+      actionLabel: 'Create Memo',
+      onAction: launchDistributionMemo,
     },
     {
       title: 'Purchase Agreement Draft',
       subtitle: 'Acquisition papering and transfer support',
       detail: 'Draft a purchase agreement shell for assets, contract rights, or operating acquisitions.',
+      lane: 'entity',
       actionLabel: 'Draft Agreement',
       onAction: launchPurchaseAgreement,
+    },
+    {
+      title: 'Contractor Engagement Packet',
+      subtitle: 'Onboarding plus 1099 posture support',
+      detail: 'Create a contractor packet with agreement, onboarding, payment terms, and reporting checklist.',
+      lane: 'operations',
+      actionLabel: 'Create Packet',
+      onAction: launchContractorPacket,
+    },
+    {
+      title: 'Business Banking Setup',
+      subtitle: 'Account-opening and treasury onboarding support',
+      detail: 'Create a banking setup packet that can feed entity onboarding, document uploads, and treasury mapping.',
+      lane: 'operations',
+      actionLabel: 'Create Banking Packet',
+      onAction: launchBusinessBankingPacket,
+    },
+    {
+      title: 'Payroll Onboarding Packet',
+      subtitle: 'Employee intake and deposit authorization support',
+      detail: 'Create a payroll onboarding packet that supports employee intake, direct-deposit requests, and withholding setup.',
+      lane: 'operations',
+      actionLabel: 'Create Payroll Packet',
+      onAction: launchPayrollOnboardingPacket,
     },
     {
       title: 'Trust Administration Packet',
       subtitle: 'Trustee minutes, beneficiary notes, and authority support',
       detail: 'Create a trustee-facing administration packet for decisions, distributions, and fiduciary recordkeeping.',
+      lane: 'trust',
       actionLabel: 'Create Packet',
       onAction: launchTrustAdministrationPacket,
     },
@@ -411,31 +947,135 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       title: 'Promissory Note Into Ledger',
       subtitle: 'Instrument, obligation, token, and journal draft in one move',
       detail: 'Create a note package that lands directly in instruments, obligations, documents, tokens, and journals.',
+      lane: 'ledger',
       actionLabel: 'Draft Note Package',
       onAction: launchPromissoryNote,
+    },
+    {
+      title: 'Secured Note Package',
+      subtitle: 'Collateral-aware note drafting into ledger',
+      detail: 'Create a secured note packet with collateral support, linked obligation, and verification token.',
+      lane: 'ledger',
+      actionLabel: 'Draft Secured Note',
+      onAction: launchSecuredNotePackage,
+    },
+    {
+      title: 'Security Agreement Draft',
+      subtitle: 'Collateral and remedies support',
+      detail: 'Create a security agreement draft with control, collateral, and default language support.',
+      lane: 'ledger',
+      actionLabel: 'Draft Agreement',
+      onAction: launchSecurityAgreement,
+    },
+    {
+      title: 'Treasury Control Memo',
+      subtitle: 'Reserve, release, and settlement operating posture',
+      detail: 'Generate a treasury control memo that maps reserve posture, release controls, and ERP settlement checkpoints.',
+      lane: 'ledger',
+      actionLabel: 'Create Memo',
+      onAction: launchTreasuryControlMemo,
     },
     {
       title: '1099 Filing Prep',
       subtitle: 'IRIS/FIRE readiness and filing packet support',
       detail: 'Assemble a filing-prep packet with payer review, payee readiness, and controlled evidence support.',
+      lane: 'compliance',
       actionLabel: 'Create 1099 Packet',
       onAction: launch1099PrepPacket,
+    },
+    {
+      title: 'W-9 Collection Packet',
+      subtitle: 'Tax intake and payee verification',
+      detail: 'Create a W-9 collection packet that also opens a linked tax-intake compliance item.',
+      lane: 'compliance',
+      actionLabel: 'Create Intake Packet',
+      onAction: launchW9CollectionPacket,
     },
     {
       title: 'Identifier Research Packet',
       subtitle: 'CUSIP-adjacent issuer and instrument lookup support',
       detail: 'Create a structured research packet for identifier mapping, issuer support, and document evidence.',
+      lane: 'compliance',
       actionLabel: 'Create Research Packet',
       onAction: launchIdentifierResearchPacket,
+    },
+    {
+      title: 'Beneficial Ownership Packet',
+      subtitle: 'Ownership, control, and authority support',
+      detail: 'Create an ownership and control packet for banking, tax, and authority onboarding workflows.',
+      lane: 'compliance',
+      actionLabel: 'Create Ownership Packet',
+      onAction: launchBeneficialOwnershipPacket,
+    },
+    {
+      title: '1031 Exchange Planning',
+      subtitle: 'Exchange timing, property, and intermediary controls',
+      detail: 'Create a 1031 planning packet for timeline controls, property support, and tax review routing.',
+      lane: 'compliance',
+      actionLabel: 'Create 1031 Packet',
+      onAction: launch1031ExchangePacket,
     },
     {
       title: 'Logo Creator Brief',
       subtitle: 'Entity branding direction for packets and invoices',
       detail: 'Create a branding brief so logo and visual identity work can stay tied to the entity profile.',
+      lane: 'entity',
       actionLabel: 'Create Brief',
       onAction: launchLogoBrief,
     },
   ];
+
+  const studioLanes: Array<{
+    key: 'entity' | 'trust' | 'ledger' | 'compliance' | 'operations';
+    title: string;
+    description: string;
+  }> = [
+    {
+      key: 'entity',
+      title: 'Entity Launchers',
+      description: 'Business formation, branding, operating resolutions, agreements, and onboarding packets.',
+    },
+    {
+      key: 'trust',
+      title: 'Trust & Fiduciary Tools',
+      description: 'Trustee support, administration packets, distribution memos, and authority-centered documents.',
+    },
+    {
+      key: 'ledger',
+      title: 'Ledger & Filing Tools',
+      description: 'Note drafting, secured obligations, tax filing prep, and identifier research tied back into records.',
+    },
+    {
+      key: 'compliance',
+      title: 'Compliance & Filing Tools',
+      description: 'Tax intake, 1099 preparation, identifier research, and controlled filing support.',
+    },
+    {
+      key: 'operations',
+      title: 'Operations & Banking Tools',
+      description: 'Payroll onboarding, banking setup, contractor intake, and operational packets that feed live desks.',
+    },
+  ];
+
+  const recentGeneratedDocuments = data.documents
+    .filter((document) => document.generatedBody || document.templateKey)
+    .slice(0, 5);
+
+  const resolveDocumentDesk = (document: DocumentRecord) => {
+    if (document.category === 'tax' || document.category === 'compliance' || document.linkedComplianceTagIds?.length) {
+      return { label: 'Open Compliance', hash: '#compliance' };
+    }
+
+    if (document.linkedInstrumentIds?.length || document.category === 'financial') {
+      return { label: 'Open Transactions', hash: '#transactions' };
+    }
+
+    if (document.category === 'authority_record' || document.category === 'governing') {
+      return { label: 'Open Entities', hash: '#entities' };
+    }
+
+    return { label: 'Open Documents', hash: `#documents:${document.id}` };
+  };
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -456,48 +1096,54 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
         <StatCard label="Workflows" value={data.aiWorkflows.length} />
         <StatCard label="Digital Asset Workflows" value={digitalCount} />
         <StatCard label="Compliance Workflows" value={complianceCount} />
+        <StatCard label="Legal / Trust Tools" value={laneCounts.legal} />
+        <StatCard label="Financial / Ledger Tools" value={laneCounts.financial} />
+        <StatCard label="Operations Tools" value={laneCounts.operations} />
         <StatCard label="Output Formats" value="DOCX / PDF / Markdown" />
       </div>
 
-      <PageSection
-        title="Execution Studio"
-        description="Launch useful resources directly into the operating system instead of starting from a blank page."
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 16,
-          }}
-        >
-          {studioTools.map((tool) => (
-            <WorkbenchRecordCard
-              key={tool.title}
-              title={tool.title}
-              subtitle={tool.subtitle}
-              actionSlot={
-                <button
-                  type="button"
-                  onClick={tool.onAction}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(126, 242, 255, 0.28)',
-                    background: 'rgba(54, 215, 255, 0.09)',
-                    color: '#effcff',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  {tool.actionLabel}
-                </button>
-              }
+      {studioLanes.map((lane) => (
+        <div key={lane.key}>
+          <PageSection title={lane.title} description={lane.description}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 16,
+              }}
             >
-              {tool.detail}
-            </WorkbenchRecordCard>
-          ))}
+              {studioTools
+                .filter((tool) => tool.lane === lane.key)
+                .map((tool) => (
+                  <WorkbenchRecordCard
+                    key={tool.title}
+                    title={tool.title}
+                    subtitle={tool.subtitle}
+                    actionSlot={
+                      <button
+                        type="button"
+                        onClick={tool.onAction}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(126, 242, 255, 0.28)',
+                          background: 'rgba(54, 215, 255, 0.09)',
+                          color: '#effcff',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {tool.actionLabel}
+                      </button>
+                    }
+                  >
+                    {tool.detail}
+                  </WorkbenchRecordCard>
+                ))}
+            </div>
+          </PageSection>
         </div>
-      </PageSection>
+      ))}
 
       <PageSection
         title="Research & Filing Library"
@@ -536,6 +1182,73 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
               {resource.detail}
             </WorkbenchRecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Recent Studio Outputs"
+        description="Jump back into the latest generated packets without hunting through the vault."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {recentGeneratedDocuments.length === 0 ? (
+            <WorkbenchRecordCard title="No generated outputs yet" subtitle="Launch a tool to begin">
+              Studio-generated packets will appear here for quick re-entry into the vault workflow.
+            </WorkbenchRecordCard>
+          ) : (
+            recentGeneratedDocuments.map((document) => (
+              <WorkbenchRecordCard
+                key={document.id}
+                title={document.title}
+                subtitle={`${document.category} | ${document.outputStatus || document.status} | ${document.date}`}
+                summaryItems={[
+                  {
+                    label: 'Entity',
+                    value:
+                      data.entities.find((entity) => entity.id === document.entityId)?.displayName ||
+                      document.entityId,
+                  },
+                  { label: 'Template', value: document.templateKey || 'custom' },
+                  { label: 'Tokens', value: document.linkedTokenIds?.length || 0 },
+                ]}
+                actionSlot={
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => focusDocument(document.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(96,165,250,0.4)',
+                        background: 'rgba(37,99,235,0.18)',
+                        color: '#e5e7eb',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Open in Vault
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => focusRoute(resolveDocumentDesk(document).hash)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(126, 242, 255, 0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {resolveDocumentDesk(document).label}
+                    </button>
+                  </div>
+                }
+              >
+                {document.summary || 'Generated output ready for review in the vault.'}
+              </WorkbenchRecordCard>
+            ))
+          )}
         </div>
       </PageSection>
 

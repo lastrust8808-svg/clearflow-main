@@ -10,6 +10,7 @@ import {
   authenticateLocalPassword,
   saveLocalAuthAppData,
   startLocalAuthChallenge,
+  upsertLocalBackupAccount,
   updateLocalAccountCredentials,
   verifyLocalAuthChallenge,
 } from '../services/localAuth.service';
@@ -76,6 +77,11 @@ interface AuthContextType {
   updateUser: (user: User) => void;
   updateEntities: (entities: Entity[]) => void;
   updateCoreDataSnapshot: (snapshot: CoreDataBundle) => void;
+  updateBackupAccess: (input: {
+    userHandle?: string;
+    password?: string;
+    preferredContactType?: 'email' | 'phone';
+  }) => Promise<{ success: boolean; error?: string }>;
   completeProfileSetup: (
     name: string,
     email?: string,
@@ -107,14 +113,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const env = (window as any).process?.env;
     if (!env) return false;
     const googleId = env.GOOGLE_CLIENT_ID;
-    const baseUrl = env.REACT_APP_API_BASE_URL;
     return (
       !!googleId && 
       googleId !== 'YOUR_GOOGLE_CLIENT_ID_HERE' && 
-      googleId !== '%VITE_GOOGLE_CLIENT_ID%' &&
-      !!baseUrl && 
-      baseUrl !== 'YOUR_NGROK_OR_SERVER_URL_HERE' &&
-      baseUrl !== '%VITE_API_BASE_URL%'
+      googleId !== '%VITE_GOOGLE_CLIENT_ID%'
     );
   });
   const [tokenClient, setTokenClient] = useState<any>(null);
@@ -175,7 +177,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSavingStatus('saving');
     if (state.apiAccessToken) {
       debouncedSave(state.apiAccessToken, state.appData);
-      return;
     }
 
     if (state.localAccountId) {
@@ -539,6 +540,73 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateBackupAccess = async (input: {
+    userHandle?: string;
+    password?: string;
+    preferredContactType?: 'email' | 'phone';
+  }) => {
+    if (!state.appData) {
+      return { success: false, error: 'No active user session was found.' };
+    }
+
+    const nextAppData: AppData = {
+      ...state.appData,
+      user: {
+        ...state.appData.user,
+        userHandle: input.userHandle?.trim() || state.appData.user.userHandle,
+      },
+    };
+
+    try {
+      if (state.localAccountId) {
+        await updateLocalAccountCredentials({
+          userId: state.localAccountId,
+          appData: nextAppData,
+          userHandle: input.userHandle,
+          password: input.password,
+        });
+        saveLocalAuthAppData(state.localAccountId, nextAppData);
+        void saveAccountAppData(state.localAccountId, nextAppData).catch((error) => {
+          console.warn('Failed to mirror backup access settings to durable storage.', error);
+        });
+        setState((current) => ({
+          ...current,
+          appData: nextAppData,
+        }));
+        return { success: true };
+      }
+
+      const backupAccountId = await upsertLocalBackupAccount({
+        appData: nextAppData,
+        preferredContactType: input.preferredContactType,
+        userHandle: input.userHandle,
+        password: input.password,
+      });
+
+      if (!backupAccountId) {
+        return {
+          success: false,
+          error: 'Add an email or phone number first so backup access has a contact path.',
+        };
+      }
+
+      setState((current) => ({
+        ...current,
+        appData: nextAppData,
+        localAccountId: backupAccountId,
+      }));
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Backup access could not be updated.',
+      };
+    }
+  };
+
   const completeProfileSetup = (
     name: string,
     email?: string,
@@ -567,9 +635,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (state.apiAccessToken) {
       // Real GSI flow with Drive persistence
       initialDataLoaded.current = true; // Mark as loaded to prevent immediate re-save
-      userDataService.saveUserData(state.apiAccessToken, finalAppData)
-        .then(() => {
-          setState(s => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
+      Promise.resolve(
+        userHandle?.trim() || password?.trim()
+          ? upsertLocalBackupAccount({
+              appData: finalAppData,
+              preferredContactType:
+                finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
+              userHandle,
+              password,
+            })
+          : null
+      )
+        .then((backupAccountId) =>
+          userDataService.saveUserData(state.apiAccessToken!, finalAppData).then(() => backupAccountId)
+        )
+        .then((backupAccountId) => {
+          setState((s) => ({
+            ...s,
+            appData: finalAppData,
+            localAccountId: backupAccountId || s.localAccountId,
+            status: 'pending-verification',
+          }));
         })
         .catch(err => {
           console.error("Failed to create user data file in Drive", err);
@@ -688,6 +774,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     updateUser,
     updateEntities,
     updateCoreDataSnapshot,
+    updateBackupAccess,
     completeProfileSetup,
     completeVerification,
     logout,

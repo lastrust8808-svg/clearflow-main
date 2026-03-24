@@ -1,5 +1,5 @@
 ﻿import type { Dispatch, SetStateAction } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import PageSection from '../ui/PageSection';
 import EntityProfileCard from '../entities/EntityProfileCard';
@@ -11,6 +11,12 @@ import StatCard from '../ui/StatCard';
 interface EntitiesPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
+}
+
+function goToHash(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
 }
 
 export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
@@ -25,6 +31,34 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
   const bankPackagesInFlight = data.bankAccounts.filter(
     (account) => account.onboardingStatus && account.onboardingStatus !== 'connected'
   ).length;
+
+  const resolveEntitySetupDocument = (entityId: string) =>
+    data.documents.find(
+      (document) =>
+        document.entityId === entityId &&
+        (document.templateKey === 'formation_packet' || document.category === 'authority_record'),
+    );
+
+  useEffect(() => {
+    const applyHash = () => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      if (window.location.hash === '#entities:new') {
+        setIsEntityModalOpen(true);
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}#entities`,
+        );
+      }
+    };
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -131,9 +165,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
             ],
           }));
           setIsEntityModalOpen(false);
-          if (typeof window !== 'undefined') {
-            window.location.hash = `documents:${documentId}`;
-          }
+          goToHash(`#documents:${documentId}`);
         }}
       />
       <div>
@@ -193,6 +225,70 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                   }))
                 }
               />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {resolveEntitySetupDocument(entity.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => goToHash(`#documents:${resolveEntitySetupDocument(entity.id)?.id}`)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(96,165,250,0.4)',
+                      background: 'rgba(37,99,235,0.18)',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Open Setup Packet
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => goToHash('#documents')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Documents
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goToHash('#accounting:dashboard')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Accounting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goToHash('#compliance')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Compliance
+                </button>
+              </div>
             </div>
           ))}
         </div>

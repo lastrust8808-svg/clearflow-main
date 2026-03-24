@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './runtimeConfig.service';
+
 type SettlementExecutionRail =
   | 'FedNow'
   | 'RTP'
@@ -69,12 +71,7 @@ interface ExecuteSettlementResponse {
   };
 }
 
-const ERP_API_BASE =
-  typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin.includes('localhost')
-      ? 'http://localhost:8000'
-      : window.location.origin
-    : 'http://localhost:8000';
+const ERP_API_BASE = getApiBaseUrl();
 
 function buildLocalId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

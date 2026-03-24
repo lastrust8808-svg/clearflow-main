@@ -115,6 +115,50 @@ function parseAccountingSubsectionHash(hashValue: string): AccountingSection | n
     : null;
 }
 
+type AccountingHashAction =
+  | 'new-customer'
+  | 'new-vendor'
+  | 'new-employee'
+  | 'new-invoice'
+  | 'new-payment'
+  | 'new-direct-deposit'
+  | 'new-journal'
+  | 'new-bill'
+  | 'new-receipt'
+  | 'new-presentment'
+  | 'new-quote'
+  | 'new-intercompany'
+  | 'new-bank-account'
+  | 'new-bank-transaction';
+
+function parseAccountingActionHash(hashValue: string): AccountingHashAction | null {
+  if (!hashValue.startsWith('#accounting:')) {
+    return null;
+  }
+
+  const normalized = hashValue.replace('#accounting:', '');
+  const actions: AccountingHashAction[] = [
+    'new-customer',
+    'new-vendor',
+    'new-employee',
+    'new-invoice',
+    'new-payment',
+    'new-direct-deposit',
+    'new-journal',
+    'new-bill',
+    'new-receipt',
+    'new-presentment',
+    'new-quote',
+    'new-intercompany',
+    'new-bank-account',
+    'new-bank-transaction',
+  ];
+
+  return actions.includes(normalized as AccountingHashAction)
+    ? (normalized as AccountingHashAction)
+    : null;
+}
+
 export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [activeSubsection, setActiveSubsection] =
     useState<AccountingSection>('dashboard');
@@ -136,6 +180,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     useState<'customer' | 'vendor' | null>(null);
   const [operationsNotice, setOperationsNotice] = useState('');
 
+  const navigateToHash = (hash: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.location.hash = hash;
+  };
+
   useEffect(() => {
     const applyHash = () => {
       const nextSubsection = parseAccountingSubsectionHash(window.location.hash);
@@ -143,6 +195,90 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         setActiveSubsection((previous) =>
           previous === nextSubsection ? previous : nextSubsection,
         );
+        return;
+      }
+
+      const nextAction = parseAccountingActionHash(window.location.hash);
+      if (!nextAction) {
+        return;
+      }
+
+      const replaceHash = (hash: string) => {
+        const nextUrl = `${window.location.pathname}${window.location.search}${hash}`;
+        window.history.replaceState(null, '', nextUrl);
+      };
+
+      switch (nextAction) {
+        case 'new-customer':
+          setCounterpartyModalMode('customer');
+          setActiveSubsection('customers');
+          replaceHash('#accounting:customers');
+          break;
+        case 'new-vendor':
+          setCounterpartyModalMode('vendor');
+          setActiveSubsection('vendors');
+          replaceHash('#accounting:vendors');
+          break;
+        case 'new-employee':
+          setIsEmployeeModalOpen(true);
+          setActiveSubsection('payroll');
+          replaceHash('#accounting:payroll');
+          break;
+        case 'new-invoice':
+          setIsInvoiceModalOpen(true);
+          setActiveSubsection('invoices');
+          replaceHash('#accounting:invoices');
+          break;
+        case 'new-payment':
+          setIsPaymentModalOpen(true);
+          setActiveSubsection('payments');
+          replaceHash('#accounting:payments');
+          break;
+        case 'new-direct-deposit':
+          setIsDirectDepositModalOpen(true);
+          setActiveSubsection('payroll');
+          replaceHash('#accounting:payroll');
+          break;
+        case 'new-journal':
+          setIsJournalModalOpen(true);
+          setActiveSubsection('journal');
+          replaceHash('#accounting:journal');
+          break;
+        case 'new-bill':
+          setIsBillModalOpen(true);
+          setActiveSubsection('bills');
+          replaceHash('#accounting:bills');
+          break;
+        case 'new-receipt':
+          setIsReceiptModalOpen(true);
+          setActiveSubsection('receipts');
+          replaceHash('#accounting:receipts');
+          break;
+        case 'new-presentment':
+          setIsCouponPresentmentModalOpen(true);
+          setActiveSubsection('presentments');
+          replaceHash('#accounting:presentments');
+          break;
+        case 'new-quote':
+          setIsQuoteModalOpen(true);
+          setActiveSubsection('quotes');
+          replaceHash('#accounting:quotes');
+          break;
+        case 'new-intercompany':
+          setIsIntercompanyModalOpen(true);
+          setActiveSubsection('intercompany');
+          replaceHash('#accounting:intercompany');
+          break;
+        case 'new-bank-account':
+          setIsManualBankAccountModalOpen(true);
+          setActiveSubsection('bankFeed');
+          replaceHash('#accounting:bankFeed');
+          break;
+        case 'new-bank-transaction':
+          setIsManualBankTransactionModalOpen(true);
+          setActiveSubsection('bankFeed');
+          replaceHash('#accounting:bankFeed');
+          break;
       }
     };
 
@@ -171,6 +307,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const treasuryAccounts = data.treasuryAccounts ?? [];
   const instrumentSettlements = data.instrumentSettlements ?? [];
   const obligations = data.obligations ?? [];
+  const complianceTags = data.complianceTags ?? [];
   const movementIdentifiers = data.movementIdentifiers ?? [];
   const returnEvents = data.returnEvents ?? [];
   const reclamationEvents = data.reclamationEvents ?? [];
@@ -5099,6 +5236,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             employees={employees}
             directDepositAuthorizations={directDepositAuthorizations}
             taxReportingLinks={taxReportingLinks}
+            documents={data.documents}
+            obligations={obligations}
+            complianceTags={complianceTags}
+            movementIdentifiers={movementIdentifiers}
+            returnEvents={returnEvents}
+            onNavigate={navigateToHash}
           />
         );
 

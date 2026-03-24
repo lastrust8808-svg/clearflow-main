@@ -8,6 +8,12 @@ interface ComplianceWorkbenchPageProps {
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
 
+function goToHash(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
+}
+
 const cardStyle = {
   display: 'grid',
   gap: 14,
@@ -107,6 +113,22 @@ export default function ComplianceWorkbenchPage({
     </div>
   );
 
+  const resolveComplianceAction = (item: CoreDataBundle['complianceTags'][number]) => {
+    if (item.linkedDocumentIds?.[0]) {
+      return { label: 'Open Packet', hash: `#documents:${item.linkedDocumentIds[0]}` };
+    }
+
+    if (item.category === 'tax' || item.category === 'reporting') {
+      return { label: 'Open Filing Desk', hash: '#compliance' };
+    }
+
+    if (item.category === 'authority' || item.category === 'entity') {
+      return { label: 'Open Entities', hash: '#entities' };
+    }
+
+    return { label: 'Open Compliance', hash: '#compliance' };
+  };
+
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div>
@@ -159,17 +181,13 @@ export default function ComplianceWorkbenchPage({
                         'Workspace-wide'}
                     </div>
                   </div>
-                  {item.linkedDocumentIds?.[0] ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.hash = `documents:${item.linkedDocumentIds?.[0]}`;
-                      }}
-                      style={chipStyle(false)}
-                    >
-                      Open Packet
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => goToHash(resolveComplianceAction(item).hash)}
+                    style={chipStyle(false)}
+                  >
+                    {resolveComplianceAction(item).label}
+                  </button>
                 </div>
 
                 {renderStatusActions(item.id, item.status)}
@@ -232,6 +250,16 @@ export default function ComplianceWorkbenchPage({
                   {data.entities.find((entity) => entity.id === item.entityId)?.displayName ||
                     'Workspace-wide'}
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => goToHash(resolveComplianceAction(item).hash)}
+                  style={chipStyle(false)}
+                >
+                  {resolveComplianceAction(item).label}
+                </button>
               </div>
 
               {renderStatusActions(item.id, item.status)}
@@ -387,6 +415,15 @@ export default function ComplianceWorkbenchPage({
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        goToHash(item.linkedPaymentId ? '#accounting:payments' : '#accounting:dashboard')
+                      }
+                      style={chipStyle(false)}
+                    >
+                      {item.linkedPaymentId ? 'Open Payment' : 'Open Accounting'}
+                    </button>
                     {(['draft', 'filed', 'accepted', 'corrected'] as const).map((status) => (
                       <button
                         key={status}

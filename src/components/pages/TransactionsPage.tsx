@@ -11,6 +11,12 @@ interface TransactionsPageProps {
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
 
+function goToHash(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
+}
+
 function statusPill(label: string, tone: 'blue' | 'teal' | 'gold' | 'rose') {
   const tones = {
     blue: {
@@ -101,6 +107,49 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
       flow.settlement?.status === 'exception'
   ).length;
 
+  const resolveSettlementAction = (flow: (typeof settlementFlows)[number]) => {
+    if (flow.transaction.linkedDocumentIds?.[0]) {
+      return {
+        label: 'Open Supporting Packet',
+        hash: `#documents:${flow.transaction.linkedDocumentIds[0]}`,
+      };
+    }
+
+    if (flow.settlement?.status === 'exception' || flow.derivedAutoReconcileStatus === 'exception') {
+      return { label: 'Open Accounting Payments', hash: '#accounting:payments' };
+    }
+
+    if (flow.reconciliation) {
+      return { label: 'Open Reconciliation', hash: '#accounting:reconciliation' };
+    }
+
+    return { label: 'Open Accounting', hash: '#accounting:dashboard' };
+  };
+
+  const resolveObligationAction = (obligation: CoreDataBundle['obligations'][number]) => {
+    if (obligation.linkedDocumentIds?.[0]) {
+      return { label: 'Open Packet', hash: `#documents:${obligation.linkedDocumentIds[0]}` };
+    }
+
+    if (obligation.recurringSchedule?.enabled) {
+      return { label: 'Open Recurring Desk', hash: '#accounting:recurring' };
+    }
+
+    return { label: 'Open Accounting', hash: '#accounting:dashboard' };
+  };
+
+  const resolveRemittanceAction = (record: CoreDataBundle['remittanceStatements'][number]) => {
+    if (record.linkedSettlementId) {
+      return { label: 'Open Payments', hash: '#accounting:payments' };
+    }
+
+    if (record.linkedInstrumentSettlementId) {
+      return { label: 'Open Instrument Desk', hash: '#transactions' };
+    }
+
+    return { label: 'Open Documents', hash: '#documents' };
+  };
+
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div>
@@ -145,6 +194,23 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               subtitle={`${flow.transaction.type} · ${flow.transaction.status} · ${flow.transaction.date}`}
             >
               <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => goToHash(resolveSettlementAction(flow).hash)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126,242,255,0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {resolveSettlementAction(flow).label}
+                  </button>
+                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {statusPill(
                     flow.settlement
@@ -306,6 +372,23 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               subtitle={`${obligation.obligationType} · ${obligation.status} · ${formatMoney(obligation.amount, 'USD')}`}
             >
               <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => goToHash(resolveObligationAction(obligation).hash)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126,242,255,0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {resolveObligationAction(obligation).label}
+                  </button>
+                </div>
                 <div>
                   <strong style={{ color: 'var(--cf-text)' }}>Payment medium:</strong>{' '}
                   {obligation.paymentMedium}
@@ -340,6 +423,23 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               subtitle={`${record.dischargeMethod} · ${record.status} · ${record.statementDate}`}
             >
               <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => goToHash(resolveRemittanceAction(record).hash)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126,242,255,0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {resolveRemittanceAction(record).label}
+                  </button>
+                </div>
                 <div>
                   <strong style={{ color: 'var(--cf-text)' }}>Payer / Payee:</strong>{' '}
                   {record.payerName} {'->'} {record.payeeName}

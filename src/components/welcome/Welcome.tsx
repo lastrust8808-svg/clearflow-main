@@ -54,8 +54,25 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onDevLogin,
   onStartOnboarding,
   renderGoogleButton,
+  pendingCredentialAuth,
+  onStartCredentialAuth,
+  onVerifyCredentialAuth,
+  onSignInWithPassword,
+  onCancelCredentialAuth,
 }) => {
   const [entryView, setEntryView] = useState<'landing' | 'signin'>(initialView);
+  const [backupMode, setBackupMode] = useState<'password' | 'code'>('password');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
+  const [passwordIdentifier, setPasswordIdentifier] = useState('');
+  const [passwordValue, setPasswordValue] = useState('');
+  const [contactType, setContactType] = useState<LocalAuthContactType>('email');
+  const [contactValue, setContactValue] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [backupUserId, setBackupUserId] = useState('');
+  const [backupPassword, setBackupPassword] = useState('');
   const canUseDevAccess =
     typeof window !== 'undefined' &&
     ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -65,6 +82,96 @@ export const Welcome: React.FC<WelcomeProps> = ({
       renderGoogleButton('google-btn-container');
     }
   }, [entryView, isConfigured, renderGoogleButton]);
+
+  const handlePasswordSignIn = async () => {
+    if (!onSignInWithPassword) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsWorking(true);
+
+    try {
+      const result = await onSignInWithPassword({
+        identifier: passwordIdentifier,
+        password: passwordValue,
+      });
+
+      if (!result.success) {
+        setErrorMessage(result.error || 'Unable to sign in with backup password.');
+        return;
+      }
+
+      setStatusMessage('Backup sign-in accepted. Restoring workspace...');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const handleRequestCode = async () => {
+    if (!onStartCredentialAuth) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsWorking(true);
+
+    try {
+      const result = await onStartCredentialAuth({
+        contactType,
+        contactValue,
+        name: displayName || undefined,
+      });
+
+      if (!result.success) {
+        setErrorMessage(result.error || 'Unable to send a verification code.');
+        return;
+      }
+
+      setStatusMessage('Verification code sent. Enter it below to continue.');
+      setVerificationCode('');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!onVerifyCredentialAuth) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsWorking(true);
+
+    try {
+      const result = await onVerifyCredentialAuth({
+        code: verificationCode,
+        userHandle: backupUserId || undefined,
+        password: backupPassword || undefined,
+      });
+
+      if (!result.success) {
+        setErrorMessage(result.error || 'Unable to verify that code.');
+        return;
+      }
+
+      setStatusMessage('Verification accepted. Continuing into your workspace...');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const resetBackupState = () => {
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setVerificationCode('');
+    setBackupUserId('');
+    setBackupPassword('');
+    onCancelCredentialAuth?.();
+  };
 
   return (
     <div
@@ -409,8 +516,417 @@ export const Welcome: React.FC<WelcomeProps> = ({
                       lineHeight: 1.6,
                     }}
                   >
-                    Google sign-in is not configured yet in this environment, so dev login is still
-                    available for local build work.
+                    Google sign-in is not configured in this environment yet. Backup access below
+                    is still available so members can keep using the app.
+                  </div>
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 14,
+                  padding: 18,
+                  borderRadius: 22,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div style={{ fontSize: 18, fontWeight: 800 }}>Backup Access</div>
+                <div style={{ color: '#c5d7e3', lineHeight: 1.7 }}>
+                  Use a backup password, or request a verification code by email or phone if you
+                  need an alternate way in.
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'password' as const, label: 'Password Sign In' },
+                    { id: 'code' as const, label: 'Verification Code' },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setBackupMode(option.id);
+                        setErrorMessage(null);
+                        setStatusMessage(null);
+                      }}
+                      style={{
+                        minHeight: 40,
+                        padding: '0 14px',
+                        borderRadius: 12,
+                        border:
+                          backupMode === option.id
+                            ? '1px solid rgba(126, 242, 255, 0.34)'
+                            : '1px solid rgba(255,255,255,0.12)',
+                        background:
+                          backupMode === option.id
+                            ? 'rgba(54, 215, 255, 0.12)'
+                            : 'rgba(255,255,255,0.04)',
+                        color: '#eff6fb',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {backupMode === 'password' ? (
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    <div>
+                      <label
+                        htmlFor="backup-identifier"
+                        style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                      >
+                        Email, phone, or user ID
+                      </label>
+                      <input
+                        id="backup-identifier"
+                        value={passwordIdentifier}
+                        onChange={(event) => setPasswordIdentifier(event.target.value)}
+                        placeholder="member@email.com, +15551234567, or your.userid"
+                        style={{
+                          width: '100%',
+                          minHeight: 46,
+                          borderRadius: 14,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(7, 10, 22, 0.62)',
+                          color: '#fff',
+                          padding: '0 14px',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="backup-password"
+                        style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                      >
+                        Backup password
+                      </label>
+                      <input
+                        id="backup-password"
+                        type="password"
+                        value={passwordValue}
+                        onChange={(event) => setPasswordValue(event.target.value)}
+                        placeholder="Enter your backup password"
+                        style={{
+                          width: '100%',
+                          minHeight: 46,
+                          borderRadius: 14,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(7, 10, 22, 0.62)',
+                          color: '#fff',
+                          padding: '0 14px',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!passwordIdentifier.trim() || !passwordValue.trim() || isWorking}
+                      onClick={handlePasswordSignIn}
+                      style={{
+                        minHeight: 46,
+                        borderRadius: 16,
+                        border: '1px solid rgba(126, 242, 255, 0.24)',
+                        background:
+                          'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                        color: '#fff',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        opacity:
+                          !passwordIdentifier.trim() || !passwordValue.trim() || isWorking ? 0.6 : 1,
+                      }}
+                    >
+                      {isWorking ? 'Signing In...' : 'Sign In with Backup Password'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {(['email', 'phone'] as const).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setContactType(option)}
+                          style={{
+                            minHeight: 40,
+                            padding: '0 14px',
+                            borderRadius: 12,
+                            border:
+                              contactType === option
+                                ? '1px solid rgba(126, 242, 255, 0.34)'
+                                : '1px solid rgba(255,255,255,0.12)',
+                            background:
+                              contactType === option
+                                ? 'rgba(54, 215, 255, 0.12)'
+                                : 'rgba(255,255,255,0.04)',
+                            color: '#eff6fb',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {option === 'email' ? 'Email Code' : 'Phone Code'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {!pendingCredentialAuth ? (
+                      <>
+                        <div>
+                          <label
+                            htmlFor="backup-contact"
+                            style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                          >
+                            {contactType === 'email' ? 'Email address' : 'Phone number'}
+                          </label>
+                          <input
+                            id="backup-contact"
+                            value={contactValue}
+                            onChange={(event) => setContactValue(event.target.value)}
+                            placeholder={
+                              contactType === 'email' ? 'member@email.com' : '+1 555 123 4567'
+                            }
+                            style={{
+                              width: '100%',
+                              minHeight: 46,
+                              borderRadius: 14,
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              background: 'rgba(7, 10, 22, 0.62)',
+                              color: '#fff',
+                              padding: '0 14px',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="backup-display-name"
+                            style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                          >
+                            Name if this is your first backup sign-in
+                          </label>
+                          <input
+                            id="backup-display-name"
+                            value={displayName}
+                            onChange={(event) => setDisplayName(event.target.value)}
+                            placeholder="Optional for existing members"
+                            style={{
+                              width: '100%',
+                              minHeight: 46,
+                              borderRadius: 14,
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              background: 'rgba(7, 10, 22, 0.62)',
+                              color: '#fff',
+                              padding: '0 14px',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!contactValue.trim() || isWorking}
+                          onClick={handleRequestCode}
+                          style={{
+                            minHeight: 46,
+                            borderRadius: 16,
+                            border: '1px solid rgba(126, 242, 255, 0.24)',
+                            background:
+                              'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                            color: '#fff',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            fontSize: 14,
+                            opacity: !contactValue.trim() || isWorking ? 0.6 : 1,
+                          }}
+                        >
+                          {isWorking ? 'Sending Code...' : 'Send Verification Code'}
+                        </button>
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 12,
+                          padding: 16,
+                          borderRadius: 18,
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(126, 242, 255, 0.16)',
+                        }}
+                      >
+                        <div style={{ color: '#dff7fb', lineHeight: 1.7 }}>
+                          Code requested for <strong>{pendingCredentialAuth.maskedTarget}</strong>.
+                          {pendingCredentialAuth.deliveryMessage ? (
+                            <div style={{ marginTop: 6 }}>{pendingCredentialAuth.deliveryMessage}</div>
+                          ) : null}
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="verification-code"
+                            style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                          >
+                            Verification code
+                          </label>
+                          <input
+                            id="verification-code"
+                            value={verificationCode}
+                            onChange={(event) => setVerificationCode(event.target.value)}
+                            placeholder="6-digit code"
+                            style={{
+                              width: '100%',
+                              minHeight: 46,
+                              borderRadius: 14,
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              background: 'rgba(7, 10, 22, 0.62)',
+                              color: '#fff',
+                              padding: '0 14px',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        </div>
+                        {!pendingCredentialAuth.isExistingUser ? (
+                          <>
+                            <div>
+                              <label
+                                htmlFor="backup-user-id"
+                                style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                              >
+                                Backup user ID
+                              </label>
+                              <input
+                                id="backup-user-id"
+                                value={backupUserId}
+                                onChange={(event) => setBackupUserId(event.target.value)}
+                                placeholder="your.userid"
+                                style={{
+                                  width: '100%',
+                                  minHeight: 46,
+                                  borderRadius: 14,
+                                  border: '1px solid rgba(255,255,255,0.12)',
+                                  background: 'rgba(7, 10, 22, 0.62)',
+                                  color: '#fff',
+                                  padding: '0 14px',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label
+                                htmlFor="backup-user-password"
+                                style={{ display: 'block', marginBottom: 6, color: '#d9e7ef', fontSize: 14 }}
+                              >
+                                Backup password
+                              </label>
+                              <input
+                                id="backup-user-password"
+                                type="password"
+                                value={backupPassword}
+                                onChange={(event) => setBackupPassword(event.target.value)}
+                                placeholder="Create a backup password"
+                                style={{
+                                  width: '100%',
+                                  minHeight: 46,
+                                  borderRadius: 14,
+                                  border: '1px solid rgba(255,255,255,0.12)',
+                                  background: 'rgba(7, 10, 22, 0.62)',
+                                  color: '#fff',
+                                  padding: '0 14px',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                        {pendingCredentialAuth.deliveryMode === 'in_app_preview' &&
+                        pendingCredentialAuth.codePreview ? (
+                          <div
+                            style={{
+                              borderRadius: 14,
+                              padding: 14,
+                              background: 'rgba(15, 118, 110, 0.18)',
+                              border: '1px solid rgba(45, 212, 191, 0.2)',
+                              color: '#d5fbf4',
+                              lineHeight: 1.6,
+                            }}
+                          >
+                            Preview code: <strong>{pendingCredentialAuth.codePreview}</strong>
+                          </div>
+                        ) : null}
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            disabled={!verificationCode.trim() || isWorking}
+                            onClick={handleVerifyCode}
+                            style={{
+                              minHeight: 46,
+                              padding: '0 16px',
+                              borderRadius: 16,
+                              border: '1px solid rgba(126, 242, 255, 0.24)',
+                              background:
+                                'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                              color: '#fff',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: 14,
+                              opacity: !verificationCode.trim() || isWorking ? 0.6 : 1,
+                            }}
+                          >
+                            {isWorking ? 'Verifying...' : 'Verify and Continue'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetBackupState}
+                            style={{
+                              minHeight: 46,
+                              padding: '0 16px',
+                              borderRadius: 16,
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              background: 'rgba(255,255,255,0.04)',
+                              color: '#eff6fb',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              fontSize: 14,
+                            }}
+                          >
+                            Start Over
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {errorMessage ? (
+                  <div
+                    style={{
+                      borderRadius: 14,
+                      padding: 14,
+                      background: 'rgba(127, 29, 29, 0.24)',
+                      border: '1px solid rgba(248, 113, 113, 0.24)',
+                      color: '#fee2e2',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {errorMessage}
+                  </div>
+                ) : null}
+
+                {statusMessage ? (
+                  <div
+                    style={{
+                      borderRadius: 14,
+                      padding: 14,
+                      background: 'rgba(15, 118, 110, 0.18)',
+                      border: '1px solid rgba(45, 212, 191, 0.2)',
+                      color: '#d5fbf4',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {statusMessage}
                   </div>
                 ) : null}
               </div>

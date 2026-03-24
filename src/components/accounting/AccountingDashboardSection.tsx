@@ -1,10 +1,15 @@
 import type {
   BillRecord,
+  ComplianceTagRecord,
   DirectDepositAuthorizationRecord,
+  DocumentRecord,
   EmployeeRecord,
   ExpenseRecord,
+  MovementIdentifierRecord,
+  ObligationRecord,
   PaymentRecord,
   ReceiptRecord,
+  ReturnEventRecord,
   TaxReportingLinkRecord,
 } from '../../types/core';
 import PageSection from '../ui/PageSection';
@@ -21,6 +26,12 @@ interface AccountingDashboardSectionProps {
   employees: EmployeeRecord[];
   directDepositAuthorizations: DirectDepositAuthorizationRecord[];
   taxReportingLinks: TaxReportingLinkRecord[];
+  documents: DocumentRecord[];
+  obligations: ObligationRecord[];
+  complianceTags: ComplianceTagRecord[];
+  movementIdentifiers: MovementIdentifierRecord[];
+  returnEvents: ReturnEventRecord[];
+  onNavigate?: (hash: string) => void;
 }
 
 export default function AccountingDashboardSection({
@@ -33,6 +44,12 @@ export default function AccountingDashboardSection({
   employees,
   directDepositAuthorizations,
   taxReportingLinks,
+  documents,
+  obligations,
+  complianceTags,
+  movementIdentifiers,
+  returnEvents,
+  onNavigate,
 }: AccountingDashboardSectionProps) {
   const incomingReceiptsTotal = payments
     .filter((payment) => payment.direction === 'incoming')
@@ -62,6 +79,73 @@ export default function AccountingDashboardSection({
   const activeDirectDepositForms = directDepositAuthorizations.filter(
     (item) => item.status === 'returned' || item.status === 'verified'
   ).length;
+  const formatDate = (value?: string) => (value ? value : 'No date');
+  const actionButtonStyle = {
+    padding: '9px 12px',
+    borderRadius: 10,
+    border: '1px solid rgba(96,165,250,0.4)',
+    background: 'rgba(8,47,73,0.72)',
+    color: '#e0f2fe',
+    cursor: 'pointer',
+    fontWeight: 600,
+  } as const;
+  const infoCardStyle = {
+    border: '1px solid rgba(148,163,184,0.2)',
+    borderRadius: 12,
+    padding: 14,
+    background: 'rgba(15,23,42,0.45)',
+    color: '#e5e7eb',
+  } as const;
+  const navigate = (hash: string) => {
+    if (onNavigate) {
+      onNavigate(hash);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.hash = hash;
+    }
+  };
+  const filingQueue = taxReportingLinks.filter(
+    (link) =>
+      link.status !== 'accepted' ||
+      link.correctionStatus === 'pending' ||
+      link.tinMatchStatus === 'pending' ||
+      link.tinMatchStatus === 'mismatch'
+  );
+  const recurringObligations = obligations
+    .filter((obligation) => obligation.status === 'open' && obligation.recurringSchedule?.enabled)
+    .sort((left, right) =>
+      (left.recurringSchedule?.nextDueDate || '9999-12-31').localeCompare(
+        right.recurringSchedule?.nextDueDate || '9999-12-31'
+      )
+    );
+  const railIssues = [
+    ...returnEvents.filter((event) => event.status !== 'resolved'),
+    ...movementIdentifiers.filter(
+      (record) => record.status === 'returned' || record.status === 'draft'
+    ),
+  ].slice(0, 5);
+  const recentAccountingDocuments = [...documents]
+    .filter(
+      (document) =>
+        document.category === 'financial' ||
+        document.linkedComplianceTagIds?.length ||
+        document.sourceRecordType === 'bill' ||
+        document.sourceRecordType === 'receipt' ||
+        document.sourceRecordType === 'coupon_presentment' ||
+        document.sourceRecordType === 'direct_deposit_request'
+    )
+    .sort((left, right) => (right.date || '').localeCompare(left.date || ''))
+    .slice(0, 5);
+  const highPriorityComplianceItems = complianceTags
+    .filter(
+      (tag) =>
+        tag.status !== 'ok' &&
+        (tag.category === 'tax' || tag.category === 'reporting' || tag.category === 'risk')
+    )
+    .sort((left, right) => (left.dueDate || '9999-12-31').localeCompare(right.dueDate || '9999-12-31'))
+    .slice(0, 4);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -90,15 +174,284 @@ export default function AccountingDashboardSection({
         title="Accounting Overview"
         description="Top-level ERP accounting status, intake actions, and workflow routing."
       >
-        <div style={{ display: 'grid', gap: 12, color: '#d1d5db', lineHeight: 1.7 }}>
-          <div>
-            Use the action bar above to create invoices, journal entries, bills, receipts, and
-            quotes.
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 12, color: '#d1d5db', lineHeight: 1.7 }}>
+            <div>
+              Use the action bar above to create invoices, journal entries, bills, receipts, and
+              quotes.
+            </div>
+            <div>
+              Use the tabs to move into detailed ERP work areas for customers, vendors, payables,
+              receivables, and reconciliation.
+            </div>
           </div>
-          <div>
-            Use the tabs to move into detailed ERP work areas for customers, vendors, payables,
-            receivables, and reconciliation.
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:payments')}>
+              Open Payments Desk
+            </button>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:recurring')}>
+              Open Recurring Desk
+            </button>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:payroll')}>
+              Open Payroll
+            </button>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:railOps')}>
+              Open Rails & Codes
+            </button>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#compliance')}>
+              Open Compliance
+            </button>
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#documents')}>
+              Open Vault
+            </button>
           </div>
+        </div>
+      </PageSection>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 16,
+        }}
+      >
+        <PageSection
+          title="Filing Review Queue"
+          description="Tax reporting links that still need match, filing, or correction work."
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            {filingQueue.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>No filing items need review right now.</div>
+            ) : (
+              filingQueue.slice(0, 5).map((item) => (
+                <div key={item.id} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700 }}>{item.counterpartyName}</div>
+                  <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                    {item.formType || 'Reporting link'} | {item.status} | TIN {item.tinMatchStatus}
+                  </div>
+                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                    Filing channel: {item.filingChannel || 'Not set'} | Correction:{' '}
+                    {item.correctionStatus}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#compliance')}
+                    >
+                      Open Filing Desk
+                    </button>
+                    {item.linkedPaymentId ? (
+                      <button
+                        type="button"
+                        style={actionButtonStyle}
+                        onClick={() => navigate('#accounting:payments')}
+                      >
+                        Open Payment
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </PageSection>
+
+        <PageSection
+          title="Recurring Obligation Watch"
+          description="Open recurring obligations that are due next and ready for presentment or review."
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            {recurringObligations.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>No recurring obligations are scheduled right now.</div>
+            ) : (
+              recurringObligations.slice(0, 5).map((obligation) => (
+                <div key={obligation.id} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700 }}>{obligation.title}</div>
+                  <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                    {obligation.obligationType} | ${obligation.amount.toLocaleString()} | next due{' '}
+                    {formatDate(obligation.recurringSchedule?.nextDueDate)}
+                  </div>
+                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                    Auto presentment:{' '}
+                    {obligation.recurringSchedule?.autoCreatePresentment ? 'enabled' : 'off'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#accounting:recurring')}
+                    >
+                      Open Recurring Desk
+                    </button>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#transactions')}
+                    >
+                      Open Transactions
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </PageSection>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 16,
+        }}
+      >
+        <PageSection
+          title="Rails & Return Issues"
+          description="Movement identifiers and unresolved return events that still need attention."
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            {railIssues.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>No rail exceptions are open right now.</div>
+            ) : (
+              railIssues.map((issue) => (
+                <div key={issue.id} style={infoCardStyle}>
+                  {'code' in issue ? (
+                    <>
+                      <div style={{ fontWeight: 700 }}>
+                        {issue.code} - {issue.reason}
+                      </div>
+                      <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                        {issue.railNamespace} | {issue.status} | correction {issue.correctionStatus}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontWeight: 700 }}>{issue.primaryIdentifier}</div>
+                      <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                        {issue.railNamespace} | {issue.movementType} | {issue.status}
+                      </div>
+                    </>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#accounting:railOps')}
+                    >
+                      Open Rails & Codes
+                    </button>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#accounting:reconciliation')}
+                    >
+                      Open Reconciliation
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </PageSection>
+
+        <PageSection
+          title="Recent Accounting Outputs"
+          description="Newest vault packets and accounting-linked records ready for the next step."
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            {recentAccountingDocuments.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>No recent accounting packets or uploads yet.</div>
+            ) : (
+              recentAccountingDocuments.map((document) => (
+                <div key={document.id} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700 }}>{document.title}</div>
+                  <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                    {document.category} | {document.status} | {formatDate(document.date)}
+                  </div>
+                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                    {document.summary || 'Accounting-linked vault output ready for workflow follow-up.'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate(`#documents:${document.id}`)}
+                    >
+                      Open Packet
+                    </button>
+                    {document.linkedComplianceTagIds?.length ? (
+                      <button
+                        type="button"
+                        style={actionButtonStyle}
+                        onClick={() => navigate('#compliance')}
+                      >
+                        Open Compliance
+                      </button>
+                    ) : document.linkedInstrumentIds?.length ? (
+                      <button
+                        type="button"
+                        style={actionButtonStyle}
+                        onClick={() => navigate('#transactions')}
+                      >
+                        Open Transactions
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        style={actionButtonStyle}
+                        onClick={() => navigate('#documents')}
+                      >
+                        Open Vault
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </PageSection>
+      </div>
+
+      <PageSection
+        title="Accounting Risk & Compliance Signals"
+        description="Priority tax, reporting, and risk tags already linked into the ERP workflow."
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          {highPriorityComplianceItems.length === 0 ? (
+            <div style={{ color: '#d1d5db' }}>No high-priority accounting compliance tags need attention.</div>
+          ) : (
+            highPriorityComplianceItems.map((tag) => (
+              <div key={tag.id} style={infoCardStyle}>
+                <div style={{ fontWeight: 700 }}>{tag.label}</div>
+                <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                  {tag.category} | {tag.status} | due {formatDate(tag.dueDate)}
+                </div>
+                <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                  {tag.notes || 'Linked accounting compliance control.'}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => navigate('#compliance')}
+                  >
+                    Open Compliance
+                  </button>
+                  {tag.linkedDocumentIds?.[0] ? (
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate(`#documents:${tag.linkedDocumentIds[0]}`)}
+                    >
+                      Open Packet
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </PageSection>
 

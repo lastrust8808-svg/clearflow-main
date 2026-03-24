@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { downloadDocumentFile, saveDocumentFile } from '../../services/documentVault.service';
@@ -12,16 +12,70 @@ interface DocumentsPageProps {
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
 
+function goToHash(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
+}
+
 export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const focusedDocumentId =
-    typeof window !== 'undefined' && window.location.hash.startsWith('#documents:')
-      ? window.location.hash.replace('#documents:', '')
-      : null;
+  const [focusedDocumentId, setFocusedDocumentId] = useState<string | null>(null);
   const finalCount = data.documents.filter((item) => item.status === 'final').length;
   const draftCount = data.documents.filter((item) => item.status === 'draft').length;
   const verifiedTokenCount = data.tokens.filter((item) => item.status === 'verified').length;
+
+  useEffect(() => {
+    const applyHash = () => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      if (window.location.hash === '#documents:upload') {
+        setIsUploadModalOpen(true);
+        setFocusedDocumentId(null);
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}#documents`,
+        );
+        return;
+      }
+
+      if (window.location.hash.startsWith('#documents:')) {
+        const targetId = window.location.hash.replace('#documents:', '');
+        setFocusedDocumentId(targetId || null);
+        return;
+      }
+
+      setFocusedDocumentId(null);
+    };
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
+  const resolveDocumentAction = (doc: CoreDataBundle['documents'][number]) => {
+    if (doc.linkedComplianceTagIds?.length || doc.category === 'tax' || doc.category === 'compliance') {
+      return { label: 'Open Compliance', hash: '#compliance' };
+    }
+
+    if (doc.linkedInstrumentIds?.length || doc.category === 'financial' || doc.category === 'contract') {
+      return { label: 'Open Transactions', hash: '#transactions' };
+    }
+
+    if (doc.linkedAuthorityRecordIds?.length || doc.category === 'authority_record' || doc.category === 'governing') {
+      return { label: 'Open Entities', hash: '#entities' };
+    }
+
+    if (doc.sourceRecordType === 'bill' || doc.sourceRecordType === 'receipt') {
+      return { label: 'Open Accounting', hash: '#accounting:dashboard' };
+    }
+
+    return { label: 'Open Documents', hash: `#documents:${doc.id}` };
+  };
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -60,9 +114,7 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
             ],
           }));
           setIsUploadModalOpen(false);
-          if (typeof window !== 'undefined') {
-            window.location.hash = `documents:doc-upload-${stamp}`;
-          }
+          goToHash(`#documents:doc-upload-${stamp}`);
         }}
       />
       <div>
@@ -148,6 +200,21 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                       {downloadingId === doc.id ? 'Opening...' : 'Open File'}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => goToHash(resolveDocumentAction(doc).hash)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126,242,255,0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {resolveDocumentAction(doc).label}
+                  </button>
                 </div>
               }
             >

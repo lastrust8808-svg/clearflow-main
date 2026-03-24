@@ -1,11 +1,7 @@
 import type { AppData } from '../types/app.models';
+import { getApiBaseUrl } from './runtimeConfig.service';
 
-const STORAGE_API_BASE =
-  typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin.includes('localhost')
-      ? 'http://localhost:8000'
-      : window.location.origin
-    : 'http://localhost:8000';
+const STORAGE_API_BASE = getApiBaseUrl();
 
 interface RemoteDocumentFilePayload {
   fileName: string;

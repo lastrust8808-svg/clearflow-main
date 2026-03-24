@@ -7,9 +7,9 @@ import AppShell from '../components/layout/AppShell';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
-import OverviewPage from '../components/pages/OverviewPage';
-import EntitiesPage from '../components/pages/EntitiesPage';
-import AccountingPage from '../components/pages/AccountingPage';
+const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
+const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
+const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
 const LedgerPage = lazy(() => import('../components/pages/LedgerPage'));
 const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
 const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
@@ -364,6 +364,15 @@ function WorkspaceSectionLoading({ title }: { title: string }) {
 
 function preloadWorkspaceSection(section: AppSection) {
   switch (section) {
+    case 'overview':
+      void import('../components/pages/OverviewPage');
+      break;
+    case 'accounting':
+      void import('../components/pages/AccountingPage');
+      break;
+    case 'entities':
+      void import('../components/pages/EntitiesPage');
+      break;
     case 'ledger':
       void import('../components/pages/LedgerPage');
       break;

@@ -410,6 +410,78 @@ export async function updateLocalAccountCredentials(input: {
   saveAccounts(nextAccounts);
 }
 
+export async function upsertLocalBackupAccount(input: {
+  appData: AppData;
+  preferredContactType?: LocalAuthContactType;
+  userHandle?: string;
+  password?: string;
+}) {
+  const email = input.appData.user.email ? normalizeEmail(input.appData.user.email) : '';
+  const phone = input.appData.user.phone ? normalizePhone(input.appData.user.phone) : '';
+  const contactType: LocalAuthContactType | null =
+    input.preferredContactType === 'phone' && phone
+      ? 'phone'
+      : input.preferredContactType === 'email' && email
+        ? 'email'
+        : email
+          ? 'email'
+          : phone
+            ? 'phone'
+            : null;
+
+  if (!contactType) {
+    return null;
+  }
+
+  const contactValue = contactType === 'email' ? email : phone;
+  const accounts = loadAccounts();
+  const existingAccount = findAccount(accounts, contactType, contactValue);
+  const userId = existingAccount?.userId || input.appData.user.id || crypto.randomUUID();
+  const desiredHandle = input.userHandle?.trim()
+    ? ensureUniqueHandle(accounts, input.userHandle, userId)
+    : existingAccount?.userHandle || inferHandleFromUser(input.appData.user);
+  const passwordHash = input.password?.trim()
+    ? await hashPassword(input.password.trim())
+    : existingAccount?.passwordHash;
+
+  const nextAppData: AppData = {
+    ...input.appData,
+    user: {
+      ...input.appData.user,
+      userHandle: desiredHandle || input.appData.user.userHandle,
+      email: input.appData.user.email || (contactType === 'email' ? contactValue : undefined),
+      phone: input.appData.user.phone || (contactType === 'phone' ? contactValue : undefined),
+      primaryContactType: input.appData.user.primaryContactType || contactType,
+    },
+  };
+
+  if (existingAccount) {
+    const nextAccounts = accounts.map((account) =>
+      account.userId === existingAccount.userId
+        ? {
+            ...account,
+            userHandle: desiredHandle || account.userHandle,
+            passwordHash,
+            appData: nextAppData,
+          }
+        : account
+    );
+    saveAccounts(nextAccounts);
+    return existingAccount.userId;
+  }
+
+  accounts.unshift({
+    userId,
+    contactType,
+    contactValue,
+    userHandle: desiredHandle || undefined,
+    passwordHash,
+    appData: nextAppData,
+  });
+  saveAccounts(accounts);
+  return userId;
+}
+
 export function saveLocalAuthAppData(userId: string, appData: AppData) {
   const accounts = loadAccounts();
   const nextAccounts = accounts.map((account) =>

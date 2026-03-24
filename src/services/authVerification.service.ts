@@ -1,11 +1,8 @@
+import { getApiBaseUrl } from './runtimeConfig.service';
+
 export type VerificationDeliveryMode = 'in_app_preview' | 'email_sent' | 'sms_sent';
 
-const AUTH_API_BASE =
-  typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin.includes('localhost')
-      ? 'http://localhost:8000'
-      : window.location.origin
-    : 'http://localhost:8000';
+const AUTH_API_BASE = getApiBaseUrl();
 
 export async function deliverVerificationCode(input: {
   contactType: 'email' | 'phone';

@@ -86,4 +86,16 @@ router.post('/verification/start', async (req, res) => {
   }
 });
 
+router.get('/status', async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    status: {
+      smtpConfigured: isMailerConfigured(),
+      smsConfigured: isSmsConfigured(),
+      smsProvider: process.env.SMS_PROVIDER || null,
+      plaidConfigured: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
+    },
+  });
+});
+
 export default router;
