@@ -20,6 +20,8 @@ import {
 } from '../services/accountPersistence.service';
 import { deliverVerificationCode } from '../services/authVerification.service';
 import {
+  applyClearFlowRetentionRecords,
+  CLEARFLOW_TERMS_VERSION,
   clearStoredMembershipDraft,
   enrichAppDataFromMembershipDraft,
 } from '../services/membershipDraft.service';
@@ -87,7 +89,8 @@ interface AuthContextType {
     email?: string,
     phone?: string,
     userHandle?: string,
-    password?: string
+    password?: string,
+    acceptedTerms?: boolean
   ) => void;
   completeVerification: () => void;
   logout: () => void;
@@ -619,10 +622,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email?: string,
     phone?: string,
     userHandle?: string,
-    password?: string
+    password?: string,
+    acceptedTerms?: boolean
   ) => {
     if (!state.appData) {
       logout();
+      return;
+    }
+
+    if (!acceptedTerms) {
+      console.error('ClearFlow terms must be accepted before profile setup can complete.');
       return;
     }
 
@@ -634,9 +643,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       userHandle: userHandle || state.appData.user.userHandle,
       isVerified: false,
     };
-    const finalAppData = enrichAppDataFromMembershipDraft({
+    const acceptedAt = new Date().toISOString();
+    const enrichedAppData = enrichAppDataFromMembershipDraft({
       ...state.appData,
       user: updatedUser,
+    });
+    const finalAppData = applyClearFlowRetentionRecords(enrichedAppData, {
+      acceptedAt,
+      termsVersion: CLEARFLOW_TERMS_VERSION,
     });
 
     if (state.apiAccessToken) {

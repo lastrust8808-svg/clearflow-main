@@ -9,6 +9,7 @@ export const ProfileSetup: React.FC = () => {
     phone: auth.currentUser?.phone ?? '',
     userHandle: auth.currentUser?.userHandle ?? '',
     password: '',
+    acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt),
   });
 
   const requiresBackupFields = auth.isLocalCredentialFlow;
@@ -38,7 +39,8 @@ export const ProfileSetup: React.FC = () => {
         form.email || undefined,
         form.phone || undefined,
         wantsBackupCredentials ? suggestedHandle || undefined : undefined,
-        wantsBackupCredentials && form.password.trim() ? form.password : undefined
+        wantsBackupCredentials && form.password.trim() ? form.password : undefined,
+        form.acceptedTerms
       );
     }
   };
@@ -120,6 +122,27 @@ export const ProfileSetup: React.FC = () => {
                 className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
               />
             </div>
+            <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
+              <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>
+              <div className="mt-2 leading-6 text-slate-300">
+                Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, internal security agreement support, and the internal deposit ledger for protected security instruments held in custody or retention.
+              </div>
+              <label className="mt-3 flex items-start gap-3 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  name="acceptedTerms"
+                  checked={form.acceptedTerms}
+                  onChange={(event) =>
+                    setForm({ ...form, acceptedTerms: event.target.checked })
+                  }
+                  className="mt-1"
+                  required
+                />
+                <span>
+                  I agree to ClearFlow&apos;s terms and conditions, authorize the creation of a retained security agreement record, and understand that required platform custody and compliance records may be retained by ClearFlow.
+                </span>
+              </label>
+            </div>
           </div>
           <p className="text-xs text-slate-400 mt-3">
             At least one contact method is required.
@@ -129,10 +152,10 @@ export const ProfileSetup: React.FC = () => {
           </p>
           <button
             type="submit"
-            disabled={!form.name || (!form.email && !form.phone)}
+            disabled={!form.name || (!form.email && !form.phone) || !form.acceptedTerms}
             className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500"
           >
-            Confirm and Enter
+            Agree and Enter
           </button>
         </form>
       </div>

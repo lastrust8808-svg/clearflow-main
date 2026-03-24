@@ -1,16 +1,21 @@
 import { coreMockData } from '../data/mockData';
 import type { AppData, Entity } from '../types/app.models';
 import type {
+  AssetRecord,
   AuthorityRecord,
   CoreDataBundle,
   DocumentRecord,
   EntityRecord,
+  InstrumentRecord,
+  LedgerAccountRecord,
   TokenRecord,
+  TreasuryAccountRecord,
 } from '../types/core';
 import type { MembershipIntakeDraft } from './onboarding.service';
 
 export const MEMBERSHIP_DRAFT_STORAGE_KEY = 'clearflow-membership-intake-draft';
 export const MEMBERSHIP_DRAFT_ID_STORAGE_KEY = 'clearflow-membership-intake-draft-id';
+export const CLEARFLOW_TERMS_VERSION = '2026.03';
 
 function buildPrefixSeed(value: string, fallback: string) {
   const cleaned = value.replace(/[^A-Za-z0-9]+/g, ' ').trim();
@@ -279,6 +284,170 @@ export function enrichAppDataFromMembershipDraft(appData: AppData): AppData {
   return {
     ...appData,
     entities: appData.entities.length > 0 ? appData.entities : [seededEntity],
+    coreDataSnapshot: nextSnapshot,
+  };
+}
+
+function upsertById<T extends { id: string }>(records: T[], nextRecord: T) {
+  const existingIndex = records.findIndex((record) => record.id === nextRecord.id);
+  if (existingIndex === -1) {
+    return [...records, nextRecord];
+  }
+
+  return records.map((record) => (record.id === nextRecord.id ? nextRecord : record));
+}
+
+export function applyClearFlowRetentionRecords(
+  appData: AppData,
+  input: {
+    acceptedAt: string;
+    termsVersion?: string;
+  }
+): AppData {
+  const primaryEntityId =
+    appData.entities[0]?.id ?? appData.coreDataSnapshot?.entities[0]?.id;
+
+  if (!primaryEntityId || !appData.coreDataSnapshot) {
+    return appData;
+  }
+
+  const acceptedDate = input.acceptedAt.slice(0, 10);
+  const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
+  const agreementDocumentId = `doc-clearflow-terms-${appData.user.id}`;
+  const retainedDocumentId = `doc-clearflow-retained-${appData.user.id}`;
+  const agreementTokenId = `tok-clearflow-terms-${appData.user.id}`;
+  const retentionLedgerId = `led-clearflow-retained-${appData.user.id}`;
+  const retentionTreasuryId = `tre-clearflow-retained-${appData.user.id}`;
+  const retentionAssetId = `ast-clearflow-retained-${appData.user.id}`;
+  const retentionInstrumentId = `ins-clearflow-retained-${appData.user.id}`;
+
+  const agreementDocument: DocumentRecord = {
+    id: agreementDocumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow User Terms and Security Agreement',
+    category: 'contract',
+    date: acceptedDate,
+    status: 'final',
+    linkedTokenIds: [agreementTokenId],
+    linkedInstrumentIds: [retentionInstrumentId],
+    summary:
+      'Accepted ClearFlow user agreement, platform security terms, and retained-record consent for protected operational custody records.',
+  };
+
+  const retainedRecordDocument: DocumentRecord = {
+    id: retainedDocumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow Retained Security Record',
+    category: 'compliance',
+    date: acceptedDate,
+    status: 'final',
+    linkedTokenIds: [agreementTokenId],
+    linkedInstrumentIds: [retentionInstrumentId],
+    summary:
+      'Platform-retained record of the user agreement, security posture, internal deposit ledger assignment, and protected recordkeeping retention.',
+  };
+
+  const agreementToken: TokenRecord = {
+    id: agreementTokenId,
+    entityId: primaryEntityId,
+    subjectType: 'document',
+    subjectId: agreementDocumentId,
+    label: 'ClearFlow Agreement Acceptance Token',
+    status: 'verified',
+    tokenStandard: 'internal-proof',
+    tokenReference: `CLEARFLOW-TERMS-${appData.user.id}`,
+    issuedAt: input.acceptedAt,
+    verifiedAt: input.acceptedAt,
+    proofReference: `Accepted ClearFlow terms version ${termsVersion} and linked platform retention record.`,
+  };
+
+  const retentionLedger: LedgerAccountRecord = {
+    id: retentionLedgerId,
+    entityId: primaryEntityId,
+    code: '1198',
+    name: 'ClearFlow Retained Security Instruments Held',
+    accountType: 'asset',
+    currency: 'USD',
+    balance: 0,
+    remittanceEligible: false,
+    remittanceClassification: 'reserve',
+    linkedAssetIds: [retentionAssetId],
+  };
+
+  const retentionTreasury: TreasuryAccountRecord = {
+    id: retentionTreasuryId,
+    entityId: primaryEntityId,
+    name: 'ClearFlow Internal Deposit Ledger',
+    treasuryType: 'instrument_pool',
+    status: 'active',
+    currency: 'USD',
+    availableBalance: 0,
+    reservedBalance: 0,
+    linkedLedgerAccountId: retentionLedgerId,
+    originatingAuthority: 'private_ledger_only',
+    remittanceEnabled: false,
+    notes:
+      'Platform-retained internal ledger for security instruments, protected custody records, and retained contractual support documents.',
+  };
+
+  const retentionAsset: AssetRecord = {
+    id: retentionAssetId,
+    entityId: primaryEntityId,
+    name: 'ClearFlow Retained Security Interest',
+    category: 'security',
+    status: 'restricted',
+    bookValue: 0,
+    paymentMedium: 'mixed_contractual_tender',
+    linkedLedgerAccountId: retentionLedgerId,
+    linkedDocumentIds: [agreementDocumentId, retainedDocumentId],
+    notes:
+      'Non-liquid retained security-record placeholder representing protected internal custody and agreement support held by ClearFlow.',
+  };
+
+  const retentionInstrument: InstrumentRecord = {
+    id: retentionInstrumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow User Security Agreement',
+    instrumentType: 'performance_security_posting',
+    issueDate: acceptedDate,
+    paymentMedium: 'mixed_contractual_tender',
+    obligationType: 'secured_private_obligation',
+    performanceSecurityStatus: 'posted',
+    linkedTokenIds: [agreementTokenId],
+    linkedAssetIds: [retentionAssetId],
+    linkedDocumentIds: [agreementDocumentId, retainedDocumentId],
+    notes:
+      'Internal instrument record for platform-retained security agreement support and protected recordkeeping obligations.',
+  };
+
+  const nextSnapshot: CoreDataBundle = {
+    ...appData.coreDataSnapshot,
+    documents: upsertById(
+      upsertById(appData.coreDataSnapshot.documents, agreementDocument),
+      retainedRecordDocument
+    ),
+    tokens: upsertById(appData.coreDataSnapshot.tokens, agreementToken),
+    ledgerAccounts: upsertById(appData.coreDataSnapshot.ledgerAccounts, retentionLedger),
+    treasuryAccounts: upsertById(appData.coreDataSnapshot.treasuryAccounts, retentionTreasury),
+    assets: upsertById(appData.coreDataSnapshot.assets, retentionAsset),
+    instruments: upsertById(appData.coreDataSnapshot.instruments, retentionInstrument),
+    workspaceSettings: {
+      ...appData.coreDataSnapshot.workspaceSettings,
+      vaultRetentionPolicy: 'core_records_permanent',
+      customRetentionNotes:
+        'Core user agreement, security support records, and retained platform custody records are kept internally by ClearFlow while user workspace data can remain user-owned where configured.',
+    },
+  };
+
+  return {
+    ...appData,
+    user: {
+      ...appData.user,
+      clearflowTermsAcceptedAt: input.acceptedAt,
+      clearflowTermsVersion: termsVersion,
+      clearflowTermsDocumentId: agreementDocumentId,
+      clearflowRetainedRecordDocumentId: retainedDocumentId,
+    },
     coreDataSnapshot: nextSnapshot,
   };
 }

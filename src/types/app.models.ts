@@ -8,6 +8,10 @@ export interface User {
   userHandle?: string;
   primaryContactType?: 'google' | 'email' | 'phone';
   isVerified: boolean;
+  clearflowTermsAcceptedAt?: string;
+  clearflowTermsVersion?: string;
+  clearflowTermsDocumentId?: string;
+  clearflowRetainedRecordDocumentId?: string;
 }
 
 export type EntityType = 'LLC' | 'C-Corp' | 'S-Corp' | 'Trust/Estate' | 'Non-profit' | 'Personal';
