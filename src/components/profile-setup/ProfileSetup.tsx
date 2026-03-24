@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
 export const ProfileSetup: React.FC = () => {
@@ -7,25 +7,8 @@ export const ProfileSetup: React.FC = () => {
     name: auth.currentUser?.name ?? '',
     email: auth.currentUser?.email ?? '',
     phone: auth.currentUser?.phone ?? '',
-    userHandle: auth.currentUser?.userHandle ?? '',
-    password: '',
     acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt),
   });
-
-  const requiresBackupFields = auth.isLocalCredentialFlow;
-  const wantsBackupCredentials =
-    requiresBackupFields || Boolean(form.userHandle.trim() || form.password.trim());
-  const suggestedHandle = useMemo(() => {
-    if (form.userHandle.trim()) {
-      return form.userHandle.trim();
-    }
-
-    if (form.email.includes('@')) {
-      return form.email.split('@')[0].toLowerCase();
-    }
-
-    return form.name.trim().toLowerCase().replace(/\s+/g, '.');
-  }, [form.email, form.name, form.userHandle]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -38,8 +21,8 @@ export const ProfileSetup: React.FC = () => {
         form.name,
         form.email || undefined,
         form.phone || undefined,
-        wantsBackupCredentials ? suggestedHandle || undefined : undefined,
-        wantsBackupCredentials && form.password.trim() ? form.password : undefined,
+        undefined,
+        undefined,
         form.acceptedTerms
       );
     }
@@ -94,34 +77,6 @@ export const ProfileSetup: React.FC = () => {
                 className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
               />
             </div>
-            <div>
-              <label htmlFor="userHandle" className="block text-sm font-medium text-slate-400">
-                Backup User ID
-              </label>
-              <input
-                id="userHandle"
-                name="userHandle"
-                type="text"
-                value={form.userHandle}
-                onChange={handleChange}
-                placeholder={suggestedHandle || 'your.userid'}
-                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-400">
-                Backup Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Set a password for backup sign-in"
-                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
-              />
-            </div>
             <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
               <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>
               <div className="mt-2 leading-6 text-slate-300">
@@ -145,10 +100,7 @@ export const ProfileSetup: React.FC = () => {
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-3">
-            At least one contact method is required.
-            {requiresBackupFields
-              ? ' Add a user ID and password now to complete backup access.'
-              : ' Google is still the primary sign-in path. These backup credentials are optional, but recommended.'}
+            At least one contact method is required. Google remains the primary sign-in path for this workspace.
           </p>
           <button
             type="submit"

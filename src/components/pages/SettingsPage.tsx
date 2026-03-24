@@ -18,14 +18,6 @@ interface SettingsPageProps {
 
 export default function SettingsPage({ data, setData }: SettingsPageProps) {
   const auth = useAuth();
-  const [backupUserId, setBackupUserId] = useState(auth.currentUser?.userHandle ?? '');
-  const [backupPassword, setBackupPassword] = useState('');
-  const [preferredContactType, setPreferredContactType] = useState<'email' | 'phone'>(
-    auth.currentUser?.phone && !auth.currentUser?.email ? 'phone' : 'email'
-  );
-  const [backupNotice, setBackupNotice] = useState<string | null>(null);
-  const [backupError, setBackupError] = useState<string | null>(null);
-  const [isSavingBackup, setIsSavingBackup] = useState(false);
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatusSnapshot | null>(null);
   const [integrationLoading, setIntegrationLoading] = useState(true);
 
@@ -34,30 +26,6 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
       .then((status) => setIntegrationStatus(status))
       .finally(() => setIntegrationLoading(false));
   }, []);
-
-  const handleSaveBackupAccess = async () => {
-    setBackupError(null);
-    setBackupNotice(null);
-    setIsSavingBackup(true);
-
-    try {
-      const result = await auth.updateBackupAccess({
-        userHandle: backupUserId || undefined,
-        password: backupPassword || undefined,
-        preferredContactType,
-      });
-
-      if (!result.success) {
-        setBackupError(result.error || 'Backup access could not be updated.');
-        return;
-      }
-
-      setBackupNotice('Backup access settings saved.');
-      setBackupPassword('');
-    } finally {
-      setIsSavingBackup(false);
-    }
-  };
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -83,7 +51,7 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
         />
         <StatCard
           label="Sign-In Priority"
-          value={auth.isConfigured ? 'Google first' : 'Backup sign-in'}
+          value={auth.isConfigured ? 'Google first' : 'Google pending setup'}
         />
       </div>
 
@@ -104,7 +72,7 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
 
       <PageSection
         title="Access & Identity"
-        description="Google is the preferred identity path, with backup sign-in available for continuity."
+        description="Google is the primary identity path, with retained platform records and user-owned storage where configured."
       >
         <div
           style={{
@@ -118,12 +86,12 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
             subtitle={auth.currentUser?.email || auth.currentUser?.phone || auth.currentUser?.userHandle || 'No active user'}
             summaryItems={[
               { label: 'Name', value: auth.currentUser?.name || 'Not set' },
-              { label: 'User ID', value: auth.currentUser?.userHandle || 'No backup user ID saved' },
               { label: 'Verified', value: auth.currentUser?.isVerified ? 'Yes' : 'Not yet' },
               { label: 'Drive Access', value: auth.hasDriveAccess ? 'Connected' : 'Not connected' },
+              { label: 'Terms Accepted', value: auth.currentUser?.clearflowTermsAcceptedAt ? 'Accepted' : 'Pending' },
             ]}
           >
-            Use Google as the main sign-in path. Backup email, phone, and user-ID access remain available if the user has set them up during verification or onboarding.
+            Use Google as the main sign-in path. ClearFlow retains only the required platform and custody records while letting user-owned workspace data stay external where that storage path is available.
           </WorkbenchRecordCard>
 
           <WorkbenchRecordCard
@@ -131,110 +99,26 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
             subtitle="Recommended front-door behavior"
             summaryItems={[
               { label: 'Primary', value: 'Google sign-in' },
-              { label: 'Backup', value: 'Email / phone / user ID + password' },
-              { label: 'Verification', value: 'Email or phone challenge flow' },
+              { label: 'Recovery', value: 'Google sign-in help request' },
+              { label: 'Verification', value: 'Identity and agreement confirmation' },
               { label: 'Environment', value: auth.isConfigured ? 'Production-capable' : 'Local fallback mode' },
             ]}
           >
-            The welcome flow now starts with just two choices, then guides existing users into Google first while still preserving backup continuity paths.
+            The welcome flow now starts with just two choices, then guides existing users into Google first and routes new users into Google before onboarding.
           </WorkbenchRecordCard>
 
           <WorkbenchRecordCard
-            title="Backup Access Controls"
-            subtitle="Set or update backup user ID and password"
+            title="ClearFlow Retained Records"
+            subtitle="Required internal agreement and custody support retained by the platform"
           >
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {(['email', 'phone'] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setPreferredContactType(option)}
-                    style={{
-                      minHeight: 38,
-                      padding: '0 12px',
-                      borderRadius: 12,
-                      border:
-                        preferredContactType === option
-                          ? '1px solid rgba(126, 242, 255, 0.34)'
-                          : '1px solid rgba(255,255,255,0.12)',
-                      background:
-                        preferredContactType === option
-                          ? 'rgba(54, 215, 255, 0.12)'
-                          : 'rgba(255,255,255,0.04)',
-                      color: '#eff6fb',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {option === 'email' ? 'Email Backup' : 'Phone Backup'}
-                  </button>
-                ))}
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Terms version: {auth.currentUser?.clearflowTermsVersion || 'Not yet accepted'}</div>
+              <div>Accepted at: {auth.currentUser?.clearflowTermsAcceptedAt || 'Pending acceptance'}</div>
+              <div>Terms record: {auth.currentUser?.clearflowTermsDocumentId || 'Not created yet'}</div>
+              <div>Retained record: {auth.currentUser?.clearflowRetainedRecordDocumentId || 'Not created yet'}</div>
+              <div style={{ color: 'var(--cf-muted)' }}>
+                These are the internal records ClearFlow keeps for platform agreement, security support, and retained custody/compliance posture.
               </div>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span>Backup User ID</span>
-                <input
-                  value={backupUserId}
-                  onChange={(event) => setBackupUserId(event.target.value)}
-                  placeholder="your.userid"
-                  style={{
-                    width: '100%',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    background: 'rgba(10, 11, 24, 0.78)',
-                    color: '#fff6fd',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                  }}
-                />
-              </label>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span>Backup Password</span>
-                <input
-                  type="password"
-                  value={backupPassword}
-                  onChange={(event) => setBackupPassword(event.target.value)}
-                  placeholder="Set or rotate your backup password"
-                  style={{
-                    width: '100%',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    background: 'rgba(10, 11, 24, 0.78)',
-                    color: '#fff6fd',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                  }}
-                />
-              </label>
-              <div style={{ color: 'var(--cf-muted)', lineHeight: 1.7 }}>
-                Google remains the primary sign-in path. These backup credentials let the same
-                user keep alternate access by password or verification code when needed.
-              </div>
-              <button
-                type="button"
-                onClick={handleSaveBackupAccess}
-                disabled={isSavingBackup || (!backupUserId.trim() && !backupPassword.trim())}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(126, 242, 255, 0.28)',
-                  background:
-                    'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  opacity:
-                    isSavingBackup || (!backupUserId.trim() && !backupPassword.trim()) ? 0.6 : 1,
-                }}
-              >
-                {isSavingBackup ? 'Saving Backup Access...' : 'Save Backup Access'}
-              </button>
-              {backupError ? (
-                <div style={{ color: '#fecaca', lineHeight: 1.6 }}>{backupError}</div>
-              ) : null}
-              {backupNotice ? (
-                <div style={{ color: '#bbf7d0', lineHeight: 1.6 }}>{backupNotice}</div>
-              ) : null}
             </div>
           </WorkbenchRecordCard>
         </div>

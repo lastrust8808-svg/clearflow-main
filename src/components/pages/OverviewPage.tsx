@@ -43,6 +43,14 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const directDepositCount = data.directDepositAuthorizations.filter(
     (item) => item.status === 'returned' || item.status === 'verified',
   ).length;
+  const retainedRecordCount = data.documents.filter(
+    (item) =>
+      item.title.includes('ClearFlow User Terms') ||
+      item.title.includes('ClearFlow Retained Security Record')
+  ).length;
+  const internalRetentionLedgerCount = data.ledgerAccounts.filter((item) =>
+    item.name.includes('ClearFlow Retained Security Instruments Held')
+  ).length;
   const recurringPaymentCount = data.payments.filter(
     (item) => item.recurringSchedule?.enabled,
   ).length;
@@ -120,6 +128,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Employees" value={employeeCount} />
         <StatCard label="Tax Filing Queue" value={filingQueueCount} />
         <StatCard label="Direct Deposit Returns" value={directDepositCount} />
+        <StatCard label="Retained Records" value={retainedRecordCount} />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
 
@@ -196,11 +205,74 @@ export default function OverviewPage({ data }: OverviewPageProps) {
           </RecordCard>
 
           <RecordCard
+            title="Storage Split"
+            subtitle="User-owned workspace files, ClearFlow-retained required records"
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+              Workspace records can remain user-owned where configured, while required platform
+              records such as accepted terms, retained security support, and internal custody
+              records stay inside ClearFlow&apos;s retained record layer.
+            </div>
+          </RecordCard>
+
+          <RecordCard
             title="AI Workflow Layer"
             subtitle="Generators for token docs, reserve memos, snapshots, and control records"
           >
             <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
               The first pass is ready for structured generators instead of isolated one-off tools.
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Storage & Retention"
+        description="Visibility into what belongs to the user workspace versus what ClearFlow must keep internally."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Retained Record Layer"
+            subtitle={`${retainedRecordCount} retained documents | ${internalRetentionLedgerCount} internal deposit ledgers`}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                ClearFlow keeps its own internal agreement, security-support, and retained custody
+                records for compliance posture, growth support, and projection-ready audit trails.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('#documents')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Documents
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Workspace-Owned Layer"
+            subtitle={`${data.documents.filter((item) => item.sourceFileId).length} vault-backed files ready for user-owned storage paths`}
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+              Operational uploads, packets, and working files are the best candidates for
+              user-owned storage paths such as Google Drive, while retained platform records stay
+              on ClearFlow&apos;s side.
             </div>
           </RecordCard>
         </div>

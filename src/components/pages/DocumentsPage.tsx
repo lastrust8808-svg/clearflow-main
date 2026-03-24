@@ -25,6 +25,14 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const finalCount = data.documents.filter((item) => item.status === 'final').length;
   const draftCount = data.documents.filter((item) => item.status === 'draft').length;
   const verifiedTokenCount = data.tokens.filter((item) => item.status === 'verified').length;
+  const retainedRecordCount = data.documents.filter(
+    (item) =>
+      item.title.includes('ClearFlow User Terms') ||
+      item.title.includes('ClearFlow Retained Security Record')
+  ).length;
+  const userOwnedReadyCount = data.documents.filter(
+    (item) => item.sourceFileId && item.sourceRecordType === 'document'
+  ).length;
 
   useEffect(() => {
     const applyHash = () => {
@@ -153,8 +161,45 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
         <StatCard label="Final" value={finalCount} />
         <StatCard label="Draft" value={draftCount} />
         <StatCard label="Vault-Linked" value={data.documents.filter((d) => d.vaultPath).length} />
+        <StatCard label="User-Owned Ready" value={userOwnedReadyCount} />
+        <StatCard label="Retained Records" value={retainedRecordCount} />
         <StatCard label="Verification Tokens" value={verifiedTokenCount} />
       </div>
+
+      <PageSection
+        title="Storage Posture"
+        description="ClearFlow separates user-owned workspace records from the platform records it must retain."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="User-Owned Workspace Records"
+            subtitle="Operational files, uploads, and working packets"
+            summaryItems={[
+              { label: 'Upload Records', value: userOwnedReadyCount },
+              { label: 'Vault Files', value: data.documents.filter((item) => item.sourceFileId).length },
+            ]}
+          >
+            General user documents and workflow packets are the part of the workspace best suited for external, user-owned storage paths such as Google Drive when that path is enabled.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="ClearFlow Retained Records"
+            subtitle="Agreement, custody, and internal security support"
+            summaryItems={[
+              { label: 'Retained Documents', value: retainedRecordCount },
+              { label: 'Retained Tokens', value: data.tokens.filter((item) => item.label.includes('ClearFlow Agreement')).length },
+            ]}
+          >
+            Terms acceptance, internal security agreement support, and platform custody/compliance records stay inside ClearFlow&apos;s own retained record layer.
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Vault Records"
@@ -171,6 +216,14 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 { label: 'Output', value: doc.outputStatus || 'Not generated' },
                 { label: 'Vault Path', value: doc.vaultPath || 'Vault path not assigned' },
                 { label: 'Source File', value: doc.fileName || 'No stored file' },
+                {
+                  label: 'Record Class',
+                  value:
+                    doc.title.includes('ClearFlow User Terms') ||
+                    doc.title.includes('ClearFlow Retained Security Record')
+                      ? 'ClearFlow retained'
+                      : 'Workspace record',
+                },
               ]}
               actionSlot={
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
