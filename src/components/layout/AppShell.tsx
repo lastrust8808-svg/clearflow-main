@@ -98,6 +98,7 @@ const sectionQuickActions: Record<
 };
 
 const RECENT_ROUTE_STORAGE_KEY = 'clearflow-shell-recent-routes-v1';
+const PINNED_ROUTE_STORAGE_KEY = 'clearflow-shell-pinned-routes-v1';
 
 function goToHash(hash: string) {
   if (typeof window === 'undefined') {
@@ -156,6 +157,7 @@ export default function AppShell({
   );
   const [launcherQuery, setLauncherQuery] = useState('');
   const [recentRoutes, setRecentRoutes] = useState<Array<{ hash: string; label: string }>>([]);
+  const [pinnedRoutes, setPinnedRoutes] = useState<Array<{ hash: string; label: string }>>([]);
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -327,6 +329,15 @@ export default function AppShell({
       // ignore route history parse errors
     }
 
+    try {
+      const rawPinnedRoutes = window.localStorage.getItem(PINNED_ROUTE_STORAGE_KEY);
+      if (rawPinnedRoutes) {
+        setPinnedRoutes(JSON.parse(rawPinnedRoutes) as Array<{ hash: string; label: string }>);
+      }
+    } catch {
+      // ignore pinned route parse errors
+    }
+
     applyWindowState();
     window.addEventListener('hashchange', applyWindowState);
     window.addEventListener('resize', applyWindowState);
@@ -357,6 +368,28 @@ export default function AppShell({
       return nextRoutes;
     });
   }, [activeSection, currentHash]);
+
+  const togglePinnedRoute = (hash: string, label?: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const resolvedLabel = label || formatRouteLabel(hash, activeSection);
+    setPinnedRoutes((previous) => {
+      const existing = previous.find((item) => item.hash === hash);
+      const nextRoutes = existing
+        ? previous.filter((item) => item.hash !== hash)
+        : [{ hash, label: resolvedLabel }, ...previous].slice(0, 8);
+
+      try {
+        window.localStorage.setItem(PINNED_ROUTE_STORAGE_KEY, JSON.stringify(nextRoutes));
+      } catch {
+        // ignore local storage failures
+      }
+
+      return nextRoutes;
+    });
+  };
 
   return (
     <div
@@ -664,27 +697,60 @@ export default function AppShell({
                   </div>
                   <div style={{ display: 'grid', gap: 8 }}>
                     {quickActions.map((action) => (
-                      <button
+                      <div
                         key={action.hash}
-                        type="button"
-                        onClick={() => goToHash(action.hash)}
                         style={{
-                          textAlign: 'left',
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          border: '1px solid var(--cf-border)',
-                          background: 'rgba(255,255,255,0.03)',
-                          color: 'var(--cf-text)',
-                          cursor: 'pointer',
                           display: 'grid',
-                          gap: 4,
+                          gridTemplateColumns: '1fr auto',
+                          gap: 8,
+                          alignItems: 'stretch',
                         }}
                       >
-                        <span style={{ fontWeight: 700 }}>{action.label}</span>
-                        <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
-                          {action.description}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => goToHash(action.hash)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '10px 12px',
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background: 'rgba(255,255,255,0.03)',
+                            color: 'var(--cf-text)',
+                            cursor: 'pointer',
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{action.label}</span>
+                          <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
+                            {action.description}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => togglePinnedRoute(action.hash, action.label)}
+                          title={
+                            pinnedRoutes.some((item) => item.hash === action.hash)
+                              ? 'Remove pinned route'
+                              : 'Pin this route'
+                          }
+                          style={{
+                            minWidth: 42,
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background: pinnedRoutes.some((item) => item.hash === action.hash)
+                              ? 'rgba(54, 215, 255, 0.12)'
+                              : 'rgba(255,255,255,0.03)',
+                            color: pinnedRoutes.some((item) => item.hash === action.hash)
+                              ? 'var(--cf-accent-soft)'
+                              : 'var(--cf-muted)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {pinnedRoutes.some((item) => item.hash === action.hash) ? '★' : '☆'}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -726,28 +792,138 @@ export default function AppShell({
                   />
                   <div style={{ display: 'grid', gap: 8 }}>
                     {filteredLauncherItems.map((item) => (
-                      <button
+                      <div
                         key={`${item.category}-${item.hash}`}
-                        type="button"
-                        onClick={() => goToHash(item.hash)}
                         style={{
-                          textAlign: 'left',
-                          padding: '10px 12px',
-                          borderRadius: 14,
-                          border: '1px solid var(--cf-border)',
-                          background: 'rgba(255,255,255,0.03)',
-                          color: 'var(--cf-text)',
-                          cursor: 'pointer',
                           display: 'grid',
-                          gap: 4,
+                          gridTemplateColumns: '1fr auto',
+                          gap: 8,
+                          alignItems: 'stretch',
                         }}
                       >
-                        <span style={{ fontWeight: 700 }}>{item.label}</span>
-                        <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
-                          {item.category} | {item.description}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => goToHash(item.hash)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '10px 12px',
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background: 'rgba(255,255,255,0.03)',
+                            color: 'var(--cf-text)',
+                            cursor: 'pointer',
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{item.label}</span>
+                          <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
+                            {item.category} | {item.description}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => togglePinnedRoute(item.hash, item.label)}
+                          title={
+                            pinnedRoutes.some((route) => route.hash === item.hash)
+                              ? 'Remove pinned route'
+                              : 'Pin this route'
+                          }
+                          style={{
+                            minWidth: 42,
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background: pinnedRoutes.some((route) => route.hash === item.hash)
+                              ? 'rgba(54, 215, 255, 0.12)'
+                              : 'rgba(255,255,255,0.03)',
+                            color: pinnedRoutes.some((route) => route.hash === item.hash)
+                              ? 'var(--cf-accent-soft)'
+                              : 'var(--cf-muted)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {pinnedRoutes.some((route) => route.hash === item.hash) ? '★' : '☆'}
+                        </button>
+                      </div>
                     ))}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Pinned Routes
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {pinnedRoutes.length === 0 ? (
+                      <div style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.5 }}>
+                        Pin desks and actions from quick actions or launcher search to keep your most-used paths here.
+                      </div>
+                    ) : (
+                      pinnedRoutes.map((route) => (
+                        <div
+                          key={route.hash}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto',
+                            gap: 8,
+                            alignItems: 'stretch',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => goToHash(route.hash)}
+                            style={{
+                              textAlign: 'left',
+                              padding: '10px 12px',
+                              borderRadius: 14,
+                              border: '1px solid var(--cf-border)',
+                              background:
+                                route.hash === currentHash
+                                  ? 'rgba(54, 215, 255, 0.1)'
+                                  : 'rgba(255,255,255,0.03)',
+                              color: 'var(--cf-text)',
+                              cursor: 'pointer',
+                              display: 'grid',
+                              gap: 4,
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>{route.label}</span>
+                            <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePinnedRoute(route.hash, route.label)}
+                            title="Remove pinned route"
+                            style={{
+                              minWidth: 42,
+                              borderRadius: 14,
+                              border: '1px solid var(--cf-border)',
+                              background: 'rgba(54, 215, 255, 0.12)',
+                              color: 'var(--cf-accent-soft)',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                          >
+                            ★
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
                 <div
