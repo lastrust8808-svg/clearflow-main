@@ -117,6 +117,39 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
           </WorkbenchRecordCard>
 
           <WorkbenchRecordCard
+            title="Access Recovery Workflow"
+            subtitle="When a user loses Google access or gets stuck during secure loading"
+            summaryItems={[
+              { label: 'Recovery Path', value: 'Google help request' },
+              { label: 'Temporary Access', value: 'Handled by support request' },
+              { label: 'Email Change', value: 'Secure handoff required' },
+              { label: 'Current Runtime', value: auth.isConfigured ? 'Google-capable' : 'Config pending' },
+            ]}
+            actionSlot={
+              <a
+                href="mailto:billing@clearflow.site?subject=ClearFlow%20Access%20Recovery%20Request"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(126, 242, 255, 0.24)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                Request Access Help
+              </a>
+            }
+          >
+            If a user can no longer use the original Google account, ClearFlow should recover access through a support-led handoff instead of exposing backup sign-in clutter on the front door.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
             title="ClearFlow Retained Records"
             subtitle="Required internal agreement and custody support retained by the platform"
             summaryItems={[

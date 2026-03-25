@@ -355,11 +355,15 @@ function LoadingShell({
   subtitle,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
 }: {
   title: string;
   subtitle: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
 }) {
   return (
     <div
@@ -386,23 +390,42 @@ function LoadingShell({
         <div style={{ fontSize: 28, fontWeight: 800 }}>{title}</div>
         <div style={{ marginTop: 10, color: '#c5d7e3', lineHeight: 1.6 }}>{subtitle}</div>
         {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            style={{
-              marginTop: 18,
-              minHeight: 46,
-              padding: '0 16px',
-              borderRadius: 14,
-              border: '1px solid rgba(126, 242, 255, 0.24)',
-              background: 'rgba(54, 215, 255, 0.1)',
-              color: '#effcff',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {actionLabel}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+            <button
+              type="button"
+              onClick={onAction}
+              style={{
+                minHeight: 46,
+                padding: '0 16px',
+                borderRadius: 14,
+                border: '1px solid rgba(126, 242, 255, 0.24)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {actionLabel}
+            </button>
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button
+                type="button"
+                onClick={onSecondaryAction}
+                style={{
+                  minHeight: 46,
+                  padding: '0 16px',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: '#effcff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {secondaryActionLabel}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -439,6 +462,34 @@ function WorkspaceSectionLoading({ title }: { title: string }) {
       </div>
     </div>
   );
+}
+
+function openAccessRecoveryHelp() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const subject = encodeURIComponent('ClearFlow Secure Access Recovery Help');
+  const body = encodeURIComponent(
+    [
+      'Hello ClearFlow Support,',
+      '',
+      'I need help with Google sign-in or secure workspace access.',
+      '',
+      `Current origin: ${window.location.origin}`,
+      `Current path: ${window.location.pathname}`,
+      `Timestamp: ${new Date().toISOString()}`,
+      '',
+      'Requested support:',
+      '- Google sign-in troubleshooting',
+      '- Temporary access handoff',
+      '- Login email change request',
+      '',
+      'Please follow up with the secure recovery steps.',
+    ].join('\n')
+  );
+
+  window.location.href = `mailto:billing@clearflow.site?subject=${subject}&body=${body}`;
 }
 
 function preloadWorkspaceSection(section: AppSection) {
@@ -753,6 +804,8 @@ export default function App({
         onAction={
           auth.appData?.user ? () => auth.continueGoogleOnboardingFallback() : undefined
         }
+        secondaryActionLabel="Need Sign-In Help?"
+        onSecondaryAction={openAccessRecoveryHelp}
       />
     );
   }
