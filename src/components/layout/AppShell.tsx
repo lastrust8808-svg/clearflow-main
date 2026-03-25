@@ -1248,6 +1248,38 @@ export default function AppShell({
                 gap: 10,
               }}
             >
+              {currentHash ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                    }}
+                  >
+                    Current View
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchRoute(currentHash)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '12px 14px',
+                      borderRadius: 16,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(54, 215, 255, 0.08)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gap: 4,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>{activeRouteLabel}</span>
+                    <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{currentHash}</span>
+                  </button>
+                </div>
+              ) : null}
               {pinnedRoutes.length > 0 ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div
