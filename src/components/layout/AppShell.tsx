@@ -99,6 +99,8 @@ const sectionQuickActions: Record<
 
 const RECENT_ROUTE_STORAGE_KEY = 'clearflow-shell-recent-routes-v1';
 const PINNED_ROUTE_STORAGE_KEY = 'clearflow-shell-pinned-routes-v1';
+const PINNED_ICON = '[pin]';
+const UNPINNED_ICON = '[+]';
 
 function goToHash(hash: string) {
   if (typeof window === 'undefined') {
@@ -261,6 +263,10 @@ export default function AppShell({
     () => formatRouteLabel(currentHash, activeSection),
     [activeSection, currentHash]
   );
+  const isCurrentRoutePinned = useMemo(
+    () => pinnedRoutes.some((route) => route.hash === currentHash),
+    [currentHash, pinnedRoutes]
+  );
   const quickActions = sectionQuickActions[activeSection];
   const resumeRoutes = useMemo(
     () => recentRoutes.filter((route) => route.hash !== currentHash).slice(0, 3),
@@ -389,6 +395,14 @@ export default function AppShell({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!isCommandPaletteOpen) {
+      return;
+    }
+
+    setLauncherQuery('');
+  }, [isCommandPaletteOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !currentHash) {
@@ -692,6 +706,30 @@ export default function AppShell({
                   >
                     {activeRouteLabel}
                   </div>
+                  {currentHash ? (
+                    <button
+                      type="button"
+                      onClick={() => togglePinnedRoute(currentHash, activeRouteLabel)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '7px 12px',
+                        borderRadius: 999,
+                        background: isCurrentRoutePinned
+                          ? 'rgba(54, 215, 255, 0.12)'
+                          : 'rgba(255,255,255,0.04)',
+                        border: '1px solid var(--cf-border)',
+                        color: isCurrentRoutePinned ? 'var(--cf-accent-soft)' : 'var(--cf-muted)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isCurrentRoutePinned ? PINNED_ICON : UNPINNED_ICON}
+                      {isCurrentRoutePinned ? 'Unpin This View' : 'Pin This View'}
+                    </button>
+                  ) : null}
                 </div>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
                   {activeItem.hint}
@@ -1244,6 +1282,46 @@ export default function AppShell({
                         <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+              ) : null}
+              {recentRoutes.length > 0 ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                    }}
+                  >
+                    Recent
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {recentRoutes
+                      .filter((route) => !pinnedRoutes.some((item) => item.hash === route.hash))
+                      .slice(0, 4)
+                      .map((route) => (
+                        <button
+                          key={`palette-recent-${route.hash}`}
+                          type="button"
+                          onClick={() => handleLaunchRoute(route.hash)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '12px 14px',
+                            borderRadius: 16,
+                            border: '1px solid var(--cf-border)',
+                            background: 'rgba(255,255,255,0.03)',
+                            color: 'var(--cf-text)',
+                            cursor: 'pointer',
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{route.label}</span>
+                          <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
+                        </button>
+                      ))}
                   </div>
                 </div>
               ) : null}
