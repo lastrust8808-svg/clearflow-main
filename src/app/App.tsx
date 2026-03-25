@@ -42,6 +42,7 @@ const Verification = lazy(() =>
 
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
+const ROUTE_STORAGE_KEY = 'clearflow-active-route-v1';
 const DOCUMENT_HASH_PREFIX = '#documents:';
 const ONBOARDING_INTENT_STORAGE_KEY = 'clearflow-onboarding-intent';
 const ONBOARDING_STAGE_STORAGE_KEY = 'clearflow-onboarding-stage';
@@ -296,6 +297,27 @@ function loadSectionForUser(userId: string) {
   return 'overview' as AppSection;
 }
 
+function loadRouteForUser(userId: string) {
+  try {
+    const raw = window.localStorage.getItem(buildScopedKey(ROUTE_STORAGE_KEY, userId));
+    if (!raw) {
+      return '';
+    }
+
+    if (parseHashSection(raw)) {
+      return raw;
+    }
+
+    if (allowedSections.includes(raw as AppSection)) {
+      return buildSectionHash(raw as AppSection);
+    }
+  } catch {
+    // ignore local storage errors and use default route
+  }
+
+  return '';
+}
+
 function parseHashSection(hashValue: string): AppSection | null {
   if (!hashValue) {
     return null;
@@ -311,6 +333,10 @@ function parseHashSection(hashValue: string): AppSection | null {
 
 function buildSectionHash(section: AppSection) {
   return `#${section}`;
+}
+
+function resolvePreferredRoute(hashValue: string, fallbackSection: AppSection) {
+  return parseHashSection(hashValue) ? hashValue : buildSectionHash(fallbackSection);
 }
 
 function replaceWindowHash(hashValue: string) {
@@ -658,12 +684,15 @@ export default function App({
     }
 
     initializedSectionUserIdRef.current = currentUserId;
-    const hashSection =
-      typeof window !== 'undefined' ? parseHashSection(window.location.hash) : null;
-    const nextSection = hashSection || loadSectionForUser(currentUserId);
+    const browserHash = typeof window !== 'undefined' ? window.location.hash : '';
+    const hashSection = parseHashSection(browserHash);
+    const storedRoute = loadRouteForUser(currentUserId);
+    const storedSection = loadSectionForUser(currentUserId);
+    const nextRoute = hashSection ? browserHash : resolvePreferredRoute(storedRoute, storedSection);
+    const nextSection = parseHashSection(nextRoute) || storedSection;
     setActiveSection(nextSection);
-    if (typeof window !== 'undefined' && !window.location.hash.startsWith(DOCUMENT_HASH_PREFIX)) {
-      replaceWindowHash(buildSectionHash(nextSection));
+    if (typeof window !== 'undefined' && window.location.hash !== nextRoute) {
+      replaceWindowHash(nextRoute);
     }
   }, [auth.authStatus, currentUserId]);
 
@@ -699,6 +728,8 @@ export default function App({
       buildScopedKey(SECTION_STORAGE_KEY, currentUserId),
       activeSection
     );
+    const hashValue = resolvePreferredRoute(window.location.hash, activeSection);
+    window.localStorage.setItem(buildScopedKey(ROUTE_STORAGE_KEY, currentUserId), hashValue);
   }, [activeSection, auth.authStatus, currentUserId]);
 
   useEffect(() => {
