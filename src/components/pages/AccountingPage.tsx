@@ -11,6 +11,7 @@ import {
 } from '../../services/erpOperations.service';
 import {
   buildInvoiceEmailPayload,
+  buildInvoicePacketHtml,
   buildInvoicePacketFileName,
   downloadInvoicePacket,
   openInvoiceEmailDraft,
@@ -26,6 +27,7 @@ import {
   executeInjectedWalletPayment,
   pollInjectedWalletTransaction,
 } from '../../services/walletExecution.service';
+import { useAuth } from '../../hooks/useAuth';
 import AccountingDashboardSection from '../accounting/AccountingDashboardSection';
 import AccountingToolbar from '../accounting/AccountingToolbar';
 import BankAccountManualModal from '../accounting/BankAccountManualModal';
@@ -160,6 +162,7 @@ function parseAccountingActionHash(hashValue: string): AccountingHashAction | nu
 }
 
 export default function AccountingPage({ data, setData }: AccountingPageProps) {
+  const auth = useAuth();
   const [activeSubsection, setActiveSubsection] =
     useState<AccountingSection>('dashboard');
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -446,6 +449,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     sourceRecordId,
     linkedTokenIds,
     summary,
+    storageOwner: 'user_owned',
+    retentionClass: 'financial_evidence',
+    storageNotes:
+      'ERP-generated document record ready for vault review and user-owned Google Drive routing when enabled.',
+    externalStorageTarget: 'google_drive',
+    externalStorageStatus: 'ready',
   });
 
   const buildInvoiceBrandingSnapshot = (
@@ -664,8 +673,33 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     }
 
     try {
+      const resolvedStorageOwner =
+        storageOwner ||
+        (sourceRecordType === 'direct_deposit_request'
+          ? 'clearflow_retained'
+          : 'user_owned');
+      const resolvedRetentionClass =
+        retentionClass ||
+        (sourceRecordType === 'reconciliation' ||
+        sourceRecordType === 'bill' ||
+        sourceRecordType === 'receipt' ||
+        sourceRecordType === 'coupon_presentment'
+          ? 'financial_evidence'
+          : sourceRecordType === 'direct_deposit_request'
+            ? 'payroll'
+            : 'operational');
       const sourceFileId = `vault-${sourceRecordType}-${Date.now()}`;
       const fileMetadata = await saveDocumentFile(sourceFileId, file);
+      const shouldAutoRouteToDrive =
+        resolvedStorageOwner === 'user_owned' &&
+        data.workspaceSettings.autoRouteUserOwnedDocumentsToDrive &&
+        auth.hasDriveAccess;
+      const driveRoutingResult = shouldAutoRouteToDrive
+        ? await auth.routeDocumentToDrive({
+            sourceFileId: fileMetadata.sourceFileId,
+            fileName: fileMetadata.fileName,
+          })
+        : null;
 
       const nextDocument: DocumentRecord = {
         id: `doc-${sourceRecordType}-${Date.now()}`,
@@ -683,10 +717,36 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         sourceRecordId,
         vaultPath: buildVaultPath(entityId, folder, fileMetadata.fileName),
         summary,
-        storageOwner,
-        retentionClass,
-        externalStorageTarget,
-        externalStorageStatus,
+        storageOwner: resolvedStorageOwner,
+        retentionClass: resolvedRetentionClass,
+        externalStorageTarget:
+          resolvedStorageOwner === 'user_owned'
+            ? 'google_drive'
+            : externalStorageTarget,
+        externalStorageStatus:
+          resolvedStorageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'routed'
+              : shouldAutoRouteToDrive
+                ? 'error'
+                : externalStorageStatus || 'ready'
+            : externalStorageStatus || 'not_applicable',
+        externalStorageFileId:
+          resolvedStorageOwner === 'user_owned' && driveRoutingResult?.success
+            ? driveRoutingResult.fileId
+            : undefined,
+        externalStorageLabel:
+          resolvedStorageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'Auto-routed to Google Drive'
+              : shouldAutoRouteToDrive
+                ? driveRoutingResult?.error || 'Automatic Google Drive routing failed'
+                : 'Ready for Google Drive routing'
+            : undefined,
+        externalStorageRoutedAt:
+          resolvedStorageOwner === 'user_owned' && driveRoutingResult?.success
+            ? new Date().toISOString()
+            : undefined,
         storageNotes,
       };
 
@@ -4119,12 +4179,30 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       customer,
       entity,
     });
+    const packetHtml = buildInvoicePacketHtml({
+      invoice,
+      customer,
+      entity,
+    });
 
     const response = await queueInvoiceExport({
       invoiceId: invoice.id,
       entityId: invoice.entityId,
       invoiceNumber: invoice.invoiceNumber,
     });
+
+    const exportFile = new File([packetHtml], packetDownload.fileName, {
+      type: 'text/html;charset=utf-8',
+    });
+    const exportFileMetadata = await saveDocumentFile(`invoice-export-${invoice.id}`, exportFile);
+    const shouldAutoRouteToDrive =
+      data.workspaceSettings.autoRouteUserOwnedDocumentsToDrive && auth.hasDriveAccess;
+    const driveRoutingResult = shouldAutoRouteToDrive
+      ? await auth.routeDocumentToDrive({
+          sourceFileId: exportFileMetadata.sourceFileId,
+          fileName: exportFileMetadata.fileName,
+        })
+      : null;
 
     setData((prev) => {
       const invoice = prev.invoices.find((item) => item.id === invoiceId);
@@ -4137,11 +4215,32 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         category: 'financial',
         date: new Date().toISOString().slice(0, 10),
         status: 'final',
-        fileName: packetDownload.fileName,
-        mimeType: 'text/html',
+        fileName: exportFileMetadata.fileName,
+        mimeType: exportFileMetadata.mimeType,
+        sizeBytes: exportFileMetadata.sizeBytes,
+        uploadedAt: exportFileMetadata.uploadedAt,
+        sourceFileId: exportFileMetadata.sourceFileId,
         sourceRecordType: 'document',
         sourceRecordId: invoiceId,
+        vaultPath: buildVaultPath(invoice.entityId, 'documents', exportFileMetadata.fileName),
         summary: `Export packet prepared for ${invoice.invoiceNumber}.`,
+        storageOwner: 'user_owned',
+        retentionClass: 'financial_evidence',
+        storageNotes:
+          'Invoice export packet retained in the vault and ready for user-owned Google Drive routing.',
+        externalStorageTarget: 'google_drive',
+        externalStorageStatus: driveRoutingResult?.success
+          ? 'routed'
+          : shouldAutoRouteToDrive
+            ? 'error'
+            : 'ready',
+        externalStorageFileId: driveRoutingResult?.success ? driveRoutingResult.fileId : undefined,
+        externalStorageLabel: driveRoutingResult?.success
+          ? 'Auto-routed to Google Drive'
+          : shouldAutoRouteToDrive
+            ? driveRoutingResult?.error || 'Automatic Google Drive routing failed'
+            : 'Ready for Google Drive routing',
+        externalStorageRoutedAt: driveRoutingResult?.success ? new Date().toISOString() : undefined,
       };
 
       return {
