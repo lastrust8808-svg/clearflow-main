@@ -174,21 +174,38 @@ export default function EntityExecutionStudio({
     linkedAuthorityRecordIds?: string[],
     linkedComplianceTagIds?: string[],
     linkedTokenIds?: string[]
-  ): DocumentRecord => ({
-    id: buildId('doc'),
-    entityId,
-    title,
-    category,
-    date,
-    status: 'draft',
-    templateKey,
-    outputStatus: 'drafting',
-    generatedBody,
-    summary,
-    linkedAuthorityRecordIds,
-    linkedComplianceTagIds,
-    linkedTokenIds,
-  });
+  ): DocumentRecord => {
+    const retentionClass =
+      category === 'tax'
+        ? 'tax'
+        : category === 'compliance'
+          ? 'compliance'
+          : category === 'authority_record' || category === 'governing'
+            ? 'authority'
+            : 'operational';
+
+    return {
+      id: buildId('doc'),
+      entityId,
+      title,
+      category,
+      date,
+      status: 'draft',
+      templateKey,
+      outputStatus: 'drafting',
+      generatedBody,
+      summary,
+      linkedAuthorityRecordIds,
+      linkedComplianceTagIds,
+      linkedTokenIds,
+      storageOwner: 'user_owned',
+      retentionClass,
+      storageNotes:
+        'Entity execution packet is workspace-owned and ready for vault review or Google Drive routing when the operator enables it.',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+    };
+  };
 
   const createComplianceTag = (
     entityId: string,

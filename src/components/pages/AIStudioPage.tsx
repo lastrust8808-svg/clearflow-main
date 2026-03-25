@@ -12,6 +12,8 @@ import type {
   ObligationRecord,
   TokenRecord,
 } from '../../types/core';
+import { useAuth } from '../../hooks/useAuth';
+import { saveDocumentFile } from '../../services/documentVault.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -190,6 +192,7 @@ function buildComplianceTag(input: {
 }
 
 export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
+  const auth = useAuth();
   const primaryEntity = data.entities[0];
   const digitalCount = data.aiWorkflows.filter((item) => item.category === 'digital_asset').length;
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
@@ -202,16 +205,98 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     [data.aiWorkflows],
   );
 
-  const appendDocument = (document: DocumentRecord, tokens: TokenRecord[] = []) => {
-    setData((prev) => ({
-      ...prev,
-      documents: [document, ...prev.documents],
-      tokens: tokens.length ? [...tokens, ...prev.tokens] : prev.tokens,
-    }));
-    focusDocument(document.id);
+  const slugifyFileStem = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'clearflow-packet';
+
+  const persistGeneratedDocumentRecord = async (document: DocumentRecord): Promise<DocumentRecord> => {
+    if (!document.generatedBody) {
+      return document;
+    }
+
+    try {
+      const generatedFile = new File(
+        [document.generatedBody],
+        `${slugifyFileStem(document.title)}.md`,
+        { type: 'text/markdown' },
+      );
+      const fileMetadata = await saveDocumentFile(`doc-generated-${document.id}`, generatedFile);
+      const shouldAutoRoute =
+        document.storageOwner === 'user_owned' &&
+        data.workspaceSettings.autoRouteUserOwnedDocumentsToDrive &&
+        auth.hasDriveAccess;
+      const driveRoutingResult = shouldAutoRoute
+        ? await auth.routeDocumentToDrive({
+            sourceFileId: fileMetadata.sourceFileId,
+            fileName: fileMetadata.fileName,
+          })
+        : null;
+
+      return {
+        ...document,
+        fileName: fileMetadata.fileName,
+        mimeType: fileMetadata.mimeType,
+        sizeBytes: fileMetadata.sizeBytes,
+        uploadedAt: fileMetadata.uploadedAt,
+        sourceFileId: fileMetadata.sourceFileId,
+        sourceRecordType: 'document',
+        sourceRecordId: document.id,
+        vaultPath: `/vault/${document.entityId}/documents/${fileMetadata.fileName}`,
+        externalStorageTarget:
+          document.storageOwner === 'user_owned' ? 'google_drive' : document.externalStorageTarget,
+        externalStorageStatus:
+          document.storageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'routed'
+              : shouldAutoRoute
+                ? 'error'
+                : document.externalStorageStatus || 'ready'
+            : document.externalStorageStatus || 'not_applicable',
+        externalStorageFileId:
+          document.storageOwner === 'user_owned' && driveRoutingResult?.success
+            ? driveRoutingResult.fileId
+            : document.externalStorageFileId,
+        externalStorageLabel:
+          document.storageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'Auto-routed to Google Drive'
+              : shouldAutoRoute
+                ? driveRoutingResult?.error || 'Automatic Google Drive routing failed'
+                : document.externalStorageLabel || 'Ready for Google Drive routing'
+            : document.externalStorageLabel,
+        externalStorageRoutedAt:
+          document.storageOwner === 'user_owned' && driveRoutingResult?.success
+            ? new Date().toISOString()
+            : document.externalStorageRoutedAt,
+      };
+    } catch (error) {
+      console.warn('Failed to persist AI Studio generated document into the vault.', error);
+      return {
+        ...document,
+        externalStorageStatus:
+          document.storageOwner === 'user_owned' ? 'error' : document.externalStorageStatus,
+        externalStorageLabel:
+          document.storageOwner === 'user_owned'
+            ? 'Vault persistence failed for this generated packet'
+            : document.externalStorageLabel,
+      };
+    }
   };
 
-  const appendDocumentBundle = ({
+  const appendDocument = async (document: DocumentRecord, tokens: TokenRecord[] = []) => {
+    const persistedDocument = await persistGeneratedDocumentRecord(document);
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      tokens: tokens.length ? [...tokens, ...prev.tokens] : prev.tokens,
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const appendDocumentBundle = async ({
     document,
     tokens = [],
     complianceTags = [],
@@ -222,9 +307,10 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     complianceTags?: CoreDataBundle['complianceTags'];
     taxReportingLinks?: CoreDataBundle['taxReportingLinks'];
   }) => {
+    const persistedDocument = await persistGeneratedDocumentRecord(document);
     setData((prev) => ({
       ...prev,
-      documents: [document, ...prev.documents],
+      documents: [persistedDocument, ...prev.documents],
       tokens: tokens.length ? [...tokens, ...prev.tokens] : prev.tokens,
       complianceTags: complianceTags.length
         ? [...complianceTags, ...prev.complianceTags]
@@ -233,7 +319,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
         ? [...taxReportingLinks, ...prev.taxReportingLinks]
         : prev.taxReportingLinks,
     }));
-    focusDocument(document.id);
+    focusDocument(persistedDocument.id);
   };
 
   const launchBusinessPacket = () => {
@@ -249,7 +335,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Business Document Packet\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\n\n## Included Drafts\n- Operating resolution\n- Vendor onboarding cover letter\n- Banking support memo\n- Internal control checklist\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchTrusteePacket = () => {
@@ -265,7 +351,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Trustee Help Packet\n\nTrust: ${primaryEntity.displayName || primaryEntity.name}\n\n## Trustee Checklist\n- Confirm authority documents are linked\n- Review current obligations and reserves\n- Update signer roles and communication paths\n- Prepare next compliance actions\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchLogoBrief = () => {
@@ -281,7 +367,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       body: `# Logo Creator Brief\n\nBrand: ${primaryEntity.displayName || primaryEntity.name}\nAccent: ${primaryEntity.branding?.accentColor || data.workspaceSettings.preferredAccentColor || '#36d7ff'}\n\n## Goals\n- Luxe but youthful\n- Credible for finance and trusteeship\n- Strong icon for invoices, vault packets, and the sidebar shell\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchStorageRetentionPacket = () => {
@@ -319,7 +405,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
 `,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchPurchaseAgreement = () => {
@@ -335,7 +421,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       body: `# Purchase Agreement Draft\n\nSeller: ____________________\nBuyer: ${primaryEntity.displayName || primaryEntity.name}\n\n## Purchase Terms\n- Asset or rights being acquired\n- Consideration and settlement method\n- Transfer documents and closing deliverables\n- Default, cure, and dispute language\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchTrustAdministrationPacket = () => {
@@ -362,7 +448,7 @@ Trust: ${primaryEntity.displayName || primaryEntity.name}
 `,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launch1099PrepPacket = () => {
@@ -419,7 +505,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       notes: 'Created from AI Studio 1099 filing prep flow for controlled review before filing.',
     };
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: {
         ...document,
         linkedTokenIds: [token.id],
@@ -460,7 +546,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
 `,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchOperatingResolution = () => {
@@ -478,7 +564,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       templateKey: 'operating_agreement',
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchContractorPacket = () => {
@@ -495,7 +581,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       body: `# Contractor Engagement Packet\n\nHiring Entity: ${primaryEntity.displayName || primaryEntity.name}\n\n## Included Drafts\n- Contractor agreement shell\n- Scope of work page\n- Payment and reimbursement terms\n- 1099 / tax collection checklist\n- File return and vault retention notes\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchW9CollectionPacket = () => {
@@ -533,7 +619,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       notes: 'Created from W-9 collection packet to track payee tax intake and retained forms.',
     };
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
       taxReportingLinks: [taxReportingLink],
@@ -554,7 +640,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       body: `# Distribution Review Memo\n\nEntity or Trust: ${primaryEntity.displayName || primaryEntity.name}\n\n## Review Points\n- Governing document authority\n- Available reserve and treasury posture\n- Intended recipient / beneficiary\n- Tax and reporting treatment\n- Remittance statement and evidence support\n`,
     });
 
-    appendDocument(document);
+    void appendDocument(document);
   };
 
   const launchSecuredNotePackage = () => {
@@ -647,7 +733,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       proofReference: 'Issued when a security agreement package is generated for controlled drafting.',
     });
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedTokenIds: [token.id] },
       tokens: [token],
     });
@@ -685,7 +771,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       proofReference: 'Issued automatically when a treasury control memo is generated.',
     });
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedTokenIds: [token.id] },
       tokens: [token],
     });
@@ -724,7 +810,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       linkedDocumentIds: [document.id],
     });
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
     });
@@ -762,7 +848,7 @@ Employer: ${primaryEntity.displayName || primaryEntity.name}
       linkedDocumentIds: [document.id],
     });
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
     });
@@ -800,7 +886,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       linkedDocumentIds: [document.id],
     });
 
-    appendDocumentBundle({
+    void appendDocumentBundle({
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
     });
