@@ -759,6 +759,7 @@ export interface WorkspaceSettingsRecord {
   supportEmail?: string;
   vaultRetentionPolicy: 'core_records_permanent' | 'seven_years' | 'custom';
   customRetentionNotes?: string;
+  autoRouteUserOwnedDocumentsToDrive: boolean;
   preferredAccentColor?: string;
 }
 

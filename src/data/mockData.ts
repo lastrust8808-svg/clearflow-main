@@ -1846,6 +1846,7 @@ export const coreMockData: CoreDataBundle = {
     ],
     supportEmail: 'ops@clearflow.site',
     vaultRetentionPolicy: 'core_records_permanent',
+    autoRouteUserOwnedDocumentsToDrive: true,
     preferredAccentColor: '#36d7ff',
   },
 };

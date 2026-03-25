@@ -26,7 +26,8 @@ const booleanSettingFields: Array<{
     | 'autoIssueVerificationTokens'
     | 'autoReconcileJournalEntries'
     | 'requireDocumentLinksForSettlements'
-    | 'digitalAssetVerificationRequired';
+    | 'digitalAssetVerificationRequired'
+    | 'autoRouteUserOwnedDocumentsToDrive';
   label: string;
 }> = [
   { key: 'autoIssueVerificationTokens', label: 'Auto Issue Verification Tokens' },
@@ -38,6 +39,10 @@ const booleanSettingFields: Array<{
   {
     key: 'digitalAssetVerificationRequired',
     label: 'Require Digital Asset Verification',
+  },
+  {
+    key: 'autoRouteUserOwnedDocumentsToDrive',
+    label: 'Auto Route User-Owned Documents To Google Drive',
   },
 ];
 

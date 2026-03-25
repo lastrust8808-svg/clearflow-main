@@ -139,6 +139,17 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
 
           const stamp = Date.now();
           const fileMetadata = await saveDocumentFile(`doc-upload-${stamp}`, payload.file);
+          const shouldAutoRouteToDrive =
+            payload.storageOwner === 'user_owned' &&
+            data.workspaceSettings.autoRouteUserOwnedDocumentsToDrive &&
+            auth.hasDriveAccess;
+          const driveRoutingResult = shouldAutoRouteToDrive
+            ? await auth.routeDocumentToDrive({
+                sourceFileId: fileMetadata.sourceFileId,
+                fileName: fileMetadata.fileName,
+              })
+            : null;
+
           setData((prev) => ({
             ...prev,
             documents: [
@@ -167,7 +178,29 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
                 externalStorageTarget:
                   payload.storageOwner === 'user_owned' ? 'google_drive' : undefined,
                 externalStorageStatus:
-                  payload.storageOwner === 'user_owned' ? 'ready' : 'not_applicable',
+                  payload.storageOwner === 'user_owned'
+                    ? driveRoutingResult?.success
+                      ? 'routed'
+                      : shouldAutoRouteToDrive
+                        ? 'error'
+                        : 'ready'
+                    : 'not_applicable',
+                externalStorageFileId:
+                  payload.storageOwner === 'user_owned' && driveRoutingResult?.success
+                    ? driveRoutingResult.fileId
+                    : undefined,
+                externalStorageLabel:
+                  payload.storageOwner === 'user_owned'
+                    ? driveRoutingResult?.success
+                      ? 'Auto-routed to Google Drive'
+                      : shouldAutoRouteToDrive
+                        ? driveRoutingResult?.error || 'Automatic Google Drive routing failed'
+                        : 'Ready for Google Drive routing'
+                    : undefined,
+                externalStorageRoutedAt:
+                  payload.storageOwner === 'user_owned' && driveRoutingResult?.success
+                    ? new Date().toISOString()
+                    : undefined,
               },
               ...prev.documents,
             ],
