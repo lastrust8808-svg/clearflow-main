@@ -332,6 +332,11 @@ export function applyClearFlowRetentionRecords(
     linkedInstrumentIds: [retentionInstrumentId],
     summary:
       'Accepted ClearFlow user agreement, platform security terms, and retained-record consent for protected operational custody records.',
+    storageOwner: 'clearflow_retained',
+    retentionClass: 'agreement',
+    storageNotes:
+      'Required internal agreement record retained by ClearFlow for platform security, consent, and recordkeeping support.',
+    externalStorageStatus: 'not_applicable',
   };
 
   const retainedRecordDocument: DocumentRecord = {
@@ -345,6 +350,11 @@ export function applyClearFlowRetentionRecords(
     linkedInstrumentIds: [retentionInstrumentId],
     summary:
       'Platform-retained record of the user agreement, security posture, internal deposit ledger assignment, and protected recordkeeping retention.',
+    storageOwner: 'clearflow_retained',
+    retentionClass: 'security_support',
+    storageNotes:
+      'Protected internal retained record held by ClearFlow for custody support, growth tracking, and audit-ready recordkeeping.',
+    externalStorageStatus: 'not_applicable',
   };
 
   const agreementToken: TokenRecord = {

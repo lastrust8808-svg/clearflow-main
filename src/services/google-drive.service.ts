@@ -1,6 +1,56 @@
 import { AnalysisResult } from '../types/app.models';
 
 class GoogleDriveService {
+  async uploadBinaryFile(
+    accessToken: string,
+    fileName: string,
+    blob: Blob,
+    mimeType: string,
+  ): Promise<{ id: string; name: string }> {
+    if (!accessToken) {
+      throw new Error('Not authorized for Google Drive.');
+    }
+
+    const metadata = {
+      name: fileName,
+      mimeType: mimeType || 'application/octet-stream',
+    };
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelim = `\r\n--${boundary}--`;
+    const metadataPart =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata);
+    const fileHeader =
+      delimiter + `Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`;
+
+    const requestBody = new Blob(
+      [metadataPart, fileHeader, blob, closeDelim],
+      { type: `multipart/related; boundary=${boundary}` },
+    );
+
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: requestBody,
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to upload file to Google Drive. ${errorText}`);
+    }
+
+    return response.json();
+  }
+
 
   private formatAnalysisResult(result: AnalysisResult, entityName: string): string {
     let content = `Clear-Flow Document Analysis\n`;

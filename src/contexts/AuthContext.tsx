@@ -2,6 +2,8 @@ import React, { createContext, useState, useEffect, useCallback, ReactNode, useR
 import { AppData, Entity, User } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
+import { getDocumentFile } from '../services/documentVault.service';
+import { googleDriveService } from '../services/google-drive.service';
 import type {
   LocalAuthChallenge,
   LocalAuthContactType,
@@ -79,6 +81,10 @@ interface AuthContextType {
   updateUser: (user: User) => void;
   updateEntities: (entities: Entity[]) => void;
   updateCoreDataSnapshot: (snapshot: CoreDataBundle) => void;
+  routeDocumentToDrive: (input: {
+    sourceFileId: string;
+    fileName: string;
+  }) => Promise<{ success: boolean; fileId?: string; error?: string }>;
   updateBackupAccess: (input: {
     userHandle?: string;
     password?: string;
@@ -132,18 +138,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const handleCredentialResponse = useCallback((response: any) => {
     const idToken = response.credential;
     const decodedToken = JSON.parse(atob(idToken.split('.')[1]));
+    const provisionalUser: User = {
+      id: crypto.randomUUID(),
+      name: decodedToken.name,
+      email: decodedToken.email,
+      isVerified: false,
+      primaryContactType: 'google',
+    };
     setState(current => ({
       ...current,
       token: idToken,
       status: 'pending-gsi',
-      gsiUser: { name: decodedToken.name, email: decodedToken.email }
+      gsiUser: { name: decodedToken.name, email: decodedToken.email },
+      appData: { user: provisionalUser, entities: [] },
     }));
   }, []);
 
   const handleAccessTokenResponse = useCallback((response: any) => {
     if (response.error) {
         console.error('OAuth Error:', response.error);
-        logout();
+        setState((current) => {
+          if (current.status === 'pending-gsi' && current.appData?.user) {
+            return {
+              ...current,
+              status: 'pending-profile-setup',
+              gsiUser: null,
+            };
+          }
+
+          return current;
+        });
         return;
     }
     setState(current => ({ ...current, apiAccessToken: response.access_token, status: 'pending-drive-check' }));
@@ -230,6 +254,60 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     checkDrive();
   }, [state.status, state.apiAccessToken, state.gsiUser]);
+
+  useEffect(() => {
+    if (state.status !== 'pending-drive-check' || !state.gsiUser) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setState((current) => {
+        if (current.status !== 'pending-drive-check' || !current.gsiUser) {
+          return current;
+        }
+
+        const newUser: User = {
+          ...(current.appData?.user || {
+            id: crypto.randomUUID(),
+            ...current.gsiUser,
+            isVerified: false,
+            primaryContactType: 'google' as const,
+          }),
+        };
+
+        return {
+          ...current,
+          status: 'pending-profile-setup',
+          appData: current.appData || { user: newUser, entities: [] },
+          gsiUser: null,
+        };
+      });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [state.status, state.gsiUser]);
+
+  useEffect(() => {
+    if (state.status !== 'pending-gsi' || !state.appData?.user) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setState((current) => {
+        if (current.status !== 'pending-gsi' || !current.appData?.user) {
+          return current;
+        }
+
+        return {
+          ...current,
+          status: 'pending-profile-setup',
+          gsiUser: null,
+        };
+      });
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [state.status, state.appData]);
 
   useEffect(() => {
     setIsInitialized(true);
@@ -550,6 +628,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const routeDocumentToDrive = async (input: {
+    sourceFileId: string;
+    fileName: string;
+  }) => {
+    if (!state.apiAccessToken) {
+      return { success: false, error: 'Google Drive access is not available yet.' };
+    }
+
+    try {
+      const storedFile = await getDocumentFile(input.sourceFileId);
+      if (!storedFile) {
+        return { success: false, error: 'The source file could not be found in the vault.' };
+      }
+
+      const upload = await googleDriveService.uploadBinaryFile(
+        state.apiAccessToken,
+        input.fileName || storedFile.fileName,
+        storedFile.blob,
+        storedFile.mimeType,
+      );
+
+      return { success: true, fileId: upload.id };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'The document could not be routed to Google Drive.',
+      };
+    }
+  };
+
   const updateBackupAccess = async (input: {
     userHandle?: string;
     password?: string;
@@ -699,8 +808,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.warn('Failed to persist local account profile setup to durable storage.', error);
       });
       setState((s) => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
+    } else if (state.token) {
+      Promise.resolve(
+        upsertLocalBackupAccount({
+          appData: finalAppData,
+          preferredContactType: finalAppData.user.email ? 'email' : 'phone',
+        })
+      )
+        .then((backupAccountId) => {
+          if (backupAccountId) {
+            saveLocalAuthAppData(backupAccountId, finalAppData);
+            void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
+              console.warn('Failed to persist Google fallback onboarding to durable storage.', error);
+            });
+          }
+
+          setState((s) => ({
+            ...s,
+            appData: finalAppData,
+            localAccountId: backupAccountId || s.localAccountId,
+            status: 'pending-verification',
+          }));
+        })
+        .catch((error) => {
+          console.warn('Unable to provision fallback storage for Google onboarding.', error);
+          setState((s) => ({
+            ...s,
+            appData: finalAppData,
+            status: 'pending-verification',
+          }));
+        });
     } else {
-      // Invalid state, logout
       console.error("Incomplete profile setup attempt without access token or mock token.");
       logout();
     }
@@ -795,6 +933,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     updateUser,
     updateEntities,
     updateCoreDataSnapshot,
+    routeDocumentToDrive,
     updateBackupAccess,
     completeProfileSetup,
     completeVerification,

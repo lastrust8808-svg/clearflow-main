@@ -269,6 +269,26 @@ export type DocumentCategory =
   | 'authority_record'
   | 'other';
 
+export type DocumentStorageOwner = 'user_owned' | 'clearflow_retained';
+
+export type DocumentRetentionClass =
+  | 'operational'
+  | 'agreement'
+  | 'security_support'
+  | 'payroll'
+  | 'compliance'
+  | 'authority'
+  | 'tax'
+  | 'financial_evidence';
+
+export type DocumentExternalStorageTarget = 'google_drive';
+
+export type DocumentExternalStorageStatus =
+  | 'not_applicable'
+  | 'ready'
+  | 'routed'
+  | 'error';
+
 export interface EntityRecord {
   id: string;
   name: string;
@@ -664,6 +684,14 @@ export interface DocumentRecord {
   linkedTokenIds?: string[];
   vaultPath?: string;
   summary?: string;
+  storageOwner?: DocumentStorageOwner;
+  retentionClass?: DocumentRetentionClass;
+  storageNotes?: string;
+  externalStorageTarget?: DocumentExternalStorageTarget;
+  externalStorageStatus?: DocumentExternalStorageStatus;
+  externalStorageFileId?: string;
+  externalStorageLabel?: string;
+  externalStorageRoutedAt?: string;
 }
 
 export interface TokenRecord {

@@ -4,7 +4,10 @@ import type {
   AIWorkflowRecord,
   CoreDataBundle,
   DocumentCategory,
+  DocumentExternalStorageStatus,
   DocumentRecord,
+  DocumentRetentionClass,
+  DocumentStorageOwner,
   InstrumentRecord,
   ObligationRecord,
   TokenRecord,
@@ -104,7 +107,22 @@ function buildGeneratedDocument(input: {
   summary: string;
   templateKey?: DocumentRecord['templateKey'];
   body: string;
+  storageOwner?: DocumentStorageOwner;
+  retentionClass?: DocumentRetentionClass;
+  storageNotes?: string;
+  externalStorageStatus?: DocumentExternalStorageStatus;
 }): DocumentRecord {
+  const storageOwner = input.storageOwner || 'user_owned';
+  const retentionClass =
+    input.retentionClass ||
+    (input.category === 'tax'
+      ? 'tax'
+      : input.category === 'compliance'
+        ? 'compliance'
+        : input.category === 'authority_record'
+          ? 'authority'
+          : 'operational');
+
   return {
     id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     entityId: input.entityId,
@@ -116,6 +134,16 @@ function buildGeneratedDocument(input: {
     outputStatus: 'drafting',
     generatedBody: input.body,
     summary: input.summary,
+    storageOwner,
+    retentionClass,
+    storageNotes:
+      input.storageNotes ||
+      (storageOwner === 'clearflow_retained'
+        ? 'Studio-generated retained record intended to stay inside ClearFlow’s retained record layer.'
+        : 'Studio-generated workspace packet ready for user-owned storage routing and vault review.'),
+    externalStorageTarget: storageOwner === 'user_owned' ? 'google_drive' : undefined,
+    externalStorageStatus:
+      input.externalStorageStatus || (storageOwner === 'user_owned' ? 'ready' : 'not_applicable'),
   };
 }
 
@@ -251,6 +279,44 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       category: 'other',
       summary: 'Brand and logo concept brief tied to entity identity and document style.',
       body: `# Logo Creator Brief\n\nBrand: ${primaryEntity.displayName || primaryEntity.name}\nAccent: ${primaryEntity.branding?.accentColor || data.workspaceSettings.preferredAccentColor || '#36d7ff'}\n\n## Goals\n- Luxe but youthful\n- Credible for finance and trusteeship\n- Strong icon for invoices, vault packets, and the sidebar shell\n`,
+    });
+
+    appendDocument(document);
+  };
+
+  const launchStorageRetentionPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Storage & Retention Packet`,
+      category: 'compliance',
+      summary:
+        'Workspace storage split packet covering user-owned drive routing, ClearFlow-retained records, and operational retention posture.',
+      retentionClass: 'compliance',
+      body: `# Storage & Retention Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## User-Owned Workspace Layer
+- Operational uploads
+- Working document packets
+- Draft agreements and support memos
+- Routing target: Google Drive when connected
+
+## ClearFlow Retained Layer
+- Accepted terms and conditions
+- Internal security-support records
+- Custody and compliance support records
+- Records required for platform audit posture
+
+## Operator Review
+- Confirm which records are retained internally
+- Confirm which packets should route to Google Drive
+- Review tax, payroll, and authority retention requirements
+`,
     });
 
     appendDocument(document);
@@ -1023,6 +1089,14 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
       actionLabel: 'Create Brief',
       onAction: launchLogoBrief,
     },
+    {
+      title: 'Storage & Retention Packet',
+      subtitle: 'User-owned drive routing and ClearFlow retained records',
+      detail: 'Create a packet that explains storage split, Google Drive routing posture, and retained-record treatment for the workspace.',
+      lane: 'operations',
+      actionLabel: 'Create Storage Packet',
+      onAction: launchStorageRetentionPacket,
+    },
   ];
 
   const studioLanes: Array<{
@@ -1209,6 +1283,15 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
                   },
                   { label: 'Template', value: document.templateKey || 'custom' },
                   { label: 'Tokens', value: document.linkedTokenIds?.length || 0 },
+                  {
+                    label: 'Storage',
+                    value:
+                      document.storageOwner === 'clearflow_retained'
+                        ? 'ClearFlow retained'
+                        : document.externalStorageStatus === 'routed'
+                          ? 'Drive routed'
+                          : 'Workspace / drive-ready',
+                  },
                 ]}
                 actionSlot={
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

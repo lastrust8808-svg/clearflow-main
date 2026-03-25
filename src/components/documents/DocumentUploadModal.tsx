@@ -1,5 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { DocumentCategory, EntityRecord } from '../../types/core';
+import type {
+  DocumentCategory,
+  DocumentRetentionClass,
+  DocumentStorageOwner,
+  EntityRecord,
+} from '../../types/core';
 
 interface DocumentUploadModalProps {
   open: boolean;
@@ -11,6 +16,8 @@ interface DocumentUploadModalProps {
     category: DocumentCategory;
     date: string;
     summary: string;
+    storageOwner: DocumentStorageOwner;
+    retentionClass: DocumentRetentionClass;
     file: File | null;
   }) => void;
 }
@@ -67,6 +74,8 @@ export default function DocumentUploadModal({ open, entities, onClose, onSubmit 
   const [category, setCategory] = useState<DocumentCategory>('financial');
   const [date, setDate] = useState('');
   const [summary, setSummary] = useState('');
+  const [storageOwner, setStorageOwner] = useState<DocumentStorageOwner>('user_owned');
+  const [retentionClass, setRetentionClass] = useState<DocumentRetentionClass>('operational');
   const [file, setFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -76,6 +85,8 @@ export default function DocumentUploadModal({ open, entities, onClose, onSubmit 
     setCategory('financial');
     setDate(new Date().toISOString().slice(0, 10));
     setSummary('');
+    setStorageOwner('user_owned');
+    setRetentionClass('operational');
     setFile(null);
   }, [entities, open]);
 
@@ -111,13 +122,42 @@ export default function DocumentUploadModal({ open, entities, onClose, onSubmit 
           </select>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} style={inputStyle} />
+          <select
+            value={storageOwner}
+            onChange={(e) => setStorageOwner(e.target.value as DocumentStorageOwner)}
+            style={inputStyle}
+          >
+            <option value="user_owned">User-owned workspace record</option>
+            <option value="clearflow_retained">ClearFlow retained record</option>
+          </select>
+          <select
+            value={retentionClass}
+            onChange={(e) => setRetentionClass(e.target.value as DocumentRetentionClass)}
+            style={inputStyle}
+          >
+            <option value="operational">Operational</option>
+            <option value="agreement">Agreement</option>
+            <option value="security_support">Security support</option>
+            <option value="payroll">Payroll</option>
+            <option value="compliance">Compliance</option>
+            <option value="authority">Authority</option>
+            <option value="tax">Tax</option>
+            <option value="financial_evidence">Financial evidence</option>
+          </select>
         </div>
         <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="What this document is for" style={{ ...inputStyle, minHeight: 120, resize: 'vertical' }} />
+        <div style={{ color: '#94a3b8', fontSize: 13 }}>
+          {storageOwner === 'clearflow_retained'
+            ? "Use ClearFlow retained for platform-held agreement, custody, payroll, or compliance records that should stay inside ClearFlow's retained layer."
+            : 'Use user-owned workspace for normal operating files, uploads, and packets that can later route to user-controlled storage like Google Drive.'}
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} style={buttonStyle}>Cancel</button>
           <button
             type="button"
-            onClick={() => onSubmit({ entityId, title, category, date, summary, file })}
+            onClick={() =>
+              onSubmit({ entityId, title, category, date, summary, storageOwner, retentionClass, file })
+            }
             style={{ ...buttonStyle, background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))', borderColor: 'rgba(126,242,255,0.28)' }}
           >
             Save Document

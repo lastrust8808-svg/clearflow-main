@@ -1,4 +1,8 @@
 import type { CoreDataBundle } from '../../types/core';
+import {
+  isClearFlowRetainedDocument,
+  isUserOwnedReadyDocument,
+} from '../../services/documentStorage.service';
 import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -43,10 +47,10 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const directDepositCount = data.directDepositAuthorizations.filter(
     (item) => item.status === 'returned' || item.status === 'verified',
   ).length;
-  const retainedRecordCount = data.documents.filter(
-    (item) =>
-      item.title.includes('ClearFlow User Terms') ||
-      item.title.includes('ClearFlow Retained Security Record')
+  const retainedRecordCount = data.documents.filter(isClearFlowRetainedDocument).length;
+  const userOwnedReadyCount = data.documents.filter(isUserOwnedReadyDocument).length;
+  const driveRoutedCount = data.documents.filter(
+    (item) => item.externalStorageStatus === 'routed'
   ).length;
   const internalRetentionLedgerCount = data.ledgerAccounts.filter((item) =>
     item.name.includes('ClearFlow Retained Security Instruments Held')
@@ -267,7 +271,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
 
           <RecordCard
             title="Workspace-Owned Layer"
-            subtitle={`${data.documents.filter((item) => item.sourceFileId).length} vault-backed files ready for user-owned storage paths`}
+            subtitle={`${userOwnedReadyCount} ready | ${driveRoutedCount} already routed to drive`}
           >
             <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
               Operational uploads, packets, and working files are the best candidates for

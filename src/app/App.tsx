@@ -6,6 +6,7 @@ import { coreMockData } from '../data/mockData';
 import AppShell from '../components/layout/AppShell';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
+import { getStoredMembershipDraft } from '../services/membershipDraft.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
@@ -496,6 +497,45 @@ export default function App({
       setPostAuthOnboardingStage('profile');
     }
   }, [auth.authStatus]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'pending-profile-setup') {
+      return;
+    }
+
+    const storedDraft = getStoredMembershipDraft();
+    const hasEntitySeed = Boolean(
+      auth.appData?.entities?.length || auth.appData?.coreDataSnapshot?.entities?.length
+    );
+    const needsStructuredOnboarding =
+      !auth.currentUser?.clearflowTermsAcceptedAt && !hasEntitySeed;
+
+    if (!needsStructuredOnboarding) {
+      return;
+    }
+
+    if (storedDraft) {
+      setSelectedOnboardingPath(storedDraft.selectedPath);
+    }
+
+    if (welcomeIntent !== 'new') {
+      setWelcomeIntent('new');
+      setStoredOnboardingIntent('new');
+    }
+
+    const nextStage: PostAuthOnboardingStage = storedDraft ? 'membership' : 'pathSelect';
+    if (postAuthOnboardingStage !== nextStage) {
+      setPostAuthOnboardingStage(nextStage);
+      setStoredOnboardingStage(nextStage);
+    }
+  }, [
+    auth.appData?.coreDataSnapshot?.entities?.length,
+    auth.appData?.entities?.length,
+    auth.authStatus,
+    auth.currentUser?.clearflowTermsAcceptedAt,
+    postAuthOnboardingStage,
+    welcomeIntent,
+  ]);
 
   useEffect(() => {
     setDocumentVaultScope(currentUserId);

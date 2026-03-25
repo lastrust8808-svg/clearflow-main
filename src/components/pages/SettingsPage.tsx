@@ -3,6 +3,10 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
 import {
+  isClearFlowRetainedDocument,
+  isUserOwnedReadyDocument,
+} from '../../services/documentStorage.service';
+import {
   loadIntegrationStatus,
   type IntegrationStatusSnapshot,
 } from '../../services/integrationStatus.service';
@@ -20,6 +24,11 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
   const auth = useAuth();
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatusSnapshot | null>(null);
   const [integrationLoading, setIntegrationLoading] = useState(true);
+  const retainedDocumentCount = data.documents.filter(isClearFlowRetainedDocument).length;
+  const userOwnedReadyCount = data.documents.filter(isUserOwnedReadyDocument).length;
+  const driveRoutedCount = data.documents.filter(
+    (item) => item.externalStorageStatus === 'routed'
+  ).length;
 
   useEffect(() => {
     void loadIntegrationStatus()
@@ -110,9 +119,15 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
           <WorkbenchRecordCard
             title="ClearFlow Retained Records"
             subtitle="Required internal agreement and custody support retained by the platform"
+            summaryItems={[
+              { label: 'Retained Docs', value: retainedDocumentCount },
+              { label: 'User-Owned Ready', value: userOwnedReadyCount },
+              { label: 'Drive Routed', value: driveRoutedCount },
+              { label: 'Terms Version', value: auth.currentUser?.clearflowTermsVersion || 'Pending' },
+              { label: 'Drive Access', value: auth.hasDriveAccess ? 'Connected' : 'Not connected' },
+            ]}
           >
             <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
-              <div>Terms version: {auth.currentUser?.clearflowTermsVersion || 'Not yet accepted'}</div>
               <div>Accepted at: {auth.currentUser?.clearflowTermsAcceptedAt || 'Pending acceptance'}</div>
               <div>Terms record: {auth.currentUser?.clearflowTermsDocumentId || 'Not created yet'}</div>
               <div>Retained record: {auth.currentUser?.clearflowRetainedRecordDocumentId || 'Not created yet'}</div>
@@ -181,7 +196,14 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
             title="Vault Settings"
             subtitle="Document storage, path rules, retention logic"
           >
-            Next layer: route uploads to durable storage profiles, archive policies, and controlled export bundles.
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>User-owned ready documents: {userOwnedReadyCount}</div>
+              <div>ClearFlow retained documents: {retainedDocumentCount}</div>
+              <div>Drive-routed documents: {driveRoutedCount}</div>
+              <div style={{ color: 'var(--cf-muted)' }}>
+                The storage split is now explicit in the document model, so user-owned workspace files and retained platform records can route differently without title-based guessing.
+              </div>
+            </div>
           </WorkbenchRecordCard>
           <WorkbenchRecordCard
             title="Compliance Settings"
