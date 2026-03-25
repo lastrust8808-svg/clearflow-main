@@ -3,6 +3,7 @@ import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type {
   AuthorityRecord,
   BankAccountRecord,
+  ComplianceTagRecord,
   CoreDataBundle,
   DocumentRecord,
   InstrumentRecord,
@@ -75,6 +76,12 @@ function formatLabel(value: string) {
 
 function buildId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function goToHash(hash: string) {
+  if (typeof window !== 'undefined') {
+    window.location.hash = hash;
+  }
 }
 
 function buildResourceSummary(data: CoreDataBundle, entityId: string) {
@@ -162,25 +169,112 @@ export default function EntityResourceStudio({
     }
 
     const entityId = selectedEntity.id;
+    const findLinkedDocument = (documentIds?: string[]) =>
+      documentIds?.length
+        ? data.documents.find((document) => documentIds.includes(document.id)) || null
+        : null;
+    const findComplianceTag = (documentIds?: string[]) =>
+      documentIds?.length
+        ? data.complianceTags.find((tag) =>
+            tag.linkedDocumentIds?.some((documentId) => documentIds.includes(documentId)),
+          ) || null
+        : null;
+
     return [
       ...data.bankAccounts
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.accountName, kind: 'Bank Account' })),
+        .map((item) => {
+          const linkedDocument = findLinkedDocument(item.linkedDocumentIds);
+          const complianceTag = findComplianceTag(item.linkedDocumentIds);
+
+          return {
+            id: item.id,
+            label: item.accountName,
+            kind: 'Bank Account',
+            supportLabel:
+              complianceTag?.label ||
+              linkedDocument?.title ||
+              `${item.onboardingStatus ? formatLabel(item.onboardingStatus) : 'support pending'}`,
+            actionLabel: linkedDocument ? 'Open Packet' : 'Open Accounting',
+            actionHash: linkedDocument ? `#documents:${linkedDocument.id}` : '#accounting:bank-feed',
+          };
+        }),
       ...data.wallets
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.name, kind: 'Wallet' })),
+        .map((item) => {
+          const linkedDocument = findLinkedDocument(item.linkedDocumentIds);
+          const complianceTag = findComplianceTag(item.linkedDocumentIds);
+
+          return {
+            id: item.id,
+            label: item.name,
+            kind: 'Wallet',
+            supportLabel:
+              complianceTag?.label ||
+              linkedDocument?.title ||
+              `${formatLabel(item.custodyType || 'self_custody')} custody`,
+            actionLabel: linkedDocument ? 'Open Packet' : 'Open Assets',
+            actionHash: linkedDocument ? `#documents:${linkedDocument.id}` : '#assets',
+          };
+        }),
       ...data.authorityRecords
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.personName, kind: 'Authority' })),
+        .map((item) => {
+          const linkedDocument = findLinkedDocument(item.linkedDocumentIds);
+
+          return {
+            id: item.id,
+            label: item.personName,
+            kind: 'Authority',
+            supportLabel:
+              linkedDocument?.title ||
+              `${formatLabel(item.clientAuthorizationStatus || 'active')} authority`,
+            actionLabel: linkedDocument ? 'Open Memo' : 'Open Entities',
+            actionHash: linkedDocument ? `#documents:${linkedDocument.id}` : '#entities',
+          };
+        }),
       ...data.instruments
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.title, kind: 'Instrument' })),
+        .map((item) => {
+          const linkedDocument = findLinkedDocument(item.linkedDocumentIds);
+
+          return {
+            id: item.id,
+            label: item.title,
+            kind: 'Instrument',
+            supportLabel:
+              linkedDocument?.title || `${formatLabel(item.instrumentType)} support packet`,
+            actionLabel: linkedDocument ? 'Open Packet' : 'Open Transactions',
+            actionHash: linkedDocument ? `#documents:${linkedDocument.id}` : '#transactions',
+          };
+        }),
       ...data.obligations
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.title, kind: 'Obligation' })),
+        .map((item) => {
+          const linkedDocument = findLinkedDocument(item.linkedDocumentIds);
+
+          return {
+            id: item.id,
+            label: item.title,
+            kind: 'Obligation',
+            supportLabel: linkedDocument?.title || `${formatLabel(item.status)} control memo`,
+            actionLabel: linkedDocument ? 'Open Memo' : 'Open Transactions',
+            actionHash: linkedDocument ? `#documents:${linkedDocument.id}` : '#transactions',
+          };
+        }),
       ...data.documents
         .filter((item) => item.entityId === entityId)
-        .map((item) => ({ id: item.id, label: item.title, kind: 'Document' })),
+        .map((item) => ({
+          id: item.id,
+          label: item.title,
+          kind: 'Document',
+          supportLabel:
+            item.externalStorageStatus === 'routed'
+              ? 'Routed to Google Drive'
+              : item.externalStorageLabel || `${formatLabel(item.status)} document`,
+          actionLabel: 'Open Vault',
+          actionHash: `#documents:${item.id}`,
+        })),
     ].slice(0, 8);
   }, [data, selectedEntity]);
 
@@ -326,8 +420,9 @@ export default function EntityResourceStudio({
       const entityId = selectedEntity.id;
 
       if (resourceType === 'bankAccount') {
+        const bankAccountId = buildId('bank');
         const nextRecord: BankAccountRecord = {
-          id: buildId('bank'),
+          id: bankAccountId,
           entityId,
           institutionName: formState.institutionName || 'Operating Bank',
           accountName: formState.accountName || `${selectedEntity.displayName || selectedEntity.name} Operating`,
@@ -335,23 +430,73 @@ export default function EntityResourceStudio({
           currency: formState.currency || 'USD',
           status: 'active',
           currentBalance: Number(formState.currentBalance || 0),
+          linkedDocumentIds: [],
+          onboardingStatus: 'draft',
         };
+        const bankDocument = buildStorageReadyDocument(
+          entityId,
+          `${nextRecord.accountName} Banking Support Packet`,
+          'financial',
+          'Banking support packet generated from the entity resource desk.',
+          `# Banking Support Packet\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nInstitution: ${nextRecord.institutionName}\nAccount Name: ${nextRecord.accountName}\nAccount Type: ${nextRecord.accountType}\nCurrency: ${nextRecord.currency}\nOpening Balance: ${nextRecord.currentBalance || 0}\n\nNext Steps\n- Attach onboarding and authority support\n- Confirm feed or manual reconciliation posture\n- Link treasury or ledger mapping as needed`,
+        );
+        const bankTag: ComplianceTagRecord = {
+          id: buildId('cmp'),
+          entityId,
+          label: `${nextRecord.accountName} onboarding review`,
+          category: 'reporting',
+          status: 'review',
+          linkedDocumentIds: [bankDocument.id],
+          notes: 'Created automatically from bank account setup in Entity Resource Studio.',
+        };
+        persistedDocument = bankDocument;
+        nextRecord.linkedDocumentIds = [bankDocument.id];
 
-        return { ...prev, bankAccounts: [nextRecord, ...prev.bankAccounts] };
+        return {
+          ...prev,
+          bankAccounts: [nextRecord, ...prev.bankAccounts],
+          documents: [bankDocument, ...prev.documents],
+          complianceTags: [bankTag, ...prev.complianceTags],
+        };
       }
 
       if (resourceType === 'wallet') {
+        const walletId = buildId('wallet');
         const nextRecord: WalletRecord = {
-          id: buildId('wallet'),
+          id: walletId,
           entityId,
           name: formState.walletName || `${selectedEntity.displayName || selectedEntity.name} Wallet`,
           network: formState.walletNetwork || 'ethereum',
           address: formState.walletAddress || 'pending-assignment',
           custodyType: (formState.walletCustodyType as WalletRecord['custodyType']) || 'self_custody',
+          linkedDocumentIds: [],
           notes: 'Created from Entity Resource Studio.',
         };
+        const walletDocument = buildStorageReadyDocument(
+          entityId,
+          `${nextRecord.name} Custody Packet`,
+          'wallet_control_memo',
+          'Wallet custody and execution support packet generated from the entity resource desk.',
+          `# Wallet Custody Packet\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nWallet: ${nextRecord.name}\nNetwork: ${nextRecord.network}\nAddress: ${nextRecord.address}\nCustody Type: ${nextRecord.custodyType}\n\nControl Notes\n- Confirm signer or custodian authority\n- Confirm execution posture and routing\n- Link policy or compliance support as needed`,
+        );
+        const walletTag: ComplianceTagRecord = {
+          id: buildId('cmp'),
+          entityId,
+          label: `${nextRecord.name} custody review`,
+          category: 'digital_asset',
+          status: 'review',
+          linkedDocumentIds: [walletDocument.id],
+          notes: 'Created automatically from wallet setup in Entity Resource Studio.',
+        };
+        persistedDocument = walletDocument;
+        nextRecord.linkedDocumentIds = [walletDocument.id];
 
-        return { ...prev, wallets: [nextRecord, ...prev.wallets] };
+        return {
+          ...prev,
+          wallets: [nextRecord, ...prev.wallets],
+          documents: [walletDocument, ...prev.documents],
+          complianceTags: [walletTag, ...prev.complianceTags],
+        };
       }
 
       if (resourceType === 'authority') {
@@ -979,23 +1124,44 @@ export default function EntityResourceStudio({
             This entity does not have any quick-created resources yet.
           </div>
         ) : (
-          recentResources.map((resource) => (
-            <div
-              key={resource.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '10px 12px',
-                borderRadius: 12,
-                background: 'rgba(8, 13, 27, 0.56)',
-              }}
-            >
-              <div>{resource.label}</div>
-              <div style={{ color: 'var(--cf-muted)' }}>{resource.kind}</div>
-            </div>
-          ))
-        )}
+            recentResources.map((resource) => (
+              <div
+                key={resource.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(8, 13, 27, 0.56)',
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div style={{ fontWeight: 700 }}>{resource.label}</div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>
+                    {resource.kind} · {resource.supportLabel}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => goToHash(resource.actionHash)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126, 242, 255, 0.24)',
+                    background: 'rgba(54, 215, 255, 0.12)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {resource.actionLabel}
+                </button>
+              </div>
+            ))
+          )}
       </div>
     </div>
   );
