@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AppSection, WorkspaceSettingsRecord } from '../../types/core';
+import { subnavItems } from '../accounting/accountingUtils';
 
 interface AppShellProps {
   activeSection: AppSection;
@@ -39,12 +41,117 @@ const navGroups: Array<{
   },
 ];
 
+const sectionQuickActions: Record<
+  AppSection,
+  Array<{ label: string; hash: string; description: string }>
+> = {
+  overview: [
+    { label: 'New Invoice', hash: '#accounting:new-invoice', description: 'Launch receivable intake' },
+    { label: 'Record Payment', hash: '#accounting:new-payment', description: 'Open settlement flow' },
+    { label: 'Upload Document', hash: '#documents:upload', description: 'Send a file into the vault' },
+  ],
+  entities: [
+    { label: 'Add Entity', hash: '#entities:new', description: 'Create a new profile' },
+    { label: 'Open Documents', hash: '#documents', description: 'Review packets and evidence' },
+    { label: 'Open Accounting', hash: '#accounting:dashboard', description: 'Continue ERP setup' },
+  ],
+  accounting: [
+    { label: 'Payments', hash: '#accounting:payments', description: 'Open remittance desk' },
+    { label: 'Recurring', hash: '#accounting:recurring', description: 'Review scheduled flows' },
+    { label: 'Bank Feed', hash: '#accounting:bankFeed', description: 'Sync or post bank activity' },
+  ],
+  ledger: [
+    { label: 'Open Treasury', hash: '#ledger', description: 'Review private reserve posture' },
+    { label: 'Settlement Desk', hash: '#transactions', description: 'Continue obligation execution' },
+    { label: 'Documents', hash: '#documents', description: 'Open supporting memos and proofs' },
+  ],
+  assets: [
+    { label: 'Wallet Reserve', hash: '#assets', description: 'Review custody and reserve assets' },
+    { label: 'Bank Feed', hash: '#accounting:bankFeed', description: 'Connect external cash flows' },
+    { label: 'Compliance', hash: '#compliance', description: 'Review digital asset posture' },
+  ],
+  transactions: [
+    { label: 'Payments', hash: '#accounting:payments', description: 'Open outgoing settlements' },
+    { label: 'Recurring', hash: '#accounting:recurring', description: 'Review obligation cycles' },
+    { label: 'Documents', hash: '#documents', description: 'Open linked packets' },
+  ],
+  compliance: [
+    { label: 'Rails & Codes', hash: '#accounting:railOps', description: 'Check movement identifiers' },
+    { label: 'Payments', hash: '#accounting:payments', description: 'Resolve held settlements' },
+    { label: 'Documents', hash: '#documents', description: 'Open filing and support packets' },
+  ],
+  documents: [
+    { label: 'Upload', hash: '#documents:upload', description: 'Add a new vault file' },
+    { label: 'Accounting', hash: '#accounting:dashboard', description: 'Return to ERP workflow' },
+    { label: 'Compliance', hash: '#compliance', description: 'Review linked control items' },
+  ],
+  aiStudio: [
+    { label: 'Settlement Audit', hash: '#aiStudio', description: 'Generate a rail audit packet' },
+    { label: 'Documents', hash: '#documents', description: 'Open recent studio outputs' },
+    { label: 'Compliance', hash: '#compliance', description: 'Review filing and support tags' },
+  ],
+  settings: [
+    { label: 'Documents', hash: '#documents', description: 'Review storage posture' },
+    { label: 'AI Studio', hash: '#aiStudio', description: 'Open generators and reports' },
+    { label: 'Overview', hash: '#overview', description: 'Return to operating inbox' },
+  ],
+};
+
+function goToHash(hash: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.location.hash = hash;
+}
+
+function formatRouteLabel(hashValue: string, activeSection: AppSection) {
+  if (!hashValue || hashValue === `#${activeSection}`) {
+    return 'Desk Home';
+  }
+
+  if (hashValue.startsWith('#accounting:')) {
+    const subroute = hashValue.replace('#accounting:', '');
+    const actionLabel = subnavItems.find((item) => item.id === subroute)?.label;
+    if (actionLabel) {
+      return actionLabel;
+    }
+
+    return subroute
+      .replace(/^new-/, 'new ')
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, (value) => value.toUpperCase());
+  }
+
+  if (hashValue.startsWith('#documents:')) {
+    const docTarget = hashValue.replace('#documents:', '');
+    return docTarget === 'upload' ? 'Upload Document' : 'Focused Vault Record';
+  }
+
+  if (hashValue.startsWith('#entities:')) {
+    const entityTarget = hashValue.replace('#entities:', '');
+    return entityTarget === 'new' ? 'Add Entity' : 'Entity Workflow';
+  }
+
+  return hashValue
+    .replace('#', '')
+    .replace(/:/g, ' / ')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
 export default function AppShell({
   activeSection,
   onSectionChange,
   workspaceSettings,
   children,
 }: AppShellProps) {
+  const [currentHash, setCurrentHash] = useState(() =>
+    typeof window === 'undefined' ? '' : window.location.hash
+  );
+  const [isCompactLayout, setIsCompactLayout] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 1180
+  );
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -140,6 +247,11 @@ export default function AppShell({
   const activeItem =
     navGroups.flatMap((group) => group.items).find((item) => item.id === activeSection) ||
     navGroups[0].items[0];
+  const activeRouteLabel = useMemo(
+    () => formatRouteLabel(currentHash, activeSection),
+    [activeSection, currentHash]
+  );
+  const quickActions = sectionQuickActions[activeSection];
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
@@ -152,6 +264,25 @@ export default function AppShell({
     aiStudio: 'Generators, research, search, reporting, and operational tool launchers.',
     settings: 'Workspace behavior, storage posture, integrations, and access configuration.',
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const applyWindowState = () => {
+      setCurrentHash(window.location.hash);
+      setIsCompactLayout(window.innerWidth < 1180);
+    };
+
+    applyWindowState();
+    window.addEventListener('hashchange', applyWindowState);
+    window.addEventListener('resize', applyWindowState);
+    return () => {
+      window.removeEventListener('hashchange', applyWindowState);
+      window.removeEventListener('resize', applyWindowState);
+    };
+  }, []);
 
   return (
     <div
@@ -174,7 +305,7 @@ export default function AppShell({
         overflow: 'hidden',
         minHeight: '100vh',
         display: 'grid',
-        gridTemplateColumns: '280px minmax(0, 1fr)',
+        gridTemplateColumns: isCompactLayout ? '1fr' : '280px minmax(0, 1fr)',
         background: themePalette.pageBackground,
         color: 'var(--cf-text)',
         fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
@@ -184,7 +315,8 @@ export default function AppShell({
         style={{
           position: 'relative',
           zIndex: 1,
-          borderRight: '1px solid var(--cf-border)',
+          borderRight: isCompactLayout ? 'none' : '1px solid var(--cf-border)',
+          borderBottom: isCompactLayout ? '1px solid var(--cf-border)' : 'none',
           padding: '24px 16px 28px',
           background: themePalette.sidebarBackground,
           boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
@@ -280,45 +412,55 @@ export default function AppShell({
               >
                 {group.title}
               </div>
-              {group.items.map((item) => {
-                const isActive = item.id === activeSection;
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 8,
+                  gridTemplateColumns: isCompactLayout
+                    ? 'repeat(auto-fit, minmax(170px, 1fr))'
+                    : '1fr',
+                }}
+              >
+                {group.items.map((item) => {
+                  const isActive = item.id === activeSection;
 
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onSectionChange(item.id)}
-                    style={{
-                      textAlign: 'left',
-                      padding: '13px 14px',
-                      borderRadius: 16,
-                      border: '1px solid',
-                      borderColor: isActive ? 'var(--cf-border-strong)' : 'var(--cf-border)',
-                      background: isActive
-                        ? 'linear-gradient(135deg, rgba(54, 215, 255, 0.18), rgba(88, 141, 255, 0.18))'
-                        : 'var(--cf-panel-soft)',
-                      color: 'var(--cf-text)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: isActive ? 700 : 500,
-                      boxShadow: isActive ? '0 14px 28px rgba(7, 17, 31, 0.24)' : 'none',
-                      display: 'grid',
-                      gap: 4,
-                      transition: 'background 160ms ease, border-color 160ms ease, transform 160ms ease',
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    <span
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => onSectionChange(item.id)}
                       style={{
-                        fontSize: 12,
-                        color: isActive ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.6)',
-                        fontWeight: 500,
+                        textAlign: 'left',
+                        padding: '13px 14px',
+                        borderRadius: 16,
+                        border: '1px solid',
+                        borderColor: isActive ? 'var(--cf-border-strong)' : 'var(--cf-border)',
+                        background: isActive
+                          ? 'linear-gradient(135deg, rgba(54, 215, 255, 0.18), rgba(88, 141, 255, 0.18))'
+                          : 'var(--cf-panel-soft)',
+                        color: 'var(--cf-text)',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        fontWeight: isActive ? 700 : 500,
+                        boxShadow: isActive ? '0 14px 28px rgba(7, 17, 31, 0.24)' : 'none',
+                        display: 'grid',
+                        gap: 4,
+                        transition: 'background 160ms ease, border-color 160ms ease, transform 160ms ease',
                       }}
                     >
-                      {item.hint}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span>{item.label}</span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: isActive ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.6)',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {item.hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </nav>
@@ -360,22 +502,40 @@ export default function AppShell({
               }}
             >
               <div style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '7px 12px',
-                    borderRadius: 999,
-                    background: 'rgba(54, 215, 255, 0.08)',
-                    border: '1px solid rgba(126, 242, 255, 0.18)',
-                    color: 'var(--cf-accent-soft)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    width: 'fit-content',
-                  }}
-                >
-                  {activeItem.label}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '7px 12px',
+                      borderRadius: 999,
+                      background: 'rgba(54, 215, 255, 0.08)',
+                      border: '1px solid rgba(126, 242, 255, 0.18)',
+                      color: 'var(--cf-accent-soft)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      width: 'fit-content',
+                    }}
+                  >
+                    {activeItem.label}
+                  </div>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '7px 12px',
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid var(--cf-border)',
+                      color: 'var(--cf-muted)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {activeRouteLabel}
+                  </div>
                 </div>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
                   {activeItem.hint}
@@ -407,6 +567,51 @@ export default function AppShell({
                   </div>
                   <div style={{ color: 'var(--cf-muted)', marginTop: 4, lineHeight: 1.55, fontSize: 13 }}>
                     Refresh now returns to this active desk instead of restarting the app flow.
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Quick Actions
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {quickActions.map((action) => (
+                      <button
+                        key={action.hash}
+                        type="button"
+                        onClick={() => goToHash(action.hash)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          borderRadius: 14,
+                          border: '1px solid var(--cf-border)',
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'var(--cf-text)',
+                          cursor: 'pointer',
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <span style={{ fontWeight: 700 }}>{action.label}</span>
+                        <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
+                          {action.description}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
