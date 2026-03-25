@@ -7,8 +7,11 @@ import type {
   DocumentRecord,
   InstrumentRecord,
   ObligationRecord,
+  TokenRecord,
   WalletRecord,
 } from '../../types/core';
+import { useAuth } from '../../hooks/useAuth';
+import { saveDocumentFile } from '../../services/documentVault.service';
 
 type ResourceType =
   | 'bankAccount'
@@ -89,6 +92,7 @@ export default function EntityResourceStudio({
   data,
   setData,
 }: EntityResourceStudioProps) {
+  const auth = useAuth();
   const [selectedEntityId, setSelectedEntityId] = useState(data.entities[0]?.id ?? '');
   const [resourceType, setResourceType] = useState<ResourceType>('bankAccount');
   const [formState, setFormState] = useState<Record<string, string>>({});
@@ -191,10 +195,132 @@ export default function EntityResourceStudio({
   const updateField = (key: string, value: string) =>
     setFormState((prev) => ({ ...prev, [key]: value }));
 
-  const handleCreateResource = () => {
+  const shouldIssueVerificationToken =
+    selectedEntity?.operationalDefaults?.autoIssueVerificationTokens ??
+    data.workspaceSettings.autoIssueVerificationTokens;
+
+  const buildStorageReadyDocument = (
+    entityId: string,
+    title: string,
+    category: DocumentRecord['category'],
+    summary: string,
+    generatedBody?: string,
+    linkedAuthorityRecordIds?: string[],
+    linkedTokenIds?: string[],
+  ): DocumentRecord => {
+    const retentionClass =
+      category === 'tax'
+        ? 'tax'
+        : category === 'compliance'
+          ? 'compliance'
+          : category === 'authority_record' || category === 'governing'
+            ? 'authority'
+            : 'operational';
+
+    return {
+      id: buildId('doc'),
+      entityId,
+      title,
+      category,
+      date: formState.documentDate || new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      summary,
+      generatedBody,
+      linkedAuthorityRecordIds,
+      linkedTokenIds,
+      storageOwner: 'user_owned',
+      retentionClass,
+      storageNotes:
+        'Entity resource packet is workspace-owned and ready for vault review or Google Drive routing when enabled.',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+    };
+  };
+
+  const persistGeneratedEntityDocument = async (
+    document: DocumentRecord,
+  ): Promise<DocumentRecord> => {
+    if (!document.generatedBody) {
+      return document;
+    }
+
+    try {
+      const fileStem =
+        document.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 60) || 'entity-resource-packet';
+      const generatedFile = new File([document.generatedBody], `${fileStem}.md`, {
+        type: 'text/markdown',
+      });
+      const fileMetadata = await saveDocumentFile(`entity-resource-${document.id}`, generatedFile);
+      const shouldAutoRoute =
+        document.storageOwner === 'user_owned' &&
+        data.workspaceSettings.autoRouteUserOwnedDocumentsToDrive &&
+        auth.hasDriveAccess;
+      const driveRoutingResult = shouldAutoRoute
+        ? await auth.routeDocumentToDrive({
+            sourceFileId: fileMetadata.sourceFileId,
+            fileName: fileMetadata.fileName,
+          })
+        : null;
+
+      return {
+        ...document,
+        fileName: fileMetadata.fileName,
+        mimeType: fileMetadata.mimeType,
+        sizeBytes: fileMetadata.sizeBytes,
+        uploadedAt: fileMetadata.uploadedAt,
+        sourceFileId: fileMetadata.sourceFileId,
+        sourceRecordType: 'document',
+        sourceRecordId: document.id,
+        vaultPath: `/vault/${document.entityId}/documents/${fileMetadata.fileName}`,
+        externalStorageStatus:
+          document.storageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'routed'
+              : shouldAutoRoute
+                ? 'error'
+                : document.externalStorageStatus || 'ready'
+            : document.externalStorageStatus,
+        externalStorageFileId:
+          document.storageOwner === 'user_owned' && driveRoutingResult?.success
+            ? driveRoutingResult.fileId
+            : document.externalStorageFileId,
+        externalStorageLabel:
+          document.storageOwner === 'user_owned'
+            ? driveRoutingResult?.success
+              ? 'Auto-routed to Google Drive'
+              : shouldAutoRoute
+                ? driveRoutingResult?.error || 'Automatic Google Drive routing failed'
+                : 'Ready for Google Drive routing'
+            : document.externalStorageLabel,
+        externalStorageRoutedAt:
+          document.storageOwner === 'user_owned' && driveRoutingResult?.success
+            ? new Date().toISOString()
+            : document.externalStorageRoutedAt,
+      };
+    } catch (error) {
+      console.warn('Failed to persist entity resource document into the vault.', error);
+      return {
+        ...document,
+        externalStorageStatus:
+          document.storageOwner === 'user_owned' ? 'error' : document.externalStorageStatus,
+        externalStorageLabel:
+          document.storageOwner === 'user_owned'
+            ? 'Vault persistence failed for this generated entity packet'
+            : document.externalStorageLabel,
+      };
+    }
+  };
+
+  const handleCreateResource = async () => {
     if (!selectedEntity) {
       return;
     }
+
+    let persistedDocument: DocumentRecord | null = null;
 
     setData((prev) => {
       const entityId = selectedEntity.id;
@@ -229,8 +355,10 @@ export default function EntityResourceStudio({
       }
 
       if (resourceType === 'authority') {
+        const authorityId = buildId('auth');
+        const tokenId = shouldIssueVerificationToken ? buildId('tok') : null;
         const nextRecord: AuthorityRecord = {
-          id: buildId('auth'),
+          id: authorityId,
           entityId,
           personName: formState.authorityPersonName || selectedEntity.representativeName || 'Authorized Representative',
           recordType: (formState.authorityType as AuthorityRecord['recordType']) || 'client_authorization',
@@ -238,14 +366,48 @@ export default function EntityResourceStudio({
           clientAuthorizationStatus:
             (formState.authorityStatus as AuthorityRecord['clientAuthorizationStatus']) || 'active',
           notes: formState.authorityNotes || 'Created from Entity Resource Studio.',
+          linkedTokenIds: tokenId ? [tokenId] : undefined,
         };
 
-        return { ...prev, authorityRecords: [nextRecord, ...prev.authorityRecords] };
+        const authorityToken: TokenRecord | null = tokenId
+          ? {
+              id: tokenId,
+              entityId,
+              subjectType: 'authority_record',
+              subjectId: authorityId,
+              label: `${nextRecord.personName} authority token`,
+              status: 'issued',
+              tokenStandard: 'internal-proof',
+              tokenReference: `AUTH-${Date.now()}`,
+              issuedAt: new Date().toISOString(),
+              proofReference: 'Generated automatically from Entity Resource Studio authority creation.',
+            }
+          : null;
+        const authorityDocument = buildStorageReadyDocument(
+          entityId,
+          `${nextRecord.personName} Authority Memo`,
+          'authority_record',
+          'Authority packet generated from the entity resource desk.',
+          `# Authority Memo\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nRepresentative: ${nextRecord.personName}\nAuthority Type: ${nextRecord.recordType}\nStatus: ${nextRecord.clientAuthorizationStatus}\nEffective Date: ${nextRecord.effectiveDate || 'Pending'}\n\nNotes\n${nextRecord.notes || 'Authority support generated from Entity Resource Studio.'}`,
+          [authorityId],
+          authorityToken ? [authorityToken.id] : undefined,
+        );
+        persistedDocument = authorityDocument;
+        nextRecord.linkedDocumentIds = [authorityDocument.id];
+
+        return {
+          ...prev,
+          authorityRecords: [nextRecord, ...prev.authorityRecords],
+          documents: [authorityDocument, ...prev.documents],
+          tokens: authorityToken ? [authorityToken, ...prev.tokens] : prev.tokens,
+        };
       }
 
       if (resourceType === 'instrument') {
+        const instrumentId = buildId('inst');
+        const tokenId = shouldIssueVerificationToken ? buildId('tok') : null;
         const nextRecord: InstrumentRecord = {
-          id: buildId('inst'),
+          id: instrumentId,
           entityId,
           title: formState.instrumentTitle || `${selectedEntity.displayName || selectedEntity.name} Instrument`,
           instrumentType:
@@ -254,15 +416,47 @@ export default function EntityResourceStudio({
           denominationValue: Number(formState.instrumentAmount || 0),
           paymentMedium: 'fiat',
           linkedDocumentIds: [],
+          linkedTokenIds: tokenId ? [tokenId] : undefined,
           notes: formState.instrumentNotes || 'Created from Entity Resource Studio.',
         };
+        const instrumentToken: TokenRecord | null = tokenId
+          ? {
+              id: tokenId,
+              entityId,
+              subjectType: 'instrument',
+              subjectId: instrumentId,
+              label: `${nextRecord.title} verification token`,
+              status: 'issued',
+              tokenStandard: 'internal-proof',
+              tokenReference: `INST-${Date.now()}`,
+              issuedAt: new Date().toISOString(),
+              proofReference: 'Generated automatically from Entity Resource Studio instrument creation.',
+            }
+          : null;
+        const instrumentDocument = buildStorageReadyDocument(
+          entityId,
+          `${nextRecord.title} Support Packet`,
+          'financial',
+          'Instrument support packet generated from the entity resource desk.',
+          `# Instrument Support Packet\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nInstrument: ${nextRecord.title}\nType: ${nextRecord.instrumentType}\nIssue Date: ${nextRecord.issueDate || 'Pending'}\nDenomination: ${nextRecord.denominationValue || 0}\n\nNotes\n${nextRecord.notes || 'Instrument support generated from Entity Resource Studio.'}`,
+          undefined,
+          instrumentToken ? [instrumentToken.id] : undefined,
+        );
+        persistedDocument = instrumentDocument;
+        nextRecord.linkedDocumentIds = [instrumentDocument.id];
 
-        return { ...prev, instruments: [nextRecord, ...prev.instruments] };
+        return {
+          ...prev,
+          instruments: [nextRecord, ...prev.instruments],
+          documents: [instrumentDocument, ...prev.documents],
+          tokens: instrumentToken ? [instrumentToken, ...prev.tokens] : prev.tokens,
+        };
       }
 
       if (resourceType === 'obligation') {
+        const obligationId = buildId('obl');
         const nextRecord: ObligationRecord = {
-          id: buildId('obl'),
+          id: obligationId,
           entityId,
           title: formState.obligationTitle || `${selectedEntity.displayName || selectedEntity.name} Obligation`,
           obligationType:
@@ -273,22 +467,44 @@ export default function EntityResourceStudio({
           status: (formState.obligationStatus as ObligationRecord['status']) || 'open',
           linkedDocumentIds: [],
         };
+        const obligationDocument = buildStorageReadyDocument(
+          entityId,
+          `${nextRecord.title} Control Memo`,
+          'financial',
+          'Obligation control memo generated from the entity resource desk.',
+          `# Obligation Control Memo\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nObligation: ${nextRecord.title}\nType: ${nextRecord.obligationType}\nAmount: ${nextRecord.amount}\nPayment Medium: ${nextRecord.paymentMedium}\nStatus: ${nextRecord.status}\n\nNotes\nGenerated from Entity Resource Studio for downstream settlement and treasury work.`,
+        );
+        persistedDocument = obligationDocument;
+        nextRecord.linkedDocumentIds = [obligationDocument.id];
 
-        return { ...prev, obligations: [nextRecord, ...prev.obligations] };
+        return {
+          ...prev,
+          obligations: [nextRecord, ...prev.obligations],
+          documents: [obligationDocument, ...prev.documents],
+        };
       }
 
-      const nextRecord: DocumentRecord = {
-        id: buildId('doc'),
+      const nextRecord = buildStorageReadyDocument(
         entityId,
-        title: formState.documentTitle || `${selectedEntity.displayName || selectedEntity.name} Control Memo`,
-        category: (formState.documentCategory as DocumentRecord['category']) || 'authority_record',
-        date: formState.documentDate || new Date().toISOString().slice(0, 10),
-        status: 'draft',
-        summary: formState.documentSummary || 'Created from Entity Resource Studio.',
-      };
+        formState.documentTitle || `${selectedEntity.displayName || selectedEntity.name} Control Memo`,
+        (formState.documentCategory as DocumentRecord['category']) || 'authority_record',
+        formState.documentSummary || 'Created from Entity Resource Studio.',
+        `# Entity Control Memo\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nCategory: ${formState.documentCategory || 'authority_record'}\nDate: ${formState.documentDate || new Date().toISOString().slice(0, 10)}\n\nSummary\n${formState.documentSummary || 'Created from Entity Resource Studio.'}`,
+      );
+      persistedDocument = nextRecord;
 
       return { ...prev, documents: [nextRecord, ...prev.documents] };
     });
+
+    if (persistedDocument) {
+      const hydratedDocument = await persistGeneratedEntityDocument(persistedDocument);
+      setData((prev) => ({
+        ...prev,
+        documents: prev.documents.map((item) =>
+          item.id === hydratedDocument.id ? hydratedDocument : item,
+        ),
+      }));
+    }
   };
 
   return (
