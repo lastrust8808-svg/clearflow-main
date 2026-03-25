@@ -158,6 +158,9 @@ export default function AppShell({
   const [launcherQuery, setLauncherQuery] = useState('');
   const [recentRoutes, setRecentRoutes] = useState<Array<{ hash: string; label: string }>>([]);
   const [pinnedRoutes, setPinnedRoutes] = useState<Array<{ hash: string; label: string }>>([]);
+  const [showUtilityPanels, setShowUtilityPanels] = useState(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= 1180
+  );
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -258,6 +261,10 @@ export default function AppShell({
     [activeSection, currentHash]
   );
   const quickActions = sectionQuickActions[activeSection];
+  const resumeRoutes = useMemo(
+    () => recentRoutes.filter((route) => route.hash !== currentHash).slice(0, 3),
+    [currentHash, recentRoutes]
+  );
   const launcherItems = useMemo(
     () => [
       ...navGroups.flatMap((group) =>
@@ -317,7 +324,9 @@ export default function AppShell({
 
     const applyWindowState = () => {
       setCurrentHash(window.location.hash);
-      setIsCompactLayout(window.innerWidth < 1180);
+      const nextCompactLayout = window.innerWidth < 1180;
+      setIsCompactLayout(nextCompactLayout);
+      setShowUtilityPanels((previous) => (nextCompactLayout ? previous : true));
     };
 
     try {
@@ -650,7 +659,44 @@ export default function AppShell({
                 <div style={{ color: 'var(--cf-muted)', lineHeight: 1.65, fontSize: 15 }}>
                   {sectionSummaryById[activeSection]}
                 </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowUtilityPanels((previous) => !previous)}
+                    style={{
+                      minHeight: 42,
+                      padding: '0 14px',
+                      borderRadius: 14,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {showUtilityPanels ? 'Hide Workspace Utilities' : 'Show Workspace Utilities'}
+                  </button>
+                  {resumeRoutes[0] ? (
+                    <button
+                      type="button"
+                      onClick={() => goToHash(resumeRoutes[0].hash)}
+                      style={{
+                        minHeight: 42,
+                        padding: '0 14px',
+                        borderRadius: 14,
+                        border: '1px solid rgba(126, 242, 255, 0.18)',
+                        background: 'rgba(54, 215, 255, 0.08)',
+                        color: 'var(--cf-accent-soft)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Resume {resumeRoutes[0].label}
+                    </button>
+                  ) : null}
+                </div>
               </div>
+              {showUtilityPanels ? (
               <div
                 style={{
                   display: 'grid',
@@ -674,6 +720,55 @@ export default function AppShell({
                   </div>
                   <div style={{ color: 'var(--cf-muted)', marginTop: 4, lineHeight: 1.55, fontSize: 13 }}>
                     Refresh now returns to this active desk instead of restarting the app flow.
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Resume Work
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {resumeRoutes.length === 0 ? (
+                      <div style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.5 }}>
+                        As you move between desks, your latest working routes will show up here for quick return.
+                      </div>
+                    ) : (
+                      resumeRoutes.map((route) => (
+                        <button
+                          key={`resume-${route.hash}`}
+                          type="button"
+                          onClick={() => goToHash(route.hash)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '10px 12px',
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background: 'rgba(255,255,255,0.03)',
+                            color: 'var(--cf-text)',
+                            cursor: 'pointer',
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{route.label}</span>
+                          <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
                 <div
@@ -979,6 +1074,7 @@ export default function AppShell({
                   </div>
                 </div>
               </div>
+              ) : null}
             </div>
           </section>
           {children}
