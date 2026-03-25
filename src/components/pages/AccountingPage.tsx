@@ -5399,6 +5399,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             complianceTags={complianceTags}
             movementIdentifiers={movementIdentifiers}
             returnEvents={returnEvents}
+            railControls={remittanceRailControls}
             onNavigate={navigateToHash}
           />
         );
@@ -5573,6 +5574,110 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       case 'railOps':
         return (
           <div style={{ display: 'grid', gap: 16 }}>
+            <PageSection
+              title="Settlement Railing Board"
+              description="Unified release posture for outgoing remittances across proof, traceability, exception, and reconciliation controls."
+            >
+              <div style={{ display: 'grid', gap: 12 }}>
+                {remittanceRailControls.length === 0 ? (
+                  <div style={{ color: '#d1d5db' }}>
+                    No remittance rail controls are active yet.
+                  </div>
+                ) : (
+                  remittanceRailControls.map((control) => (
+                    <div
+                      key={control.paymentId}
+                      style={{
+                        border: '1px solid rgba(148,163,184,0.2)',
+                        borderRadius: 12,
+                        padding: 14,
+                        background: 'rgba(15,23,42,0.45)',
+                        color: '#e5e7eb',
+                        display: 'grid',
+                        gap: 10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ display: 'grid', gap: 4 }}>
+                          <div style={{ fontWeight: 700 }}>
+                            {control.executionLabel} | {control.railNamespace}
+                          </div>
+                          <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                            payment {control.paymentId} | settlement {control.settlementId || 'pending'}
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            border: '1px solid rgba(96,165,250,0.35)',
+                            background:
+                              control.overallStatus === 'ready'
+                                ? 'rgba(15,118,110,0.22)'
+                                : control.overallStatus === 'watch'
+                                  ? 'rgba(8,47,73,0.28)'
+                                  : 'rgba(120,53,15,0.2)',
+                            color:
+                              control.overallStatus === 'ready'
+                                ? '#ccfbf1'
+                                : control.overallStatus === 'watch'
+                                  ? '#bae6fd'
+                                  : '#fde68a',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {control.overallStatus}
+                        </div>
+                      </div>
+                      <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                        {control.recommendedAction}
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: 10,
+                          color: '#cbd5e1',
+                          fontSize: 13,
+                        }}
+                      >
+                        <div>{control.passCount}/{control.checks.length} controls passing</div>
+                        <div>{control.movementIdentifierCount} linked movement identifiers</div>
+                        <div>{control.openReturnCount} open return events</div>
+                        <div>{control.openReclamationCount} open reclamation events</div>
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {control.checks.map((check) => (
+                          <div
+                            key={`${control.paymentId}-${check.id}`}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: '1px solid rgba(148,163,184,0.2)',
+                              background: 'rgba(8,13,27,0.48)',
+                            }}
+                          >
+                            <div style={{ fontWeight: 700 }}>
+                              {check.label} | {check.status}
+                            </div>
+                            <div style={{ color: '#94a3b8', marginTop: 4 }}>{check.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </PageSection>
             <EditableRecordSection
               title="Movement Identifiers"
               description="ACH traces, Fedwire IMAD/OMAD, Treasury references, and IRS-linked movement IDs."

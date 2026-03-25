@@ -12,6 +12,7 @@ import type {
   ReturnEventRecord,
   TaxReportingLinkRecord,
 } from '../../types/core';
+import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import type { AccountingStats, JournalDraft } from './accountingTypes';
@@ -31,6 +32,7 @@ interface AccountingDashboardSectionProps {
   complianceTags: ComplianceTagRecord[];
   movementIdentifiers: MovementIdentifierRecord[];
   returnEvents: ReturnEventRecord[];
+  railControls: SettlementRailControlView[];
   onNavigate?: (hash: string) => void;
 }
 
@@ -49,6 +51,7 @@ export default function AccountingDashboardSection({
   complianceTags,
   movementIdentifiers,
   returnEvents,
+  railControls,
   onNavigate,
 }: AccountingDashboardSectionProps) {
   const incomingReceiptsTotal = payments
@@ -146,6 +149,15 @@ export default function AccountingDashboardSection({
     )
     .sort((left, right) => (left.dueDate || '9999-12-31').localeCompare(right.dueDate || '9999-12-31'))
     .slice(0, 4);
+  const railSummary = {
+    ready: railControls.filter((item) => item.overallStatus === 'ready').length,
+    watch: railControls.filter((item) => item.overallStatus === 'watch').length,
+    hold: railControls.filter((item) => item.overallStatus === 'hold').length,
+    exception: railControls.filter((item) => item.overallStatus === 'exception').length,
+  };
+  const priorityRailControls = railControls
+    .filter((item) => item.overallStatus !== 'ready')
+    .slice(0, 4);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -205,6 +217,63 @@ export default function AccountingDashboardSection({
             <button type="button" style={actionButtonStyle} onClick={() => navigate('#documents')}>
               Open Vault
             </button>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Settlement Rail Posture"
+        description="Derived rail readiness across source control, counterparty instructions, proof, identifiers, exceptions, and reconciliation."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <StatCard label="Ready Rails" value={railSummary.ready} />
+            <StatCard label="Watch Rails" value={railSummary.watch} />
+            <StatCard label="Held Rails" value={railSummary.hold} />
+            <StatCard label="Rail Exceptions" value={railSummary.exception} />
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {priorityRailControls.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>
+                No unsettled rail blockers are open right now.
+              </div>
+            ) : (
+              priorityRailControls.map((control) => (
+                <div key={control.paymentId} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700 }}>
+                    {control.executionLabel} | {control.railNamespace}
+                  </div>
+                  <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                    {control.overallStatus} | {control.passCount}/{control.checks.length} controls passing
+                  </div>
+                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                    {control.recommendedAction}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#accounting:payments')}
+                    >
+                      Open Payments Desk
+                    </button>
+                    <button
+                      type="button"
+                      style={actionButtonStyle}
+                      onClick={() => navigate('#accounting:railOps')}
+                    >
+                      Open Rails & Codes
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </PageSection>
