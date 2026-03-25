@@ -5,11 +5,13 @@ import type {
   ReconciliationRecord,
 } from '../../types/core';
 import { buildReconciliationCloseMetrics } from '../../services/reconciliationControls.service';
+import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 
 interface ReconciliationWorkspaceProps {
   bankAccounts: BankAccountRecord[];
   reconciliations: ReconciliationRecord[];
   payments: PaymentRecord[];
+  railControls: SettlementRailControlView[];
   onCreateReconciliation: (bankAccountId: string) => void;
   onAutoClear: (reconciliationId: string) => void;
   onSaveStatement: (
@@ -35,6 +37,7 @@ export default function ReconciliationWorkspace({
   bankAccounts,
   reconciliations,
   payments,
+  railControls,
   onCreateReconciliation,
   onAutoClear,
   onSaveStatement,
@@ -76,6 +79,19 @@ export default function ReconciliationWorkspace({
         : null,
     [selectedBankAccount, selectedReconciliation]
   );
+  const selectedRailControls = useMemo(() => {
+    if (!selectedBankAccount) {
+      return [];
+    }
+
+    return railControls.filter((control) => {
+      const linkedPayment = payments.find((payment) => payment.id === control.paymentId);
+      return (
+        linkedPayment?.sourceBankAccountId === selectedBankAccount.id &&
+        control.overallStatus !== 'ready'
+      );
+    });
+  }, [payments, railControls, selectedBankAccount]);
 
   useEffect(() => {
     if (!selectedReconciliation) {
@@ -346,6 +362,47 @@ export default function ReconciliationWorkspace({
               </div>
             </div>
           ) : null}
+
+          <div
+            style={{
+              display: 'grid',
+              gap: 10,
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(148,163,184,0.18)',
+              background: 'rgba(15,23,42,0.35)',
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Settlement Rail Exceptions In Scope</div>
+            {selectedRailControls.length === 0 ? (
+              <div style={{ color: '#8cebff' }}>
+                No held or exception rail controls are tied to this bank account right now.
+              </div>
+            ) : (
+              selectedRailControls.map((control) => (
+                <div
+                  key={control.paymentId}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(148,163,184,0.2)',
+                    background: 'rgba(8,13,27,0.48)',
+                    color: '#d1d5db',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: '#e5e7eb' }}>
+                    {control.executionLabel} | {control.overallStatus}
+                  </div>
+                  <div>{control.recommendedAction}</div>
+                  <div style={{ color: '#94a3b8' }}>
+                    {control.openReturnCount} return(s) | {control.openReclamationCount} reclamation(s) |{' '}
+                    {control.movementIdentifierCount} identifiers
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
 
           <label style={{ display: 'grid', gap: 6 }}>
             <span>Exception Notes</span>

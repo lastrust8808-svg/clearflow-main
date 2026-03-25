@@ -4,6 +4,7 @@ import {
   isUserOwnedReadyDocument,
 } from '../../services/documentStorage.service';
 import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
+import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -19,6 +20,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
     }
   };
   const settlementFlows = buildSettlementFlowViews(data);
+  const remittanceRailControls = buildRemittanceRailControls(data);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -67,6 +69,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
       item.approvalStatus === 'pending' ||
       item.releaseStatus === 'ready_to_release',
   );
+  const priorityRailControls = remittanceRailControls
+    .filter((item) => item.overallStatus !== 'ready')
+    .slice(0, 5);
   const reconciliationQueue = data.reconciliations.filter(
     (item) => item.status !== 'completed' || item.statementReviewStatus === 'needs_review',
   );
@@ -133,6 +138,12 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Tax Filing Queue" value={filingQueueCount} />
         <StatCard label="Direct Deposit Returns" value={directDepositCount} />
         <StatCard label="Retained Records" value={retainedRecordCount} />
+        <StatCard
+          label="Rail Exceptions"
+          value={
+            remittanceRailControls.filter((item) => item.overallStatus === 'exception').length
+          }
+        />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
 
@@ -327,6 +338,44 @@ export default function OverviewPage({ data }: OverviewPageProps) {
                 }}
               >
                 Open Payments Queue
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Settlement Rail Watch"
+            subtitle={`${priorityRailControls.length} remittance lanes with blockers or follow-up work`}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              {priorityRailControls.slice(0, 4).map((control) => (
+                <div key={control.paymentId} style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                  <strong style={{ color: '#effcff' }}>
+                    {control.executionLabel} | {control.railNamespace}
+                  </strong>
+                  <div>
+                    {control.overallStatus} | {control.passCount}/{control.checks.length} controls passing
+                  </div>
+                  <div>{control.recommendedAction}</div>
+                </div>
+              ))}
+              {priorityRailControls.length === 0 ? (
+                <div style={{ color: '#d1d5db' }}>No rail blockers or watch items are open.</div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => navigate('#accounting:payments')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Settlement Rail Desk
               </button>
             </div>
           </RecordCard>

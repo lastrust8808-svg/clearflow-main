@@ -5892,6 +5892,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               bankAccounts={bankAccounts}
               reconciliations={reconciliations}
               payments={payments}
+              railControls={remittanceRailControls}
               onCreateReconciliation={handleCreateReconciliation}
               onAutoClear={handleAutoClearReconciliation}
               onSaveStatement={handleSaveReconciliationStatement}
