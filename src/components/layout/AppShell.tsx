@@ -97,6 +97,8 @@ const sectionQuickActions: Record<
   ],
 };
 
+const RECENT_ROUTE_STORAGE_KEY = 'clearflow-shell-recent-routes-v1';
+
 function goToHash(hash: string) {
   if (typeof window === 'undefined') {
     return;
@@ -152,6 +154,8 @@ export default function AppShell({
   const [isCompactLayout, setIsCompactLayout] = useState(() =>
     typeof window !== 'undefined' && window.innerWidth < 1180
   );
+  const [launcherQuery, setLauncherQuery] = useState('');
+  const [recentRoutes, setRecentRoutes] = useState<Array<{ hash: string; label: string }>>([]);
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -252,6 +256,45 @@ export default function AppShell({
     [activeSection, currentHash]
   );
   const quickActions = sectionQuickActions[activeSection];
+  const launcherItems = useMemo(
+    () => [
+      ...navGroups.flatMap((group) =>
+        group.items.map((item) => ({
+          label: item.label,
+          hash: `#${item.id}`,
+          description: item.hint,
+          category: group.title,
+        }))
+      ),
+      ...Object.entries(sectionQuickActions).flatMap(([sectionId, actions]) =>
+        actions.map((action) => ({
+          label: action.label,
+          hash: action.hash,
+          description: action.description,
+          category: `${sectionId} actions`,
+        }))
+      ),
+    ],
+    []
+  );
+  const filteredLauncherItems = useMemo(() => {
+    const normalized = launcherQuery.trim().toLowerCase();
+    const baseItems = normalized
+      ? launcherItems.filter(
+          (item) =>
+            item.label.toLowerCase().includes(normalized) ||
+            item.description.toLowerCase().includes(normalized) ||
+            item.category.toLowerCase().includes(normalized)
+        )
+      : launcherItems.slice(0, 10);
+
+    return baseItems
+      .filter(
+        (item, index, collection) =>
+          collection.findIndex((candidate) => candidate.hash === item.hash) === index
+      )
+      .slice(0, 8);
+  }, [launcherItems, launcherQuery]);
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
@@ -275,6 +318,15 @@ export default function AppShell({
       setIsCompactLayout(window.innerWidth < 1180);
     };
 
+    try {
+      const rawRecentRoutes = window.localStorage.getItem(RECENT_ROUTE_STORAGE_KEY);
+      if (rawRecentRoutes) {
+        setRecentRoutes(JSON.parse(rawRecentRoutes) as Array<{ hash: string; label: string }>);
+      }
+    } catch {
+      // ignore route history parse errors
+    }
+
     applyWindowState();
     window.addEventListener('hashchange', applyWindowState);
     window.addEventListener('resize', applyWindowState);
@@ -283,6 +335,28 @@ export default function AppShell({
       window.removeEventListener('resize', applyWindowState);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !currentHash) {
+      return;
+    }
+
+    const routeLabel = formatRouteLabel(currentHash, activeSection);
+    setRecentRoutes((previous) => {
+      const nextRoutes = [
+        { hash: currentHash, label: routeLabel },
+        ...previous.filter((item) => item.hash !== currentHash),
+      ].slice(0, 6);
+
+      try {
+        window.localStorage.setItem(RECENT_ROUTE_STORAGE_KEY, JSON.stringify(nextRoutes));
+      } catch {
+        // ignore local storage failures
+      }
+
+      return nextRoutes;
+    });
+  }, [activeSection, currentHash]);
 
   return (
     <div
@@ -548,7 +622,7 @@ export default function AppShell({
                 style={{
                   display: 'grid',
                   gap: 10,
-                  minWidth: 240,
+                  minWidth: 280,
                 }}
               >
                 <div
@@ -612,6 +686,120 @@ export default function AppShell({
                         </span>
                       </button>
                     ))}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Workspace Launcher
+                  </div>
+                  <input
+                    type="text"
+                    value={launcherQuery}
+                    onChange={(event) => setLauncherQuery(event.target.value)}
+                    placeholder="Search desks, tools, and actions"
+                    style={{
+                      width: '100%',
+                      minHeight: 42,
+                      borderRadius: 12,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(10, 16, 28, 0.72)',
+                      color: 'var(--cf-text)',
+                      padding: '0 12px',
+                      outline: 'none',
+                      marginBottom: 10,
+                    }}
+                  />
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {filteredLauncherItems.map((item) => (
+                      <button
+                        key={`${item.category}-${item.hash}`}
+                        type="button"
+                        onClick={() => goToHash(item.hash)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          borderRadius: 14,
+                          border: '1px solid var(--cf-border)',
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'var(--cf-text)',
+                          cursor: 'pointer',
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <span style={{ fontWeight: 700 }}>{item.label}</span>
+                        <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
+                          {item.category} | {item.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Recent Routes
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {recentRoutes.length === 0 ? (
+                      <div style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.5 }}>
+                        Your most recent desks and actions will appear here as you move through the app.
+                      </div>
+                    ) : (
+                      recentRoutes.map((route) => (
+                        <button
+                          key={route.hash}
+                          type="button"
+                          onClick={() => goToHash(route.hash)}
+                          style={{
+                            textAlign: 'left',
+                            padding: '10px 12px',
+                            borderRadius: 14,
+                            border: '1px solid var(--cf-border)',
+                            background:
+                              route.hash === currentHash
+                                ? 'rgba(54, 215, 255, 0.1)'
+                                : 'rgba(255,255,255,0.03)',
+                            color: 'var(--cf-text)',
+                            cursor: 'pointer',
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{route.label}</span>
+                          <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
