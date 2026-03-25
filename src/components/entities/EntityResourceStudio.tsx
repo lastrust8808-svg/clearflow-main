@@ -706,6 +706,7 @@ export default function EntityResourceStudio({
           item.id === hydratedDocument.id ? hydratedDocument : item,
         ),
       }));
+      goToHash(`#documents:${hydratedDocument.id}`);
     }
   };
 
