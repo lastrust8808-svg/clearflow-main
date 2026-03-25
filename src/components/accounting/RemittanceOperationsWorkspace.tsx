@@ -9,12 +9,14 @@ import type {
   WalletRecord,
   OnChainTransactionRecord,
 } from '../../types/core';
+import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import PageSection from '../ui/PageSection';
 
 interface RemittanceOperationsWorkspaceProps {
   payments: PaymentRecord[];
   customers: CustomerRecord[];
   vendors: VendorRecord[];
+  railControls: SettlementRailControlView[];
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
@@ -94,6 +96,7 @@ export default function RemittanceOperationsWorkspace({
   payments,
   customers,
   vendors,
+  railControls,
   bankAccounts,
   ledgerAccounts,
   treasuryAccounts,
@@ -105,6 +108,8 @@ export default function RemittanceOperationsWorkspace({
   onConfirmWalletSettlement,
   operationsNotice,
 }: RemittanceOperationsWorkspaceProps) {
+  const railControlByPaymentId = new Map(railControls.map((control) => [control.paymentId, control]));
+
   const resolveCounterpartyName = (payment: PaymentRecord) => {
     if (payment.counterpartyType === 'customer') {
       return customers.find((item) => item.id === payment.counterpartyId)?.name || 'Customer';
@@ -148,6 +153,12 @@ export default function RemittanceOperationsWorkspace({
   };
 
   const remittancePayments = payments.filter(isOutgoingRemittance);
+  const railSummary = {
+    ready: railControls.filter((item) => item.overallStatus === 'ready').length,
+    watch: railControls.filter((item) => item.overallStatus === 'watch').length,
+    hold: railControls.filter((item) => item.overallStatus === 'hold').length,
+    exception: railControls.filter((item) => item.overallStatus === 'exception').length,
+  };
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -166,6 +177,31 @@ export default function RemittanceOperationsWorkspace({
         </div>
       ) : null}
       <PageSection
+        title="Railing Summary"
+        description="Strong control posture across source funding, remittance instructions, proof, identifiers, and exception follow-up."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {([
+            ['Ready rails', railSummary.ready, 'good'],
+            ['Watch items', railSummary.watch, 'info'],
+            ['Held rails', railSummary.hold, 'warn'],
+            ['Exceptions', railSummary.exception, 'warn'],
+          ] as Array<[string, number, 'good' | 'info' | 'warn']>).map(([label, value, tone]) => (
+            <div key={String(label)} style={cardStyle}>
+              <div style={{ color: '#94a3b8', fontSize: 12 }}>{label}</div>
+              <div style={{ fontSize: 28, fontWeight: 800 }}>{value}</div>
+              <span style={badgeStyle(tone)}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </PageSection>
+      <PageSection
         title="Remittance Control Desk"
         description="Approve, release, and confirm vendor ACH, EFT, wire, and digital-asset disbursements from connected banks, treasury, ledger, or wallet positions."
       >
@@ -176,6 +212,7 @@ export default function RemittanceOperationsWorkspace({
             </div>
           ) : (
             remittancePayments.map((payment) => {
+              const railControl = railControlByPaymentId.get(payment.id);
               const needsComplianceConfirmation =
                 payment.complianceConfirmationStatus === 'pending';
               const needsReview =
@@ -241,6 +278,17 @@ export default function RemittanceOperationsWorkspace({
                       </span>
                       <span
                         style={badgeStyle(
+                          railControl?.overallStatus === 'ready'
+                            ? 'good'
+                            : railControl?.overallStatus === 'watch'
+                              ? 'info'
+                              : 'warn'
+                        )}
+                      >
+                        rail: {railControl?.overallStatus || 'watch'}
+                      </span>
+                      <span
+                        style={badgeStyle(
                           payment.approvalStatus === 'approved'
                             ? 'good'
                             : payment.approvalStatus === 'pending'
@@ -286,6 +334,10 @@ export default function RemittanceOperationsWorkspace({
                       </div>
                     </div>
                     <div>
+                      <strong style={{ color: '#e5e7eb' }}>Rail Namespace</strong>
+                      <div>{railControl?.railNamespace || 'Not classified'}</div>
+                    </div>
+                    <div>
                       <strong style={{ color: '#e5e7eb' }}>Execution Ref</strong>
                       <div>
                         {linkedOnChainRecord?.txHash ||
@@ -297,6 +349,22 @@ export default function RemittanceOperationsWorkspace({
                     <div>
                       <strong style={{ color: '#e5e7eb' }}>Release Token</strong>
                       <div>{payment.releaseTokenId || 'No token linked'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Rail Trace</strong>
+                      <div>
+                        {railControl
+                          ? `${railControl.movementIdentifierCount} identifiers | ${railControl.openReturnCount} returns | ${railControl.openReclamationCount} reclamations`
+                          : 'Pending control profile'}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Proof Posture</strong>
+                      <div>
+                        {railControl
+                          ? `${railControl.passCount}/${railControl.checks.length} controls passing`
+                          : 'Pending control profile'}
+                      </div>
                     </div>
                     {payment.method === 'digital_asset' ? (
                       <div>
@@ -356,10 +424,68 @@ export default function RemittanceOperationsWorkspace({
                     }}
                   >
                     {payment.complianceConfirmationNote ||
+                      railControl?.recommendedAction ||
                       payment.settlementExecution?.executionReason ||
                       payment.notes ||
                       'Settlement is ready for operator review.'}
                   </div>
+
+                  {railControl ? (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: 10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 12,
+                          border: '1px solid rgba(148,163,184,0.2)',
+                          background: 'rgba(15,23,42,0.28)',
+                          display: 'grid',
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: '#e5e7eb' }}>Blockers</div>
+                        {railControl.blockers.length === 0 ? (
+                          <div style={{ color: '#86efac', fontSize: 13 }}>
+                            No hard blockers are open on this settlement rail.
+                          </div>
+                        ) : (
+                          railControl.blockers.map((item) => (
+                            <div key={item} style={{ color: '#fde68a', fontSize: 13, lineHeight: 1.5 }}>
+                              {item}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 12,
+                          border: '1px solid rgba(148,163,184,0.2)',
+                          background: 'rgba(15,23,42,0.28)',
+                          display: 'grid',
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: '#e5e7eb' }}>Watch Items</div>
+                        {railControl.watchItems.length === 0 ? (
+                          <div style={{ color: '#93c5fd', fontSize: 13 }}>
+                            No follow-up watch items are open right now.
+                          </div>
+                        ) : (
+                          railControl.watchItems.map((item) => (
+                            <div key={item} style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.5 }}>
+                              {item}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button

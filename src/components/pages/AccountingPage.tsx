@@ -19,6 +19,11 @@ import {
 } from '../../services/invoiceDelivery.service';
 import { buildReconciliationCloseMetrics } from '../../services/reconciliationControls.service';
 import { parseStatementFileForReconciliation } from '../../services/reconciliationStatement.service';
+import {
+  getRemittanceRailControl,
+  hasHardRailBlocks,
+  buildRemittanceRailControls,
+} from '../../services/settlementRailing.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -321,6 +326,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const quoteRecords = invoices.filter(isQuoteRecord);
   const standardInvoices = invoices.filter((record) => !isQuoteRecord(record));
   const stats = useMemo(() => buildAccountingStats(data, journalEntries), [data, journalEntries]);
+  const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
   const defaultEntity = getPrimaryEntity(data);
   const defaultPayrollEntity =
     data.entities.find((entity) =>
@@ -2743,6 +2749,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         return prev;
       }
 
+      const railControl = getRemittanceRailControl(prev, paymentId);
+      if (hasHardRailBlocks(railControl, ['control_authority'])) {
+        setOperationsNotice(
+          railControl?.recommendedAction ||
+            'Rail controls still show a blocker, so approval stayed in review.'
+        );
+        return prev;
+      }
+
       const linkedTokenIds = settlement?.linkedTokenIds || (payment.releaseTokenId ? [payment.releaseTokenId] : []);
       const tokenShouldVerify = settlement?.verificationMethod === 'internal_control_token';
 
@@ -2841,6 +2856,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         return prev;
       }
 
+      const railControl = getRemittanceRailControl(prev, paymentId);
+      if (hasHardRailBlocks(railControl, ['control_authority'])) {
+        setOperationsNotice(
+          railControl?.recommendedAction ||
+            'Rail controls still show a blocker, so compliance confirmation stayed in review.'
+        );
+        return prev;
+      }
+
       const confirmationNote =
         payment.complianceConfirmationNote ||
         payment.settlementExecution?.executionReason ||
@@ -2918,6 +2942,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       data.workspaceSettings.workspaceName ||
       'ClearFlow Operator';
     const livePayment = data.payments.find((item) => item.id === paymentId);
+    const liveRailControl = getRemittanceRailControl(data, paymentId);
+
+    if (hasHardRailBlocks(liveRailControl)) {
+      setOperationsNotice(
+        liveRailControl?.recommendedAction ||
+          'Rail controls still show a blocker, so release stayed in the queue.'
+      );
+      return;
+    }
     const liveWallet = livePayment?.linkedWalletId
       ? data.wallets.find((item) => item.id === livePayment.linkedWalletId)
       : undefined;
@@ -5613,6 +5646,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             payments={payments}
             customers={customers}
             vendors={vendors}
+            railControls={remittanceRailControls}
             bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
             ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}
             treasuryAccounts={
