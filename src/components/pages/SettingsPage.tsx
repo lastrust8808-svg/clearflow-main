@@ -128,6 +128,7 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
             ]}
           >
             <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Signer: {auth.currentUser?.clearflowTermsSignerName || 'Not recorded yet'}</div>
               <div>Accepted at: {auth.currentUser?.clearflowTermsAcceptedAt || 'Pending acceptance'}</div>
               <div>Terms record: {auth.currentUser?.clearflowTermsDocumentId || 'Not created yet'}</div>
               <div>Retained record: {auth.currentUser?.clearflowRetainedRecordDocumentId || 'Not created yet'}</div>

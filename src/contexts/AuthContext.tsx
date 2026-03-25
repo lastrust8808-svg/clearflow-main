@@ -96,7 +96,8 @@ interface AuthContextType {
     phone?: string,
     userHandle?: string,
     password?: string,
-    acceptedTerms?: boolean
+    acceptedTerms?: boolean,
+    signerName?: string
   ) => void;
   completeVerification: () => void;
   logout: () => void;
@@ -134,6 +135,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const initialDataLoaded = useRef(false);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const googleClientsInitializedRef = useRef(false);
+  const needsDriveCatchUpRef = useRef(false);
 
 
   const handleCredentialResponse = useCallback((response: any) => {
@@ -171,6 +173,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         return;
     }
+    needsDriveCatchUpRef.current = true;
     setState(current => ({ ...current, apiAccessToken: response.access_token, status: 'pending-drive-check' }));
   }, []);
 
@@ -222,6 +225,78 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
   }, [state.appData, state.apiAccessToken, state.localAccountId, state.status, debouncedSave]);
+
+  useEffect(() => {
+    if (
+      !state.apiAccessToken ||
+      !state.appData ||
+      !needsDriveCatchUpRef.current ||
+      state.status === 'pending-gsi' ||
+      state.status === 'pending-drive-check'
+    ) {
+      return;
+    }
+
+    needsDriveCatchUpRef.current = false;
+    setSavingStatus('saving');
+
+    void userDataService
+      .saveUserData(state.apiAccessToken, state.appData)
+      .then(() => {
+        initialDataLoaded.current = true;
+        setSavingStatus('saved');
+        window.setTimeout(() => setSavingStatus('idle'), 2500);
+      })
+      .catch((error) => {
+        console.warn('Failed to catch up Google Drive workspace sync.', error);
+        needsDriveCatchUpRef.current = true;
+        setSavingStatus('error');
+      });
+  }, [state.apiAccessToken, state.appData, state.status]);
+
+  useEffect(() => {
+    if (
+      !state.appData?.user.clearflowTermsAcceptedAt ||
+      !state.appData.coreDataSnapshot
+    ) {
+      return;
+    }
+
+    const hasRetainedTerms =
+      Boolean(state.appData.user.clearflowTermsDocumentId) &&
+      Boolean(state.appData.user.clearflowRetainedRecordDocumentId);
+
+    if (hasRetainedTerms) {
+      return;
+    }
+
+    setState((current) => {
+      if (
+        !current.appData?.user.clearflowTermsAcceptedAt ||
+        !current.appData.coreDataSnapshot
+      ) {
+        return current;
+      }
+
+        return {
+          ...current,
+          appData: applyClearFlowRetentionRecords(current.appData, {
+            acceptedAt: current.appData.user.clearflowTermsAcceptedAt,
+            termsVersion:
+              current.appData.user.clearflowTermsVersion || CLEARFLOW_TERMS_VERSION,
+            signerName:
+              current.appData.user.clearflowTermsSignerName ||
+              current.appData.user.name,
+          }),
+        };
+      });
+  }, [
+    state.appData?.coreDataSnapshot,
+    state.appData?.user.clearflowRetainedRecordDocumentId,
+    state.appData?.user.clearflowTermsAcceptedAt,
+    state.appData?.user.clearflowTermsDocumentId,
+    state.appData?.user.clearflowTermsVersion,
+  ]);
   
   useEffect(() => {
     if (state.status === 'pending-gsi' && tokenClient) {
@@ -733,7 +808,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     phone?: string,
     userHandle?: string,
     password?: string,
-    acceptedTerms?: boolean
+    acceptedTerms?: boolean,
+    signerName?: string
   ) => {
     if (!state.appData) {
       logout();
@@ -761,6 +837,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const finalAppData = applyClearFlowRetentionRecords(enrichedAppData, {
       acceptedAt,
       termsVersion: CLEARFLOW_TERMS_VERSION,
+      signerName,
     });
 
     if (state.apiAccessToken) {
@@ -899,6 +976,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     userDataService.clearCache();
     initialDataLoaded.current = false;
+    needsDriveCatchUpRef.current = false;
     setSavingStatus('idle');
     setState({
       token: null,

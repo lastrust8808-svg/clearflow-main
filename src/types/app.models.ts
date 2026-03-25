@@ -10,6 +10,7 @@ export interface User {
   isVerified: boolean;
   clearflowTermsAcceptedAt?: string;
   clearflowTermsVersion?: string;
+  clearflowTermsSignerName?: string;
   clearflowTermsDocumentId?: string;
   clearflowRetainedRecordDocumentId?: string;
 }

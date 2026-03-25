@@ -8,6 +8,10 @@ export const ProfileSetup: React.FC = () => {
     email: auth.currentUser?.email ?? '',
     phone: auth.currentUser?.phone ?? '',
     acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt),
+    signerName:
+      auth.currentUser?.clearflowTermsSignerName ||
+      auth.currentUser?.name ||
+      '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -23,7 +27,8 @@ export const ProfileSetup: React.FC = () => {
         form.phone || undefined,
         undefined,
         undefined,
-        form.acceptedTerms
+        form.acceptedTerms,
+        form.signerName || form.name
       );
     }
   };
@@ -82,6 +87,21 @@ export const ProfileSetup: React.FC = () => {
               <div className="mt-2 leading-6 text-slate-300">
                 Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, internal security agreement support, and the internal deposit ledger for protected security instruments held in custody or retention.
               </div>
+              <div className="mt-4">
+                <label htmlFor="signerName" className="block text-sm font-medium text-slate-300">
+                  Signer Name
+                </label>
+                <input
+                  id="signerName"
+                  name="signerName"
+                  type="text"
+                  value={form.signerName}
+                  onChange={handleChange}
+                  className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                  placeholder="Type your full name to sign"
+                  required
+                />
+              </div>
               <label className="mt-3 flex items-start gap-3 text-sm text-slate-200">
                 <input
                   type="checkbox"
@@ -104,10 +124,10 @@ export const ProfileSetup: React.FC = () => {
           </p>
           <button
             type="submit"
-            disabled={!form.name || (!form.email && !form.phone) || !form.acceptedTerms}
+            disabled={!form.name || (!form.email && !form.phone) || !form.acceptedTerms || !form.signerName}
             className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500"
           >
-            Agree and Enter
+            Sign and Submit
           </button>
         </form>
       </div>

@@ -302,6 +302,7 @@ export function applyClearFlowRetentionRecords(
   input: {
     acceptedAt: string;
     termsVersion?: string;
+    signerName?: string;
   }
 ): AppData {
   const primaryEntityId =
@@ -313,6 +314,8 @@ export function applyClearFlowRetentionRecords(
 
   const acceptedDate = input.acceptedAt.slice(0, 10);
   const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
+  const signerName =
+    input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
   const agreementDocumentId = `doc-clearflow-terms-${appData.user.id}`;
   const retainedDocumentId = `doc-clearflow-retained-${appData.user.id}`;
   const agreementTokenId = `tok-clearflow-terms-${appData.user.id}`;
@@ -331,7 +334,7 @@ export function applyClearFlowRetentionRecords(
     linkedTokenIds: [agreementTokenId],
     linkedInstrumentIds: [retentionInstrumentId],
     summary:
-      'Accepted ClearFlow user agreement, platform security terms, and retained-record consent for protected operational custody records.',
+      `Accepted ClearFlow user agreement, platform security terms, and retained-record consent signed by ${signerName}.`,
     storageOwner: 'clearflow_retained',
     retentionClass: 'agreement',
     storageNotes:
@@ -349,7 +352,7 @@ export function applyClearFlowRetentionRecords(
     linkedTokenIds: [agreementTokenId],
     linkedInstrumentIds: [retentionInstrumentId],
     summary:
-      'Platform-retained record of the user agreement, security posture, internal deposit ledger assignment, and protected recordkeeping retention.',
+      `Platform-retained record of the user agreement, security posture, internal deposit ledger assignment, and protected recordkeeping retention for signer ${signerName}.`,
     storageOwner: 'clearflow_retained',
     retentionClass: 'security_support',
     storageNotes:
@@ -368,7 +371,7 @@ export function applyClearFlowRetentionRecords(
     tokenReference: `CLEARFLOW-TERMS-${appData.user.id}`,
     issuedAt: input.acceptedAt,
     verifiedAt: input.acceptedAt,
-    proofReference: `Accepted ClearFlow terms version ${termsVersion} and linked platform retention record.`,
+    proofReference: `Accepted ClearFlow terms version ${termsVersion} and linked platform retention record signed by ${signerName}.`,
   };
 
   const retentionLedger: LedgerAccountRecord = {
@@ -455,6 +458,7 @@ export function applyClearFlowRetentionRecords(
       ...appData.user,
       clearflowTermsAcceptedAt: input.acceptedAt,
       clearflowTermsVersion: termsVersion,
+      clearflowTermsSignerName: signerName,
       clearflowTermsDocumentId: agreementDocumentId,
       clearflowRetainedRecordDocumentId: retainedDocumentId,
     },
