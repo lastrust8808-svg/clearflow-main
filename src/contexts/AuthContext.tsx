@@ -101,6 +101,7 @@ interface AuthContextType {
   completeVerification: () => void;
   logout: () => void;
   requestDriveAccess: () => void;
+  continueGoogleOnboardingFallback: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -914,6 +915,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
   };
 
+  const continueGoogleOnboardingFallback = () => {
+    setState((current) => {
+      if (
+        (current.status !== 'pending-gsi' &&
+          current.status !== 'pending-drive-check') ||
+        !current.appData?.user
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        status: 'pending-profile-setup',
+        gsiUser: null,
+      };
+    });
+  };
+
   const value: AuthContextType = {
     isInitialized,
     isConfigured,
@@ -939,6 +958,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     completeVerification,
     logout,
     requestDriveAccess,
+    continueGoogleOnboardingFallback,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

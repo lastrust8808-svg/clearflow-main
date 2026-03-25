@@ -350,7 +350,17 @@ function loadDataForUser(userId: string, authEntities: Entity[], coreDataSnapsho
   return buildBlankBundle(mappedEntities);
 }
 
-function LoadingShell({ title, subtitle }: { title: string; subtitle: string }) {
+function LoadingShell({
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  subtitle: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <div
       style={{
@@ -375,6 +385,25 @@ function LoadingShell({ title, subtitle }: { title: string; subtitle: string }) 
       >
         <div style={{ fontSize: 28, fontWeight: 800 }}>{title}</div>
         <div style={{ marginTop: 10, color: '#c5d7e3', lineHeight: 1.6 }}>{subtitle}</div>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            style={{
+              marginTop: 18,
+              minHeight: 46,
+              padding: '0 16px',
+              borderRadius: 14,
+              border: '1px solid rgba(126, 242, 255, 0.24)',
+              background: 'rgba(54, 215, 255, 0.1)',
+              color: '#effcff',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -720,6 +749,10 @@ export default function App({
       <LoadingShell
         title="Connecting Secure Access"
         subtitle="Checking Google identity and loading the user workspace from secure storage."
+        actionLabel={auth.appData?.user ? 'Continue Onboarding Now' : undefined}
+        onAction={
+          auth.appData?.user ? () => auth.continueGoogleOnboardingFallback() : undefined
+        }
       />
     );
   }
