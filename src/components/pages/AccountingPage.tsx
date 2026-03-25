@@ -633,6 +633,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     sourceRecordId,
     file,
     date,
+    storageOwner,
+    retentionClass,
+    externalStorageTarget,
+    externalStorageStatus,
+    storageNotes,
   }: {
     entityId: string;
     folder: 'bills' | 'receipts' | 'documents';
@@ -648,6 +653,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     sourceRecordId: string;
     file?: File | null;
     date: string;
+    storageOwner?: DocumentRecord['storageOwner'];
+    retentionClass?: DocumentRecord['retentionClass'];
+    externalStorageTarget?: DocumentRecord['externalStorageTarget'];
+    externalStorageStatus?: DocumentRecord['externalStorageStatus'];
+    storageNotes?: string;
   }) => {
     if (!file) {
       return null;
@@ -673,6 +683,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         sourceRecordId,
         vaultPath: buildVaultPath(entityId, folder, fileMetadata.fileName),
         summary,
+        storageOwner,
+        retentionClass,
+        externalStorageTarget,
+        externalStorageStatus,
+        storageNotes,
       };
 
       return nextDocument;
@@ -3727,6 +3742,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         sourceRecordId: requestId,
         file: payload.uploadedFile,
         date: now.slice(0, 10),
+        storageOwner: 'clearflow_retained',
+        retentionClass: 'payroll',
+        externalStorageStatus: 'not_applicable',
+        storageNotes:
+          'Returned payroll banking authorization retained by ClearFlow for payroll records and compliance support.',
       });
     }
 
@@ -3741,6 +3761,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       sourceRecordId: requestId,
       linkedTokenIds: [tokenId],
       summary: 'Payroll direct deposit request packet generated for employee onboarding.',
+      storageOwner: 'user_owned',
+      retentionClass: 'payroll',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+      storageNotes:
+        'Payroll onboarding packet generated for the workspace and ready for user-owned Google Drive routing.',
     };
 
     const requestToken: TokenRecord = {

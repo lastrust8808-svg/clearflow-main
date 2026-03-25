@@ -145,6 +145,12 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                 linkedAuthorityRecordIds: [authorityId],
                 linkedTokenIds: [tokenId],
                 summary: 'Initial setup packet created automatically from the entity profile flow.',
+                storageOwner: 'user_owned',
+                retentionClass: 'authority',
+                externalStorageTarget: 'google_drive',
+                externalStorageStatus: 'ready',
+                storageNotes:
+                  'Entity setup packet is workspace-owned and ready to route into the user-controlled Google Drive archive.',
               },
               ...prev.documents,
             ],
