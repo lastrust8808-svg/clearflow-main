@@ -161,6 +161,7 @@ export default function AppShell({
   const [showUtilityPanels, setShowUtilityPanels] = useState(() =>
     typeof window === 'undefined' ? true : window.innerWidth >= 1180
   );
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -357,6 +358,39 @@ export default function AppShell({
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+        return;
+      }
+
+      if (!isTypingTarget && event.key === '/') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || !currentHash) {
       return;
     }
@@ -398,6 +432,12 @@ export default function AppShell({
 
       return nextRoutes;
     });
+  };
+
+  const handleLaunchRoute = (hash: string) => {
+    goToHash(hash);
+    setIsCommandPaletteOpen(false);
+    setLauncherQuery('');
   };
 
   return (
@@ -694,6 +734,22 @@ export default function AppShell({
                       Resume {resumeRoutes[0].label}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setIsCommandPaletteOpen(true)}
+                    style={{
+                      minHeight: 42,
+                      padding: '0 14px',
+                      borderRadius: 14,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Quick Open
+                  </button>
                 </div>
               </div>
               {showUtilityPanels ? (
@@ -803,7 +859,7 @@ export default function AppShell({
                       >
                         <button
                           type="button"
-                          onClick={() => goToHash(action.hash)}
+                            onClick={() => handleLaunchRoute(action.hash)}
                           style={{
                             textAlign: 'left',
                             padding: '10px 12px',
@@ -898,7 +954,7 @@ export default function AppShell({
                       >
                         <button
                           type="button"
-                          onClick={() => goToHash(item.hash)}
+                            onClick={() => handleLaunchRoute(item.hash)}
                           style={{
                             textAlign: 'left',
                             padding: '10px 12px',
@@ -981,7 +1037,7 @@ export default function AppShell({
                         >
                           <button
                             type="button"
-                            onClick={() => goToHash(route.hash)}
+                              onClick={() => handleLaunchRoute(route.hash)}
                             style={{
                               textAlign: 'left',
                               padding: '10px 12px',
@@ -1050,7 +1106,7 @@ export default function AppShell({
                         <button
                           key={route.hash}
                           type="button"
-                          onClick={() => goToHash(route.hash)}
+                            onClick={() => handleLaunchRoute(route.hash)}
                           style={{
                             textAlign: 'left',
                             padding: '10px 12px',
@@ -1080,6 +1136,172 @@ export default function AppShell({
           {children}
         </div>
       </main>
+      {isCommandPaletteOpen ? (
+        <div
+          onClick={() => setIsCommandPaletteOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(5, 8, 15, 0.7)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 30,
+            display: 'grid',
+            placeItems: 'start center',
+            padding: '10vh 20px 20px',
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(760px, 100%)',
+              borderRadius: 24,
+              border: '1px solid var(--cf-border-strong)',
+              background: 'linear-gradient(180deg, rgba(15,23,42,0.98), rgba(12,18,30,0.96))',
+              boxShadow: '0 40px 100px rgba(0,0,0,0.45)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: 18,
+                borderBottom: '1px solid var(--cf-border)',
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ fontSize: 18, fontWeight: 800 }}>Quick Open</div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>
+                  Press <strong>Ctrl/Command + K</strong> or <strong>/</strong>
+                </div>
+              </div>
+              <input
+                type="text"
+                autoFocus
+                value={launcherQuery}
+                onChange={(event) => setLauncherQuery(event.target.value)}
+                placeholder="Search desks, packets, actions, and workspace flows"
+                style={{
+                  width: '100%',
+                  minHeight: 50,
+                  borderRadius: 14,
+                  border: '1px solid var(--cf-border)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--cf-text)',
+                  padding: '0 14px',
+                  outline: 'none',
+                  fontSize: 15,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                maxHeight: '60vh',
+                overflowY: 'auto',
+                padding: 18,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              {pinnedRoutes.length > 0 ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                    }}
+                  >
+                    Pinned
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {pinnedRoutes.slice(0, 4).map((route) => (
+                      <button
+                        key={`palette-pinned-${route.hash}`}
+                        type="button"
+                        onClick={() => handleLaunchRoute(route.hash)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '12px 14px',
+                          borderRadius: 16,
+                          border: '1px solid var(--cf-border)',
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'var(--cf-text)',
+                          cursor: 'pointer',
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <span style={{ fontWeight: 700 }}>{route.label}</span>
+                        <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: 1.3,
+                    color: 'var(--cf-accent-soft)',
+                  }}
+                >
+                  Results
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {filteredLauncherItems.map((item) => (
+                    <button
+                      key={`palette-${item.category}-${item.hash}`}
+                      type="button"
+                      onClick={() => handleLaunchRoute(item.hash)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '12px 14px',
+                        borderRadius: 16,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.03)',
+                        color: 'var(--cf-text)',
+                        cursor: 'pointer',
+                        display: 'grid',
+                        gap: 4,
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>{item.label}</span>
+                      <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>
+                        {item.category} | {item.description}
+                      </span>
+                    </button>
+                  ))}
+                  {filteredLauncherItems.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 16,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.03)',
+                        color: 'var(--cf-muted)',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      No matches yet. Try searching for `payments`, `upload`, `entity`, or `compliance`.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
