@@ -163,6 +163,63 @@ export default function EntityResourceStudio({
         documents: 0,
       };
 
+  const workflowSignals = useMemo(() => {
+    if (!selectedEntity) {
+      return [];
+    }
+
+    const entityId = selectedEntity.id;
+    const bankPackagesInFlight = data.bankAccounts.filter(
+      (item) =>
+        item.entityId === entityId &&
+        item.onboardingStatus &&
+        !['connected', 'ready'].includes(item.onboardingStatus),
+    ).length;
+    const walletReviews = data.complianceTags.filter(
+      (tag) => tag.entityId === entityId && tag.category === 'digital_asset' && tag.status !== 'ok',
+    ).length;
+    const openObligations = data.obligations.filter(
+      (item) => item.entityId === entityId && ['open', 'disputed', 'defaulted'].includes(item.status),
+    ).length;
+    const driveReadyPackets = data.documents.filter(
+      (document) =>
+        document.entityId === entityId &&
+        document.storageOwner === 'user_owned' &&
+        document.externalStorageStatus === 'ready',
+    ).length;
+
+    return [
+      {
+        label: 'Bank onboarding in flight',
+        value: bankPackagesInFlight,
+        hint: 'Accounts still need onboarding or feed completion.',
+        actionLabel: 'Open Bank Feed',
+        actionHash: '#accounting:bank-feed',
+      },
+      {
+        label: 'Wallet custody reviews',
+        value: walletReviews,
+        hint: 'Digital-asset support packets are waiting on review.',
+        actionLabel: 'Open Compliance',
+        actionHash: '#compliance',
+      },
+      {
+        label: 'Open obligations',
+        value: openObligations,
+        hint: 'Outstanding obligations still need performance or discharge work.',
+        actionLabel: 'Open Transactions',
+        actionHash: '#transactions',
+      },
+      {
+        label: 'Drive-ready packets',
+        value: driveReadyPackets,
+        hint: 'Workspace-owned packets are ready to route to Google Drive.',
+        actionLabel: 'Open Documents',
+        actionHash: '#documents',
+      },
+    ];
+  }, [data, selectedEntity]);
+
   const recentResources = useMemo(() => {
     if (!selectedEntity) {
       return [];
@@ -734,6 +791,62 @@ export default function EntityResourceStudio({
             <div style={{ marginTop: 6, fontSize: 24, fontWeight: 800 }}>{value}</div>
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          borderRadius: 16,
+          border: '1px solid rgba(126, 242, 255, 0.16)',
+          background: 'rgba(11, 20, 38, 0.72)',
+          padding: 16,
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Entity Follow-Through</div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {workflowSignals.map((signal) => (
+            <div
+              key={signal.label}
+              style={{
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: 14,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{signal.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{signal.value}</div>
+              <div style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.5 }}>
+                {signal.hint}
+              </div>
+              <button
+                type="button"
+                onClick={() => goToHash(signal.actionHash)}
+                style={{
+                  justifySelf: 'start',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126, 242, 255, 0.24)',
+                  background: 'rgba(54, 215, 255, 0.12)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {signal.actionLabel}
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {resourceType === 'bankAccount' && (
