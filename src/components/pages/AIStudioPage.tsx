@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   AIWorkflowRecord,
@@ -14,6 +14,7 @@ import type {
 } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
 import { saveDocumentFile } from '../../services/documentVault.service';
+import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -193,9 +194,11 @@ function buildComplianceTag(input: {
 
 export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const auth = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
   const primaryEntity = data.entities[0];
   const digitalCount = data.aiWorkflows.filter((item) => item.category === 'digital_asset').length;
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
+  const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
   const laneCounts = useMemo(
     () => ({
       legal: data.aiWorkflows.filter((item) => item.category === 'legal').length,
@@ -1015,6 +1018,178 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
     focusDocument(document.id);
   };
 
+  const launchSettlementRailAuditReport = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const blockedControls = remittanceRailControls.filter((item) => item.overallStatus === 'hold');
+    const exceptionControls = remittanceRailControls.filter((item) => item.overallStatus === 'exception');
+    const watchControls = remittanceRailControls.filter((item) => item.overallStatus === 'watch');
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Settlement Rail Audit Report`,
+      category: 'financial',
+      summary:
+        'Audit report across source control, proof posture, movement identifiers, return exposure, and reconciliation follow-up.',
+      retentionClass: 'financial_evidence',
+      body: `# Settlement Rail Audit Report
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Rail Posture Summary
+- Ready rails: ${remittanceRailControls.filter((item) => item.overallStatus === 'ready').length}
+- Watch rails: ${watchControls.length}
+- Held rails: ${blockedControls.length}
+- Exceptions: ${exceptionControls.length}
+
+## Held / Exception Items
+${[...blockedControls, ...exceptionControls]
+  .slice(0, 8)
+  .map(
+    (item) =>
+      `- ${item.executionLabel} | ${item.railNamespace} | ${item.overallStatus}\n  ${item.recommendedAction}`,
+  )
+  .join('\n') || '- No held or exception rail items were open at report time.'}
+
+## Watch Items
+${watchControls
+  .slice(0, 8)
+  .map((item) => `- ${item.executionLabel} | ${item.recommendedAction}`)
+  .join('\n') || '- No watch-only rail items were open at report time.'}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} settlement rail audit review`,
+      category: 'risk',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio settlement rail audit reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchTreasuryReserveReport = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const entityTreasuries = data.treasuryAccounts.filter((item) => item.entityId === primaryEntity.id);
+    const entityBankAccounts = data.bankAccounts.filter((item) => item.entityId === primaryEntity.id);
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Treasury & Reserve Report`,
+      category: 'financial',
+      summary:
+        'Treasury and reserve report covering available balances, remittance posture, linked banking, and reserve-backed settlements.',
+      retentionClass: 'financial_evidence',
+      body: `# Treasury & Reserve Report
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Treasury Accounts
+${entityTreasuries
+  .map(
+    (item) =>
+      `- ${item.name} | ${item.treasuryType} | available ${item.currency} ${item.availableBalance.toLocaleString()} | reserved ${(item.reservedBalance || 0).toLocaleString()} | authority ${item.originatingAuthority}`,
+  )
+  .join('\n') || '- No treasury accounts are currently recorded for this entity.'}
+
+## Linked Bank Accounts
+${entityBankAccounts
+  .map(
+    (item) =>
+      `- ${item.accountName} | ${item.institutionName} | ${item.connectionType || 'manual_bank'} | feed ${item.liveFeedStatus || 'not_connected'}`,
+  )
+  .join('\n') || '- No bank accounts are currently linked for this entity.'}
+
+## Reserve-Backed Settlements
+${data.settlements
+  .filter((item) => item.entityId === primaryEntity.id && item.reserveBacked)
+  .slice(0, 8)
+  .map(
+    (item) =>
+      `- ${item.id} | ${item.path} | ${item.status} | ${item.currency} ${item.settledAmount.toLocaleString()} | ${item.verificationStatus}`,
+  )
+  .join('\n') || '- No reserve-backed settlements are currently recorded.'}
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchOperationsExceptionReport = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const reconciliationExceptions = data.reconciliations.filter(
+      (item) =>
+        item.entityId === primaryEntity.id &&
+        (item.status !== 'completed' || item.statementReviewStatus === 'needs_review'),
+    );
+    const filingExceptions = data.taxReportingLinks.filter(
+      (item) =>
+        item.entityId === primaryEntity.id &&
+        (item.status !== 'accepted' || item.tinMatchStatus === 'pending' || item.correctionStatus === 'pending'),
+    );
+    const returnExceptions = data.returnEvents.filter((item) => item.entityId === primaryEntity.id && item.status !== 'resolved');
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Operations Exception Report`,
+      category: 'compliance',
+      summary:
+        'Exception report across reconciliation, returns, rail posture, and filing readiness for operator follow-up.',
+      retentionClass: 'compliance',
+      body: `# Operations Exception Report
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Reconciliation Queue
+${reconciliationExceptions
+  .map(
+    (item) =>
+      `- ${item.id} | ${item.periodStart} to ${item.periodEnd} | ${item.status} | review ${item.statementReviewStatus || 'not_imported'}`,
+  )
+  .join('\n') || '- No reconciliation exceptions are open.'}
+
+## Return / Rail Exceptions
+${returnExceptions
+  .map((item) => `- ${item.code} | ${item.reason} | ${item.railNamespace} | ${item.status}`)
+  .join('\n') || '- No return events are open.'}
+
+## Filing Review
+${filingExceptions
+  .map(
+    (item) =>
+      `- ${item.counterpartyName} | ${item.formType || 'reporting link'} | TIN ${item.tinMatchStatus} | status ${item.status}`,
+  )
+  .join('\n') || '- No tax filing exceptions are open.'}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} operations exception review`,
+      category: 'reporting',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio operations exception reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
   const studioTools: Array<{
     title: string;
     subtitle: string;
@@ -1221,6 +1396,125 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
     .filter((document) => document.generatedBody || document.templateKey)
     .slice(0, 5);
 
+  const integrationLaunchers = [
+    {
+      title: 'Google Drive Routing',
+      subtitle: auth.hasDriveAccess ? 'Connected for user-owned routing' : 'Drive routing not connected',
+      detail: auth.hasDriveAccess
+        ? `${data.documents.filter((item) => item.externalStorageStatus === 'routed').length} documents already routed to Drive.`
+        : 'Connect or review Drive routing posture for workspace-owned records.',
+      actionLabel: auth.hasDriveAccess ? 'Open Documents' : 'Open Settings',
+      actionHash: auth.hasDriveAccess ? '#documents' : '#settings',
+    },
+    {
+      title: 'Bank Feed & Reconciliation',
+      subtitle: `${data.bankAccounts.filter((item) => item.liveFeedStatus === 'connected').length} live feeds connected`,
+      detail: `${data.reconciliations.filter((item) => item.status !== 'completed').length} reconciliations still need review or close work.`,
+      actionLabel: 'Open Bank Feed',
+      actionHash: '#accounting:bankFeed',
+    },
+    {
+      title: 'Settlement Rail Controls',
+      subtitle: `${remittanceRailControls.filter((item) => item.overallStatus !== 'ready').length} rail items need attention`,
+      detail: `${remittanceRailControls.filter((item) => item.overallStatus === 'exception').length} exception rails and ${remittanceRailControls.filter((item) => item.overallStatus === 'hold').length} held rails are open.`,
+      actionLabel: 'Open Payments Desk',
+      actionHash: '#accounting:payments',
+    },
+    {
+      title: 'Compliance & Filing',
+      subtitle: `${data.taxReportingLinks.filter((item) => item.status !== 'accepted').length} filing links still active`,
+      detail: `${data.complianceTags.filter((item) => item.status === 'review').length} compliance review items and ${data.returnEvents.filter((item) => item.status !== 'resolved').length} open returns are in queue.`,
+      actionLabel: 'Open Compliance',
+      actionHash: '#compliance',
+    },
+  ];
+
+  const reportTools = [
+    {
+      title: 'Settlement Rail Audit',
+      subtitle: 'Proof, trace, blocker, and exception report',
+      detail: 'Create a report from the live rail control layer for remittance and settlement oversight.',
+      actionLabel: 'Create Audit Report',
+      onAction: launchSettlementRailAuditReport,
+    },
+    {
+      title: 'Treasury & Reserve Report',
+      subtitle: 'Reserve-backed balances and treasury posture',
+      detail: 'Create a treasury report across reserve accounts, linked banks, and reserve-backed settlements.',
+      actionLabel: 'Create Treasury Report',
+      onAction: launchTreasuryReserveReport,
+    },
+    {
+      title: 'Operations Exception Report',
+      subtitle: 'Reconciliation, filing, and return exception packet',
+      detail: 'Create an operator-ready packet of current reconciliation, filing, and rail exceptions.',
+      actionLabel: 'Create Exception Report',
+      onAction: launchOperationsExceptionReport,
+    },
+  ];
+
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+
+    const results = [
+      ...data.entities.map((item) => ({
+        id: `entity-${item.id}`,
+        label: item.displayName || item.name,
+        subtitle: `Entity | ${item.type}`,
+        haystack: `${item.displayName || ''} ${item.name} ${item.type} ${item.jurisdiction || ''}`,
+        hash: '#entities',
+      })),
+      ...data.documents.map((item) => ({
+        id: `document-${item.id}`,
+        label: item.title,
+        subtitle: `Document | ${item.category}`,
+        haystack: `${item.title} ${item.summary || ''} ${item.category} ${item.templateKey || ''}`,
+        hash: `#documents:${item.id}`,
+      })),
+      ...data.payments.map((item) => ({
+        id: `payment-${item.id}`,
+        label: `${item.method.toUpperCase()} ${item.amount.toLocaleString()} ${item.currency}`,
+        subtitle: `Payment | ${item.status}`,
+        haystack: `${item.id} ${item.method} ${item.status} ${item.notes || ''}`,
+        hash: '#accounting:payments',
+      })),
+      ...data.obligations.map((item) => ({
+        id: `obligation-${item.id}`,
+        label: item.title,
+        subtitle: `Obligation | ${item.status}`,
+        haystack: `${item.title} ${item.obligationType} ${item.status}`,
+        hash: '#transactions',
+      })),
+      ...data.instruments.map((item) => ({
+        id: `instrument-${item.id}`,
+        label: item.title,
+        subtitle: `Instrument | ${item.instrumentType}`,
+        haystack: `${item.title} ${item.instrumentType} ${item.notes || ''}`,
+        hash: '#transactions',
+      })),
+      ...data.complianceTags.map((item) => ({
+        id: `compliance-${item.id}`,
+        label: item.label,
+        subtitle: `Compliance | ${item.category} | ${item.status}`,
+        haystack: `${item.label} ${item.category} ${item.status} ${item.notes || ''} ${item.jurisdiction || ''}`,
+        hash: item.linkedDocumentIds?.[0] ? `#documents:${item.linkedDocumentIds[0]}` : '#compliance',
+      })),
+      ...researchLinks.map((item) => ({
+        id: `research-${item.title}`,
+        label: item.title,
+        subtitle: `Research | ${item.subtitle}`,
+        haystack: `${item.title} ${item.subtitle} ${item.detail}`,
+        hash: item.url,
+        external: true,
+      })),
+    ];
+
+    return results.filter((item) => item.haystack.toLowerCase().includes(query)).slice(0, 12);
+  }, [data, searchQuery]);
+
   const resolveDocumentDesk = (document: DocumentRecord) => {
     if (document.category === 'tax' || document.category === 'compliance' || document.linkedComplianceTagIds?.length) {
       return { label: 'Open Compliance', hash: '#compliance' };
@@ -1261,6 +1555,148 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
         <StatCard label="Operations Tools" value={laneCounts.operations} />
         <StatCard label="Output Formats" value="DOCX / PDF / Markdown" />
       </div>
+
+      <PageSection
+        title="Studio Search"
+        description="Search live records, packets, compliance items, payments, obligations, and research sources from one place."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search entities, documents, payments, obligations, compliance, or research"
+            style={{
+              width: '100%',
+              minHeight: 44,
+              padding: '12px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(148,163,184,0.25)',
+              background: 'rgba(15,23,42,0.55)',
+              color: '#e5e7eb',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'grid', gap: 12 }}>
+            {searchQuery.trim() === '' ? (
+              <WorkbenchRecordCard title="Search is ready" subtitle="Type to search">
+                Search across the live workspace and the attached filing / authority research library.
+              </WorkbenchRecordCard>
+            ) : searchResults.length === 0 ? (
+              <WorkbenchRecordCard title="No matches found" subtitle="Try a broader phrase">
+                No current workspace records or research links matched that search.
+              </WorkbenchRecordCard>
+            ) : (
+              searchResults.map((result) => (
+                <WorkbenchRecordCard
+                  key={result.id}
+                  title={result.label}
+                  subtitle={result.subtitle}
+                  actionSlot={
+                    <button
+                      type="button"
+                      onClick={() => (result.external ? openLink(result.hash) : focusRoute(result.hash))}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(96,165,250,0.4)',
+                        background: 'rgba(37,99,235,0.18)',
+                        color: '#e5e7eb',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {result.external ? 'Open Source' : 'Open Result'}
+                    </button>
+                  }
+                >
+                  {result.subtitle}
+                </WorkbenchRecordCard>
+              ))
+            )}
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Integration Launchers"
+        description="Operational integration status and direct jumps into the desks that keep the system synchronized."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {integrationLaunchers.map((item) => (
+            <WorkbenchRecordCard
+              key={item.title}
+              title={item.title}
+              subtitle={item.subtitle}
+              actionSlot={
+                <button
+                  type="button"
+                  onClick={() => focusRoute(item.actionHash)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126, 242, 255, 0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.actionLabel}
+                </button>
+              }
+            >
+              {item.detail}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Report Generators"
+        description="Generate live operating reports from current ERP, treasury, rail, and exception data."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {reportTools.map((tool) => (
+            <WorkbenchRecordCard
+              key={tool.title}
+              title={tool.title}
+              subtitle={tool.subtitle}
+              actionSlot={
+                <button
+                  type="button"
+                  onClick={tool.onAction}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126, 242, 255, 0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  {tool.actionLabel}
+                </button>
+              }
+            >
+              {tool.detail}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       {studioLanes.map((lane) => (
         <div key={lane.key}>
