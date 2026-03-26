@@ -1614,12 +1614,47 @@ ${filingExceptions
         haystack: `${item.title} ${item.instrumentType} ${item.notes || ''}`,
         hash: '#transactions',
       })),
+      ...data.treasuryAccounts.map((item) => ({
+        id: `treasury-${item.id}`,
+        label: item.name,
+        subtitle: `Treasury | ${item.treasuryType} | ${item.status}`,
+        haystack: `${item.name} ${item.treasuryType} ${item.status} ${item.originatingAuthority || ''}`,
+        hash: '#ledger',
+      })),
+      ...data.bankAccounts.map((item) => ({
+        id: `bank-${item.id}`,
+        label: item.accountName,
+        subtitle: `Bank account | ${item.institutionName} | ${item.liveFeedStatus || 'not_connected'}`,
+        haystack: `${item.accountName} ${item.institutionName} ${item.connectionType || ''} ${item.liveFeedStatus || ''}`,
+        hash: '#accounting:bankFeed',
+      })),
       ...data.complianceTags.map((item) => ({
         id: `compliance-${item.id}`,
         label: item.label,
         subtitle: `Compliance | ${item.category} | ${item.status}`,
         haystack: `${item.label} ${item.category} ${item.status} ${item.notes || ''} ${item.jurisdiction || ''}`,
         hash: item.linkedDocumentIds?.[0] ? `#documents:${item.linkedDocumentIds[0]}` : '#compliance',
+      })),
+      ...integrationLaunchers.map((item) => ({
+        id: `integration-${item.title}`,
+        label: item.title,
+        subtitle: `Integration | ${item.subtitle}`,
+        haystack: `${item.title} ${item.subtitle} ${item.detail}`,
+        hash: item.actionHash,
+      })),
+      ...reportPackPresets.map((item) => ({
+        id: `report-pack-${item.title}`,
+        label: item.title,
+        subtitle: `Report pack | ${item.subtitle}`,
+        haystack: `${item.title} ${item.subtitle} ${item.detail}`,
+        hash: '#aiStudio',
+      })),
+      ...reportTools.map((item) => ({
+        id: `report-tool-${item.title}`,
+        label: item.title,
+        subtitle: `Report generator | ${item.subtitle}`,
+        haystack: `${item.title} ${item.subtitle} ${item.detail}`,
+        hash: '#aiStudio',
       })),
       ...researchLinks.map((item) => ({
         id: `research-${item.title}`,
@@ -1632,7 +1667,7 @@ ${filingExceptions
     ];
 
     return results.filter((item) => item.haystack.toLowerCase().includes(query)).slice(0, 12);
-  }, [data, searchQuery]);
+  }, [data, integrationLaunchers, reportPackPresets, reportTools, searchQuery]);
 
   const resolveDocumentDesk = (document: DocumentRecord) => {
     if (document.category === 'tax' || document.category === 'compliance' || document.linkedComplianceTagIds?.length) {
