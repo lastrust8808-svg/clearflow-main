@@ -11,6 +11,9 @@ import RecordCard from '../ui/RecordCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
 import StatCard from '../ui/StatCard';
 
+const paymentDraftStorageKey = 'clearflow-accounting-payment-draft';
+const presentmentDraftStorageKey = 'clearflow-accounting-presentment-draft';
+
 interface TransactionsPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
@@ -105,6 +108,14 @@ function settlementTone(status?: CoreDataBundle['settlements'][number]['status']
   }
 }
 
+function queueAccountingDraft(key: string, draft: Record<string, unknown>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(key, JSON.stringify(draft));
+}
+
 function resolveProofChainAction(chain: ReturnType<typeof buildTransactionProofChainViews>[number]) {
   if (chain.watchReasons.includes('Missing settlement link')) {
     return {
@@ -150,6 +161,8 @@ function resolveProofChainAction(chain: ReturnType<typeof buildTransactionProofC
 
 export default function TransactionsPage({ data, setData }: TransactionsPageProps) {
   const settlementFlows = buildSettlementFlowViews(data);
+  const transactionById = new Map(data.transactions.map((transaction) => [transaction.id, transaction]));
+  const settlementById = new Map(data.settlements.map((settlement) => [settlement.id, settlement]));
   const entityNameById = new Map(data.entities.map((entity) => [entity.id, entity.name]));
   const coveredTransactions = settlementFlows.filter((flow) => flow.settlement).length;
   const liquidCashReadyCount = settlementFlows.filter((flow) => flow.liquidCashReady).length;
@@ -445,6 +458,59 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
     }));
   };
 
+  const launchProofChainCure = (chain: (typeof transactionProofChains)[number]) => {
+    const transaction = transactionById.get(chain.transactionId);
+    const settlement = chain.settlementId ? settlementById.get(chain.settlementId) : undefined;
+    const action = resolveProofChainAction(chain);
+
+    if (action.hash === '#accounting:new-presentment') {
+      queueAccountingDraft(presentmentDraftStorageKey, {
+        title: transaction?.title || chain.title,
+        presentmentDate: transaction?.date || todayIso(),
+        dueDate: settlement?.expectedSettlementDate || '',
+        amount: String(transaction?.amount ?? ''),
+        obligationId: undefined,
+        instrumentSettlementId: settlement?.linkedInstrumentSettlementId,
+        treasuryAccountId:
+          settlement?.originSourceType === 'manual_remittance' ? settlement.originSourceId : '',
+        sourceBankAccountId:
+          settlement?.originSourceType === 'bank_account' ? settlement.originSourceId : '',
+        sourceLedgerAccountId:
+          settlement?.originSourceType === 'ledger_account' ? settlement.originSourceId : '',
+        dischargeMethod: settlement?.dischargeMethod || 'instrument_performance',
+        parsedNotes: `Generated from proof-chain cure routing for ${chain.transactionId}. Watch reasons: ${chain.watchReasons.join(', ')}.`,
+      });
+      goToHash(action.hash);
+      return;
+    }
+
+    if (action.hash === '#accounting:new-payment') {
+      queueAccountingDraft(paymentDraftStorageKey, {
+        direction: settlement?.direction || 'outgoing',
+        paymentDate: transaction?.date || todayIso(),
+        amount: String(transaction?.amount ?? ''),
+        method:
+          settlement?.executionRail === 'Fedwire'
+            ? 'wire'
+            : settlement?.executionRail === 'LedgerRemittance'
+              ? 'other'
+              : 'ach',
+        treasuryAccountId:
+          settlement?.originSourceType === 'manual_remittance' ? settlement.originSourceId : '',
+        sourceBankAccountId:
+          settlement?.originSourceType === 'bank_account' ? settlement.originSourceId : '',
+        sourceLedgerAccountId:
+          settlement?.originSourceType === 'ledger_account' ? settlement.originSourceId : '',
+        dischargeMethod: settlement?.dischargeMethod || 'bank_rail_payment',
+        notes: `Generated from proof-chain cure routing for ${chain.transactionId}. Watch reasons: ${chain.watchReasons.join(', ')}.`,
+      });
+      goToHash(action.hash);
+      return;
+    }
+
+    goToHash(action.hash);
+  };
+
   const resolveSettlementAction = (flow: (typeof settlementFlows)[number]) => {
     if (flow.transaction.linkedDocumentIds?.[0]) {
       return {
@@ -536,7 +602,7 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                 <button
                   type="button"
-                  onClick={() => goToHash(recommendedAction.hash)}
+                  onClick={() => launchProofChainCure(chain)}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 10,

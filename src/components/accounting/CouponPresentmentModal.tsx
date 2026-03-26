@@ -16,6 +16,22 @@ interface CouponPresentmentModalProps {
   treasuryAccounts: TreasuryAccountRecord[];
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
+  draft?: {
+    title?: string;
+    receiverName?: string;
+    receiverAccountLabel?: string;
+    couponReference?: string;
+    presentmentDate?: string;
+    dueDate?: string;
+    amount?: string;
+    obligationId?: string;
+    instrumentSettlementId?: string;
+    treasuryAccountId?: string;
+    sourceBankAccountId?: string;
+    sourceLedgerAccountId?: string;
+    dischargeMethod?: CouponPresentmentSubmitPayload['dischargeMethod'];
+    parsedNotes?: string;
+  } | null;
   onClose: () => void;
   onSubmit: (payload: CouponPresentmentSubmitPayload) => void;
 }
@@ -73,6 +89,7 @@ export default function CouponPresentmentModal({
   treasuryAccounts,
   bankAccounts,
   ledgerAccounts,
+  draft,
   onClose,
   onSubmit,
 }: CouponPresentmentModalProps) {
@@ -115,6 +132,25 @@ export default function CouponPresentmentModal({
     setUploadedFile(null);
     setParsedNotes('');
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !draft) return;
+
+    setTitle(draft.title ?? '');
+    setReceiverName(draft.receiverName ?? '');
+    setReceiverAccountLabel(draft.receiverAccountLabel ?? '');
+    setCouponReference(draft.couponReference ?? '');
+    setPresentmentDate(draft.presentmentDate ?? new Date().toISOString().slice(0, 10));
+    setDueDate(draft.dueDate ?? '');
+    setAmount(draft.amount ?? '');
+    setObligationId(draft.obligationId ?? '');
+    setInstrumentSettlementId(draft.instrumentSettlementId ?? '');
+    setTreasuryAccountId(draft.treasuryAccountId ?? '');
+    setSourceBankAccountId(draft.sourceBankAccountId ?? '');
+    setSourceLedgerAccountId(draft.sourceLedgerAccountId ?? '');
+    setDischargeMethod(draft.dischargeMethod ?? 'instrument_performance');
+    setParsedNotes(draft.parsedNotes ?? '');
+  }, [draft, open]);
 
   if (!open) return null;
 

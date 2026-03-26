@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import type { ComponentProps, CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle, DocumentRecord, InvoiceRecord, SettlementPath, TokenRecord } from '../../types/core';
 import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
 import { saveDocumentFile } from '../../services/documentVault.service';
@@ -142,6 +142,36 @@ type AccountingHashAction =
   | 'new-bank-account'
   | 'new-bank-transaction';
 
+const paymentDraftStorageKey = 'clearflow-accounting-payment-draft';
+const presentmentDraftStorageKey = 'clearflow-accounting-presentment-draft';
+
+type PaymentModalDraft = NonNullable<
+  ComponentProps<typeof PaymentRecordModal>['draft']
+>;
+type PresentmentModalDraft = NonNullable<
+  ComponentProps<typeof CouponPresentmentModal>['draft']
+>;
+
+function consumeSessionDraft<T>(key: string): T | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+
+  window.sessionStorage.removeItem(key);
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.warn(`Failed to parse stored accounting draft for ${key}.`, error);
+    return null;
+  }
+}
+
 function parseAccountingActionHash(hashValue: string): AccountingHashAction | null {
   if (!hashValue.startsWith('#accounting:')) {
     return null;
@@ -187,6 +217,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [isManualBankTransactionModalOpen, setIsManualBankTransactionModalOpen] = useState(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
   const [isDirectDepositModalOpen, setIsDirectDepositModalOpen] = useState(false);
+  const [paymentModalDraft, setPaymentModalDraft] = useState<PaymentModalDraft | null>(null);
+  const [presentmentModalDraft, setPresentmentModalDraft] =
+    useState<PresentmentModalDraft | null>(null);
   const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
@@ -242,6 +275,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           replaceHash('#accounting:invoices');
           break;
         case 'new-payment':
+          setPaymentModalDraft(consumeSessionDraft<PaymentModalDraft>(paymentDraftStorageKey));
           setIsPaymentModalOpen(true);
           setActiveSubsection('payments');
           replaceHash('#accounting:payments');
@@ -267,6 +301,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           replaceHash('#accounting:receipts');
           break;
         case 'new-presentment':
+          setPresentmentModalDraft(
+            consumeSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey)
+          );
           setIsCouponPresentmentModalOpen(true);
           setActiveSubsection('presentments');
           replaceHash('#accounting:presentments');
@@ -6369,7 +6406,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
             : ledgerAccounts
         }
-        onClose={() => setIsCouponPresentmentModalOpen(false)}
+        draft={presentmentModalDraft}
+        onClose={() => {
+          setIsCouponPresentmentModalOpen(false);
+          setPresentmentModalDraft(null);
+        }}
         onSubmit={handleCouponPresentmentSubmit}
       />
       <ReceiptIntakeModal
@@ -6396,7 +6437,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             ? digitalAssets.filter((item) => item.entityId === defaultEntity.id)
             : digitalAssets
         }
-        onClose={() => setIsPaymentModalOpen(false)}
+        draft={paymentModalDraft}
+        onClose={() => {
+          setIsPaymentModalOpen(false);
+          setPaymentModalDraft(null);
+        }}
         onSubmit={handlePaymentSubmit}
       />
       <JournalEntryModal

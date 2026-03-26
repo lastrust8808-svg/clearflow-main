@@ -39,6 +39,22 @@ interface PaymentRecordModalProps {
   treasuryAccounts: TreasuryAccountRecord[];
   wallets: WalletRecord[];
   digitalAssets: DigitalAssetRecord[];
+  draft?: {
+    direction?: 'incoming' | 'outgoing';
+    counterpartyId?: string;
+    paymentDate?: string;
+    amount?: string;
+    method?: PaymentMethod;
+    linkedInvoiceId?: string;
+    linkedBillId?: string;
+    sourceBankAccountId?: string;
+    sourceLedgerAccountId?: string;
+    treasuryAccountId?: string;
+    linkedWalletId?: string;
+    linkedDigitalAssetId?: string;
+    dischargeMethod?: DischargeMethod;
+    notes?: string;
+  } | null;
   onClose: () => void;
   onSubmit: (payload: PaymentSubmitPayload) => void;
 }
@@ -100,6 +116,7 @@ export default function PaymentRecordModal({
   treasuryAccounts,
   wallets,
   digitalAssets,
+  draft,
   onClose,
   onSubmit,
 }: PaymentRecordModalProps) {
@@ -151,6 +168,25 @@ export default function PaymentRecordModal({
     setRecurringAutoPost(false);
     setNotes('');
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !draft) return;
+
+    setDirection(draft.direction ?? 'incoming');
+    setCounterpartyId(draft.counterpartyId ?? '');
+    setPaymentDate(draft.paymentDate ?? new Date().toISOString().slice(0, 10));
+    setAmount(draft.amount ?? '');
+    setMethod(draft.method ?? 'ach');
+    setLinkedInvoiceId(draft.linkedInvoiceId ?? '');
+    setLinkedBillId(draft.linkedBillId ?? '');
+    setSourceBankAccountId(draft.sourceBankAccountId ?? '');
+    setSourceLedgerAccountId(draft.sourceLedgerAccountId ?? '');
+    setTreasuryAccountId(draft.treasuryAccountId ?? '');
+    setLinkedWalletId(draft.linkedWalletId ?? '');
+    setLinkedDigitalAssetId(draft.linkedDigitalAssetId ?? '');
+    setDischargeMethod(draft.dischargeMethod ?? 'bank_rail_payment');
+    setNotes(draft.notes ?? '');
+  }, [draft, open]);
 
   useEffect(() => {
     if (method === 'digital_asset' && dischargeMethod === 'bank_rail_payment') {
