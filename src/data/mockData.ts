@@ -1437,7 +1437,15 @@ export const coreMockData: CoreDataBundle = {
       securedByAssetIds: ['ast-digital-token-note', 'ast-metal-001'],
       linkedInstrumentIds: ['ins-note-001'],
       linkedDocumentIds: ['doc-token-001', 'doc-contract-001'],
+      linkedSettlementIds: ['set-001'],
+      linkedRemittanceStatementIds: ['remit-001'],
+      linkedCouponPresentmentIds: ['cpn-001'],
       gainOrLossOnDischarge: 0,
+      lifecycleStage: 'discharge_pending',
+      lastPresentmentDate: '2026-03-05',
+      cureDeadline: '2026-03-15',
+      enforcementMemo:
+        'Presentment and performance evidence are in place; operator can now finalize discharge and close the holder ledger balance.',
       recurringSchedule: {
         enabled: true,
         frequency: 'quarterly',

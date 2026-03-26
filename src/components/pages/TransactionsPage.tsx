@@ -1,6 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { AutoReconcileStatus, CoreDataBundle } from '../../types/core';
 import { buildSettlementFlowViews, formatMoney } from '../../services/settlementAnalytics.service';
+import {
+  buildObligationLifecycleSummaries,
+  type ObligationLifecycleSummary,
+} from '../../services/obligationLifecycle.service';
 import PageSection from '../ui/PageSection';
 import RecordCard from '../ui/RecordCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
@@ -15,6 +19,16 @@ function goToHash(hash: string) {
   if (typeof window !== 'undefined') {
     window.location.hash = hash;
   }
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysToIsoDate(date: string, days: number) {
+  const base = new Date(`${date}T00:00:00`);
+  base.setDate(base.getDate() + days);
+  return base.toISOString().slice(0, 10);
 }
 
 function statusPill(label: string, tone: 'blue' | 'teal' | 'gold' | 'rose') {
@@ -108,6 +122,280 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
       flow.derivedAutoReconcileStatus === 'exception' ||
       flow.settlement?.status === 'exception'
   ).length;
+  const obligationLifecycleSummaries = buildObligationLifecycleSummaries(data);
+  const defaultedObligationCount = obligationLifecycleSummaries.filter(
+    (item) => item.stage === 'defaulted'
+  ).length;
+  const dischargedObligationCount = obligationLifecycleSummaries.filter(
+    (item) => item.stage === 'discharged'
+  ).length;
+
+  const handleStartCure = (obligationId: string) => {
+    const now = todayIso();
+    const cureDeadline = addDaysToIsoDate(now, 10);
+    setData((prev) => {
+      const obligation = prev.obligations.find((item) => item.id === obligationId);
+      if (!obligation) {
+        return prev;
+      }
+
+      const tagId = `cmp-cure-${Date.now()}`;
+      return {
+        ...prev,
+        obligations: prev.obligations.map((item) =>
+          item.id === obligationId
+            ? {
+                ...item,
+                lifecycleStage: 'cure_running',
+                cureDeadline,
+                enforcementMemo:
+                  item.enforcementMemo ||
+                  'Cure period opened after presentment to track controlled performance before default.',
+              }
+            : item
+        ),
+        complianceTags: [
+          {
+            id: tagId,
+            entityId: obligation.entityId,
+            label: `Cure running - ${obligation.title}`,
+            category: 'risk',
+            status: 'review',
+            dueDate: cureDeadline,
+            notes:
+              'Internal default-control tracking only. Monitor cure period and evidence of performance or discharge.',
+          },
+          ...prev.complianceTags,
+        ],
+      };
+    });
+  };
+
+  const handleDeclareDefault = (summary: ObligationLifecycleSummary) => {
+    const now = todayIso();
+    const defaultNoticeId = `doc-default-${Date.now()}`;
+    const complianceTagId = `cmp-default-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === summary.obligation.id
+          ? {
+              ...item,
+              status: 'defaulted',
+              lifecycleStage: 'defaulted',
+              defaultBasis: item.defaultBasis || 'non_performance',
+              defaultDeclaredAt: now,
+              defaultNoticeDocumentId: defaultNoticeId,
+              enforcementMemo:
+                item.enforcementMemo ||
+                'Default declared inside controlled private-ledger workflow pending review of governing documents and any outside enforcement rights.',
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.obligationId === summary.obligation.id && item.performanceStatus !== 'performed'
+          ? {
+              ...item,
+              performanceStatus: 'disputed',
+              notes:
+                item.notes ||
+                'Moved to disputed status after internal default declaration review.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        summary.obligation.linkedSettlementIds?.includes(item.id) ||
+        item.linkedInstrumentSettlementId === summary.linkedInstrumentSettlement?.id
+          ? {
+              ...item,
+              status: item.status === 'settled' ? item.status : 'exception',
+              processorStatus:
+                item.status === 'settled' ? item.processorStatus : 'requires_review',
+              executionReason:
+                item.executionReason ||
+                'Internal default review opened before discharge could be completed.',
+              notes:
+                item.notes ||
+                'Settlement placed into exception posture pending default review.',
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.obligationId === summary.obligation.id ||
+        summary.obligation.linkedInstrumentIds?.includes(item.instrumentId || '')
+          ? {
+              ...item,
+              status: item.status === 'performed' ? item.status : 'disputed',
+              notes:
+                item.notes ||
+                'Register flagged for default review pending cure or documented discharge.',
+            }
+          : item
+      ),
+      documents: [
+        {
+          id: defaultNoticeId,
+          entityId: summary.obligation.entityId,
+          title: `Notice of Default - ${summary.obligation.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `DEFAULT NOTICE\n\nObligation: ${summary.obligation.title}\nLegal Identifier: ${
+            summary.obligation.legalIdentifier || 'Pending'
+          }\nDeclared Date: ${now}\nBasis: ${
+            summary.obligation.defaultBasis || 'non_performance'
+          }\n\nThis record is an internal control notice for tracking default, cure failure, and follow-up. Review governing documents before any outside enforcement step.`,
+          linkedInstrumentIds: summary.obligation.linkedInstrumentIds,
+          summary: 'Internal default notice and review memo.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      complianceTags: [
+        {
+          id: complianceTagId,
+          entityId: summary.obligation.entityId,
+          label: `Default review - ${summary.obligation.title}`,
+          category: 'risk',
+          status: 'restricted',
+          linkedDocumentIds: [defaultNoticeId],
+          notes:
+            'Default recorded inside controlled settlement workflow. Review governing documents and any outside rail requirements before external action.',
+        },
+        ...prev.complianceTags,
+      ],
+    }));
+  };
+
+  const handleDischargeObligation = (summary: ObligationLifecycleSummary) => {
+    const now = todayIso();
+    const register = summary.linkedRegister;
+    const performanceEntryId = `hle-discharge-${Date.now()}`;
+    const proofTokenId = `tok-discharge-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === summary.obligation.id
+          ? {
+              ...item,
+              status: 'satisfied',
+              lifecycleStage: 'discharged',
+              dischargedAt: now,
+              gainOrLossOnDischarge: item.gainOrLossOnDischarge ?? 0,
+              enforcementMemo:
+                item.enforcementMemo ||
+                'Discharge completed and tied back to settlement, remittance, and holder-ledger evidence.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        summary.obligation.linkedSettlementIds?.includes(item.id) ||
+        item.id === summary.linkedSettlement?.id
+          ? {
+              ...item,
+              status: 'settled',
+              actualSettlementDate: item.actualSettlementDate || now,
+              verificationStatus:
+                item.verificationStatus === 'verified' ? item.verificationStatus : 'verified',
+              processorStatus: item.processorStatus === 'blocked' ? 'settled' : item.processorStatus,
+              releasedAt: item.releasedAt || new Date().toISOString(),
+              liquidCashStage:
+                item.liquidCashStage === 'liquid_cash_released'
+                  ? item.liquidCashStage
+                  : 'liquid_cash_released',
+              tokenizedProofId: item.tokenizedProofId || proofTokenId,
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      remittanceStatements: prev.remittanceStatements.map((item) =>
+        summary.obligation.linkedRemittanceStatementIds?.includes(item.id) ||
+        item.id === summary.linkedRemittanceStatement?.id
+          ? {
+              ...item,
+              status: 'performed',
+              notes: item.notes || 'Marked performed from default/discharge control desk.',
+            }
+          : item
+      ),
+      couponPresentments: prev.couponPresentments.map((item) =>
+        summary.obligation.linkedCouponPresentmentIds?.includes(item.id) ||
+        item.id === summary.linkedCouponPresentment?.id
+          ? {
+              ...item,
+              status: 'performed',
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.obligationId === summary.obligation.id
+          ? {
+              ...item,
+              performanceStatus: 'performed',
+              performedAmount: Math.max(item.performedAmount, summary.obligation.amount),
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: register
+        ? prev.negotiableInstrumentRegisters.map((item) =>
+            item.id === register.id
+              ? {
+                  ...item,
+                  status: 'performed',
+                  outstandingAmount: 0,
+                  linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+                }
+              : item
+          )
+        : prev.negotiableInstrumentRegisters,
+      holderLedgerEntries: register
+        ? [
+            {
+              id: performanceEntryId,
+              entityId: summary.obligation.entityId,
+              registerId: register.id,
+              entryDate: now,
+              entryType: 'performance',
+              holderEntityId: register.currentHolderEntityId,
+              holderConnectionId: register.currentHolderConnectionId,
+              holderLabel: register.currentHolderLabel || 'Current holder',
+              amount: summary.outstandingAmount || summary.obligation.amount,
+              currency: register.currency,
+              resultingBalance: 0,
+              linkedInstrumentId: register.instrumentId,
+              linkedObligationId: summary.obligation.id,
+              linkedSettlementId: summary.linkedSettlement?.id,
+              linkedRemittanceStatementId: summary.linkedRemittanceStatement?.id,
+              linkedTokenIds: [proofTokenId],
+              notes: 'Discharge completed from transactions control desk.',
+            },
+            ...prev.holderLedgerEntries,
+          ]
+        : prev.holderLedgerEntries,
+      tokens: [
+        {
+          id: proofTokenId,
+          entityId: summary.obligation.entityId,
+          subjectType: 'settlement',
+          subjectId: summary.linkedSettlement?.id || summary.obligation.id,
+          label: `Discharge Proof - ${summary.obligation.title}`,
+          status: 'verified',
+          tokenStandard: 'internal-proof',
+          tokenReference: `DISC-${Date.now()}`,
+          issuedAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString(),
+          proofReference:
+            'Issued from the default and discharge desk after settlement, remittance, and holder-ledger tie-out.',
+        },
+        ...prev.tokens,
+      ],
+    }));
+  };
 
   const resolveSettlementAction = (flow: (typeof settlementFlows)[number]) => {
     if (flow.transaction.linkedDocumentIds?.[0]) {
@@ -177,8 +465,134 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
         <StatCard label="Inter-Entity Halves" value={interEntityMoveCount} />
         <StatCard label="N.I. Registers" value={registerCount} />
         <StatCard label="Holder Ledger Entries" value={holderLedgerCount} />
+        <StatCard label="Defaults" value={defaultedObligationCount} />
+        <StatCard label="Discharged Obligations" value={dischargedObligationCount} />
         <StatCard label="Auto Reconciled" value={autoMatchedCount} subvalue={`${exceptionCount} need attention`} />
       </div>
+
+      <PageSection
+        title="Default & Discharge Control"
+        description="Move obligations through presentment, cure, default review, and discharge with linked remittance, settlement, register, and holder-ledger evidence."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {obligationLifecycleSummaries.map((summary) => (
+            <RecordCard
+              key={summary.obligation.id}
+              title={summary.obligation.title}
+              subtitle={`${summary.stage} · ${summary.obligation.status} · ${formatMoney(summary.obligation.amount, 'USD')}`}
+            >
+              <div style={{ display: 'grid', gap: 12, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {statusPill(`Stage: ${summary.stage}`, summary.stage === 'defaulted' ? 'rose' : summary.stage === 'discharged' ? 'teal' : 'gold')}
+                  {statusPill(`Presentments: ${summary.presentmentCount}`, summary.presentmentCount ? 'blue' : 'gold')}
+                  {statusPill(
+                    `Outstanding: ${formatMoney(summary.outstandingAmount, 'USD')}`,
+                    summary.outstandingAmount === 0 ? 'teal' : 'gold'
+                  )}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Legal identifier:</strong>{' '}
+                  {summary.obligation.legalIdentifier || 'Not assigned'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Last presentment / cure:</strong>{' '}
+                  {summary.obligation.lastPresentmentDate || 'Not presented'}{' '}
+                  {summary.obligation.cureDeadline
+                    ? `| cure deadline ${summary.obligation.cureDeadline}`
+                    : ''}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Linked register / remittance:</strong>{' '}
+                  {summary.linkedRegister?.registerLabel || 'No register'} /{' '}
+                  {summary.linkedRemittanceStatement?.title || 'No remittance'}
+                </div>
+                {summary.watchItems.length ? (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Watch items:</strong>{' '}
+                    {summary.watchItems.join(' | ')}
+                  </div>
+                ) : null}
+                {summary.obligation.enforcementMemo ? (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Control memo:</strong>{' '}
+                    {summary.obligation.enforcementMemo}
+                  </div>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {summary.canPresent ? (
+                    <button
+                      type="button"
+                      onClick={() => goToHash('#accounting:new-presentment')}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Present / Re-Present
+                    </button>
+                  ) : null}
+                  {summary.canStartCure ? (
+                    <button
+                      type="button"
+                      onClick={() => handleStartCure(summary.obligation.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(247,211,123,0.28)',
+                        background: 'rgba(247, 211, 123, 0.09)',
+                        color: '#fff2cc',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Start Cure Window
+                    </button>
+                  ) : null}
+                  {summary.canDeclareDefault ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDeclareDefault(summary)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,160,195,0.28)',
+                        background: 'rgba(255, 120, 160, 0.09)',
+                        color: '#ffe1eb',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Declare Default
+                    </button>
+                  ) : null}
+                  {summary.canDischarge ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDischargeObligation(summary)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(140,235,191,0.28)',
+                        background: 'rgba(80, 214, 156, 0.1)',
+                        color: '#dcfff0',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Mark Discharged
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Negotiable Instrument Register"

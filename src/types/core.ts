@@ -242,6 +242,21 @@ export type RailLegalUsePosture =
   | 'private_instrument_tracking_only'
   | 'partner_bank_required_external_presentment'
   | 'hybrid_controlled_settlement';
+export type ObligationLifecycleStage =
+  | 'recognized'
+  | 'presentment_due'
+  | 'presented'
+  | 'cure_running'
+  | 'default_review'
+  | 'defaulted'
+  | 'discharge_pending'
+  | 'discharged';
+export type ObligationDefaultBasis =
+  | 'non_payment'
+  | 'non_performance'
+  | 'documentation_gap'
+  | 'maturity_lapse'
+  | 'manual_reservation';
 export type BankingOperationClass =
   | 'private_wealth_treasury'
   | 'affiliate_cash_management'
@@ -515,7 +530,18 @@ export interface ObligationRecord {
   securedByAssetIds?: string[];
   linkedInstrumentIds?: string[];
   linkedDocumentIds?: string[];
+  linkedSettlementIds?: string[];
+  linkedRemittanceStatementIds?: string[];
+  linkedCouponPresentmentIds?: string[];
   gainOrLossOnDischarge?: number;
+  lifecycleStage?: ObligationLifecycleStage;
+  lastPresentmentDate?: string;
+  cureDeadline?: string;
+  defaultBasis?: ObligationDefaultBasis;
+  defaultNoticeDocumentId?: string;
+  defaultDeclaredAt?: string;
+  dischargedAt?: string;
+  enforcementMemo?: string;
   recurringSchedule?: {
     enabled: boolean;
     frequency?: RecurrenceFrequency;

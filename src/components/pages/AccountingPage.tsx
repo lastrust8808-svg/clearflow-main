@@ -1698,11 +1698,37 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               item.id === linkedObligation.id
                 ? {
                     ...item,
+                    linkedSettlementIds: Array.from(
+                      new Set([settlementId, ...(item.linkedSettlementIds ?? [])])
+                    ),
+                    linkedRemittanceStatementIds: Array.from(
+                      new Set([remittanceStatementId, ...(item.linkedRemittanceStatementIds ?? [])])
+                    ),
+                    linkedCouponPresentmentIds: Array.from(
+                      new Set([presentmentId, ...(item.linkedCouponPresentmentIds ?? [])])
+                    ),
+                    lastPresentmentDate: presentmentDate,
+                    cureDeadline:
+                      payload.dueDate ||
+                      extraction.date ||
+                      addDaysToIsoDate(presentmentDate, 10),
+                    lifecycleStage:
+                      dischargeCompletesPerformance && resolvedAmount >= item.amount
+                        ? ('discharged' as const)
+                        : ('presented' as const),
                     status:
                       dischargeCompletesPerformance && resolvedAmount >= item.amount
                         ? ('satisfied' as const)
                         : item.status,
+                    dischargedAt:
+                      dischargeCompletesPerformance && resolvedAmount >= item.amount
+                        ? presentmentDate
+                        : item.dischargedAt,
                     gainOrLossOnDischarge: item.gainOrLossOnDischarge ?? 0,
+                    enforcementMemo:
+                      payload.parsedNotes ||
+                      extraction.summary ||
+                      'Presentment entered through accounting remittance workflow.',
                   }
                 : item
             )
