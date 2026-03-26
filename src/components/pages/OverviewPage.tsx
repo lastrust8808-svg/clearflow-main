@@ -54,6 +54,13 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const driveRoutedCount = data.documents.filter(
     (item) => item.externalStorageStatus === 'routed'
   ).length;
+  const activeEntityConnections = data.entityConnections.filter(
+    (item) => item.status === 'active',
+  ).length;
+  const activeCreditRails = data.creditRails.filter((item) => item.status === 'active').length;
+  const watchedCreditRails = data.creditRails.filter(
+    (item) => item.status === 'watch' || item.status === 'blocked',
+  ).length;
   const internalRetentionLedgerCount = data.ledgerAccounts.filter((item) =>
     item.name.includes('ClearFlow Retained Security Instruments Held')
   ).length;
@@ -138,6 +145,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Tax Filing Queue" value={filingQueueCount} />
         <StatCard label="Direct Deposit Returns" value={directDepositCount} />
         <StatCard label="Retained Records" value={retainedRecordCount} />
+        <StatCard label="Entity Connections" value={activeEntityConnections} />
+        <StatCard label="Active Credit Rails" value={activeCreditRails} />
+        <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
         <StatCard
           label="Rail Exceptions"
           value={
@@ -146,6 +156,58 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Connection Rail Posture"
+        description="Watch the multi-entity and cross-user operating links that power internal credit, reserve-backed transfers, and controlled settlement."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Internal + External Links"
+            subtitle={`${activeEntityConnections} active connections | ${activeCreditRails} active rails`}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                Connection rails tie a user&apos;s entities and other users into one governed
+                settlement map, so exposure, reserve support, validation rules, and release posture
+                are all attached to the same operating relationship.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('#entities')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Entity Rails
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Watch-State Exposure"
+            subtitle={`${watchedCreditRails} rails currently need extra attention`}
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+              Rails move into watch or blocked state when validation, reserve coverage, or exposure
+              posture needs review before another movement should clear.
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Current System Scope"

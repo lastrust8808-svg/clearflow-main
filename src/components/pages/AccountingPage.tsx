@@ -5201,9 +5201,92 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     const originReceivable = `1450 Due From ${toEntity.name}`;
     const destinationPayable = `2400 Due To ${fromEntity.name}`;
 
-    setData((prev) => ({
-      ...prev,
-      transactions: [
+    setData((prev) => {
+      const existingConnection = (prev.entityConnections ?? []).find(
+        (connection) =>
+          connection.ownerEntityId === fromEntity.id &&
+          connection.connectedEntityId === toEntity.id &&
+          connection.connectionType === 'internal_entity',
+      );
+      const existingRail = existingConnection
+        ? (prev.creditRails ?? []).find((rail) => rail.entityConnectionId === existingConnection.id)
+        : undefined;
+      const connectionId = existingConnection?.id ?? `conn-${stamp}`;
+      const railId = existingRail?.id ?? `rail-${stamp}`;
+      const existingRailOutstanding = Number(existingRail?.outstandingExposure ?? 0);
+      const existingRailLimit = Number(existingRail?.exposureLimit ?? 0);
+      const nextOutstandingExposure = existingRailOutstanding + amount;
+
+      return {
+        ...prev,
+        entityConnections: existingConnection
+          ? prev.entityConnections.map((connection) =>
+              connection.id === existingConnection.id
+                ? {
+                    ...connection,
+                    status: 'active',
+                    notes:
+                      connection.notes ||
+                      'Internal entity connection created automatically from intercompany settlement activity.',
+                  }
+                : connection,
+            )
+          : [
+              {
+                id: connectionId,
+                ownerEntityId: fromEntity.id,
+                connectionName: `${fromEntity.displayName || fromEntity.name} <> ${toEntity.displayName || toEntity.name}`,
+                connectionType: 'internal_entity',
+                relationshipClass: 'shared_control',
+                status: 'active',
+                connectedEntityId: toEntity.id,
+                defaultSettlementPath: 'internal_ledger',
+                defaultCurrency: 'USD',
+                validationMode: 'strict',
+                requireVerificationTokens: true,
+                requireComplianceValidation: false,
+                reserveBackedPreferred: true,
+                notes:
+                  'Created automatically from ERP intercompany settlement activity.',
+              },
+              ...(prev.entityConnections ?? []),
+            ],
+        creditRails: existingRail
+          ? prev.creditRails.map((rail) =>
+              rail.id === existingRail.id
+                ? {
+                    ...rail,
+                    status: rail.status === 'blocked' ? 'watch' : rail.status,
+                    outstandingExposure: nextOutstandingExposure,
+                    availableCredit:
+                      existingRailLimit > 0
+                        ? Math.max(existingRailLimit - nextOutstandingExposure, 0)
+                        : rail.availableCredit,
+                  }
+                : rail,
+            )
+          : [
+              {
+                id: railId,
+                ownerEntityId: fromEntity.id,
+                entityConnectionId: connectionId,
+                railName: `${fromEntity.displayName || fromEntity.name} Internal Credit Rail`,
+                railType: 'intercompany_credit',
+                status: 'active',
+                settlementPath: 'internal_ledger',
+                dischargeMethod: 'internal_ledger_credit',
+                currency: 'USD',
+                exposureLimit: amount * 5,
+                outstandingExposure: amount,
+                availableCredit: amount * 4,
+                autoMirrorIntercompanyEntries: true,
+                autoIssueTokens: true,
+                reserveBacked: true,
+                notes: 'Created automatically from ERP intercompany transfer posting.',
+              },
+              ...(prev.creditRails ?? []),
+            ],
+        transactions: [
         {
           id: originTransactionId,
           entityId: fromEntity.id,
@@ -5219,7 +5302,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           counterpartyEntityId: toEntity.id,
           sharedTransferGroupId: transferGroupId,
           ledgerSide: 'origin',
-          notes: 'Origin half of ERP-posted intercompany transfer.',
+          notes: 'Origin half of ERP-posted intercompany transfer under the linked internal credit rail.',
         },
         {
           id: destinationTransactionId,
@@ -5236,7 +5319,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           counterpartyEntityId: fromEntity.id,
           sharedTransferGroupId: transferGroupId,
           ledgerSide: 'destination',
-          notes: 'Destination half of ERP-posted intercompany transfer.',
+          notes: 'Destination half of ERP-posted intercompany transfer under the linked internal credit rail.',
         },
         ...(prev.transactions ?? []),
       ],
@@ -5253,7 +5336,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           status: 'settled',
           linkedTransactionIds: [originTransactionId],
           linkedSettlementId: originSettlementId,
-          notes: `Mirrored origin payment to ${toEntity.name}.`,
+          linkedEntityConnectionId: connectionId,
+          linkedCreditRailId: railId,
+          notes: `Mirrored origin payment to ${toEntity.name} through the linked internal credit rail.`,
         },
         {
           id: destinationPaymentId,
@@ -5267,7 +5352,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           status: 'settled',
           linkedTransactionIds: [destinationTransactionId],
           linkedSettlementId: destinationSettlementId,
-          notes: `Mirrored receipt from ${fromEntity.name}.`,
+          linkedEntityConnectionId: connectionId,
+          linkedCreditRailId: railId,
+          notes: `Mirrored receipt from ${fromEntity.name} through the linked internal credit rail.`,
         },
         ...(prev.payments ?? []),
       ],
@@ -5294,6 +5381,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           initiatedAt: entryDate,
           expectedSettlementDate: entryDate,
           actualSettlementDate: entryDate,
+          linkedEntityConnectionId: connectionId,
+          linkedCreditRailId: railId,
           autoReconcileStatus: 'matched',
           notes: memo,
         },
@@ -5319,6 +5408,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           initiatedAt: entryDate,
           expectedSettlementDate: entryDate,
           actualSettlementDate: entryDate,
+          linkedEntityConnectionId: connectionId,
+          linkedCreditRailId: railId,
           autoReconcileStatus: 'matched',
           notes: memo,
         },
@@ -5370,11 +5461,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           effectiveDate: entryDate,
           settlementMode: payload.settlementMode,
           status: 'settled',
+          linkedEntityConnectionId: connectionId,
+          linkedCreditRailId: railId,
           memo,
         },
         ...(prev.interEntityTransfers ?? []),
       ],
-    }));
+    }});
 
     setActiveSubsection('intercompany');
     setIsIntercompanyModalOpen(false);

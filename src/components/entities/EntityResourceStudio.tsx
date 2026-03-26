@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type {
+  AssetRecord,
   AuthorityRecord,
   BankAccountRecord,
   ComplianceTagRecord,
   CoreDataBundle,
   DocumentRecord,
   InstrumentRecord,
+  InstrumentSettlementRecord,
+  MovementIdentifierRecord,
   ObligationRecord,
+  SettlementRecord,
   TokenRecord,
+  TransactionRecord,
+  TreasuryAccountRecord,
   WalletRecord,
 } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
@@ -74,6 +80,16 @@ function formatLabel(value: string) {
   return value.replace(/_/g, ' ');
 }
 
+function buildLegalIdentifier(entityName: string, category: string, issueDate?: string) {
+  const root = entityName
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 6) || 'ENTITY';
+  const date = (issueDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+  const nonce = Date.now().toString().slice(-4);
+  return `${root}-${category.toUpperCase()}-${date}-${nonce}`;
+}
+
 function buildId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -134,6 +150,10 @@ export default function EntityResourceStudio({
       instrumentType: 'promissory_note',
       instrumentAmount: '',
       instrumentDate: new Date().toISOString().slice(0, 10),
+      instrumentSourceClass: 'note',
+      instrumentCounterpartyLabel: '',
+      instrumentDepositToReserve: 'yes',
+      instrumentTreasuryAccountId: '',
       instrumentNotes: '',
       obligationTitle: '',
       obligationType: 'private_obligation',
@@ -150,6 +170,10 @@ export default function EntityResourceStudio({
   const selectedEntity = useMemo(
     () => data.entities.find((entity) => entity.id === selectedEntityId),
     [data.entities, selectedEntityId]
+  );
+  const selectedEntityTreasuryAccounts = useMemo(
+    () => data.treasuryAccounts.filter((account) => account.entityId === selectedEntityId),
+    [data.treasuryAccounts, selectedEntityId],
   );
 
   const summary = selectedEntity
@@ -608,15 +632,39 @@ export default function EntityResourceStudio({
       if (resourceType === 'instrument') {
         const instrumentId = buildId('inst');
         const tokenId = shouldIssueVerificationToken ? buildId('tok') : null;
+        const legalIdentifier = buildLegalIdentifier(
+          selectedEntity.displayName || selectedEntity.name,
+          formState.instrumentType || 'instrument',
+          formState.instrumentDate,
+        );
+        const reserveDepositEnabled = (formState.instrumentDepositToReserve || 'yes') === 'yes';
+        const sourceClass =
+          (formState.instrumentSourceClass as InstrumentRecord['sourceClass']) || 'note';
+        const denominationValue = Number(formState.instrumentAmount || 0);
+        const linkedTreasuryAccount =
+          data.treasuryAccounts.find((account) => account.id === formState.instrumentTreasuryAccountId) ||
+          selectedEntityTreasuryAccounts[0];
+        const depositAssetId = reserveDepositEnabled ? buildId('asset') : null;
+        const depositTransactionId = reserveDepositEnabled ? buildId('txn') : null;
+        const depositSettlementId = reserveDepositEnabled ? buildId('set') : null;
+        const instrumentSettlementId = reserveDepositEnabled ? buildId('iset') : null;
+        const movementIdentifierId = reserveDepositEnabled ? buildId('mid') : null;
         const nextRecord: InstrumentRecord = {
           id: instrumentId,
           entityId,
           title: formState.instrumentTitle || `${selectedEntity.displayName || selectedEntity.name} Instrument`,
           instrumentType:
             (formState.instrumentType as InstrumentRecord['instrumentType']) || 'promissory_note',
+          legalIdentifier,
+          sourceClass,
+          issuerEntityId: entityId,
+          counterpartyLabel: formState.instrumentCounterpartyLabel || undefined,
           issueDate: formState.instrumentDate,
-          denominationValue: Number(formState.instrumentAmount || 0),
+          denominationValue,
           paymentMedium: 'fiat',
+          reserveDepositEnabled,
+          linkedTreasuryAccountId: reserveDepositEnabled ? linkedTreasuryAccount?.id : undefined,
+          linkedAssetIds: depositAssetId ? [depositAssetId] : undefined,
           linkedDocumentIds: [],
           linkedTokenIds: tokenId ? [tokenId] : undefined,
           notes: formState.instrumentNotes || 'Created from Entity Resource Studio.',
@@ -640,27 +688,158 @@ export default function EntityResourceStudio({
           `${nextRecord.title} Support Packet`,
           'financial',
           'Instrument support packet generated from the entity resource desk.',
-          `# Instrument Support Packet\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nInstrument: ${nextRecord.title}\nType: ${nextRecord.instrumentType}\nIssue Date: ${nextRecord.issueDate || 'Pending'}\nDenomination: ${nextRecord.denominationValue || 0}\n\nNotes\n${nextRecord.notes || 'Instrument support generated from Entity Resource Studio.'}`,
+          `# Instrument Support Packet\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nInstrument: ${nextRecord.title}\nLegal Identifier: ${legalIdentifier}\nType: ${nextRecord.instrumentType}\nSource Class: ${sourceClass}\nIssue Date: ${nextRecord.issueDate || 'Pending'}\nDenomination: ${nextRecord.denominationValue || 0}\nCounterparty: ${nextRecord.counterpartyLabel || 'Pending assignment'}\nReserve Deposit: ${reserveDepositEnabled ? `Auto performance enabled${linkedTreasuryAccount ? ` via ${linkedTreasuryAccount.name}` : ''}` : 'Manual only'}\n\nNotes\n${nextRecord.notes || 'Instrument support generated from Entity Resource Studio.'}`,
           undefined,
           instrumentToken ? [instrumentToken.id] : undefined,
         );
         persistedDocument = instrumentDocument;
         nextRecord.linkedDocumentIds = [instrumentDocument.id];
 
+        const depositedAsset: AssetRecord | null =
+          reserveDepositEnabled && depositAssetId
+            ? {
+                id: depositAssetId,
+                entityId,
+                name: `${nextRecord.title} Reserve Source`,
+                category: ['note', 'bond', 'future'].includes(sourceClass) ? 'security' : 'receivable',
+                status: 'active',
+                bookValue: denominationValue,
+                paymentMedium: 'private_tender',
+                linkedDocumentIds: [instrumentDocument.id],
+                notes: 'Auto-created source reserve asset from instrument deposit.',
+              }
+            : null;
+        const depositTransaction: TransactionRecord | null =
+          reserveDepositEnabled && depositTransactionId
+            ? {
+                id: depositTransactionId,
+                entityId,
+                type: 'deposit',
+                title: `${nextRecord.title} Source Deposit`,
+                amount: denominationValue,
+                currency: formState.currency || 'USD',
+                date: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                status: 'posted',
+                linkedAssetIds: depositedAsset ? [depositedAsset.id] : undefined,
+                linkedDocumentIds: [instrumentDocument.id],
+                linkedSettlementId: depositSettlementId || undefined,
+                linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+                notes: 'Auto-created from source instrument deposit into reserve.',
+              }
+            : null;
+        const depositSettlement: SettlementRecord | null =
+          reserveDepositEnabled && depositSettlementId && depositTransaction
+            ? {
+                id: depositSettlementId,
+                entityId,
+                linkedTransactionId: depositTransaction.id,
+                path: 'internal_ledger',
+                dischargeMethod: 'instrument_performance',
+                direction: 'incoming',
+                status: 'settled',
+                liquidCashStage: 'liquid_cash_available',
+                verificationMethod: shouldIssueVerificationToken
+                  ? 'internal_control_token'
+                  : 'manual_override',
+                verificationStatus: shouldIssueVerificationToken ? 'verified' : 'pending',
+                verificationReference: `Instrument ${legalIdentifier} recognized from source deposit.`,
+                tokenizedProofId: instrumentToken?.id,
+                linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+                grossAmount: denominationValue,
+                settledAmount: denominationValue,
+                currency: formState.currency || 'USD',
+                initiatedAt: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                expectedSettlementDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                actualSettlementDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                executionRail: 'LedgerRemittance',
+                processorStatus: 'settled',
+                executionReason: 'Auto performance on deposit of source instrument into reserve.',
+                reserveBacked: true,
+                autoReconcileStatus: 'matched',
+                notes: 'Created automatically from source-backed reserve deposit.',
+              }
+            : null;
+        const movementIdentifier: MovementIdentifierRecord | null =
+          reserveDepositEnabled && movementIdentifierId && depositSettlement
+            ? {
+                id: movementIdentifierId,
+                entityId,
+                railNamespace: 'commercial_ach',
+                movementType: 'payment',
+                linkedSettlementId: depositSettlement.id,
+                primaryIdentifier: legalIdentifier,
+                secondaryIdentifier: nextRecord.title,
+                effectiveDate: nextRecord.issueDate,
+                status: 'active',
+                notes: 'Internal legal/source identifier assigned to the issued instrument.',
+              }
+            : null;
+        const autoPerformance: InstrumentSettlementRecord | null =
+          reserveDepositEnabled && instrumentSettlementId
+            ? {
+                id: instrumentSettlementId,
+                entityId,
+                title: `${nextRecord.title} Auto Performance`,
+                legalIdentifier,
+                instrumentId: instrumentId,
+                treasuryAccountId: linkedTreasuryAccount?.id,
+                linkedSettlementId: depositSettlement?.id,
+                linkedTransactionId: depositTransaction?.id,
+                linkedDocumentIds: [instrumentDocument.id],
+                linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+                dischargeMethod: 'instrument_performance',
+                recognitionBasis: 'obligation_recognized_before_cash',
+                performanceStatus: 'performed',
+                faceAmount: denominationValue,
+                performedAmount: denominationValue,
+                currency: formState.currency || 'USD',
+                effectiveDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                sourceDepositStatus: 'deposited_to_reserve',
+                remittanceReference: legalIdentifier,
+                notes: 'Auto-performed on entry of source-backed reserve deposit.',
+              }
+            : null;
+
         return {
           ...prev,
           instruments: [nextRecord, ...prev.instruments],
           documents: [instrumentDocument, ...prev.documents],
+          assets: depositedAsset ? [depositedAsset, ...prev.assets] : prev.assets,
+          transactions: depositTransaction ? [depositTransaction, ...prev.transactions] : prev.transactions,
+          settlements: depositSettlement ? [depositSettlement, ...prev.settlements] : prev.settlements,
+          movementIdentifiers: movementIdentifier
+            ? [movementIdentifier, ...prev.movementIdentifiers]
+            : prev.movementIdentifiers,
+          instrumentSettlements: autoPerformance
+            ? [autoPerformance, ...prev.instrumentSettlements]
+            : prev.instrumentSettlements,
+          treasuryAccounts:
+            reserveDepositEnabled && linkedTreasuryAccount
+              ? prev.treasuryAccounts.map((account) =>
+                  account.id === linkedTreasuryAccount.id
+                    ? {
+                        ...account,
+                        availableBalance: account.availableBalance + denominationValue,
+                      }
+                    : account,
+                )
+              : prev.treasuryAccounts,
           tokens: instrumentToken ? [instrumentToken, ...prev.tokens] : prev.tokens,
         };
       }
 
       if (resourceType === 'obligation') {
         const obligationId = buildId('obl');
+        const legalIdentifier = buildLegalIdentifier(
+          selectedEntity.displayName || selectedEntity.name,
+          formState.obligationType || 'obligation',
+          formState.documentDate,
+        );
         const nextRecord: ObligationRecord = {
           id: obligationId,
           entityId,
           title: formState.obligationTitle || `${selectedEntity.displayName || selectedEntity.name} Obligation`,
+          legalIdentifier,
           obligationType:
             (formState.obligationType as ObligationRecord['obligationType']) || 'private_obligation',
           amount: Number(formState.obligationAmount || 0),
@@ -674,7 +853,7 @@ export default function EntityResourceStudio({
           `${nextRecord.title} Control Memo`,
           'financial',
           'Obligation control memo generated from the entity resource desk.',
-          `# Obligation Control Memo\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nObligation: ${nextRecord.title}\nType: ${nextRecord.obligationType}\nAmount: ${nextRecord.amount}\nPayment Medium: ${nextRecord.paymentMedium}\nStatus: ${nextRecord.status}\n\nNotes\nGenerated from Entity Resource Studio for downstream settlement and treasury work.`,
+          `# Obligation Control Memo\n\nEntity: ${selectedEntity.displayName || selectedEntity.name}\nObligation: ${nextRecord.title}\nLegal Identifier: ${legalIdentifier}\nType: ${nextRecord.obligationType}\nAmount: ${nextRecord.amount}\nPayment Medium: ${nextRecord.paymentMedium}\nStatus: ${nextRecord.status}\n\nNotes\nGenerated from Entity Resource Studio for downstream settlement and treasury work.`,
         );
         persistedDocument = obligationDocument;
         nextRecord.linkedDocumentIds = [obligationDocument.id];
@@ -1073,6 +1252,54 @@ export default function EntityResourceStudio({
               value={formState.instrumentDate || ''}
               onChange={(event) => updateField('instrumentDate', event.target.value)}
             />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Source Class</span>
+            <select
+              style={inputStyle}
+              value={formState.instrumentSourceClass || 'note'}
+              onChange={(event) => updateField('instrumentSourceClass', event.target.value)}
+            >
+              {['note', 'bond', 'future', 'collateral', 'other'].map((option) => (
+                <option key={option} value={option}>
+                  {formatLabel(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Counterparty / Related Party</span>
+            <input
+              style={inputStyle}
+              value={formState.instrumentCounterpartyLabel || ''}
+              onChange={(event) => updateField('instrumentCounterpartyLabel', event.target.value)}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Auto Deposit to Reserve</span>
+            <select
+              style={inputStyle}
+              value={formState.instrumentDepositToReserve || 'yes'}
+              onChange={(event) => updateField('instrumentDepositToReserve', event.target.value)}
+            >
+              <option value="yes">Yes, auto perform on deposit</option>
+              <option value="no">No, create instrument only</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Reserve Treasury</span>
+            <select
+              style={inputStyle}
+              value={formState.instrumentTreasuryAccountId || ''}
+              onChange={(event) => updateField('instrumentTreasuryAccountId', event.target.value)}
+            >
+              <option value="">Use primary treasury</option>
+              {selectedEntityTreasuryAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
       )}

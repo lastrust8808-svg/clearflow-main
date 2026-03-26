@@ -6,7 +6,9 @@ import EntityProfileCard from '../entities/EntityProfileCard';
 import EntityResourceStudio from '../entities/EntityResourceStudio';
 import EntityExecutionStudio from '../entities/EntityExecutionStudio';
 import EntityQuickAddModal from '../entities/EntityQuickAddModal';
+import EntityConnectionRailModal from '../entities/EntityConnectionRailModal';
 import StatCard from '../ui/StatCard';
+import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
 
 interface EntitiesPageProps {
   data: CoreDataBundle;
@@ -21,6 +23,10 @@ function goToHash(hash: string) {
 
 export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
+  const [isConnectionRailModalOpen, setIsConnectionRailModalOpen] = useState(false);
+  const [connectionRailPreset, setConnectionRailPreset] = useState<'general' | 'business_partner'>(
+    'general',
+  );
   const activeEntities = data.entities.filter((entity) => entity.status === 'active').length;
   const tokenEnabledEntities = data.entities.filter(
     (entity) => entity.operationalDefaults?.autoIssueVerificationTokens
@@ -31,6 +37,19 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
   const bankPackagesInFlight = data.bankAccounts.filter(
     (account) => account.onboardingStatus && account.onboardingStatus !== 'connected'
   ).length;
+  const internalConnections = data.entityConnections.filter(
+    (connection) => connection.connectionType === 'internal_entity'
+  ).length;
+  const externalConnections = data.entityConnections.filter(
+    (connection) => connection.connectionType !== 'internal_entity'
+  ).length;
+  const activeCreditRails = data.creditRails.filter((rail) => rail.status === 'active').length;
+  const watchCreditRails = data.creditRails.filter((rail) => rail.status === 'watch').length;
+
+  const entityNameById = new Map(
+    data.entities.map((entity) => [entity.id, entity.displayName || entity.name]),
+  );
+  const treasuryNameById = new Map(data.treasuryAccounts.map((account) => [account.id, account.name]));
 
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
@@ -47,6 +66,14 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
 
       if (window.location.hash === '#entities:new') {
         setIsEntityModalOpen(true);
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}#entities`,
+        );
+      } else if (window.location.hash === '#entities:connections') {
+        setConnectionRailPreset('general');
+        setIsConnectionRailModalOpen(true);
         window.history.replaceState(
           null,
           '',
@@ -174,12 +201,280 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
           goToHash(`#documents:${documentId}`);
         }}
       />
+      <EntityConnectionRailModal
+        open={isConnectionRailModalOpen}
+        entities={data.entities}
+        treasuryAccounts={data.treasuryAccounts}
+        defaultCurrency={data.workspaceSettings.baseCurrency}
+        initialPreset={connectionRailPreset}
+        onClose={() => setIsConnectionRailModalOpen(false)}
+        onSubmit={(payload) => {
+          const stamp = Date.now();
+          const ownerEntity = data.entities.find((entity) => entity.id === payload.ownerEntityId);
+          if (!ownerEntity) {
+            return;
+          }
+
+          const connectedEntity = payload.connectedEntityId
+            ? data.entities.find((entity) => entity.id === payload.connectedEntityId)
+            : undefined;
+          const connectionId = `conn-${stamp}`;
+          const railId = `rail-${stamp}`;
+          const documentId = `doc-${stamp}`;
+          const tokenId = `tok-${stamp}`;
+          const noteInstrumentId = payload.autoCreateNoteRemittance ? `inst-${stamp}` : null;
+          const obligationId = payload.autoCreateNoteRemittance ? `obl-${stamp}` : null;
+          const remittanceId = payload.autoCreateNoteRemittance ? `rem-${stamp}` : null;
+          const instrumentSettlementId = payload.autoCreateNoteRemittance ? `iset-${stamp}` : null;
+          const connectionName =
+            payload.connectionName.trim() ||
+            (connectedEntity
+              ? `${ownerEntity.displayName || ownerEntity.name} <> ${connectedEntity.displayName || connectedEntity.name}`
+              : `${ownerEntity.displayName || ownerEntity.name} <> ${payload.connectedUserLabel || 'External User'}`);
+          const railName =
+            payload.railName.trim() ||
+            `${connectionName} ${payload.settlementPath.replace(/_/g, ' ')} rail`;
+          const creditLimit = Number(payload.creditLimit || 0);
+          const packetTitle = `${connectionName} Connection Packet`;
+
+          setData((prev) => ({
+            ...prev,
+            entityConnections: [
+              {
+                id: connectionId,
+                ownerEntityId: payload.ownerEntityId,
+                connectionName,
+                connectionType: payload.connectionType,
+                relationshipClass: payload.relationshipClass,
+                status: 'active',
+                connectedEntityId: payload.connectedEntityId,
+                connectedUserLabel: payload.connectedUserLabel?.trim() || undefined,
+                connectedUserEmail: payload.connectedUserEmail?.trim() || undefined,
+                connectedWorkspaceLabel: payload.connectedWorkspaceLabel?.trim() || undefined,
+                linkedDocumentIds: [documentId],
+                linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                defaultSettlementPath: payload.settlementPath,
+                defaultCurrency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                validationMode: payload.requireComplianceValidation ? 'strict' : 'standard',
+                requireVerificationTokens: payload.requireVerificationTokens,
+                requireComplianceValidation: payload.requireComplianceValidation,
+                reserveBackedPreferred: payload.reserveBacked,
+                notes: payload.notes.trim() || undefined,
+              },
+              ...prev.entityConnections,
+            ],
+            creditRails: [
+              {
+                id: railId,
+                ownerEntityId: payload.ownerEntityId,
+                entityConnectionId: connectionId,
+                railName,
+                railType: payload.railType,
+                status: payload.requireComplianceValidation ? 'watch' : 'active',
+                settlementPath: payload.settlementPath,
+                dischargeMethod:
+                  payload.settlementPath === 'tokenized_credit'
+                    ? 'instrument_performance'
+                    : payload.settlementPath === 'internal_ledger'
+                      ? 'internal_ledger_credit'
+                      : 'bank_rail_payment',
+                currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                exposureLimit: creditLimit || undefined,
+                outstandingExposure: 0,
+                availableCredit: creditLimit || undefined,
+                linkedTreasuryAccountId: payload.linkedTreasuryAccountId,
+                linkedDocumentIds: [documentId],
+                linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                autoMirrorIntercompanyEntries: payload.connectionType === 'internal_entity',
+                autoIssueTokens: payload.requireVerificationTokens,
+                autoCreateNoteRemittance: payload.autoCreateNoteRemittance,
+                noteSettlementMode: payload.autoCreateNoteRemittance
+                  ? 'holder_presentment'
+                  : undefined,
+                reserveBacked: payload.reserveBacked,
+                notes: payload.notes.trim() || undefined,
+              },
+              ...prev.creditRails,
+            ],
+            instruments:
+              payload.autoCreateNoteRemittance && noteInstrumentId
+                ? [
+                    {
+                      id: noteInstrumentId,
+                      entityId: payload.ownerEntityId,
+                      title: `${connectionName} Partner Note`,
+                      instrumentType: 'promissory_note',
+                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
+                        .replace(/[^A-Za-z0-9]/g, '')
+                        .toUpperCase()
+                        .slice(0, 6)}-NOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      sourceClass: 'note',
+                      issuerEntityId: payload.ownerEntityId,
+                      counterpartyEntityId: payload.connectedEntityId,
+                      counterpartyLabel:
+                        connectedEntity?.displayName ||
+                        connectedEntity?.name ||
+                        payload.connectedUserLabel ||
+                        payload.connectedWorkspaceLabel,
+                      issueDate: new Date().toISOString().slice(0, 10),
+                      denominationValue: creditLimit || 0,
+                      paymentMedium: 'private_tender',
+                      reserveDepositEnabled: payload.reserveBacked,
+                      linkedTreasuryAccountId: payload.linkedTreasuryAccountId,
+                      linkedDocumentIds: [documentId],
+                      linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                      notes: 'Auto-structured partner note from entity connection rail creation.',
+                    },
+                    ...prev.instruments,
+                  ]
+                : prev.instruments,
+            obligations:
+              payload.autoCreateNoteRemittance && obligationId && noteInstrumentId
+                ? [
+                    {
+                      id: obligationId,
+                      entityId: payload.ownerEntityId,
+                      title: `${connectionName} Partner Obligation`,
+                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
+                        .replace(/[^A-Za-z0-9]/g, '')
+                        .toUpperCase()
+                        .slice(0, 6)}-OBL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      obligationType: 'private_obligation',
+                      amount: creditLimit || 0,
+                      paymentMedium: 'private_tender',
+                      status: 'open',
+                      linkedInstrumentIds: [noteInstrumentId],
+                      linkedDocumentIds: [documentId],
+                    },
+                    ...prev.obligations,
+                  ]
+                : prev.obligations,
+            instrumentSettlements:
+              payload.autoCreateNoteRemittance &&
+              instrumentSettlementId &&
+              noteInstrumentId &&
+              obligationId
+                ? [
+                    {
+                      id: instrumentSettlementId,
+                      entityId: payload.ownerEntityId,
+                      title: `${connectionName} Partner Presentment Flow`,
+                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
+                        .replace(/[^A-Za-z0-9]/g, '')
+                        .toUpperCase()
+                        .slice(0, 6)}-NOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      instrumentId: noteInstrumentId,
+                      obligationId,
+                      treasuryAccountId: payload.linkedTreasuryAccountId,
+                      linkedDocumentIds: [documentId],
+                      linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                      dischargeMethod: 'instrument_performance',
+                      recognitionBasis: 'obligation_recognized_before_cash',
+                      performanceStatus: 'issued',
+                      faceAmount: creditLimit || 0,
+                      performedAmount: 0,
+                      currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                      effectiveDate: new Date().toISOString().slice(0, 10),
+                      sourceDepositStatus: payload.reserveBacked ? 'deposited_to_reserve' : 'not_deposited',
+                      remittanceReference: railName,
+                      notes: 'Auto-structured from business-partner connection creation.',
+                    },
+                    ...prev.instrumentSettlements,
+                  ]
+                : prev.instrumentSettlements,
+            remittanceStatements:
+              payload.autoCreateNoteRemittance && remittanceId && obligationId
+                ? [
+                    {
+                      id: remittanceId,
+                      entityId: payload.ownerEntityId,
+                      title: `${connectionName} Partner Remittance`,
+                      statementDate: new Date().toISOString().slice(0, 10),
+                      payerName: ownerEntity.displayName || ownerEntity.name,
+                      payeeName:
+                        connectedEntity?.displayName ||
+                        connectedEntity?.name ||
+                        payload.connectedUserLabel ||
+                        payload.connectedWorkspaceLabel ||
+                        'Connected holder',
+                      amount: creditLimit || 0,
+                      currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                      dischargeMethod: 'instrument_performance',
+                      status: 'issued',
+                      linkedInstrumentSettlementId: instrumentSettlementId || undefined,
+                      notes: 'Auto-structured remittance for the connected note holder.',
+                    },
+                    ...prev.remittanceStatements,
+                  ]
+                : prev.remittanceStatements,
+            documents: [
+              {
+                id: documentId,
+                entityId: payload.ownerEntityId,
+                title: packetTitle,
+                category: 'contract',
+                date: new Date().toISOString().slice(0, 10),
+                status: 'draft',
+                outputStatus: 'drafting',
+                linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                summary:
+                  'Connection and credit rail packet created for inter-entity or cross-user settlement controls.',
+                generatedBody: [
+                  `# ${packetTitle}`,
+                  '',
+                  `Owner Entity: ${ownerEntity.displayName || ownerEntity.name}`,
+                  connectedEntity
+                    ? `Connected Entity: ${connectedEntity.displayName || connectedEntity.name}`
+                    : `Connected User: ${payload.connectedUserLabel || 'External User'}`,
+                  `Rail: ${railName}`,
+                  `Settlement Path: ${payload.settlementPath}`,
+                  `Business Partner Flow: ${payload.autoCreateNoteRemittance ? 'Auto note/remittance enabled' : 'Standard connection rail'}`,
+                  `Credit Limit: ${
+                    creditLimit
+                      ? `${payload.currency.trim() || prev.workspaceSettings.baseCurrency} ${creditLimit.toLocaleString()}`
+                      : 'Open'
+                  }`,
+                  `Validation Mode: ${payload.requireComplianceValidation ? 'strict' : 'standard'}`,
+                  '',
+                  payload.notes.trim() || 'Generated automatically from the entity connection rail desk.',
+                ].join('\n'),
+                storageOwner: 'user_owned',
+                retentionClass: 'agreement',
+                externalStorageTarget: 'google_drive',
+                externalStorageStatus: 'ready',
+                storageNotes:
+                  'Connection packets are workspace-owned and ready to route into the user-controlled archive.',
+              },
+              ...prev.documents,
+            ],
+            tokens: payload.requireVerificationTokens
+              ? [
+                  {
+                    id: tokenId,
+                    entityId: payload.ownerEntityId,
+                    subjectType: 'document',
+                    subjectId: documentId,
+                    label: `${connectionName} Control Token`,
+                    status: 'issued',
+                    tokenStandard: 'internal-proof',
+                    tokenReference: `CONN-${stamp}`,
+                    issuedAt: new Date().toISOString(),
+                    proofReference: 'Issued automatically from entity connection rail creation.',
+                  },
+                  ...prev.tokens,
+                ]
+              : prev.tokens,
+          }));
+          setIsConnectionRailModalOpen(false);
+          goToHash(`#documents:${documentId}`);
+        }}
+      />
       <div>
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Entities</h1>
         <p style={{ color: '#9ca3af', marginBottom: 0 }}>
           Entity records, workspace identity, and operational defaults for the operating system.
         </p>
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => setIsEntityModalOpen(true)}
@@ -196,6 +491,44 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
           >
             + Add Entity
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConnectionRailPreset('general');
+              setIsConnectionRailModalOpen(true);
+            }}
+            style={{
+              padding: '10px 14px',
+              minHeight: 42,
+              borderRadius: 10,
+              border: '1px solid rgba(96,165,250,0.4)',
+              background: 'rgba(37,99,235,0.18)',
+              color: '#eff6ff',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            + Create Connection Rail
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConnectionRailPreset('business_partner');
+              setIsConnectionRailModalOpen(true);
+            }}
+            style={{
+              padding: '10px 14px',
+              minHeight: 42,
+              borderRadius: 10,
+              border: '1px solid rgba(251,191,36,0.35)',
+              background: 'rgba(120, 53, 15, 0.22)',
+              color: '#fef3c7',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            + Add Business Partner
+          </button>
         </div>
       </div>
 
@@ -211,6 +544,10 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
         <StatCard label="Token-Ready Defaults" value={String(tokenEnabledEntities)} />
         <StatCard label="Pending Signer Acceptances" value={String(pendingSignerApprovals)} />
         <StatCard label="Bank Packages In Flight" value={String(bankPackagesInFlight)} />
+        <StatCard label="Internal Connections" value={String(internalConnections)} />
+        <StatCard label="External User Links" value={String(externalConnections)} />
+        <StatCard label="Active Credit Rails" value={String(activeCreditRails)} />
+        <StatCard label="Watch Rails" value={String(watchCreditRails)} />
       </div>
 
       <PageSection
@@ -297,6 +634,113 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
               </div>
             </div>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Connection Rails"
+        description="Control multi-entity links, user-to-user credit posture, reserve-backed settlement permissions, and validation standards from one desk."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.entityConnections.map((connection) => {
+            const linkedRail = data.creditRails.find((rail) => rail.entityConnectionId === connection.id);
+            const destinationLabel =
+              connection.connectedEntityId
+                ? entityNameById.get(connection.connectedEntityId)
+                : connection.connectedUserLabel || connection.connectedWorkspaceLabel || 'External user';
+
+            return (
+              <WorkbenchRecordCard
+                key={connection.id}
+                title={connection.connectionName}
+                subtitle={`${entityNameById.get(connection.ownerEntityId) || 'Entity'} -> ${destinationLabel || 'Counterparty'} · ${connection.connectionType.replace(/_/g, ' ')}`}
+                summaryItems={[
+                  { label: 'Status', value: connection.status },
+                  { label: 'Settlement Path', value: connection.defaultSettlementPath.replace(/_/g, ' ') },
+                  { label: 'Validation', value: connection.validationMode.replace(/_/g, ' ') },
+                  {
+                    label: 'Credit Rail',
+                    value: linkedRail ? linkedRail.railName : 'No rail linked yet',
+                  },
+                  {
+                    label: 'Available Credit',
+                    value:
+                      linkedRail?.availableCredit !== undefined
+                        ? `${linkedRail.currency} ${linkedRail.availableCredit.toLocaleString()}`
+                        : 'Open',
+                  },
+                  {
+                    label: 'Treasury Link',
+                    value:
+                      linkedRail?.linkedTreasuryAccountId
+                        ? treasuryNameById.get(linkedRail.linkedTreasuryAccountId) || linkedRail.linkedTreasuryAccountId
+                        : 'Not linked',
+                  },
+                ]}
+                actionSlot={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        goToHash(
+                          linkedRail?.settlementPath === 'internal_ledger'
+                            ? '#accounting:intercompany'
+                            : '#accounting:payments',
+                        )
+                      }
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Open Rail Desk
+                    </button>
+                    {connection.linkedDocumentIds?.[0] ? (
+                      <button
+                        type="button"
+                        onClick={() => goToHash(`#documents:${connection.linkedDocumentIds?.[0]}`)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(96,165,250,0.4)',
+                          background: 'rgba(37,99,235,0.18)',
+                          color: '#e5e7eb',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Open Packet
+                      </button>
+                    ) : null}
+                  </>
+                }
+              >
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div>
+                    Relationship: {connection.relationshipClass.replace(/_/g, ' ')}. Tokens{' '}
+                    {connection.requireVerificationTokens ? 'required' : 'optional'} and compliance
+                    validation {connection.requireComplianceValidation ? 'enabled' : 'light'}.
+                  </div>
+                  <div>
+                    {linkedRail
+                      ? `${linkedRail.railType.replace(/_/g, ' ')} rail is ${linkedRail.status}. Outstanding exposure: ${linkedRail.currency} ${Number(linkedRail.outstandingExposure ?? 0).toLocaleString()}.`
+                      : 'No linked credit rail is attached yet.'}
+                  </div>
+                  {connection.notes ? <div>Notes: {connection.notes}</div> : null}
+                </div>
+              </WorkbenchRecordCard>
+            );
+          })}
+          {!data.entityConnections.length ? (
+            <WorkbenchRecordCard title="No connection rails yet" subtitle="Create the first internal or external rail">
+              Use connection rails to define who can settle with whom, which reserve or treasury accounts back the moves, and how much exposure the relationship can carry before review.
+            </WorkbenchRecordCard>
+          ) : null}
         </div>
       </PageSection>
 

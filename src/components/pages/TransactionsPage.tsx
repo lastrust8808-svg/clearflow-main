@@ -355,6 +355,26 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                   }))
                 }
               />
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: 'rgba(10, 11, 24, 0.72)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--cf-muted)',
+                  lineHeight: 1.6,
+                }}
+              >
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Legal Identifier:</strong>{' '}
+                  {record.legalIdentifier || 'Not assigned'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Source Deposit:</strong>{' '}
+                  {record.sourceDepositStatus || 'not tracked'}
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -388,6 +408,10 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                   >
                     {resolveObligationAction(obligation).label}
                   </button>
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Legal Identifier:</strong>{' '}
+                  {obligation.legalIdentifier || 'Not assigned'}
                 </div>
                 <div>
                   <strong style={{ color: 'var(--cf-text)' }}>Payment medium:</strong>{' '}

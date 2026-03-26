@@ -34,6 +34,8 @@ export function useCoreData() {
     return {
       dashboardSummary,
       entities: coreMockData.entities,
+      entityConnections: coreMockData.entityConnections,
+      creditRails: coreMockData.creditRails,
       accounts: coreMockData.ledgerAccounts,
       ledgerAccounts: coreMockData.ledgerAccounts,
       assets: coreMockData.assets,

@@ -224,6 +224,19 @@ export type RailNamespace =
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
 export type InterEntitySettlementMode = 'mirrored_halves' | 'cross_entity_clearing';
+export type EntityConnectionType =
+  | 'internal_entity'
+  | 'external_user'
+  | 'counterparty_network';
+export type EntityConnectionStatus = 'pending' | 'active' | 'restricted' | 'archived';
+export type CreditRailType =
+  | 'intercompany_credit'
+  | 'member_credit'
+  | 'reserve_bridge'
+  | 'vendor_credit'
+  | 'peer_settlement'
+  | 'partner_note';
+export type CreditRailStatus = 'draft' | 'active' | 'watch' | 'blocked' | 'closed';
 
 export type TokenStatus = 'draft' | 'issued' | 'verified' | 'revoked';
 export type RecurrenceFrequency =
@@ -436,12 +449,19 @@ export interface InstrumentRecord {
   entityId: string;
   title: string;
   instrumentType: InstrumentType;
+  legalIdentifier?: string;
+  sourceClass?: 'note' | 'bond' | 'future' | 'collateral' | 'other';
+  issuerEntityId?: string;
+  counterpartyEntityId?: string;
+  counterpartyLabel?: string;
   issueDate?: string;
   maturityDate?: string;
   denominationValue?: number;
   paymentMedium?: PaymentMediumClassification;
   obligationType?: ObligationType;
   pledgedCollateralValue?: number;
+  reserveDepositEnabled?: boolean;
+  linkedTreasuryAccountId?: string;
   liquidationDiscount?: number;
   performanceSecurityStatus?: 'none' | 'posted' | 'called' | 'released';
   linkedTokenIds?: string[];
@@ -454,6 +474,7 @@ export interface ObligationRecord {
   id: string;
   entityId: string;
   title: string;
+  legalIdentifier?: string;
   obligationType: ObligationType;
   amount: number;
   paymentMedium: PaymentMediumClassification;
@@ -544,7 +565,65 @@ export interface InterEntityTransferRecord {
   effectiveDate: string;
   settlementMode: InterEntitySettlementMode;
   status: 'draft' | 'posted' | 'settled';
+  linkedEntityConnectionId?: string;
+  linkedCreditRailId?: string;
   memo?: string;
+}
+
+export interface EntityConnectionRecord {
+  id: string;
+  ownerEntityId: string;
+  connectionName: string;
+  connectionType: EntityConnectionType;
+  relationshipClass:
+    | 'shared_control'
+    | 'affiliate'
+    | 'member_relationship'
+    | 'business_partner'
+    | 'user_to_user'
+    | 'vendor_credit'
+    | 'customer_credit'
+    | 'other';
+  status: EntityConnectionStatus;
+  connectedEntityId?: string;
+  connectedUserLabel?: string;
+  connectedUserEmail?: string;
+  connectedWorkspaceLabel?: string;
+  authorityRecordIds?: string[];
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
+  defaultSettlementPath: SettlementPath;
+  defaultCurrency: string;
+  validationMode: 'strict' | 'standard' | 'manual_review';
+  requireVerificationTokens: boolean;
+  requireComplianceValidation: boolean;
+  reserveBackedPreferred?: boolean;
+  notes?: string;
+}
+
+export interface CreditRailRecord {
+  id: string;
+  ownerEntityId: string;
+  entityConnectionId: string;
+  railName: string;
+  railType: CreditRailType;
+  status: CreditRailStatus;
+  settlementPath: SettlementPath;
+  dischargeMethod: DischargeMethod;
+  currency: string;
+  exposureLimit?: number;
+  outstandingExposure?: number;
+  availableCredit?: number;
+  linkedTreasuryAccountId?: string;
+  linkedLedgerAccountId?: string;
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
+  autoMirrorIntercompanyEntries?: boolean;
+  autoIssueTokens?: boolean;
+  autoCreateNoteRemittance?: boolean;
+  noteSettlementMode?: 'holder_presentment' | 'issuer_performance' | 'manual_review';
+  reserveBacked?: boolean;
+  notes?: string;
 }
 
 export interface SettlementRecord {
@@ -552,6 +631,8 @@ export interface SettlementRecord {
   entityId: string;
   linkedTransactionId: string;
   linkedPaymentId?: string;
+  linkedEntityConnectionId?: string;
+  linkedCreditRailId?: string;
   linkedJournalEntryIds?: string[];
   linkedReconciliationId?: string;
   linkedOnChainRecordId?: string;
@@ -788,6 +869,7 @@ export interface InstrumentSettlementRecord {
   id: string;
   entityId: string;
   title: string;
+  legalIdentifier?: string;
   instrumentId?: string;
   obligationId?: string;
   treasuryAccountId?: string;
@@ -803,6 +885,7 @@ export interface InstrumentSettlementRecord {
   currency: string;
   effectiveDate: string;
   dueDate?: string;
+  sourceDepositStatus?: 'not_deposited' | 'deposited_to_reserve' | 'partially_performed';
   remittanceReference?: string;
   notes?: string;
 }
@@ -1177,6 +1260,8 @@ export interface PaymentRecord {
   direction: 'incoming' | 'outgoing';
   counterpartyType: 'customer' | 'vendor' | 'other';
   counterpartyId?: string;
+  linkedEntityConnectionId?: string;
+  linkedCreditRailId?: string;
   paymentDate: string;
   amount: number;
   currency: string;
@@ -1395,6 +1480,8 @@ export interface JournalEntryRecord {
 
 export interface CoreDataBundle {
   entities: EntityRecord[];
+  entityConnections: EntityConnectionRecord[];
+  creditRails: CreditRailRecord[];
   customers: CustomerRecord[];
   vendors: VendorRecord[];
   invoices: InvoiceRecord[];
