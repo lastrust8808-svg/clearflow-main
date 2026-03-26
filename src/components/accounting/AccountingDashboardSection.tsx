@@ -13,6 +13,7 @@ import type {
   TaxReportingLinkRecord,
 } from '../../types/core';
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
+import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import type { AccountingStats, JournalDraft } from './accountingTypes';
@@ -33,6 +34,7 @@ interface AccountingDashboardSectionProps {
   movementIdentifiers: MovementIdentifierRecord[];
   returnEvents: ReturnEventRecord[];
   railControls: SettlementRailControlView[];
+  obligationLifecycleSummaries: ObligationLifecycleSummary[];
   onNavigate?: (hash: string) => void;
 }
 
@@ -52,6 +54,7 @@ export default function AccountingDashboardSection({
   movementIdentifiers,
   returnEvents,
   railControls,
+  obligationLifecycleSummaries,
   onNavigate,
 }: AccountingDashboardSectionProps) {
   const incomingReceiptsTotal = payments
@@ -158,6 +161,17 @@ export default function AccountingDashboardSection({
   const priorityRailControls = railControls
     .filter((item) => item.overallStatus !== 'ready')
     .slice(0, 4);
+  const obligationControlQueue = obligationLifecycleSummaries
+    .filter(
+      (item) =>
+        item.stage !== 'discharged' &&
+        (item.stage === 'presentment_due' ||
+          item.stage === 'presented' ||
+          item.stage === 'cure_running' ||
+          item.stage === 'defaulted' ||
+          item.watchItems.length > 0)
+    )
+    .slice(0, 5);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -275,6 +289,55 @@ export default function AccountingDashboardSection({
               ))
             )}
           </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Default & Discharge Watch"
+        description="Obligations moving through presentment, cure, default review, and discharge control."
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          {obligationControlQueue.length === 0 ? (
+            <div style={{ color: '#d1d5db' }}>
+              No obligations need default or discharge review right now.
+            </div>
+          ) : (
+            obligationControlQueue.map((summary) => (
+              <div key={summary.obligation.id} style={infoCardStyle}>
+                <div style={{ fontWeight: 700 }}>{summary.obligation.title}</div>
+                <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                  {summary.stage} | {summary.obligation.status} | $
+                  {summary.outstandingAmount.toLocaleString()}
+                </div>
+                <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                  Presentments: {summary.presentmentCount} | Register:{' '}
+                  {summary.linkedRegister?.registerLabel || 'missing'} | Remittance:{' '}
+                  {summary.linkedRemittanceStatement?.title || 'pending'}
+                </div>
+                {summary.watchItems.length ? (
+                  <div style={{ color: '#fde68a', marginTop: 6 }}>
+                    {summary.watchItems.join(' | ')}
+                  </div>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => navigate('#accounting:payments')}
+                  >
+                    Open Payments Desk
+                  </button>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => navigate('#transactions')}
+                  >
+                    Open Control Desk
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </PageSection>
 

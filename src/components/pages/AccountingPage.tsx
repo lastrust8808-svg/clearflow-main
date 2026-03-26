@@ -24,6 +24,10 @@ import {
   hasHardRailBlocks,
   buildRemittanceRailControls,
 } from '../../services/settlementRailing.service';
+import {
+  buildObligationLifecycleSummaries,
+  type ObligationLifecycleSummary,
+} from '../../services/obligationLifecycle.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -335,6 +339,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       entity.type === 'partnership' ||
       entity.type === 'nonprofit'
     ) || defaultEntity;
+  const obligationLifecycleSummaries = useMemo(
+    () =>
+      buildObligationLifecycleSummaries(data).filter((item) =>
+        defaultEntity ? item.obligation.entityId === defaultEntity.id : true
+      ),
+    [data, defaultEntity]
+  );
 
   const mapSettlementPathToPaymentRail = (
     path: SettlementPath,
@@ -780,6 +791,265 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const endOfCurrentMonthIso = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  };
+
+  const handleStartObligationCure = (obligationId: string) => {
+    const now = new Date().toISOString().slice(0, 10);
+    const cureDeadline = addDaysToIsoDate(now, 10);
+    setData((prev) => {
+      const obligation = prev.obligations.find((item) => item.id === obligationId);
+      if (!obligation) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        obligations: prev.obligations.map((item) =>
+          item.id === obligationId
+            ? {
+                ...item,
+                lifecycleStage: 'cure_running',
+                cureDeadline,
+                enforcementMemo:
+                  item.enforcementMemo ||
+                  'Cure period opened from the accounting control desk after presentment review.',
+              }
+            : item
+        ),
+        complianceTags: [
+          {
+            id: `cmp-cure-${Date.now()}`,
+            entityId: obligation.entityId,
+            label: `Cure running - ${obligation.title}`,
+            category: 'risk',
+            status: 'review',
+            dueDate: cureDeadline,
+            notes:
+              'Internal cure tracking opened from accounting. Review performance evidence before any default declaration.',
+          },
+          ...prev.complianceTags,
+        ],
+      };
+    });
+    setActiveSubsection('payments');
+  };
+
+  const handleDeclareObligationDefault = (summary: ObligationLifecycleSummary) => {
+    const now = new Date().toISOString().slice(0, 10);
+    const defaultNoticeId = `doc-default-${Date.now()}`;
+    const defaultTagId = `cmp-default-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === summary.obligation.id
+          ? {
+              ...item,
+              status: 'defaulted',
+              lifecycleStage: 'defaulted',
+              defaultBasis: item.defaultBasis || 'non_performance',
+              defaultDeclaredAt: now,
+              defaultNoticeDocumentId: defaultNoticeId,
+              enforcementMemo:
+                item.enforcementMemo ||
+                'Default declared from accounting pending document review and any outside enforcement requirements.',
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.obligationId === summary.obligation.id && item.performanceStatus !== 'performed'
+          ? {
+              ...item,
+              performanceStatus: 'disputed',
+              notes:
+                item.notes ||
+                'Moved into disputed status after accounting-side default declaration.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        summary.obligation.linkedSettlementIds?.includes(item.id) ||
+        item.id === summary.linkedSettlement?.id
+          ? {
+              ...item,
+              status: item.status === 'settled' ? item.status : 'exception',
+              processorStatus:
+                item.status === 'settled' ? item.processorStatus : 'requires_review',
+              executionReason:
+                item.executionReason ||
+                'Default review opened before discharge could be completed.',
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.obligationId === summary.obligation.id ||
+        summary.obligation.linkedInstrumentIds?.includes(item.instrumentId || '')
+          ? {
+              ...item,
+              status: item.status === 'performed' ? item.status : 'disputed',
+              notes:
+                item.notes ||
+                'Register flagged for internal default review from accounting controls.',
+            }
+          : item
+      ),
+      documents: [
+        {
+          id: defaultNoticeId,
+          entityId: summary.obligation.entityId,
+          title: `Notice of Default - ${summary.obligation.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `DEFAULT NOTICE\n\nObligation: ${summary.obligation.title}\nLegal Identifier: ${
+            summary.obligation.legalIdentifier || 'Pending'
+          }\nDeclared Date: ${now}\nBasis: ${
+            summary.obligation.defaultBasis || 'non_performance'
+          }\n\nThis record is an internal control notice. Review governing documents and any outside rail requirements before any external enforcement step.`,
+          linkedInstrumentIds: summary.obligation.linkedInstrumentIds,
+          summary: 'Internal default notice generated from accounting control flow.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      complianceTags: [
+        {
+          id: defaultTagId,
+          entityId: summary.obligation.entityId,
+          label: `Default review - ${summary.obligation.title}`,
+          category: 'risk',
+          status: 'restricted',
+          linkedDocumentIds: [defaultNoticeId],
+          notes:
+            'Default recorded from accounting. Review governing documents and any partner-bank requirements before any outside step.',
+        },
+        ...prev.complianceTags,
+      ],
+    }));
+    setActiveSubsection('payments');
+  };
+
+  const handleDischargeObligation = (summary: ObligationLifecycleSummary) => {
+    const now = new Date().toISOString().slice(0, 10);
+    const proofTokenId = `tok-discharge-${Date.now()}`;
+    const register = summary.linkedRegister;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === summary.obligation.id
+          ? {
+              ...item,
+              status: 'satisfied',
+              lifecycleStage: 'discharged',
+              dischargedAt: now,
+              gainOrLossOnDischarge: item.gainOrLossOnDischarge ?? 0,
+              enforcementMemo:
+                item.enforcementMemo ||
+                'Discharge completed from accounting after tie-out of settlement, remittance, and holder-ledger evidence.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        summary.obligation.linkedSettlementIds?.includes(item.id) ||
+        item.id === summary.linkedSettlement?.id
+          ? {
+              ...item,
+              status: 'settled',
+              actualSettlementDate: item.actualSettlementDate || now,
+              verificationStatus:
+                item.verificationStatus === 'verified' ? item.verificationStatus : 'verified',
+              liquidCashStage:
+                item.liquidCashStage === 'liquid_cash_released'
+                  ? item.liquidCashStage
+                  : 'liquid_cash_released',
+              tokenizedProofId: item.tokenizedProofId || proofTokenId,
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      remittanceStatements: prev.remittanceStatements.map((item) =>
+        summary.obligation.linkedRemittanceStatementIds?.includes(item.id) ||
+        item.id === summary.linkedRemittanceStatement?.id
+          ? { ...item, status: 'performed' }
+          : item
+      ),
+      couponPresentments: prev.couponPresentments.map((item) =>
+        summary.obligation.linkedCouponPresentmentIds?.includes(item.id) ||
+        item.id === summary.linkedCouponPresentment?.id
+          ? {
+              ...item,
+              status: 'performed',
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.obligationId === summary.obligation.id
+          ? {
+              ...item,
+              performanceStatus: 'performed',
+              performedAmount: Math.max(item.performedAmount, summary.obligation.amount),
+              linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: register
+        ? prev.negotiableInstrumentRegisters.map((item) =>
+            item.id === register.id
+              ? {
+                  ...item,
+                  status: 'performed',
+                  outstandingAmount: 0,
+                  linkedTokenIds: Array.from(new Set([proofTokenId, ...(item.linkedTokenIds ?? [])])),
+                }
+              : item
+          )
+        : prev.negotiableInstrumentRegisters,
+      holderLedgerEntries: register
+        ? [
+            {
+              id: `hle-discharge-${Date.now()}`,
+              entityId: summary.obligation.entityId,
+              registerId: register.id,
+              entryDate: now,
+              entryType: 'performance',
+              holderEntityId: register.currentHolderEntityId,
+              holderConnectionId: register.currentHolderConnectionId,
+              holderLabel: register.currentHolderLabel || 'Current holder',
+              amount: summary.outstandingAmount || summary.obligation.amount,
+              currency: register.currency,
+              resultingBalance: 0,
+              linkedInstrumentId: register.instrumentId,
+              linkedObligationId: summary.obligation.id,
+              linkedSettlementId: summary.linkedSettlement?.id,
+              linkedRemittanceStatementId: summary.linkedRemittanceStatement?.id,
+              linkedTokenIds: [proofTokenId],
+              notes: 'Discharge completed from accounting control desk.',
+            },
+            ...prev.holderLedgerEntries,
+          ]
+        : prev.holderLedgerEntries,
+      tokens: [
+        {
+          id: proofTokenId,
+          entityId: summary.obligation.entityId,
+          subjectType: 'settlement',
+          subjectId: summary.linkedSettlement?.id || summary.obligation.id,
+          label: `Discharge Proof - ${summary.obligation.title}`,
+          status: 'verified',
+          tokenStandard: 'internal-proof',
+          tokenReference: `DISC-${Date.now()}`,
+          issuedAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString(),
+          proofReference:
+            'Issued from accounting after discharge tie-out across settlement, remittance, and holder ledger.',
+        },
+        ...prev.tokens,
+      ],
+    }));
+    setActiveSubsection('payments');
   };
 
   const ensureOperationalReconciliationForBank = (
@@ -5526,6 +5796,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             movementIdentifiers={movementIdentifiers}
             returnEvents={returnEvents}
             railControls={remittanceRailControls}
+            obligationLifecycleSummaries={obligationLifecycleSummaries}
             onNavigate={navigateToHash}
           />
         );
@@ -5891,10 +6162,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 ? data.onChainTransactions.filter((item) => item.entityId === defaultEntity.id)
                 : data.onChainTransactions
             }
+            obligationLifecycleSummaries={obligationLifecycleSummaries}
             onConfirmCompliance={handleConfirmRemittanceCompliance}
             onApprovePayment={handleApproveOutgoingPayment}
             onReleasePayment={handleReleaseOutgoingPayment}
             onConfirmWalletSettlement={handleConfirmWalletSettlement}
+            onStartCure={handleStartObligationCure}
+            onDeclareDefault={handleDeclareObligationDefault}
+            onDischargeObligation={handleDischargeObligation}
             operationsNotice={operationsNotice}
           />
         );

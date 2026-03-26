@@ -10,6 +10,7 @@ import type {
   OnChainTransactionRecord,
 } from '../../types/core';
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
+import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
 import PageSection from '../ui/PageSection';
 
 interface RemittanceOperationsWorkspaceProps {
@@ -22,10 +23,14 @@ interface RemittanceOperationsWorkspaceProps {
   treasuryAccounts: TreasuryAccountRecord[];
   wallets: WalletRecord[];
   onChainTransactions: OnChainTransactionRecord[];
+  obligationLifecycleSummaries: ObligationLifecycleSummary[];
   onConfirmCompliance: (paymentId: string) => void;
   onApprovePayment: (paymentId: string) => void;
   onReleasePayment: (paymentId: string) => void;
   onConfirmWalletSettlement: (paymentId: string) => void;
+  onStartCure: (obligationId: string) => void;
+  onDeclareDefault: (summary: ObligationLifecycleSummary) => void;
+  onDischargeObligation: (summary: ObligationLifecycleSummary) => void;
   operationsNotice?: string;
 }
 
@@ -102,10 +107,14 @@ export default function RemittanceOperationsWorkspace({
   treasuryAccounts,
   wallets,
   onChainTransactions,
+  obligationLifecycleSummaries,
   onConfirmCompliance,
   onApprovePayment,
   onReleasePayment,
   onConfirmWalletSettlement,
+  onStartCure,
+  onDeclareDefault,
+  onDischargeObligation,
   operationsNotice,
 }: RemittanceOperationsWorkspaceProps) {
   const railControlByPaymentId = new Map(railControls.map((control) => [control.paymentId, control]));
@@ -159,6 +168,16 @@ export default function RemittanceOperationsWorkspace({
     hold: railControls.filter((item) => item.overallStatus === 'hold').length,
     exception: railControls.filter((item) => item.overallStatus === 'exception').length,
   };
+  const obligationControlQueue = obligationLifecycleSummaries
+    .filter(
+      (item) =>
+        item.stage !== 'discharged' &&
+        (item.stage === 'presented' ||
+          item.stage === 'cure_running' ||
+          item.stage === 'defaulted' ||
+          item.watchItems.length > 0)
+    )
+    .slice(0, 4);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -199,6 +218,121 @@ export default function RemittanceOperationsWorkspace({
               <span style={badgeStyle(tone)}>{label}</span>
             </div>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Default & Discharge Queue"
+        description="Keep presentment, cure, default review, and discharge posture in the same operating lane as remittance release."
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          {obligationControlQueue.length === 0 ? (
+            <div style={{ color: '#d1d5db' }}>
+              No obligations are waiting for cure, default, or discharge action here right now.
+            </div>
+          ) : (
+            obligationControlQueue.map((summary) => (
+              <div key={summary.obligation.id} style={cardStyle}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    <div style={{ fontWeight: 700, fontSize: 18 }}>{summary.obligation.title}</div>
+                    <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                      {summary.stage} | {summary.obligation.status} | {summary.obligation.legalIdentifier || 'ID pending'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={badgeStyle(summary.stage === 'defaulted' ? 'warn' : summary.stage === 'discharged' ? 'good' : 'info')}>
+                      stage: {summary.stage}
+                    </span>
+                    <span style={badgeStyle(summary.outstandingAmount === 0 ? 'good' : 'warn')}>
+                      outstanding: USD {summary.outstandingAmount.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 10,
+                    color: '#d1d5db',
+                    fontSize: 13,
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: '#e5e7eb' }}>Presentment / cure</strong>
+                    <div>
+                      {summary.obligation.lastPresentmentDate || 'No presentment yet'}
+                      {summary.obligation.cureDeadline
+                        ? ` | cure ${summary.obligation.cureDeadline}`
+                        : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <strong style={{ color: '#e5e7eb' }}>Register / remittance</strong>
+                    <div>
+                      {summary.linkedRegister?.registerLabel || 'No register'} |{' '}
+                      {summary.linkedRemittanceStatement?.title || 'No remittance'}
+                    </div>
+                  </div>
+                </div>
+
+                {summary.watchItems.length ? (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(251,191,36,0.28)',
+                      background: 'rgba(120,53,15,0.2)',
+                      color: '#fde68a',
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {summary.watchItems.join(' | ')}
+                  </div>
+                ) : null}
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {summary.canStartCure ? (
+                    <button
+                      type="button"
+                      onClick={() => onStartCure(summary.obligation.id)}
+                      style={buttonStyle(false)}
+                    >
+                      Start Cure Window
+                    </button>
+                  ) : null}
+                  {summary.canDeclareDefault ? (
+                    <button
+                      type="button"
+                      onClick={() => onDeclareDefault(summary)}
+                      style={buttonStyle(false)}
+                    >
+                      Declare Default
+                    </button>
+                  ) : null}
+                  {summary.canDischarge ? (
+                    <button
+                      type="button"
+                      onClick={() => onDischargeObligation(summary)}
+                      style={buttonStyle(false)}
+                    >
+                      Mark Discharged
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </PageSection>
       <PageSection
