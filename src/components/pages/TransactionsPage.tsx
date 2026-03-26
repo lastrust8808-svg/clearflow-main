@@ -105,6 +105,49 @@ function settlementTone(status?: CoreDataBundle['settlements'][number]['status']
   }
 }
 
+function resolveProofChainAction(chain: ReturnType<typeof buildTransactionProofChainViews>[number]) {
+  if (chain.watchReasons.includes('Missing settlement link')) {
+    return {
+      label: 'Create Presentment',
+      hash: '#accounting:new-presentment',
+      detail: 'Start the settlement trail by recording a coupon or remittance presentment.',
+    };
+  }
+
+  if (chain.watchReasons.includes('No linked payments')) {
+    return {
+      label: 'Record Payment',
+      hash: '#accounting:new-payment',
+      detail: 'Tie this chain to a real payment so settlement and proof can continue.',
+    };
+  }
+
+  if (chain.watchReasons.includes('No movement identifiers')) {
+    return {
+      label: 'Open Rails & Codes',
+      hash: '#accounting:railOps',
+      detail: 'Assign ACH, wire, or other movement identifiers to complete the chain.',
+    };
+  }
+
+  if (
+    chain.watchReasons.includes('No verification tokens') ||
+    chain.watchReasons.includes('Settlement not verified')
+  ) {
+    return {
+      label: 'Open Payments Desk',
+      hash: '#accounting:payments',
+      detail: 'Finish verification and token proof coverage on the linked settlement.',
+    };
+  }
+
+  return {
+    label: 'Open Settlement Trail',
+    hash: chain.settlementId ? '#accounting:payments' : '#transactions',
+    detail: 'Review the linked settlement, payment, and proof chain from the transactions desk.',
+  };
+}
+
 export default function TransactionsPage({ data, setData }: TransactionsPageProps) {
   const settlementFlows = buildSettlementFlowViews(data);
   const entityNameById = new Map(data.entities.map((entity) => [entity.id, entity.name]));
@@ -481,12 +524,35 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
         description="Transactions are chained to their movement identifiers, settlements, payments, and verification tokens, then mirrored into the encrypted backend proof vault."
       >
         <div style={{ display: 'grid', gap: 16 }}>
-          {transactionProofChains.map((chain) => (
+          {transactionProofChains.map((chain) => {
+            const recommendedAction = resolveProofChainAction(chain);
+
+            return (
             <RecordCard
               key={chain.chainId}
               title={chain.title}
               subtitle={`chain ${chain.chainIndex} · ${chain.verificationStatus} · ${chain.date}`}
             >
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => goToHash(recommendedAction.hash)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  {recommendedAction.label}
+                </button>
+                <div style={{ color: 'var(--cf-muted)', alignSelf: 'center' }}>
+                  {recommendedAction.detail}
+                </div>
+              </div>
               <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
                 <div>
                   <strong style={{ color: 'var(--cf-text)' }}>Transaction / settlement:</strong>{' '}
@@ -517,7 +583,7 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                 )}
               </div>
             </RecordCard>
-          ))}
+          )})}
         </div>
       </PageSection>
 
