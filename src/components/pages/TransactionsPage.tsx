@@ -504,6 +504,17 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                   <strong style={{ color: 'var(--cf-text)' }}>Verification tokens:</strong>{' '}
                   {chain.tokenIds.length ? chain.tokenIds.join(', ') : 'No verification tokens linked yet'}
                 </div>
+                {chain.watchReasons.length ? (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Watch reasons:</strong>{' '}
+                    {chain.watchReasons.join(' | ')}
+                  </div>
+                ) : (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Watch reasons:</strong> Fully sealed
+                    movement, settlement, identifier, and proof-token chain.
+                  </div>
+                )}
               </div>
             </RecordCard>
           ))}

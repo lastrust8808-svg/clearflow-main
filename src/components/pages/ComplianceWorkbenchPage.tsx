@@ -221,6 +221,12 @@ export default function ComplianceWorkbenchPage({
                     {chain.tokenIds.length ? chain.tokenIds.join(', ') : 'Missing proof tokens'}
                   </div>
                 </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Watch Reasons</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {chain.watchReasons.join(' | ')}
+                  </div>
+                </div>
               </div>
             </div>
           ))}

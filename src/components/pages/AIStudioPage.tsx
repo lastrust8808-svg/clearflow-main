@@ -1345,7 +1345,7 @@ ${watchChains
   .slice(0, 10)
   .map(
     (item) =>
-      `- ${item.title} | ${item.transactionId} | settlement ${item.settlementId || 'missing'} | payments ${item.paymentIds.length} | identifiers ${item.movementIdentifierIds.length} | tokens ${item.tokenIds.length}`,
+      `- ${item.title} | ${item.transactionId} | settlement ${item.settlementId || 'missing'} | payments ${item.paymentIds.length} | identifiers ${item.movementIdentifierIds.length} | tokens ${item.tokenIds.length} | reasons ${item.watchReasons.join(', ')}`,
   )
   .join('\n') || '- No proof-chain watch items were open at report time.'}
 

@@ -13,6 +13,7 @@ export interface TransactionProofChainView {
   tokenIds: string[];
   movementIdentifierIds: string[];
   verificationStatus: 'sealed' | 'watch';
+  watchReasons: string[];
 }
 
 export interface TransactionProofChainEnvelope extends TransactionProofChainView {
@@ -84,6 +85,15 @@ export function buildTransactionProofChainViews(data: CoreDataBundle): Transacti
           linkedPaymentIds.includes(item.linkedPaymentId || '')
       )
       .map((item) => item.id);
+    const watchReasons = [
+      linkedSettlement?.id ? null : 'Missing settlement link',
+      linkedPaymentIds.length ? null : 'No linked payments',
+      movementIdentifierIds.length ? null : 'No movement identifiers',
+      tokenIds.length ? null : 'No verification tokens',
+      linkedSettlement?.verificationStatus === 'verified'
+        ? null
+        : 'Settlement not verified',
+    ].filter((item): item is string => Boolean(item));
 
     return {
       chainId: `tx-chain-${transaction.id}`,
@@ -97,10 +107,8 @@ export function buildTransactionProofChainViews(data: CoreDataBundle): Transacti
       paymentIds: linkedPaymentIds,
       tokenIds,
       movementIdentifierIds,
-      verificationStatus:
-        linkedSettlement?.verificationStatus === 'verified' && tokenIds.length > 0
-          ? 'sealed'
-          : 'watch',
+      verificationStatus: watchReasons.length === 0 ? 'sealed' : 'watch',
+      watchReasons,
     };
   });
 }
