@@ -264,6 +264,36 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     [data.entities, primaryEntity, reportEntityId],
   );
   const reportWindowLabel = useMemo(() => getReportWindowLabel(reportWindow), [reportWindow]);
+  const reportScopeSummary = useMemo(() => {
+    if (!reportEntity) {
+      return null;
+    }
+
+    const scopedPayments = data.payments.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.paymentDate, reportWindow),
+    );
+    const scopedDocuments = data.documents.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const scopedCompliance = data.complianceTags.filter((item) => item.entityId === reportEntity.id);
+    const scopedTaxLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const scopedRailIssues = remittanceRailControls.filter((item) => {
+      const payment = paymentsById.get(item.paymentId);
+      return (
+        payment?.entityId === reportEntity.id &&
+        isOnOrAfterWindow(payment.paymentDate, reportWindow) &&
+        item.overallStatus !== 'ready'
+      );
+    });
+
+    return {
+      payments: scopedPayments.length,
+      documents: scopedDocuments.length,
+      complianceReviews: scopedCompliance.filter((item) => item.status === 'review').length,
+      filingItems: scopedTaxLinks.filter((item) => item.status !== 'accepted').length,
+      railIssues: scopedRailIssues.length,
+    };
+  }, [data.complianceTags, data.documents, data.payments, data.taxReportingLinks, paymentsById, remittanceRailControls, reportEntity, reportWindow]);
 
   useEffect(() => {
     if (!reportEntityId && primaryEntity) {
@@ -1414,6 +1444,77 @@ ${['operational', 'authority', 'compliance', 'tax', 'financial_evidence']
     });
   };
 
+  const launchCounterpartyExposureReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityCustomers = data.customers.filter((item) => item.entityId === reportEntity.id);
+    const entityVendors = data.vendors.filter((item) => item.entityId === reportEntity.id);
+    const scopedPayments = data.payments.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.paymentDate, reportWindow),
+    );
+    const outgoingVendorPayments = scopedPayments.filter(
+      (item) => item.direction === 'outgoing' && item.counterpartyType === 'vendor',
+    );
+    const incomingCustomerPayments = scopedPayments.filter(
+      (item) => item.direction === 'incoming' && item.counterpartyType === 'customer',
+    );
+    const unverifiedVendors = entityVendors.filter(
+      (vendor) =>
+        vendor.paymentInstructions?.verificationStatus !== 'verified' &&
+        vendor.paymentInstructions?.verificationStatus !== 'routing_valid',
+    );
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Counterparty Exposure Report`,
+      category: 'financial',
+      summary:
+        'Counterparty exposure report across vendors, customers, payment volume, and instruction verification posture.',
+      retentionClass: 'financial_evidence',
+      body: `# Counterparty Exposure Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Counterparty Counts
+- Active customers: ${entityCustomers.filter((item) => item.status === 'active').length}
+- Active vendors: ${entityVendors.filter((item) => item.status === 'active').length}
+- Vendors with unverified instructions: ${unverifiedVendors.length}
+
+## Payment Flow
+- Outgoing vendor payments: ${outgoingVendorPayments.length}
+- Incoming customer payments: ${incomingCustomerPayments.length}
+- Outgoing vendor total: ${outgoingVendorPayments.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}
+- Incoming customer total: ${incomingCustomerPayments.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}
+
+## Highest-Risk Vendors
+${unverifiedVendors
+  .slice(0, 8)
+  .map(
+    (vendor) =>
+      `- ${vendor.name} | verification ${vendor.paymentInstructions?.verificationStatus || 'unverified'} | rail ${vendor.paymentInstructions?.railPreference || 'not set'}`,
+  )
+  .join('\n') || '- No unverified vendor instructions are currently open.'}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} counterparty exposure review`,
+      category: 'risk',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio counterparty exposure reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -1699,6 +1800,13 @@ ${['operational', 'authority', 'compliance', 'tax', 'financial_evidence']
       actionLabel: 'Create Storage Audit',
       onAction: launchStorageRetentionAuditReport,
     },
+    {
+      title: 'Counterparty Exposure Report',
+      subtitle: 'Vendor/customer posture and instruction risk',
+      detail: 'Create a counterparty report across active vendors, customers, payment volume, and instruction verification.',
+      actionLabel: 'Create Exposure Report',
+      onAction: launchCounterpartyExposureReport,
+    },
   ];
   const reportPackPresets = [
     {
@@ -1730,6 +1838,16 @@ ${['operational', 'authority', 'compliance', 'tax', 'financial_evidence']
       onAction: () => {
         launchTaxAndPayrollSummaryReport();
         launchStorageRetentionAuditReport();
+      },
+    },
+    {
+      title: 'Counterparty Review Pack',
+      subtitle: 'Vendor/customer exposure and exception follow-through',
+      detail: 'Generate the counterparty exposure report plus the operations exception report for the selected scope.',
+      actionLabel: 'Generate Counterparty Pack',
+      onAction: () => {
+        launchCounterpartyExposureReport();
+        launchOperationsExceptionReport();
       },
     },
   ];
@@ -2055,12 +2173,28 @@ ${['operational', 'authority', 'compliance', 'tax', 'financial_evidence']
                   Generate Full Ops Pack
                 </button>
               }
-            >
-              {reportEntity
-                ? `${reportWindowLabel} scope across settlement rails, reserve posture, and operating exceptions for ${reportEntity.displayName || reportEntity.name}.`
-                : 'Choose an entity to generate scoped reporting output.'}
+              >
+                {reportEntity
+                  ? `${reportWindowLabel} scope across settlement rails, reserve posture, and operating exceptions for ${reportEntity.displayName || reportEntity.name}.`
+                  : 'Choose an entity to generate scoped reporting output.'}
             </WorkbenchRecordCard>
           </div>
+
+          {reportScopeSummary ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <StatCard label="Payments In Scope" value={reportScopeSummary.payments} />
+              <StatCard label="Documents In Scope" value={reportScopeSummary.documents} />
+              <StatCard label="Rail Issues" value={reportScopeSummary.railIssues} />
+              <StatCard label="Filing Items" value={reportScopeSummary.filingItems} />
+              <StatCard label="Compliance Reviews" value={reportScopeSummary.complianceReviews} />
+            </div>
+          ) : null}
 
           <div
             style={{
