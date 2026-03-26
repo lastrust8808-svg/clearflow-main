@@ -164,6 +164,7 @@ export default function AppShell({
     typeof window === 'undefined' ? true : window.innerWidth >= 1180
   );
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
   const themePaletteByMode: Record<
     WorkspaceSettingsRecord['themeMode'],
     {
@@ -311,6 +312,31 @@ export default function AppShell({
       )
       .slice(0, 8);
   }, [launcherItems, launcherQuery]);
+  const palettePinnedRoutes = useMemo(() => pinnedRoutes.slice(0, 4), [pinnedRoutes]);
+  const paletteRecentRoutes = useMemo(
+    () =>
+      recentRoutes
+        .filter((route) => route.hash !== currentHash)
+        .filter((route) => !pinnedRoutes.some((item) => item.hash === route.hash))
+        .slice(0, 4),
+    [currentHash, pinnedRoutes, recentRoutes]
+  );
+  const paletteResults = useMemo(
+    () => [
+      ...(currentHash ? [{ hash: currentHash, label: activeRouteLabel, category: 'Current View' }] : []),
+      ...palettePinnedRoutes.map((route) => ({ ...route, category: 'Pinned' })),
+      ...paletteRecentRoutes.map((route) => ({ ...route, category: 'Recent' })),
+      ...filteredLauncherItems.map((item) => ({
+        hash: item.hash,
+        label: item.label,
+        category: item.category,
+      })),
+    ].filter(
+      (item, index, collection) =>
+        collection.findIndex((candidate) => candidate.hash === item.hash) === index
+    ),
+    [activeRouteLabel, currentHash, filteredLauncherItems, palettePinnedRoutes, paletteRecentRoutes]
+  );
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
@@ -381,6 +407,32 @@ export default function AppShell({
         return;
       }
 
+      if (isCommandPaletteOpen && event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelectedPaletteIndex((previous) =>
+          paletteResults.length === 0 ? 0 : (previous + 1) % paletteResults.length
+        );
+        return;
+      }
+
+      if (isCommandPaletteOpen && event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelectedPaletteIndex((previous) =>
+          paletteResults.length === 0
+            ? 0
+            : (previous - 1 + paletteResults.length) % paletteResults.length
+        );
+        return;
+      }
+
+      if (isCommandPaletteOpen && event.key === 'Enter') {
+        if (paletteResults[selectedPaletteIndex]) {
+          event.preventDefault();
+          handleLaunchRoute(paletteResults[selectedPaletteIndex].hash);
+        }
+        return;
+      }
+
       if (!isTypingTarget && event.key === '/') {
         event.preventDefault();
         setIsCommandPaletteOpen(true);
@@ -394,7 +446,7 @@ export default function AppShell({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isCommandPaletteOpen, paletteResults, selectedPaletteIndex]);
 
   useEffect(() => {
     if (!isCommandPaletteOpen) {
@@ -402,7 +454,12 @@ export default function AppShell({
     }
 
     setLauncherQuery('');
+    setSelectedPaletteIndex(0);
   }, [isCommandPaletteOpen]);
+
+  useEffect(() => {
+    setSelectedPaletteIndex(0);
+  }, [launcherQuery]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !currentHash) {
@@ -1280,7 +1337,7 @@ export default function AppShell({
                   </button>
                 </div>
               ) : null}
-              {pinnedRoutes.length > 0 ? (
+              {palettePinnedRoutes.length > 0 ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div
                     style={{
@@ -1293,7 +1350,12 @@ export default function AppShell({
                     Pinned
                   </div>
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {pinnedRoutes.slice(0, 4).map((route) => (
+                    {palettePinnedRoutes.map((route) => {
+                      const resultIndex = paletteResults.findIndex(
+                        (item) => item.hash === route.hash
+                      );
+
+                      return (
                       <button
                         key={`palette-pinned-${route.hash}`}
                         type="button"
@@ -1302,8 +1364,14 @@ export default function AppShell({
                           textAlign: 'left',
                           padding: '12px 14px',
                           borderRadius: 16,
-                          border: '1px solid var(--cf-border)',
-                          background: 'rgba(255,255,255,0.03)',
+                          border:
+                            selectedPaletteIndex === resultIndex
+                              ? '1px solid var(--cf-border-strong)'
+                              : '1px solid var(--cf-border)',
+                          background:
+                            selectedPaletteIndex === resultIndex
+                              ? 'rgba(54, 215, 255, 0.1)'
+                              : 'rgba(255,255,255,0.03)',
                           color: 'var(--cf-text)',
                           cursor: 'pointer',
                           display: 'grid',
@@ -1313,11 +1381,12 @@ export default function AppShell({
                         <span style={{ fontWeight: 700 }}>{route.label}</span>
                         <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
-              {recentRoutes.length > 0 ? (
+              {paletteRecentRoutes.length > 0 ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div
                     style={{
@@ -1330,10 +1399,12 @@ export default function AppShell({
                     Recent
                   </div>
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {recentRoutes
-                      .filter((route) => !pinnedRoutes.some((item) => item.hash === route.hash))
-                      .slice(0, 4)
-                      .map((route) => (
+                    {paletteRecentRoutes.map((route) => {
+                      const resultIndex = paletteResults.findIndex(
+                        (item) => item.hash === route.hash
+                      );
+
+                      return (
                         <button
                           key={`palette-recent-${route.hash}`}
                           type="button"
@@ -1342,8 +1413,14 @@ export default function AppShell({
                             textAlign: 'left',
                             padding: '12px 14px',
                             borderRadius: 16,
-                            border: '1px solid var(--cf-border)',
-                            background: 'rgba(255,255,255,0.03)',
+                            border:
+                              selectedPaletteIndex === resultIndex
+                                ? '1px solid var(--cf-border-strong)'
+                                : '1px solid var(--cf-border)',
+                            background:
+                              selectedPaletteIndex === resultIndex
+                                ? 'rgba(54, 215, 255, 0.1)'
+                                : 'rgba(255,255,255,0.03)',
                             color: 'var(--cf-text)',
                             cursor: 'pointer',
                             display: 'grid',
@@ -1353,7 +1430,8 @@ export default function AppShell({
                           <span style={{ fontWeight: 700 }}>{route.label}</span>
                           <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>{route.hash}</span>
                         </button>
-                      ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -1369,7 +1447,12 @@ export default function AppShell({
                   Results
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {filteredLauncherItems.map((item) => (
+                  {filteredLauncherItems.map((item) => {
+                    const resultIndex = paletteResults.findIndex(
+                      (candidate) => candidate.hash === item.hash
+                    );
+
+                    return (
                     <button
                       key={`palette-${item.category}-${item.hash}`}
                       type="button"
@@ -1378,8 +1461,14 @@ export default function AppShell({
                         textAlign: 'left',
                         padding: '12px 14px',
                         borderRadius: 16,
-                        border: '1px solid var(--cf-border)',
-                        background: 'rgba(255,255,255,0.03)',
+                        border:
+                          selectedPaletteIndex === resultIndex
+                            ? '1px solid var(--cf-border-strong)'
+                            : '1px solid var(--cf-border)',
+                        background:
+                          selectedPaletteIndex === resultIndex
+                            ? 'rgba(54, 215, 255, 0.1)'
+                            : 'rgba(255,255,255,0.03)',
                         color: 'var(--cf-text)',
                         cursor: 'pointer',
                         display: 'grid',
@@ -1391,7 +1480,8 @@ export default function AppShell({
                         {item.category} | {item.description}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                   {filteredLauncherItems.length === 0 ? (
                     <div
                       style={{
