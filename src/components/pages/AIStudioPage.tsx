@@ -1276,6 +1276,144 @@ ${filingExceptions
     });
   };
 
+  const launchTaxAndPayrollSummaryReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityEmployees = data.employees.filter((item) => item.entityId === reportEntity.id);
+    const entityDirectDeposits = data.directDepositAuthorizations.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        isOnOrAfterWindow(item.returnedAt || item.verifiedAt || item.requestedAt, reportWindow),
+    );
+    const entityReceipts = data.receipts.filter(
+      (item) =>
+        item.entityId === reportEntity.id && isOnOrAfterWindow(item.receiptDate, reportWindow),
+    );
+    const entityExpenses = data.expenses.filter(
+      (item) =>
+        item.entityId === reportEntity.id && isOnOrAfterWindow(item.expenseDate, reportWindow),
+    );
+    const filingLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const contractorCount = entityEmployees.filter((item) => item.employeeType === 'contractor').length;
+    const payrollBase = entityEmployees.reduce(
+      (sum, employee) => sum + (employee.annualSalary || 0),
+      0,
+    );
+    const receiptTotal = entityReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
+    const expenseTotal = entityExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Tax & Payroll Summary Report`,
+      category: 'tax',
+      summary:
+        'Tax and payroll summary across employee base, direct deposit posture, receipts, expenses, and filing-review activity.',
+      retentionClass: 'tax',
+      body: `# Tax & Payroll Summary Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Workforce Summary
+- Active workforce records: ${entityEmployees.length}
+- Contractor records: ${contractorCount}
+- Annualized payroll base: ${payrollBase.toLocaleString()}
+
+## Direct Deposit Posture
+- Sent / pending authorizations: ${entityDirectDeposits.filter((item) => item.status === 'sent' || item.status === 'draft').length}
+- Returned forms: ${entityDirectDeposits.filter((item) => item.status === 'returned').length}
+- Verified deposit instructions: ${entityDirectDeposits.filter((item) => item.status === 'verified').length}
+
+## Tax Intake and Filing
+- Open filing links: ${filingLinks.filter((item) => item.status !== 'accepted').length}
+- Pending TIN reviews: ${filingLinks.filter((item) => item.tinMatchStatus === 'pending' || item.tinMatchStatus === 'not_checked').length}
+- Corrective filing items: ${filingLinks.filter((item) => item.correctionStatus !== 'none').length}
+
+## Operating Totals
+- Receipt total: ${receiptTotal.toLocaleString()}
+- Expense total: ${expenseTotal.toLocaleString()}
+- Net operating difference: ${(receiptTotal - expenseTotal).toLocaleString()}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} tax and payroll review`,
+      category: 'tax',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio tax and payroll summary reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchStorageRetentionAuditReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityDocuments = data.documents.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const userOwnedDocs = entityDocuments.filter((item) => item.storageOwner === 'user_owned');
+    const retainedDocs = entityDocuments.filter((item) => item.storageOwner === 'clearflow_retained');
+    const driveReadyDocs = userOwnedDocs.filter((item) => item.externalStorageStatus === 'ready');
+    const driveRoutedDocs = userOwnedDocs.filter((item) => item.externalStorageStatus === 'routed');
+    const driveErrorDocs = userOwnedDocs.filter((item) => item.externalStorageStatus === 'error');
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Storage & Retention Audit Report`,
+      category: 'compliance',
+      summary:
+        'Audit report across user-owned storage routing, retained records, and document retention posture.',
+      retentionClass: 'compliance',
+      body: `# Storage & Retention Audit Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Document Ownership Split
+- User-owned records: ${userOwnedDocs.length}
+- ClearFlow-retained records: ${retainedDocs.length}
+- Total in scope: ${entityDocuments.length}
+
+## Google Drive Routing
+- Ready to route: ${driveReadyDocs.length}
+- Routed successfully: ${driveRoutedDocs.length}
+- Routing errors: ${driveErrorDocs.length}
+
+## Retention Classes
+${['operational', 'authority', 'compliance', 'tax', 'financial_evidence']
+  .map((retentionClass) => {
+    const count = entityDocuments.filter((item) => item.retentionClass === retentionClass).length;
+    return `- ${retentionClass.replace('_', ' ')}: ${count}`;
+  })
+  .join('\n')}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} storage and retention audit review`,
+      category: 'reporting',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio storage and retention audit reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -1547,6 +1685,20 @@ ${filingExceptions
       actionLabel: 'Create Exception Report',
       onAction: launchOperationsExceptionReport,
     },
+    {
+      title: 'Tax & Payroll Summary',
+      subtitle: 'Employee, deposit, filing, receipt, and expense overview',
+      detail: 'Create a tax and payroll report across workforce, direct deposit readiness, filing review, and operating totals.',
+      actionLabel: 'Create Payroll Report',
+      onAction: launchTaxAndPayrollSummaryReport,
+    },
+    {
+      title: 'Storage & Retention Audit',
+      subtitle: 'User-owned routing and retained-record posture',
+      detail: 'Create a storage audit for Google Drive routing, retained records, and document retention coverage.',
+      actionLabel: 'Create Storage Audit',
+      onAction: launchStorageRetentionAuditReport,
+    },
   ];
   const reportPackPresets = [
     {
@@ -1569,6 +1721,16 @@ ${filingExceptions
       detail: 'Shifts the report scope to the last 12 months for annual oversight and filing support.',
       actionLabel: 'Use Annual Scope',
       onAction: () => setReportWindow('365d'),
+    },
+    {
+      title: 'Payroll & Filing Pack',
+      subtitle: 'Payroll posture, tax intake, and storage review',
+      detail: 'Generate the tax and payroll summary plus the storage and retention audit for the current scope.',
+      actionLabel: 'Generate Payroll Pack',
+      onAction: () => {
+        launchTaxAndPayrollSummaryReport();
+        launchStorageRetentionAuditReport();
+      },
     },
   ];
 
