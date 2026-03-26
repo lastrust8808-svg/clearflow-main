@@ -1515,6 +1515,154 @@ ${unverifiedVendors
     });
   };
 
+  const launchEntityReadinessReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityDocuments = data.documents.filter((item) => item.entityId === reportEntity.id);
+    const entityAuthority = data.authorityRecords.filter((item) => item.entityId === reportEntity.id);
+    const entityBankAccounts = data.bankAccounts.filter((item) => item.entityId === reportEntity.id);
+    const entityTreasuryAccounts = data.treasuryAccounts.filter((item) => item.entityId === reportEntity.id);
+    const entityCompliance = data.complianceTags.filter((item) => item.entityId === reportEntity.id);
+    const readinessChecklist = [
+      {
+        label: 'Legal or governing records',
+        ready: entityDocuments.some((item) => item.category === 'governing'),
+      },
+      {
+        label: 'Authority records',
+        ready:
+          entityAuthority.length > 0 ||
+          entityDocuments.some((item) => item.category === 'authority_record'),
+      },
+      {
+        label: 'Tax identification',
+        ready: Boolean(reportEntity.taxId),
+      },
+      {
+        label: 'Banking or treasury setup',
+        ready: entityBankAccounts.length > 0 || entityTreasuryAccounts.length > 0,
+      },
+      {
+        label: 'Compliance review trail',
+        ready: entityCompliance.length > 0,
+      },
+    ];
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Entity Readiness Report`,
+      category: 'authority_record',
+      summary:
+        'Readiness report for entity formation, authority, tax identity, banking posture, and control records.',
+      retentionClass: 'authority',
+      body: `# Entity Readiness Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Readiness Checklist
+${readinessChecklist
+  .map((item) => `- ${item.label}: ${item.ready ? 'ready' : 'missing / needs follow-up'}`)
+  .join('\n')}
+
+## Operating Posture
+- Bank accounts linked: ${entityBankAccounts.length}
+- Treasury accounts linked: ${entityTreasuryAccounts.length}
+- Authority records: ${entityAuthority.length}
+- Compliance tags: ${entityCompliance.length}
+- Vault documents: ${entityDocuments.length}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} readiness review`,
+      category: 'authority',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio entity readiness reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchEvidenceGapReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityDocuments = data.documents.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const requiredCategories: Array<{ label: string; category: DocumentCategory }> = [
+      { label: 'Governing packet', category: 'governing' },
+      { label: 'Authority record', category: 'authority_record' },
+      { label: 'Compliance packet', category: 'compliance' },
+      { label: 'Tax packet', category: 'tax' },
+      { label: 'Financial evidence', category: 'financial' },
+    ];
+    const missingCategories = requiredCategories.filter(
+      (item) => !entityDocuments.some((document) => document.category === item.category),
+    );
+    const retainedWithoutProof = entityDocuments.filter(
+      (item) =>
+        item.storageOwner === 'clearflow_retained' &&
+        (!item.linkedTokenIds || item.linkedTokenIds.length === 0),
+    );
+    const userOwnedUnrouted = entityDocuments.filter(
+      (item) => item.storageOwner === 'user_owned' && item.externalStorageStatus !== 'routed',
+    );
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Evidence Gap Report`,
+      category: 'compliance',
+      summary:
+        'Evidence gap report for missing packets, unrouted user-owned files, and retained documents lacking proof linkage.',
+      retentionClass: 'compliance',
+      body: `# Evidence Gap Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Missing Packet Categories
+${missingCategories
+  .map((item) => `- ${item.label}`)
+  .join('\n') || '- No core packet categories are currently missing in scope.'}
+
+## Retained Records Missing Token Proof
+${retainedWithoutProof
+  .slice(0, 10)
+  .map((item) => `- ${item.title} | ${item.retentionClass}`)
+  .join('\n') || '- No retained records in scope are missing linked token proof.'}
+
+## User-Owned Records Not Yet Routed
+${userOwnedUnrouted
+  .slice(0, 10)
+  .map((item) => `- ${item.title} | ${item.externalStorageStatus || 'not_routed'}`)
+  .join('\n') || '- No user-owned records in scope are waiting on routing.'}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} evidence gap review`,
+      category: 'reporting',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio evidence gap reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -1807,6 +1955,20 @@ ${unverifiedVendors
       actionLabel: 'Create Exposure Report',
       onAction: launchCounterpartyExposureReport,
     },
+    {
+      title: 'Entity Readiness Report',
+      subtitle: 'Formation, authority, tax, and banking readiness',
+      detail: 'Create a readiness report for legal records, authority coverage, tax identity, and banking posture.',
+      actionLabel: 'Create Readiness Report',
+      onAction: launchEntityReadinessReport,
+    },
+    {
+      title: 'Evidence Gap Report',
+      subtitle: 'Missing packets, unrouted files, and retained proof gaps',
+      detail: 'Create an evidence gap report across missing categories, unrouted user-owned files, and retained proof coverage.',
+      actionLabel: 'Create Gap Report',
+      onAction: launchEvidenceGapReport,
+    },
   ];
   const reportPackPresets = [
     {
@@ -1848,6 +2010,16 @@ ${unverifiedVendors
       onAction: () => {
         launchCounterpartyExposureReport();
         launchOperationsExceptionReport();
+      },
+    },
+    {
+      title: 'Entity Launch Audit Pack',
+      subtitle: 'Readiness and evidence-gap review for setup quality',
+      detail: 'Generate the entity readiness report plus the evidence gap report for the selected scope.',
+      actionLabel: 'Generate Launch Audit',
+      onAction: () => {
+        launchEntityReadinessReport();
+        launchEvidenceGapReport();
       },
     },
   ];
