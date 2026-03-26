@@ -8,6 +8,7 @@ interface WelcomeProps {
   onDevLogin: () => void;
   onStartNewMember: () => void;
   onStartExistingMember: () => void;
+  startGoogleSignIn: () => Promise<{ success: boolean; error?: string }>;
   renderGoogleButton: (elementId: string) => void;
 }
 
@@ -37,10 +38,13 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onDevLogin,
   onStartNewMember,
   onStartExistingMember,
+  startGoogleSignIn,
   renderGoogleButton,
 }) => {
   const [entryView, setEntryView] = useState<'landing' | 'signin' | 'help'>(initialView);
   const [signInIntent, setSignInIntent] = useState<'new' | 'existing'>(initialIntent);
+  const [googleLaunchError, setGoogleLaunchError] = useState('');
+  const [isLaunchingGoogle, setIsLaunchingGoogle] = useState(false);
   const canUseDevAccess =
     typeof window !== 'undefined' &&
     ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -68,6 +72,33 @@ export const Welcome: React.FC<WelcomeProps> = ({
           },
     [signInIntent]
   );
+
+  const launchGoogle = async (intent: 'new' | 'existing') => {
+    setGoogleLaunchError('');
+    setSignInIntent(intent);
+    setIsLaunchingGoogle(true);
+
+    if (intent === 'new') {
+      onStartNewMember();
+    } else {
+      onStartExistingMember();
+    }
+
+    const result = await startGoogleSignIn();
+    if (!result.success) {
+      setGoogleLaunchError(result.error || 'Google sign-in could not start right now.');
+      setIsLaunchingGoogle(false);
+      return;
+    }
+
+    setEntryView('signin');
+  };
+
+  useEffect(() => {
+    if (entryView !== 'signin') {
+      setIsLaunchingGoogle(false);
+    }
+  }, [entryView]);
 
   return (
     <div
@@ -279,11 +310,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSignInIntent('new');
-                      setEntryView('signin');
-                      onStartNewMember();
-                    }}
+                    onClick={() => void launchGoogle('new')}
                     style={{
                       minHeight: 50,
                       borderRadius: 16,
@@ -295,8 +322,11 @@ export const Welcome: React.FC<WelcomeProps> = ({
                       cursor: 'pointer',
                       fontSize: 15,
                     }}
+                    disabled={isLaunchingGoogle}
                   >
-                    Continue with Google
+                    {isLaunchingGoogle && signInIntent === 'new'
+                      ? 'Starting Google...'
+                      : 'Continue with Google'}
                   </button>
                 </div>
 
@@ -316,11 +346,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSignInIntent('existing');
-                      setEntryView('signin');
-                      onStartExistingMember();
-                    }}
+                    onClick={() => void launchGoogle('existing')}
                     style={{
                       minHeight: 48,
                       borderRadius: 16,
@@ -331,11 +357,29 @@ export const Welcome: React.FC<WelcomeProps> = ({
                       cursor: 'pointer',
                       fontSize: 15,
                     }}
+                    disabled={isLaunchingGoogle}
                   >
-                    Continue with Google
+                    {isLaunchingGoogle && signInIntent === 'existing'
+                      ? 'Starting Google...'
+                      : 'Continue with Google'}
                   </button>
                 </div>
               </div>
+              {googleLaunchError ? (
+                <div
+                  style={{
+                    borderRadius: 18,
+                    padding: 16,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(248, 113, 113, 0.24)',
+                    color: '#fecaca',
+                    lineHeight: 1.6,
+                    fontSize: 14,
+                  }}
+                >
+                  {googleLaunchError}
+                </div>
+              ) : null}
             </>
           ) : entryView === 'help' ? (
             <>
@@ -438,10 +482,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
                     {signInCopy.title}
                   </div>
-                  <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                    {signInCopy.description}
-                  </div>
+                <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
+                  {signInCopy.description}
                 </div>
+              </div>
                 <button
                   type="button"
                   onClick={() => setEntryView('landing')}
@@ -472,8 +516,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 }}
               >
                 {signInIntent === 'existing'
-                  ? 'Use the Google account already tied to your ClearFlow workspace.'
-                  : 'Use the Google account you want tied to your new workspace. After sign-in, ClearFlow will walk you through account or entity onboarding.'}
+                  ? 'Google authentication and Drive permission are being requested together so your workspace can open without extra setup clicks.'
+                  : 'Google authentication and Drive permission are being requested together. Once approved, ClearFlow will continue straight into onboarding.'}
               </div>
 
               <div
@@ -486,6 +530,20 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   border: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
+                <div
+                  style={{
+                    minHeight: 44,
+                    display: 'grid',
+                    placeItems: 'center',
+                    color: '#dff7fb',
+                    lineHeight: 1.7,
+                    textAlign: 'center',
+                  }}
+                >
+                  {isLaunchingGoogle
+                    ? 'Opening Google sign-in and Drive authorization...'
+                    : 'If Google did not open automatically, use the button below.'}
+                </div>
                 <div id="google-btn-container" style={{ minHeight: 44 }} />
                 {!isConfigured ? (
                   <div

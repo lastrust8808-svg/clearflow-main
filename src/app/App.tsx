@@ -804,13 +804,14 @@ export default function App({
 
   if (auth.authStatus === 'unauthenticated') {
     return (
-      <Welcome
-        initialView={initialWelcomeView}
-        initialIntent={welcomeIntent}
-        isConfigured={auth.isConfigured}
-        renderGoogleButton={auth.renderGoogleButton}
-        onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
-        onStartNewMember={() => {
+        <Welcome
+          initialView={initialWelcomeView}
+          initialIntent={welcomeIntent}
+          isConfigured={auth.isConfigured}
+          startGoogleSignIn={auth.startGoogleSignIn}
+          renderGoogleButton={auth.renderGoogleButton}
+          onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
+          onStartNewMember={() => {
           setWelcomeIntent('new');
           setStoredOnboardingIntent('new');
           setPostAuthOnboardingStage('pathSelect');
@@ -826,14 +827,14 @@ export default function App({
     );
   }
 
-  if (auth.authStatus === 'pending-gsi' || auth.authStatus === 'pending-drive-check') {
-    return (
-      <LoadingShell
-        title="Connecting Secure Access"
-        subtitle="Checking Google identity and loading the user workspace from secure storage."
-        actionLabel={auth.appData?.user ? 'Continue Onboarding Now' : undefined}
-        onAction={
-          auth.appData?.user ? () => auth.continueGoogleOnboardingFallback() : undefined
+    if (auth.authStatus === 'pending-gsi' || auth.authStatus === 'pending-drive-check') {
+      return (
+        <LoadingShell
+          title="Connecting Secure Access"
+          subtitle="Authorizing Google identity, requesting Drive access, and loading the user workspace in one flow."
+          actionLabel={auth.appData?.user ? 'Continue Onboarding Now' : undefined}
+          onAction={
+            auth.appData?.user ? () => auth.continueGoogleOnboardingFallback() : undefined
         }
         secondaryActionLabel="Need Sign-In Help?"
         onSecondaryAction={openAccessRecoveryHelp}

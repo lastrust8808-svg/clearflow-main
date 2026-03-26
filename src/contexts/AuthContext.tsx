@@ -60,6 +60,7 @@ interface AuthContextType {
   savingStatus: SavingStatus;
   appData: AppData | null;
   pendingCredentialAuth: LocalAuthChallenge | null;
+  startGoogleSignIn: () => Promise<{ success: boolean; error?: string }>;
   renderGoogleButton: (elementId: string) => void;
   mockLogin: (name: string, email: string) => void;
   startCredentialAuth: (input: {
@@ -131,11 +132,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
   });
   const [tokenClient, setTokenClient] = useState<any>(null);
+  const tokenClientRef = useRef<any>(null);
   const [savingStatus, setSavingStatus] = useState<SavingStatus>('idle');
   const initialDataLoaded = useRef(false);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const googleClientsInitializedRef = useRef(false);
   const needsDriveCatchUpRef = useRef(false);
+  const GOOGLE_DRIVE_SCOPE =
+    'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 
 
   const handleCredentialResponse = useCallback((response: any) => {
@@ -157,11 +161,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
   }, []);
 
+  const hydrateGoogleAccessSession = useCallback(async (accessToken: string) => {
+    const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!profileResponse.ok) {
+      throw new Error('Google profile lookup failed after authorization.');
+    }
+
+    const profile = await profileResponse.json();
+    const provisionalUser: User = {
+      id: crypto.randomUUID(),
+      name: profile.name || profile.email,
+      email: profile.email,
+      isVerified: false,
+      primaryContactType: 'google',
+    };
+
+    setState((current) => ({
+      ...current,
+      token: current.token || 'google-oauth-token',
+      apiAccessToken: accessToken,
+      status: 'pending-drive-check',
+      gsiUser: { name: provisionalUser.name, email: provisionalUser.email || '' },
+      appData: current.appData || { user: provisionalUser, entities: [] },
+    }));
+  }, []);
+
   const handleAccessTokenResponse = useCallback((response: any) => {
     if (response.error) {
         console.error('OAuth Error:', response.error);
         setState((current) => {
-          if (current.status === 'pending-gsi' && current.appData?.user) {
+          if (
+            (current.status === 'pending-gsi' || current.status === 'pending-drive-check') &&
+            current.appData?.user
+          ) {
             return {
               ...current,
               status: 'pending-profile-setup',
@@ -169,13 +206,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             };
           }
 
-          return current;
+          return {
+            ...current,
+            status: 'unauthenticated',
+            gsiUser: null,
+            token: null,
+            apiAccessToken: null,
+            appData: null,
+          };
         });
         return;
     }
     needsDriveCatchUpRef.current = true;
-    setState(current => ({ ...current, apiAccessToken: response.access_token, status: 'pending-drive-check' }));
-  }, []);
+    void hydrateGoogleAccessSession(response.access_token).catch((error) => {
+      console.error('OAuth profile hydration failed:', error);
+      setState((current) => {
+        if (current.appData?.user) {
+          return {
+            ...current,
+            status: 'pending-profile-setup',
+            gsiUser: null,
+            apiAccessToken: response.access_token || current.apiAccessToken,
+          };
+        }
+
+        return {
+          ...current,
+          status: 'unauthenticated',
+          gsiUser: null,
+          token: null,
+          apiAccessToken: null,
+          appData: null,
+        };
+      });
+    });
+  }, [hydrateGoogleAccessSession]);
 
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
@@ -299,10 +364,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
   
   useEffect(() => {
-    if (state.status === 'pending-gsi' && tokenClient) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+    if (
+      state.status === 'pending-gsi' &&
+      tokenClient &&
+      state.token &&
+      state.appData?.user &&
+      !state.apiAccessToken
+    ) {
+      tokenClient.requestAccessToken({ prompt: 'consent' });
     }
-  }, [state.status, tokenClient]);
+  }, [state.apiAccessToken, state.appData, state.status, state.token, tokenClient]);
 
   useEffect(() => {
     const checkDrive = async () => {
@@ -403,10 +474,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         const client = google.accounts.oauth2.initTokenClient({
           client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
+          scope: GOOGLE_DRIVE_SCOPE,
           callback: handleAccessTokenResponse,
         });
         setTokenClient(client);
+        tokenClientRef.current = client;
         googleClientsInitializedRef.current = true;
       }
 
@@ -456,15 +528,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       const client = google.accounts.oauth2.initTokenClient({
         client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
+        scope: GOOGLE_DRIVE_SCOPE,
         callback: handleAccessTokenResponse,
       });
       setTokenClient(client);
+      tokenClientRef.current = client;
       googleClientsInitializedRef.current = true;
     }
 
     return typeof google !== 'undefined' && !!google.accounts;
-  }, [handleAccessTokenResponse, handleCredentialResponse, isConfigured]);
+  }, [GOOGLE_DRIVE_SCOPE, handleAccessTokenResponse, handleCredentialResponse, isConfigured]);
+
+  const startGoogleSignIn = useCallback(async () => {
+    if (!isConfigured) {
+      return { success: false, error: 'Google sign-in is not configured in this environment.' };
+    }
+
+    const ready = await ensureGoogleClients();
+    const activeTokenClient = tokenClientRef.current || tokenClient;
+    if (!ready || !activeTokenClient) {
+      return { success: false, error: 'Google sign-in is not ready yet. Try again in a moment.' };
+    }
+
+    setState((current) => ({
+      ...current,
+      status: 'pending-gsi',
+      gsiUser: null,
+      pendingCredentialAuth: null,
+    }));
+
+    activeTokenClient.requestAccessToken({
+      prompt: state.apiAccessToken ? '' : 'consent',
+    });
+
+    return { success: true };
+  }, [ensureGoogleClients, isConfigured, tokenClient, state.apiAccessToken]);
 
   const renderGoogleButton = useCallback((elementId: string) => {
     if (!isInitialized || !isConfigured) {
@@ -977,6 +1075,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userDataService.clearCache();
     initialDataLoaded.current = false;
     needsDriveCatchUpRef.current = false;
+    tokenClientRef.current = null;
+    googleClientsInitializedRef.current = false;
     setSavingStatus('idle');
     setState({
       token: null,
@@ -990,7 +1090,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const requestDriveAccess = () => {
-    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
+    const activeTokenClient = tokenClientRef.current || tokenClient;
+    if (activeTokenClient) activeTokenClient.requestAccessToken({ prompt: 'consent' });
   };
 
   const continueGoogleOnboardingFallback = () => {
@@ -1020,6 +1121,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     savingStatus: savingStatus,
     appData: state.appData,
     pendingCredentialAuth: state.pendingCredentialAuth,
+    startGoogleSignIn,
     renderGoogleButton,
     mockLogin,
     startCredentialAuth,
