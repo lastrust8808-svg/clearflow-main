@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { ComplianceStatus, CoreDataBundle } from '../../types/core';
 import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
+import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 
@@ -50,6 +51,7 @@ export default function ComplianceWorkbenchPage({
   setData,
 }: ComplianceWorkbenchPageProps) {
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
+  const transactionProofChains = buildTransactionProofChainViews(data);
   const reviewCount = data.complianceTags.filter((item) => item.status === 'review').length;
   const digitalReviewCount = data.digitalAssetCompliance.filter(
     (item) =>
@@ -62,6 +64,9 @@ export default function ComplianceWorkbenchPage({
   ).length;
   const wealthRailWatchCount = privateWealthRailSummaries.filter(
     (item) => item.overallStatus !== 'ready',
+  ).length;
+  const proofChainWatchCount = transactionProofChains.filter(
+    (item) => item.verificationStatus !== 'sealed',
   ).length;
 
   const updateComplianceTag = (
@@ -159,7 +164,73 @@ export default function ComplianceWorkbenchPage({
         <StatCard label="Tax Filing Links" value={data.taxReportingLinks.length} />
         <StatCard label="Filing Review Queue" value={filingReadyCount} />
         <StatCard label="Wealth Rail Watchlist" value={wealthRailWatchCount} />
+        <StatCard label="Proof Chain Watchlist" value={proofChainWatchCount} />
       </div>
+
+      <PageSection
+        title="Proof Chain Oversight"
+        description="Encrypted movement and verification chains that still need stronger token, settlement, or identifier coverage."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {transactionProofChains.filter((item) => item.verificationStatus !== 'sealed').slice(0, 8).map((chain) => (
+            <div key={chain.chainId} style={cardStyle}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{chain.title}</div>
+                  <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                    {chain.chainId} | tx {chain.transactionId} | {chain.verificationStatus}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => goToHash('#transactions')}
+                  style={chipStyle(false)}
+                >
+                  Open Proof Desk
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Settlement</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>{chain.settlementId || 'Missing settlement link'}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Payments / Identifiers</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {chain.paymentIds.length} payments | {chain.movementIdentifierIds.length} identifiers
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Verification Tokens</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {chain.tokenIds.length ? chain.tokenIds.join(', ') : 'Missing proof tokens'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {proofChainWatchCount === 0 ? (
+            <div style={{ ...cardStyle, color: '#d1d5db' }}>
+              No proof chains need compliance follow-up right now.
+            </div>
+          ) : null}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Private Wealth Rail Oversight"

@@ -15,6 +15,7 @@ import type {
 import { useAuth } from '../../hooks/useAuth';
 import { saveDocumentFile } from '../../services/documentVault.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
+import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -247,6 +248,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const digitalCount = data.aiWorkflows.filter((item) => item.category === 'digital_asset').length;
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
   const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
+  const transactionProofChains = useMemo(() => buildTransactionProofChainViews(data), [data]);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -277,6 +279,9 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     );
     const scopedCompliance = data.complianceTags.filter((item) => item.entityId === reportEntity.id);
     const scopedTaxLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const scopedProofChains = transactionProofChains.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.date, reportWindow),
+    );
     const scopedRailIssues = remittanceRailControls.filter((item) => {
       const payment = paymentsById.get(item.paymentId);
       return (
@@ -292,8 +297,9 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
       complianceReviews: scopedCompliance.filter((item) => item.status === 'review').length,
       filingItems: scopedTaxLinks.filter((item) => item.status !== 'accepted').length,
       railIssues: scopedRailIssues.length,
+      proofChains: scopedProofChains.length,
     };
-  }, [data.complianceTags, data.documents, data.payments, data.taxReportingLinks, paymentsById, remittanceRailControls, reportEntity, reportWindow]);
+  }, [data.complianceTags, data.documents, data.payments, data.taxReportingLinks, paymentsById, remittanceRailControls, reportEntity, reportWindow, transactionProofChains]);
 
   useEffect(() => {
     if (!reportEntityId && primaryEntity) {
@@ -1306,6 +1312,68 @@ ${filingExceptions
     });
   };
 
+  const launchTransactionProofAuditReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const scopedProofChains = transactionProofChains.filter(
+      (item) => item.entityId === reportEntity.id && isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const sealedChains = scopedProofChains.filter((item) => item.verificationStatus === 'sealed');
+    const watchChains = scopedProofChains.filter((item) => item.verificationStatus !== 'sealed');
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Transaction Proof Chain Audit`,
+      category: 'tx_audit_packet',
+      summary:
+        'Encrypted transaction proof-chain audit covering movement links, settlement references, identifiers, and verification token coverage.',
+      retentionClass: 'financial_evidence',
+      body: `# Transaction Proof Chain Audit
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Chain Posture Summary
+- Total chains: ${scopedProofChains.length}
+- Sealed chains: ${sealedChains.length}
+- Watch chains: ${watchChains.length}
+
+## Watch Chains
+${watchChains
+  .slice(0, 10)
+  .map(
+    (item) =>
+      `- ${item.title} | ${item.transactionId} | settlement ${item.settlementId || 'missing'} | payments ${item.paymentIds.length} | identifiers ${item.movementIdentifierIds.length} | tokens ${item.tokenIds.length}`,
+  )
+  .join('\n') || '- No proof-chain watch items were open at report time.'}
+
+## Sealed Chains
+${sealedChains
+  .slice(0, 10)
+  .map(
+    (item) =>
+      `- ${item.title} | ${item.transactionId} | previous ${item.previousChainId || 'origin'} | tokens ${item.tokenIds.join(', ') || 'none'}`,
+  )
+  .join('\n') || '- No sealed chains were in scope.'}
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} proof chain audit review`,
+      category: 'risk',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio transaction proof-chain audit reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
   const launchTaxAndPayrollSummaryReport = () => {
     if (!reportEntity) {
       return;
@@ -1935,6 +2003,13 @@ ${userOwnedUnrouted
       onAction: launchOperationsExceptionReport,
     },
     {
+      title: 'Transaction Proof Chain Audit',
+      subtitle: 'Encrypted movement and verification chain coverage',
+      detail: 'Create a report across sealed transaction chains, watch chains, identifiers, and token proof coverage.',
+      actionLabel: 'Create Proof Audit',
+      onAction: launchTransactionProofAuditReport,
+    },
+    {
       title: 'Tax & Payroll Summary',
       subtitle: 'Employee, deposit, filing, receipt, and expense overview',
       detail: 'Create a tax and payroll report across workforce, direct deposit readiness, filing review, and operating totals.',
@@ -2362,6 +2437,7 @@ ${userOwnedUnrouted
             >
               <StatCard label="Payments In Scope" value={reportScopeSummary.payments} />
               <StatCard label="Documents In Scope" value={reportScopeSummary.documents} />
+              <StatCard label="Proof Chains" value={reportScopeSummary.proofChains} />
               <StatCard label="Rail Issues" value={reportScopeSummary.railIssues} />
               <StatCard label="Filing Items" value={reportScopeSummary.filingItems} />
               <StatCard label="Compliance Reviews" value={reportScopeSummary.complianceReviews} />

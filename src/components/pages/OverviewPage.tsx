@@ -6,6 +6,7 @@ import {
 import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
+import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -23,6 +24,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const settlementFlows = buildSettlementFlowViews(data);
   const remittanceRailControls = buildRemittanceRailControls(data);
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
+  const transactionProofChains = buildTransactionProofChainViews(data);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -74,6 +76,12 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   ).length;
   const recurringObligationCount = data.obligations.filter(
     (item) => item.recurringSchedule?.enabled,
+  ).length;
+  const sealedProofChainCount = transactionProofChains.filter(
+    (item) => item.verificationStatus === 'sealed',
+  ).length;
+  const watchProofChainCount = transactionProofChains.filter(
+    (item) => item.verificationStatus !== 'sealed',
   ).length;
   const complianceHeldPayments = data.payments.filter(
     (item) =>
@@ -150,6 +158,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Tax Filing Queue" value={filingQueueCount} />
         <StatCard label="Direct Deposit Returns" value={directDepositCount} />
         <StatCard label="Retained Records" value={retainedRecordCount} />
+        <StatCard label="Sealed Proof Chains" value={sealedProofChainCount} />
         <StatCard label="Entity Connections" value={activeEntityConnections} />
         <StatCard label="Active Credit Rails" value={activeCreditRails} />
         <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
@@ -162,6 +171,57 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Proof Chain Posture"
+        description="Encrypted movement and verification chains tied to transactions, settlements, identifiers, and tokens."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Encrypted Movement Chains"
+            subtitle={`${sealedProofChainCount} sealed | ${watchProofChainCount} still need stronger proof coverage`}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                Transaction chains now tie movements, settlement references, identifiers, and proof
+                tokens together before being mirrored into the encrypted backend proof vault.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('#transactions')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Proof Chains
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Proof Coverage Watch"
+            subtitle="Verification gaps rise here before they become control failures"
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+              Any transaction that still lacks a verified settlement token or complete movement
+              identifier trail stays in watch posture until the chain is fully sealed.
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Connection Rail Posture"
