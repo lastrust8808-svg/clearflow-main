@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   AIWorkflowRecord,
@@ -23,6 +23,8 @@ interface AIStudioPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
+
+type ReportWindowOption = '30d' | '90d' | '365d' | 'all';
 
 const researchLinks = [
   {
@@ -89,6 +91,50 @@ const researchLinks = [
 
 function openLink(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function getReportWindowLabel(window: ReportWindowOption) {
+  switch (window) {
+    case '30d':
+      return 'Last 30 days';
+    case '90d':
+      return 'Last 90 days';
+    case '365d':
+      return 'Last 12 months';
+    case 'all':
+    default:
+      return 'Full history';
+  }
+}
+
+function getReportWindowStart(window: ReportWindowOption) {
+  if (window === 'all') {
+    return null;
+  }
+
+  const now = new Date();
+  const start = new Date(now);
+  const offsetDays = window === '30d' ? 30 : window === '90d' ? 90 : 365;
+  start.setDate(now.getDate() - offsetDays);
+  return start;
+}
+
+function isOnOrAfterWindow(dateValue: string | undefined, window: ReportWindowOption) {
+  if (!dateValue || window === 'all') {
+    return true;
+  }
+
+  const start = getReportWindowStart(window);
+  if (!start) {
+    return true;
+  }
+
+  const candidate = new Date(dateValue);
+  if (Number.isNaN(candidate.getTime())) {
+    return true;
+  }
+
+  return candidate >= start;
 }
 
 function focusDocument(documentId: string) {
@@ -195,10 +241,16 @@ function buildComplianceTag(input: {
 export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const auth = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [reportEntityId, setReportEntityId] = useState(() => data.entities[0]?.id || '');
+  const [reportWindow, setReportWindow] = useState<ReportWindowOption>('90d');
   const primaryEntity = data.entities[0];
   const digitalCount = data.aiWorkflows.filter((item) => item.category === 'digital_asset').length;
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
   const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
+  const paymentsById = useMemo(
+    () => new Map(data.payments.map((payment) => [payment.id, payment])),
+    [data.payments],
+  );
   const laneCounts = useMemo(
     () => ({
       legal: data.aiWorkflows.filter((item) => item.category === 'legal').length,
@@ -207,6 +259,22 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     }),
     [data.aiWorkflows],
   );
+  const reportEntity = useMemo(
+    () => data.entities.find((item) => item.id === reportEntityId) || primaryEntity,
+    [data.entities, primaryEntity, reportEntityId],
+  );
+  const reportWindowLabel = useMemo(() => getReportWindowLabel(reportWindow), [reportWindow]);
+
+  useEffect(() => {
+    if (!reportEntityId && primaryEntity) {
+      setReportEntityId(primaryEntity.id);
+      return;
+    }
+
+    if (reportEntityId && !data.entities.some((item) => item.id === reportEntityId) && primaryEntity) {
+      setReportEntityId(primaryEntity.id);
+    }
+  }, [data.entities, primaryEntity, reportEntityId]);
 
   const slugifyFileStem = (value: string) =>
     value
@@ -1019,27 +1087,32 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
   };
 
   const launchSettlementRailAuditReport = () => {
-    if (!primaryEntity) {
+    if (!reportEntity) {
       return;
     }
 
-    const blockedControls = remittanceRailControls.filter((item) => item.overallStatus === 'hold');
-    const exceptionControls = remittanceRailControls.filter((item) => item.overallStatus === 'exception');
-    const watchControls = remittanceRailControls.filter((item) => item.overallStatus === 'watch');
+    const entityRailControls = remittanceRailControls.filter((item) => {
+      const payment = paymentsById.get(item.paymentId);
+      return payment?.entityId === reportEntity.id && isOnOrAfterWindow(payment.paymentDate, reportWindow);
+    });
+    const blockedControls = entityRailControls.filter((item) => item.overallStatus === 'hold');
+    const exceptionControls = entityRailControls.filter((item) => item.overallStatus === 'exception');
+    const watchControls = entityRailControls.filter((item) => item.overallStatus === 'watch');
     const document = buildGeneratedDocument({
-      entityId: primaryEntity.id,
-      title: `${primaryEntity.displayName || primaryEntity.name} Settlement Rail Audit Report`,
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Settlement Rail Audit Report`,
       category: 'financial',
       summary:
         'Audit report across source control, proof posture, movement identifiers, return exposure, and reconciliation follow-up.',
       retentionClass: 'financial_evidence',
       body: `# Settlement Rail Audit Report
 
-Entity: ${primaryEntity.displayName || primaryEntity.name}
+Entity: ${reportEntity.displayName || reportEntity.name}
 Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
 
 ## Rail Posture Summary
-- Ready rails: ${remittanceRailControls.filter((item) => item.overallStatus === 'ready').length}
+- Ready rails: ${entityRailControls.filter((item) => item.overallStatus === 'ready').length}
 - Watch rails: ${watchControls.length}
 - Held rails: ${blockedControls.length}
 - Exceptions: ${exceptionControls.length}
@@ -1062,8 +1135,8 @@ ${watchControls
     });
 
     const complianceTag = buildComplianceTag({
-      entityId: primaryEntity.id,
-      label: `${primaryEntity.displayName || primaryEntity.name} settlement rail audit review`,
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} settlement rail audit review`,
       category: 'risk',
       linkedDocumentIds: [document.id],
       notes: 'Generated from AI Studio settlement rail audit reporting.',
@@ -1076,23 +1149,24 @@ ${watchControls
   };
 
   const launchTreasuryReserveReport = () => {
-    if (!primaryEntity) {
+    if (!reportEntity) {
       return;
     }
 
-    const entityTreasuries = data.treasuryAccounts.filter((item) => item.entityId === primaryEntity.id);
-    const entityBankAccounts = data.bankAccounts.filter((item) => item.entityId === primaryEntity.id);
+    const entityTreasuries = data.treasuryAccounts.filter((item) => item.entityId === reportEntity.id);
+    const entityBankAccounts = data.bankAccounts.filter((item) => item.entityId === reportEntity.id);
     const document = buildGeneratedDocument({
-      entityId: primaryEntity.id,
-      title: `${primaryEntity.displayName || primaryEntity.name} Treasury & Reserve Report`,
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Treasury & Reserve Report`,
       category: 'financial',
       summary:
         'Treasury and reserve report covering available balances, remittance posture, linked banking, and reserve-backed settlements.',
       retentionClass: 'financial_evidence',
       body: `# Treasury & Reserve Report
 
-Entity: ${primaryEntity.displayName || primaryEntity.name}
+Entity: ${reportEntity.displayName || reportEntity.name}
 Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
 
 ## Treasury Accounts
 ${entityTreasuries
@@ -1112,7 +1186,12 @@ ${entityBankAccounts
 
 ## Reserve-Backed Settlements
 ${data.settlements
-  .filter((item) => item.entityId === primaryEntity.id && item.reserveBacked)
+  .filter(
+    (item) =>
+      item.entityId === reportEntity.id &&
+      item.reserveBacked &&
+      isOnOrAfterWindow(item.actualSettlementDate || item.initiatedAt, reportWindow),
+  )
   .slice(0, 8)
   .map(
     (item) =>
@@ -1126,32 +1205,39 @@ ${data.settlements
   };
 
   const launchOperationsExceptionReport = () => {
-    if (!primaryEntity) {
+    if (!reportEntity) {
       return;
     }
 
     const reconciliationExceptions = data.reconciliations.filter(
       (item) =>
-        item.entityId === primaryEntity.id &&
+        item.entityId === reportEntity.id &&
+        isOnOrAfterWindow(item.periodEnd, reportWindow) &&
         (item.status !== 'completed' || item.statementReviewStatus === 'needs_review'),
     );
     const filingExceptions = data.taxReportingLinks.filter(
       (item) =>
-        item.entityId === primaryEntity.id &&
+        item.entityId === reportEntity.id &&
         (item.status !== 'accepted' || item.tinMatchStatus === 'pending' || item.correctionStatus === 'pending'),
     );
-    const returnExceptions = data.returnEvents.filter((item) => item.entityId === primaryEntity.id && item.status !== 'resolved');
+    const returnExceptions = data.returnEvents.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        isOnOrAfterWindow(item.eventDate, reportWindow) &&
+        item.status !== 'resolved',
+    );
     const document = buildGeneratedDocument({
-      entityId: primaryEntity.id,
-      title: `${primaryEntity.displayName || primaryEntity.name} Operations Exception Report`,
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Operations Exception Report`,
       category: 'compliance',
       summary:
         'Exception report across reconciliation, returns, rail posture, and filing readiness for operator follow-up.',
       retentionClass: 'compliance',
       body: `# Operations Exception Report
 
-Entity: ${primaryEntity.displayName || primaryEntity.name}
+Entity: ${reportEntity.displayName || reportEntity.name}
 Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
 
 ## Reconciliation Queue
 ${reconciliationExceptions
@@ -1177,8 +1263,8 @@ ${filingExceptions
     });
 
     const complianceTag = buildComplianceTag({
-      entityId: primaryEntity.id,
-      label: `${primaryEntity.displayName || primaryEntity.name} operations exception review`,
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} operations exception review`,
       category: 'reporting',
       linkedDocumentIds: [document.id],
       notes: 'Generated from AI Studio operations exception reporting.',
@@ -1188,6 +1274,16 @@ ${filingExceptions
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
     });
+  };
+
+  const launchFullOperationsPack = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    launchSettlementRailAuditReport();
+    launchTreasuryReserveReport();
+    launchOperationsExceptionReport();
   };
 
   const studioTools: Array<{
@@ -1452,6 +1548,29 @@ ${filingExceptions
       onAction: launchOperationsExceptionReport,
     },
   ];
+  const reportPackPresets = [
+    {
+      title: 'Controller Close Pack',
+      subtitle: 'Settlement, treasury, and exception coverage for close work',
+      detail: 'Generate all three core reports together for the currently selected entity and reporting window.',
+      actionLabel: 'Generate Full Ops Pack',
+      onAction: launchFullOperationsPack,
+    },
+    {
+      title: '90-Day Rail Review',
+      subtitle: 'Focus on recent settlement blockers and watch items',
+      detail: 'Switches the studio to the 90-day lens that works well for settlement and treasury review.',
+      actionLabel: 'Use 90-Day Scope',
+      onAction: () => setReportWindow('90d'),
+    },
+    {
+      title: 'Annual Reporting View',
+      subtitle: 'Longer-range filing and exception posture',
+      detail: 'Shifts the report scope to the last 12 months for annual oversight and filing support.',
+      actionLabel: 'Use Annual Scope',
+      onAction: () => setReportWindow('365d'),
+    },
+  ];
 
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1662,22 +1781,70 @@ ${filingExceptions
         title="Report Generators"
         description="Generate live operating reports from current ERP, treasury, rail, and exception data."
       >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 16,
-          }}
-        >
-          {reportTools.map((tool) => (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+              padding: 16,
+              borderRadius: 18,
+              border: '1px solid rgba(148,163,184,0.2)',
+              background: 'rgba(15,23,42,0.35)',
+            }}
+          >
+            <div style={{ display: 'grid', gap: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--cf-muted)', fontWeight: 700 }}>
+                Report Entity
+              </label>
+              <select
+                value={reportEntity?.id || ''}
+                onChange={(event) => setReportEntityId(event.target.value)}
+                style={{
+                  minHeight: 42,
+                  padding: '0 12px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.55)',
+                  color: '#e5e7eb',
+                }}
+              >
+                {data.entities.map((entity) => (
+                  <option key={entity.id} value={entity.id}>
+                    {entity.displayName || entity.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--cf-muted)', fontWeight: 700 }}>
+                Report Window
+              </label>
+              <select
+                value={reportWindow}
+                onChange={(event) => setReportWindow(event.target.value as ReportWindowOption)}
+                style={{
+                  minHeight: 42,
+                  padding: '0 12px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.55)',
+                  color: '#e5e7eb',
+                }}
+              >
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+                <option value="365d">Last 12 months</option>
+                <option value="all">Full history</option>
+              </select>
+            </div>
             <WorkbenchRecordCard
-              key={tool.title}
-              title={tool.title}
-              subtitle={tool.subtitle}
+              title="Current Report Scope"
+              subtitle={reportEntity ? reportEntity.displayName || reportEntity.name : 'No entity selected'}
               actionSlot={
                 <button
                   type="button"
-                  onClick={tool.onAction}
+                  onClick={launchFullOperationsPack}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 10,
@@ -1688,13 +1855,85 @@ ${filingExceptions
                     fontWeight: 700,
                   }}
                 >
-                  {tool.actionLabel}
+                  Generate Full Ops Pack
                 </button>
               }
             >
-              {tool.detail}
+              {reportEntity
+                ? `${reportWindowLabel} scope across settlement rails, reserve posture, and operating exceptions for ${reportEntity.displayName || reportEntity.name}.`
+                : 'Choose an entity to generate scoped reporting output.'}
             </WorkbenchRecordCard>
-          ))}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {reportPackPresets.map((tool) => (
+              <WorkbenchRecordCard
+                key={tool.title}
+                title={tool.title}
+                subtitle={tool.subtitle}
+                actionSlot={
+                  <button
+                    type="button"
+                    onClick={tool.onAction}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126, 242, 255, 0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {tool.actionLabel}
+                  </button>
+                }
+              >
+                {tool.detail}
+              </WorkbenchRecordCard>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {reportTools.map((tool) => (
+              <WorkbenchRecordCard
+                key={tool.title}
+                title={tool.title}
+                subtitle={tool.subtitle}
+                actionSlot={
+                  <button
+                    type="button"
+                    onClick={tool.onAction}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126, 242, 255, 0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {tool.actionLabel}
+                  </button>
+                }
+              >
+                {tool.detail}
+              </WorkbenchRecordCard>
+            ))}
+          </div>
         </div>
       </PageSection>
 
