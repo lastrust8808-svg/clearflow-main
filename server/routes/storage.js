@@ -3,9 +3,11 @@ import {
   loadAccountAppData,
   loadAccountDocumentFile,
   loadAccountRemittanceVault,
+  loadAccountTransactionProofVault,
   saveAccountAppData,
   saveAccountDocumentFile,
   saveAccountRemittanceVault,
+  saveAccountTransactionProofVault,
 } from '../services/accountStorage.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
@@ -171,6 +173,66 @@ router.put('/accounts/:accountId/vendors/:vendorId/remittance-instructions', asy
         error instanceof Error
           ? error.message
           : 'Failed to save remittance instructions.',
+    });
+  }
+});
+
+router.get('/accounts/:accountId/transaction-proof-chains', async (req, res) => {
+  try {
+    const record = await loadAccountTransactionProofVault(req.params.accountId);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Encrypted transaction proof chains not found.',
+      });
+    }
+
+    const chains = decryptJson(record.encryptedPayload);
+    return res.status(200).json({
+      success: true,
+      chains,
+      savedAt: record.savedAt,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load encrypted transaction proof chains.',
+    });
+  }
+});
+
+router.put('/accounts/:accountId/transaction-proof-chains', async (req, res) => {
+  const { chains } = req.body || {};
+
+  if (!Array.isArray(chains)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing transaction proof chain payload.',
+    });
+  }
+
+  try {
+    const encryptedPayload = encryptJson(chains);
+    const result = await saveAccountTransactionProofVault(req.params.accountId, {
+      encryptedPayload,
+    });
+
+    return res.status(200).json({
+      success: true,
+      result,
+      chainCount: chains.length,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to save encrypted transaction proof chains.',
     });
   }
 });

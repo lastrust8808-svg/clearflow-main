@@ -5,6 +5,7 @@ import {
   buildObligationLifecycleSummaries,
   type ObligationLifecycleSummary,
 } from '../../services/obligationLifecycle.service';
+import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
 import RecordCard from '../ui/RecordCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
@@ -123,11 +124,15 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
       flow.settlement?.status === 'exception'
   ).length;
   const obligationLifecycleSummaries = buildObligationLifecycleSummaries(data);
+  const transactionProofChains = buildTransactionProofChainViews(data);
   const defaultedObligationCount = obligationLifecycleSummaries.filter(
     (item) => item.stage === 'defaulted'
   ).length;
   const dischargedObligationCount = obligationLifecycleSummaries.filter(
     (item) => item.stage === 'discharged'
+  ).length;
+  const sealedProofChainCount = transactionProofChains.filter(
+    (item) => item.verificationStatus === 'sealed'
   ).length;
 
   const handleStartCure = (obligationId: string) => {
@@ -465,10 +470,45 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
         <StatCard label="Inter-Entity Halves" value={interEntityMoveCount} />
         <StatCard label="N.I. Registers" value={registerCount} />
         <StatCard label="Holder Ledger Entries" value={holderLedgerCount} />
+        <StatCard label="Sealed Proof Chains" value={sealedProofChainCount} />
         <StatCard label="Defaults" value={defaultedObligationCount} />
         <StatCard label="Discharged Obligations" value={dischargedObligationCount} />
         <StatCard label="Auto Reconciled" value={autoMatchedCount} subvalue={`${exceptionCount} need attention`} />
       </div>
+
+      <PageSection
+        title="Encrypted Proof Chains"
+        description="Transactions are chained to their movement identifiers, settlements, payments, and verification tokens, then mirrored into the encrypted backend proof vault."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {transactionProofChains.map((chain) => (
+            <RecordCard
+              key={chain.chainId}
+              title={chain.title}
+              subtitle={`chain ${chain.chainIndex} · ${chain.verificationStatus} · ${chain.date}`}
+            >
+              <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Transaction / settlement:</strong>{' '}
+                  {chain.transactionId} / {chain.settlementId || 'No settlement linked'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Previous chain:</strong>{' '}
+                  {chain.previousChainId || 'Origin chain'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Payments / movement identifiers:</strong>{' '}
+                  {chain.paymentIds.length} payment links / {chain.movementIdentifierIds.length} identifiers
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Verification tokens:</strong>{' '}
+                  {chain.tokenIds.length ? chain.tokenIds.join(', ') : 'No verification tokens linked yet'}
+                </div>
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Default & Discharge Control"

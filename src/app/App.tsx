@@ -7,6 +7,8 @@ import AppShell from '../components/layout/AppShell';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
 import { getStoredMembershipDraft } from '../services/membershipDraft.service';
+import { buildTransactionProofChainEnvelopes } from '../services/transactionProofChain.service';
+import { saveTransactionProofChains } from '../services/transactionProofVault.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
@@ -574,6 +576,7 @@ export default function App({
   const [data, setData] = useState<CoreDataBundle>(coreMockData);
   const hydratedUserIdRef = useRef<string | null>(null);
   const initializedSectionUserIdRef = useRef<string | null>(null);
+  const lastProofChainSignatureRef = useRef<string | null>(null);
 
   const currentUserId = auth.currentUser?.id ?? null;
 
@@ -758,6 +761,64 @@ export default function App({
       setData((prev) => ({ ...prev, entities: mappedAuthEntities }));
     }
   }, [auth.authStatus, data.entities.length, mappedAuthEntities]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId || data.transactions.length === 0) {
+      return;
+    }
+
+    const proofSignature = JSON.stringify({
+      transactions: data.transactions.map((item) => ({
+        id: item.id,
+        settlementId: item.linkedSettlementId,
+        tokenIds: item.linkedTokenIds ?? [],
+      })),
+      settlements: data.settlements.map((item) => ({
+        id: item.id,
+        verificationStatus: item.verificationStatus,
+        tokenizedProofId: item.tokenizedProofId,
+        linkedTokenIds: item.linkedTokenIds ?? [],
+      })),
+      movementIdentifiers: data.movementIdentifiers.map((item) => ({
+        id: item.id,
+        linkedSettlementId: item.linkedSettlementId,
+        linkedPaymentId: item.linkedPaymentId,
+        status: item.status,
+      })),
+    });
+
+    if (lastProofChainSignatureRef.current === proofSignature) {
+      return;
+    }
+
+    lastProofChainSignatureRef.current = proofSignature;
+    let cancelled = false;
+
+    void buildTransactionProofChainEnvelopes(data)
+      .then((chains) => {
+        if (cancelled) {
+          return;
+        }
+
+        return saveTransactionProofChains(currentUserId, chains);
+      })
+      .catch((error) => {
+        console.warn('Failed to save encrypted transaction proof chains.', error);
+        if (!cancelled) {
+          lastProofChainSignatureRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    auth.authStatus,
+    currentUserId,
+    data.movementIdentifiers,
+    data.settlements,
+    data.transactions,
+  ]);
 
   const handleSectionChange = (nextSection: AppSection) => {
     preloadWorkspaceSection(nextSection);
