@@ -100,6 +100,8 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
     (flow) => flow.derivedAutoReconcileStatus === 'matched'
   ).length;
   const interEntityMoveCount = data.interEntityTransfers.length * 2;
+  const registerCount = data.negotiableInstrumentRegisters.length;
+  const holderLedgerCount = data.holderLedgerEntries.length;
   const exceptionCount = settlementFlows.filter(
     (flow) =>
       flow.hasCoverageGap ||
@@ -173,8 +175,96 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
         <StatCard label="Liquid Cash Ready" value={liquidCashReadyCount} />
         <StatCard label="Verified Credits / Debits" value={verifiedCount} />
         <StatCard label="Inter-Entity Halves" value={interEntityMoveCount} />
+        <StatCard label="N.I. Registers" value={registerCount} />
+        <StatCard label="Holder Ledger Entries" value={holderLedgerCount} />
         <StatCard label="Auto Reconciled" value={autoMatchedCount} subvalue={`${exceptionCount} need attention`} />
       </div>
+
+      <PageSection
+        title="Negotiable Instrument Register"
+        description="Issued notes, bonds, futures, and collateral-backed instruments with legal identifiers, current holder, backing rail, and reserve support."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.negotiableInstrumentRegisters.map((record) => (
+            <RecordCard
+              key={record.id}
+              title={record.registerLabel}
+              subtitle={`${record.instrumentForm} · ${record.status} · ${record.legalIdentifier}`}
+            >
+              <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Current holder:</strong>{' '}
+                  {record.currentHolderLabel || 'Not assigned'}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Face / outstanding:</strong>{' '}
+                  {formatMoney(record.faceAmount, record.currency)} /{' '}
+                  {formatMoney(record.outstandingAmount, record.currency)}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Backing rail / treasury:</strong>{' '}
+                  {record.backingCreditRailId || 'No rail linked'} /{' '}
+                  {record.backingTreasuryAccountId || 'No treasury linked'}
+                </div>
+                {record.linkedDocumentIds?.[0] ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => goToHash(`#documents:${record.linkedDocumentIds?.[0]}`)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Open Register Packet
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Holder Ledger"
+        description="Holder-side issue, assignment, presentment, pledge, deposit, and performance entries tied back to instruments, remittances, and settlements."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.holderLedgerEntries.map((entry) => (
+            <RecordCard
+              key={entry.id}
+              title={`${entry.holderLabel} · ${entry.entryType}`}
+              subtitle={`${entry.entryDate} · ${formatMoney(entry.amount, entry.currency)}`}
+            >
+              <div style={{ display: 'grid', gap: 8, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Resulting balance:</strong>{' '}
+                  {formatMoney(entry.resultingBalance, entry.currency)}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Register:</strong> {entry.registerId}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Settlement / remittance:</strong>{' '}
+                  {entry.linkedSettlementId || 'No settlement linked'} /{' '}
+                  {entry.linkedRemittanceStatementId || 'No remittance linked'}
+                </div>
+                {entry.notes ? (
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Notes:</strong> {entry.notes}
+                  </div>
+                ) : null}
+              </div>
+            </RecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Settlement Control Center"

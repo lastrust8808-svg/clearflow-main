@@ -5275,12 +5275,19 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 status: 'active',
                 settlementPath: 'internal_ledger',
                 dischargeMethod: 'internal_ledger_credit',
+                legalUsePosture: 'internal_controlled_book_entry',
+                bankingOperationClass: 'affiliate_cash_management',
+                identifierNamespace: `${(fromEntity.displayName || fromEntity.name)
+                  .replace(/[^A-Za-z0-9]/g, '')
+                  .toUpperCase()
+                  .slice(0, 8)}-AFFIL`,
                 currency: 'USD',
                 exposureLimit: amount * 5,
                 outstandingExposure: amount,
                 availableCredit: amount * 4,
                 autoMirrorIntercompanyEntries: true,
                 autoIssueTokens: true,
+                holderRecordRequired: false,
                 reserveBacked: true,
                 notes: 'Created automatically from ERP intercompany transfer posting.',
               },

@@ -177,6 +177,8 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     entities: seedEntities,
     entityConnections: [],
     creditRails: [],
+    negotiableInstrumentRegisters: [],
+    holderLedgerEntries: [],
     customers: [],
     vendors: [],
     invoices: [],
@@ -230,6 +232,9 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     entities: candidate.entities ?? coreMockData.entities,
     entityConnections: candidate.entityConnections ?? coreMockData.entityConnections,
     creditRails: candidate.creditRails ?? coreMockData.creditRails,
+    negotiableInstrumentRegisters:
+      candidate.negotiableInstrumentRegisters ?? coreMockData.negotiableInstrumentRegisters,
+    holderLedgerEntries: candidate.holderLedgerEntries ?? coreMockData.holderLedgerEntries,
     customers: candidate.customers ?? coreMockData.customers,
     vendors: candidate.vendors ?? coreMockData.vendors,
     invoices: candidate.invoices ?? coreMockData.invoices,

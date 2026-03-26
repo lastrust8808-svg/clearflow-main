@@ -36,6 +36,8 @@ export function useCoreData() {
       entities: coreMockData.entities,
       entityConnections: coreMockData.entityConnections,
       creditRails: coreMockData.creditRails,
+      negotiableInstrumentRegisters: coreMockData.negotiableInstrumentRegisters,
+      holderLedgerEntries: coreMockData.holderLedgerEntries,
       accounts: coreMockData.ledgerAccounts,
       ledgerAccounts: coreMockData.ledgerAccounts,
       assets: coreMockData.assets,

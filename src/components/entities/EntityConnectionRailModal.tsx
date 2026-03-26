@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type {
+  BankingOperationClass,
   CreditRailType,
   EntityConnectionType,
   EntityRecord,
+  RailLegalUsePosture,
   SettlementPath,
   TreasuryAccountRecord,
 } from '../../types/core';
@@ -27,6 +29,9 @@ export interface EntityConnectionRailSubmitPayload {
   railName: string;
   railType: CreditRailType;
   settlementPath: SettlementPath;
+  legalUsePosture: RailLegalUsePosture;
+  bankingOperationClass: BankingOperationClass;
+  identifierNamespace: string;
   creditLimit: string;
   currency: string;
   linkedTreasuryAccountId?: string;
@@ -114,6 +119,11 @@ export default function EntityConnectionRailModal({
   const [railName, setRailName] = useState('');
   const [railType, setRailType] = useState<CreditRailType>('intercompany_credit');
   const [settlementPath, setSettlementPath] = useState<SettlementPath>('internal_ledger');
+  const [legalUsePosture, setLegalUsePosture] =
+    useState<RailLegalUsePosture>('internal_controlled_book_entry');
+  const [bankingOperationClass, setBankingOperationClass] =
+    useState<BankingOperationClass>('private_wealth_treasury');
+  const [identifierNamespace, setIdentifierNamespace] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
   const [currency, setCurrency] = useState(defaultCurrency || 'USD');
   const [linkedTreasuryAccountId, setLinkedTreasuryAccountId] = useState('');
@@ -154,6 +164,15 @@ export default function EntityConnectionRailModal({
     setRailName('');
     setRailType(initialPreset === 'business_partner' ? 'partner_note' : 'intercompany_credit');
     setSettlementPath(initialPreset === 'business_partner' ? 'tokenized_credit' : 'internal_ledger');
+    setLegalUsePosture(
+      initialPreset === 'business_partner'
+        ? 'private_instrument_tracking_only'
+        : 'internal_controlled_book_entry',
+    );
+    setBankingOperationClass(
+      initialPreset === 'business_partner' ? 'partner_note_program' : 'private_wealth_treasury',
+    );
+    setIdentifierNamespace('');
     setCreditLimit('');
     setCurrency(inferredCurrency);
     setLinkedTreasuryAccountId('');
@@ -295,20 +314,50 @@ export default function EntityConnectionRailModal({
             <option value="reserve_bridge">Reserve bridge</option>
             <option value="vendor_credit">Vendor credit</option>
             <option value="peer_settlement">Peer settlement</option>
+            <option value="partner_note">Partner note</option>
           </select>
           <select
             value={settlementPath}
             onChange={(e) => setSettlementPath(e.target.value as SettlementPath)}
             style={inputStyle}
-          >
-            <option value="internal_ledger">Internal ledger</option>
-            <option value="ach">ACH</option>
-            <option value="wire">Wire</option>
-            <option value="wallet">Wallet</option>
+            >
+              <option value="internal_ledger">Internal ledger</option>
+              <option value="ach">ACH</option>
+              <option value="wire">Wire</option>
+              <option value="wallet">Wallet</option>
             <option value="tokenized_credit">Tokenized credit</option>
             <option value="tokenized_debit">Tokenized debit</option>
             <option value="mixed">Mixed</option>
+            </select>
+          <select
+            value={legalUsePosture}
+            onChange={(e) => setLegalUsePosture(e.target.value as RailLegalUsePosture)}
+            style={inputStyle}
+          >
+            <option value="internal_controlled_book_entry">Internal controlled book entry</option>
+            <option value="private_instrument_tracking_only">Private instrument tracking only</option>
+            <option value="partner_bank_required_external_presentment">
+              Partner bank required for outside presentment
+            </option>
+            <option value="hybrid_controlled_settlement">Hybrid controlled settlement</option>
           </select>
+          <select
+            value={bankingOperationClass}
+            onChange={(e) => setBankingOperationClass(e.target.value as BankingOperationClass)}
+            style={inputStyle}
+          >
+            <option value="private_wealth_treasury">Private wealth treasury</option>
+            <option value="affiliate_cash_management">Affiliate cash management</option>
+            <option value="partner_note_program">Partner note program</option>
+            <option value="collateral_control">Collateral control</option>
+            <option value="general_settlement">General settlement</option>
+          </select>
+          <input
+            value={identifierNamespace}
+            onChange={(e) => setIdentifierNamespace(e.target.value)}
+            placeholder="Identifier namespace (e.g. LAS-TRUST-NOTES)"
+            style={inputStyle}
+          />
           <input
             type="number"
             min="0"
@@ -395,6 +444,9 @@ export default function EntityConnectionRailModal({
                 railName,
                 railType,
                 settlementPath,
+                legalUsePosture,
+                bankingOperationClass,
+                identifierNamespace,
                 creditLimit,
                 currency,
                 linkedTreasuryAccountId: linkedTreasuryAccountId || undefined,

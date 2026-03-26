@@ -10,12 +10,14 @@ import type {
   InstrumentRecord,
   InstrumentSettlementRecord,
   MovementIdentifierRecord,
+  NegotiableInstrumentRegisterRecord,
   ObligationRecord,
   SettlementRecord,
   TokenRecord,
   TransactionRecord,
   TreasuryAccountRecord,
   WalletRecord,
+  HolderLedgerEntryRecord,
 } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
 import { saveDocumentFile } from '../../services/documentVault.service';
@@ -649,6 +651,9 @@ export default function EntityResourceStudio({
         const depositSettlementId = reserveDepositEnabled ? buildId('set') : null;
         const instrumentSettlementId = reserveDepositEnabled ? buildId('iset') : null;
         const movementIdentifierId = reserveDepositEnabled ? buildId('mid') : null;
+        const registerId = buildId('nir');
+        const holderLedgerIssueId = buildId('hle');
+        const holderLedgerDepositId = reserveDepositEnabled ? buildId('hle') : null;
         const nextRecord: InstrumentRecord = {
           id: instrumentId,
           entityId,
@@ -799,10 +804,80 @@ export default function EntityResourceStudio({
                 notes: 'Auto-performed on entry of source-backed reserve deposit.',
               }
             : null;
+        const registerRecord: NegotiableInstrumentRegisterRecord = {
+          id: registerId,
+          entityId,
+          instrumentId,
+          legalIdentifier,
+          registerLabel: `${nextRecord.title} Register`,
+          instrumentForm:
+            sourceClass === 'bond'
+              ? 'bond'
+              : sourceClass === 'future'
+                ? 'future'
+                : sourceClass === 'collateral'
+                  ? 'collateral_memorandum'
+                  : 'note',
+          status: reserveDepositEnabled ? 'performed' : 'issued',
+          issueDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+          maturityDate: nextRecord.maturityDate,
+          issuerEntityId: entityId,
+          currentHolderEntityId: entityId,
+          currentHolderLabel: selectedEntity.displayName || selectedEntity.name,
+          backingTreasuryAccountId: linkedTreasuryAccount?.id,
+          faceAmount: denominationValue,
+          outstandingAmount: reserveDepositEnabled ? 0 : denominationValue,
+          currency: formState.currency || 'USD',
+          linkedSettlementIds: autoPerformance?.linkedSettlementId ? [autoPerformance.linkedSettlementId] : undefined,
+          linkedDocumentIds: [instrumentDocument.id],
+          linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+          notes: 'Generated automatically from Entity Resource Studio instrument creation.',
+        };
+        const holderLedgerEntries: HolderLedgerEntryRecord[] = [
+          {
+            id: holderLedgerIssueId,
+            entityId,
+            registerId,
+            entryDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+            entryType: 'issue',
+            holderEntityId: entityId,
+            holderLabel: selectedEntity.displayName || selectedEntity.name,
+            amount: denominationValue,
+            currency: formState.currency || 'USD',
+            resultingBalance: denominationValue,
+            linkedInstrumentId: instrumentId,
+            linkedDocumentIds: [instrumentDocument.id],
+            linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+            notes: 'Initial issuance entry generated from the resource desk.',
+          },
+          ...(reserveDepositEnabled && holderLedgerDepositId && depositSettlement
+            ? [
+                {
+                  id: holderLedgerDepositId,
+                  entityId,
+                  registerId,
+                  entryDate: formState.instrumentDate || new Date().toISOString().slice(0, 10),
+                  entryType: 'deposit' as const,
+                  holderEntityId: entityId,
+                  holderLabel: linkedTreasuryAccount?.name || (selectedEntity.displayName || selectedEntity.name),
+                  amount: denominationValue,
+                  currency: formState.currency || 'USD',
+                  resultingBalance: 0,
+                  linkedInstrumentId: instrumentId,
+                  linkedSettlementId: depositSettlement.id,
+                  linkedDocumentIds: [instrumentDocument.id],
+                  linkedTokenIds: instrumentToken ? [instrumentToken.id] : undefined,
+                  notes: 'Reserve deposit and auto-performance recorded on creation.',
+                },
+              ]
+            : []),
+        ];
 
         return {
           ...prev,
           instruments: [nextRecord, ...prev.instruments],
+          negotiableInstrumentRegisters: [registerRecord, ...prev.negotiableInstrumentRegisters],
+          holderLedgerEntries: [...holderLedgerEntries, ...prev.holderLedgerEntries],
           documents: [instrumentDocument, ...prev.documents],
           assets: depositedAsset ? [depositedAsset, ...prev.assets] : prev.assets,
           transactions: depositTransaction ? [depositTransaction, ...prev.transactions] : prev.transactions,

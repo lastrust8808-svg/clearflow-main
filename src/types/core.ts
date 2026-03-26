@@ -237,6 +237,39 @@ export type CreditRailType =
   | 'peer_settlement'
   | 'partner_note';
 export type CreditRailStatus = 'draft' | 'active' | 'watch' | 'blocked' | 'closed';
+export type RailLegalUsePosture =
+  | 'internal_controlled_book_entry'
+  | 'private_instrument_tracking_only'
+  | 'partner_bank_required_external_presentment'
+  | 'hybrid_controlled_settlement';
+export type BankingOperationClass =
+  | 'private_wealth_treasury'
+  | 'affiliate_cash_management'
+  | 'partner_note_program'
+  | 'collateral_control'
+  | 'general_settlement';
+export type NegotiableInstrumentForm =
+  | 'note'
+  | 'bond'
+  | 'future'
+  | 'collateral_memorandum'
+  | 'other';
+export type NegotiableInstrumentStatus =
+  | 'draft'
+  | 'issued'
+  | 'assigned'
+  | 'presented'
+  | 'performed'
+  | 'disputed'
+  | 'retired';
+export type HolderLedgerEntryType =
+  | 'issue'
+  | 'assignment'
+  | 'deposit'
+  | 'presentment'
+  | 'performance'
+  | 'pledge'
+  | 'release';
 
 export type TokenStatus = 'draft' | 'issued' | 'verified' | 'revoked';
 export type RecurrenceFrequency =
@@ -610,6 +643,9 @@ export interface CreditRailRecord {
   status: CreditRailStatus;
   settlementPath: SettlementPath;
   dischargeMethod: DischargeMethod;
+  legalUsePosture?: RailLegalUsePosture;
+  bankingOperationClass?: BankingOperationClass;
+  identifierNamespace?: string;
   currency: string;
   exposureLimit?: number;
   outstandingExposure?: number;
@@ -622,7 +658,55 @@ export interface CreditRailRecord {
   autoIssueTokens?: boolean;
   autoCreateNoteRemittance?: boolean;
   noteSettlementMode?: 'holder_presentment' | 'issuer_performance' | 'manual_review';
+  holderRecordRequired?: boolean;
   reserveBacked?: boolean;
+  notes?: string;
+}
+
+export interface NegotiableInstrumentRegisterRecord {
+  id: string;
+  entityId: string;
+  instrumentId?: string;
+  obligationId?: string;
+  legalIdentifier: string;
+  registerLabel: string;
+  instrumentForm: NegotiableInstrumentForm;
+  status: NegotiableInstrumentStatus;
+  issueDate: string;
+  maturityDate?: string;
+  issuerEntityId: string;
+  currentHolderEntityId?: string;
+  currentHolderConnectionId?: string;
+  currentHolderLabel?: string;
+  backingCreditRailId?: string;
+  backingTreasuryAccountId?: string;
+  faceAmount: number;
+  outstandingAmount: number;
+  currency: string;
+  linkedSettlementIds?: string[];
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
+  notes?: string;
+}
+
+export interface HolderLedgerEntryRecord {
+  id: string;
+  entityId: string;
+  registerId: string;
+  entryDate: string;
+  entryType: HolderLedgerEntryType;
+  holderEntityId?: string;
+  holderConnectionId?: string;
+  holderLabel: string;
+  amount: number;
+  currency: string;
+  resultingBalance: number;
+  linkedInstrumentId?: string;
+  linkedObligationId?: string;
+  linkedSettlementId?: string;
+  linkedRemittanceStatementId?: string;
+  linkedDocumentIds?: string[];
+  linkedTokenIds?: string[];
   notes?: string;
 }
 
@@ -1482,6 +1566,8 @@ export interface CoreDataBundle {
   entities: EntityRecord[];
   entityConnections: EntityConnectionRecord[];
   creditRails: CreditRailRecord[];
+  negotiableInstrumentRegisters: NegotiableInstrumentRegisterRecord[];
+  holderLedgerEntries: HolderLedgerEntryRecord[];
   customers: CustomerRecord[];
   vendors: VendorRecord[];
   invoices: InvoiceRecord[];

@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { ComplianceStatus, CoreDataBundle } from '../../types/core';
+import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 
@@ -48,6 +49,7 @@ export default function ComplianceWorkbenchPage({
   data,
   setData,
 }: ComplianceWorkbenchPageProps) {
+  const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
   const reviewCount = data.complianceTags.filter((item) => item.status === 'review').length;
   const digitalReviewCount = data.digitalAssetCompliance.filter(
     (item) =>
@@ -57,6 +59,9 @@ export default function ComplianceWorkbenchPage({
   const dueSoon = data.complianceTags.filter((item) => item.dueDate).length;
   const filingReadyCount = data.taxReportingLinks.filter(
     (item) => item.status === 'draft' || item.status === 'corrected',
+  ).length;
+  const wealthRailWatchCount = privateWealthRailSummaries.filter(
+    (item) => item.overallStatus !== 'ready',
   ).length;
 
   const updateComplianceTag = (
@@ -153,7 +158,83 @@ export default function ComplianceWorkbenchPage({
         <StatCard label="Dated Obligations" value={dueSoon} />
         <StatCard label="Tax Filing Links" value={data.taxReportingLinks.length} />
         <StatCard label="Filing Review Queue" value={filingReadyCount} />
+        <StatCard label="Wealth Rail Watchlist" value={wealthRailWatchCount} />
       </div>
+
+      <PageSection
+        title="Private Wealth Rail Oversight"
+        description="Track which rails are suitable only for internal controlled booking, private instrument tracking, or which ones still require a partner bank or outside presentment channel."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {privateWealthRailSummaries.map((summary) => (
+            <div key={summary.railId} style={cardStyle}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{summary.railName}</div>
+                  <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                    {summary.connectionName} | {summary.legalUsePosture.replace(/_/g, ' ')} |{' '}
+                    {summary.overallStatus}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => goToHash('#entities')}
+                  style={chipStyle(false)}
+                >
+                  Open Entity Rails
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Identifier Namespace</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>{summary.identifierNamespace}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Operation Class</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {summary.bankingOperationClass.replace(/_/g, ' ')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Outstanding Exposure</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    USD {summary.outstandingExposure.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <textarea
+                readOnly
+                value={
+                  summary.warnings.length
+                    ? summary.warnings.join('\n')
+                    : 'No additional control warnings.'
+                }
+                style={{
+                  ...inputStyle,
+                  minHeight: 96,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Priority Queue"

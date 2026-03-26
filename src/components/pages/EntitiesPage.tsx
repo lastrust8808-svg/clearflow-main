@@ -9,6 +9,7 @@ import EntityQuickAddModal from '../entities/EntityQuickAddModal';
 import EntityConnectionRailModal from '../entities/EntityConnectionRailModal';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
+import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 
 interface EntitiesPageProps {
   data: CoreDataBundle;
@@ -50,6 +51,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
     data.entities.map((entity) => [entity.id, entity.displayName || entity.name]),
   );
   const treasuryNameById = new Map(data.treasuryAccounts.map((account) => [account.id, account.name]));
+  const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
 
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
@@ -226,6 +228,9 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
           const obligationId = payload.autoCreateNoteRemittance ? `obl-${stamp}` : null;
           const remittanceId = payload.autoCreateNoteRemittance ? `rem-${stamp}` : null;
           const instrumentSettlementId = payload.autoCreateNoteRemittance ? `iset-${stamp}` : null;
+          const registerId = payload.autoCreateNoteRemittance ? `nir-${stamp}` : null;
+          const holderLedgerIssueId = payload.autoCreateNoteRemittance ? `hle-${stamp}-issue` : null;
+          const holderLedgerPresentmentId = payload.autoCreateNoteRemittance ? `hle-${stamp}-present` : null;
           const connectionName =
             payload.connectionName.trim() ||
             (connectedEntity
@@ -235,7 +240,26 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
             payload.railName.trim() ||
             `${connectionName} ${payload.settlementPath.replace(/_/g, ' ')} rail`;
           const creditLimit = Number(payload.creditLimit || 0);
+          const identifierNamespace =
+            payload.identifierNamespace.trim() ||
+            `${(ownerEntity.displayName || ownerEntity.name)
+              .replace(/[^A-Za-z0-9]/g, '')
+              .toUpperCase()
+              .slice(0, 8)}-RAIL`;
+          const noteIdentifier = `${identifierNamespace}-NOTE-${new Date()
+            .toISOString()
+            .slice(0, 10)
+            .replace(/-/g, '')}-${String(stamp).slice(-4)}`;
+          const obligationIdentifier = `${identifierNamespace}-OBL-${new Date()
+            .toISOString()
+            .slice(0, 10)
+            .replace(/-/g, '')}-${String(stamp).slice(-4)}`;
           const packetTitle = `${connectionName} Connection Packet`;
+          const complianceTagId =
+            payload.legalUsePosture === 'partner_bank_required_external_presentment' ||
+            payload.relationshipClass === 'business_partner'
+              ? `cmp-${stamp}`
+              : null;
 
           setData((prev) => ({
             ...prev,
@@ -278,6 +302,9 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                     : payload.settlementPath === 'internal_ledger'
                       ? 'internal_ledger_credit'
                       : 'bank_rail_payment',
+                legalUsePosture: payload.legalUsePosture,
+                bankingOperationClass: payload.bankingOperationClass,
+                identifierNamespace,
                 currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
                 exposureLimit: creditLimit || undefined,
                 outstandingExposure: 0,
@@ -291,6 +318,8 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                 noteSettlementMode: payload.autoCreateNoteRemittance
                   ? 'holder_presentment'
                   : undefined,
+                holderRecordRequired:
+                  payload.railType === 'partner_note' || payload.relationshipClass === 'business_partner',
                 reserveBacked: payload.reserveBacked,
                 notes: payload.notes.trim() || undefined,
               },
@@ -304,10 +333,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                       entityId: payload.ownerEntityId,
                       title: `${connectionName} Partner Note`,
                       instrumentType: 'promissory_note',
-                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
-                        .replace(/[^A-Za-z0-9]/g, '')
-                        .toUpperCase()
-                        .slice(0, 6)}-NOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      legalIdentifier: noteIdentifier,
                       sourceClass: 'note',
                       issuerEntityId: payload.ownerEntityId,
                       counterpartyEntityId: payload.connectedEntityId,
@@ -335,10 +361,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                       id: obligationId,
                       entityId: payload.ownerEntityId,
                       title: `${connectionName} Partner Obligation`,
-                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
-                        .replace(/[^A-Za-z0-9]/g, '')
-                        .toUpperCase()
-                        .slice(0, 6)}-OBL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      legalIdentifier: obligationIdentifier,
                       obligationType: 'private_obligation',
                       amount: creditLimit || 0,
                       paymentMedium: 'private_tender',
@@ -359,10 +382,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                       id: instrumentSettlementId,
                       entityId: payload.ownerEntityId,
                       title: `${connectionName} Partner Presentment Flow`,
-                      legalIdentifier: `${(ownerEntity.displayName || ownerEntity.name)
-                        .replace(/[^A-Za-z0-9]/g, '')
-                        .toUpperCase()
-                        .slice(0, 6)}-NOTE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stamp).slice(-4)}`,
+                      legalIdentifier: noteIdentifier,
                       instrumentId: noteInstrumentId,
                       obligationId,
                       treasuryAccountId: payload.linkedTreasuryAccountId,
@@ -382,6 +402,101 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                     ...prev.instrumentSettlements,
                   ]
                 : prev.instrumentSettlements,
+            negotiableInstrumentRegisters:
+              payload.autoCreateNoteRemittance && registerId && noteInstrumentId
+                ? [
+                    {
+                      id: registerId,
+                      entityId: payload.ownerEntityId,
+                      instrumentId: noteInstrumentId,
+                      obligationId: obligationId || undefined,
+                      legalIdentifier: noteIdentifier,
+                      registerLabel: `${connectionName} Partner Register`,
+                      instrumentForm: 'note',
+                      status: 'issued',
+                      issueDate: new Date().toISOString().slice(0, 10),
+                      issuerEntityId: payload.ownerEntityId,
+                      currentHolderEntityId: payload.connectedEntityId,
+                      currentHolderConnectionId: connectionId,
+                      currentHolderLabel:
+                        connectedEntity?.displayName ||
+                        connectedEntity?.name ||
+                        payload.connectedUserLabel ||
+                        payload.connectedWorkspaceLabel ||
+                        'Connected holder',
+                      backingCreditRailId: railId,
+                      backingTreasuryAccountId: payload.linkedTreasuryAccountId,
+                      faceAmount: creditLimit || 0,
+                      outstandingAmount: creditLimit || 0,
+                      currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                      linkedDocumentIds: [documentId],
+                      linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                      notes: 'Auto-generated from business partner connection setup.',
+                    },
+                    ...prev.negotiableInstrumentRegisters,
+                  ]
+                : prev.negotiableInstrumentRegisters,
+            holderLedgerEntries:
+              payload.autoCreateNoteRemittance && registerId
+                ? [
+                    ...(holderLedgerPresentmentId && remittanceId
+                      ? [
+                          {
+                            id: holderLedgerPresentmentId,
+                            entityId: payload.ownerEntityId,
+                            registerId,
+                            entryDate: new Date().toISOString().slice(0, 10),
+                            entryType: 'presentment' as const,
+                            holderEntityId: payload.connectedEntityId,
+                            holderConnectionId: connectionId,
+                            holderLabel:
+                              connectedEntity?.displayName ||
+                              connectedEntity?.name ||
+                              payload.connectedUserLabel ||
+                              payload.connectedWorkspaceLabel ||
+                              'Connected holder',
+                            amount: creditLimit || 0,
+                            currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                            resultingBalance: creditLimit || 0,
+                            linkedInstrumentId: noteInstrumentId || undefined,
+                            linkedObligationId: obligationId || undefined,
+                            linkedRemittanceStatementId: remittanceId,
+                            linkedDocumentIds: [documentId],
+                            linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                            notes: 'Initial holder presentment lane opened with the partner note rail.',
+                          },
+                        ]
+                      : []),
+                    ...(holderLedgerIssueId
+                      ? [
+                          {
+                            id: holderLedgerIssueId,
+                            entityId: payload.ownerEntityId,
+                            registerId,
+                            entryDate: new Date().toISOString().slice(0, 10),
+                            entryType: 'issue' as const,
+                            holderEntityId: payload.connectedEntityId,
+                            holderConnectionId: connectionId,
+                            holderLabel:
+                              connectedEntity?.displayName ||
+                              connectedEntity?.name ||
+                              payload.connectedUserLabel ||
+                              payload.connectedWorkspaceLabel ||
+                              'Connected holder',
+                            amount: creditLimit || 0,
+                            currency: payload.currency.trim() || prev.workspaceSettings.baseCurrency,
+                            resultingBalance: creditLimit || 0,
+                            linkedInstrumentId: noteInstrumentId || undefined,
+                            linkedObligationId: obligationId || undefined,
+                            linkedDocumentIds: [documentId],
+                            linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                            notes: 'Initial holder issuance entry generated from business partner setup.',
+                          },
+                        ]
+                      : []),
+                    ...prev.holderLedgerEntries,
+                  ]
+                : prev.holderLedgerEntries,
             remittanceStatements:
               payload.autoCreateNoteRemittance && remittanceId && obligationId
                 ? [
@@ -417,6 +532,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                 status: 'draft',
                 outputStatus: 'drafting',
                 linkedTokenIds: payload.requireVerificationTokens ? [tokenId] : undefined,
+                linkedComplianceTagIds: complianceTagId ? [complianceTagId] : undefined,
                 summary:
                   'Connection and credit rail packet created for inter-entity or cross-user settlement controls.',
                 generatedBody: [
@@ -447,6 +563,26 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
               },
               ...prev.documents,
             ],
+            complianceTags: complianceTagId
+              ? [
+                  {
+                    id: complianceTagId,
+                    entityId: payload.ownerEntityId,
+                    label:
+                      payload.legalUsePosture === 'partner_bank_required_external_presentment'
+                        ? `${connectionName} external presentment review`
+                        : `${connectionName} business partner rail review`,
+                    category: 'risk',
+                    status: 'review',
+                    linkedDocumentIds: [documentId],
+                    notes:
+                      payload.legalUsePosture === 'partner_bank_required_external_presentment'
+                        ? 'This rail requires a partner bank or outside rail before external presentment.'
+                        : 'Business partner note/remittance rail should be reviewed for holder records, identifiers, and release controls.',
+                  },
+                  ...prev.complianceTags,
+                ]
+              : prev.complianceTags,
             tokens: payload.requireVerificationTokens
               ? [
                   {
@@ -739,6 +875,46 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
           {!data.entityConnections.length ? (
             <WorkbenchRecordCard title="No connection rails yet" subtitle="Create the first internal or external rail">
               Use connection rails to define who can settle with whom, which reserve or treasury accounts back the moves, and how much exposure the relationship can carry before review.
+            </WorkbenchRecordCard>
+          ) : null}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Private Wealth Banking Rail Board"
+        description="See how each rail is being used operationally: internal controlled book-entry only, private instrument tracking, or partner-bank-required external presentment."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {privateWealthRailSummaries.map((summary) => (
+            <WorkbenchRecordCard
+              key={summary.railId}
+              title={summary.railName}
+              subtitle={`${summary.connectionName} · ${summary.bankingOperationClass.replace(/_/g, ' ')}`}
+              summaryItems={[
+                { label: 'Use Posture', value: summary.legalUsePosture.replace(/_/g, ' ') },
+                { label: 'Status', value: summary.overallStatus },
+                { label: 'Identifier', value: summary.identifierNamespace },
+                {
+                  label: 'Outstanding',
+                  value: `USD ${summary.outstandingExposure.toLocaleString()}`,
+                },
+                {
+                  label: 'Available',
+                  value:
+                    summary.availableCredit !== undefined
+                      ? `USD ${summary.availableCredit.toLocaleString()}`
+                      : 'Open',
+                },
+              ]}
+            >
+              {summary.warnings.length
+                ? `Open control points: ${summary.warnings.join(' · ')}`
+                : 'Control posture is aligned for the selected operating use.'}
+            </WorkbenchRecordCard>
+          ))}
+          {!privateWealthRailSummaries.length ? (
+            <WorkbenchRecordCard title="No wealth rails yet" subtitle="Create a connection rail first">
+              Once a rail exists, ClearFlow will classify whether it is suitable for internal book-entry control, private instrument tracking, or outside presentment that still needs a bank or external rail partner.
             </WorkbenchRecordCard>
           ) : null}
         </div>

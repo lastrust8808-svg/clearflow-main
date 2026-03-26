@@ -5,6 +5,7 @@ import {
 } from '../../services/documentStorage.service';
 import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
+import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -21,6 +22,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   };
   const settlementFlows = buildSettlementFlowViews(data);
   const remittanceRailControls = buildRemittanceRailControls(data);
+  const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -60,6 +62,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const activeCreditRails = data.creditRails.filter((item) => item.status === 'active').length;
   const watchedCreditRails = data.creditRails.filter(
     (item) => item.status === 'watch' || item.status === 'blocked',
+  ).length;
+  const partnerBankRequiredCount = privateWealthRailSummaries.filter(
+    (item) => item.legalUsePosture === 'partner_bank_required_external_presentment',
   ).length;
   const internalRetentionLedgerCount = data.ledgerAccounts.filter((item) =>
     item.name.includes('ClearFlow Retained Security Instruments Held')
@@ -148,6 +153,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Entity Connections" value={activeEntityConnections} />
         <StatCard label="Active Credit Rails" value={activeCreditRails} />
         <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
+        <StatCard label="Partner-Bank Required" value={partnerBankRequiredCount} />
         <StatCard
           label="Rail Exceptions"
           value={
@@ -206,6 +212,41 @@ export default function OverviewPage({ data }: OverviewPageProps) {
               posture needs review before another movement should clear.
             </div>
           </RecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Private Wealth Banking Use"
+        description="A control view of which rails are internal-book only, instrument-tracking only, or still require a partner bank or outside rail for presentment."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {privateWealthRailSummaries.slice(0, 4).map((summary) => (
+            <RecordCard
+              key={summary.railId}
+              title={summary.railName}
+              subtitle={summary.legalUsePosture.replace(/_/g, ' ')}
+            >
+              <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Identifier namespace:</strong>{' '}
+                  {summary.identifierNamespace}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Operation class:</strong>{' '}
+                  {summary.bankingOperationClass.replace(/_/g, ' ')}
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--cf-text)' }}>Status:</strong> {summary.overallStatus}
+                </div>
+              </div>
+            </RecordCard>
+          ))}
         </div>
       </PageSection>
 
