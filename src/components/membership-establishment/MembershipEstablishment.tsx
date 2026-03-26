@@ -14,9 +14,23 @@ import {
 
 interface MembershipEstablishmentProps {
   selectedPath: OnboardingPath;
+  onSelectPath: (path: OnboardingPath) => void;
   onBack: () => void;
   onContinue: (draft: MembershipIntakeDraft) => void;
 }
+
+const pathCards: {
+  id: OnboardingPath;
+  title: string;
+  badge: string;
+}[] = [
+  { id: 'trust_estate', title: 'Trust / Estate', badge: 'Fiduciary' },
+  { id: 'business_entity', title: 'Business Entity', badge: 'Entity' },
+  { id: 'tax_exempt', title: 'Tax-Exempt', badge: 'Restricted' },
+  { id: 'private_membership', title: 'Private Membership / PMA', badge: 'Private' },
+  { id: 'personal', title: 'Personal', badge: 'Individual' },
+  { id: 'other_custom', title: 'Other / Custom Intake', badge: 'Custom' },
+];
 
 const pathLabels: Record<OnboardingPath, string> = {
   trust_estate: 'Trust / Estate',
@@ -29,6 +43,7 @@ const pathLabels: Record<OnboardingPath, string> = {
 
 export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = ({
   selectedPath,
+  onSelectPath,
   onBack,
   onContinue,
 }) => {
@@ -207,6 +222,38 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
+            <div className="mb-6">
+              <div className="mb-3 text-sm font-medium text-slate-300">Account / entity type</div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {pathCards.map((card) => {
+                  const isActive = card.id === selectedPath;
+
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      onClick={() => onSelectPath(card.id)}
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                        isActive
+                          ? 'border-cyan-400/40 bg-cyan-500/10'
+                          : 'border-slate-800 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-950/70'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-sm font-semibold text-white">{card.title}</div>
+                        <div className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-200">
+                          {card.badge}
+                        </div>
+                      </div>
+                      <div className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
+                        {isActive ? 'Selected' : 'Tap to use'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-200">
