@@ -264,6 +264,10 @@ export default function AppShell({
     () => formatRouteLabel(currentHash, activeSection),
     [activeSection, currentHash]
   );
+  const isSectionSubroute = useMemo(
+    () => Boolean(currentHash && currentHash !== `#${activeSection}`),
+    [activeSection, currentHash]
+  );
   const isCurrentRoutePinned = useMemo(
     () => pinnedRoutes.some((route) => route.hash === currentHash),
     [currentHash, pinnedRoutes]
@@ -829,6 +833,24 @@ export default function AppShell({
                       }}
                     >
                       Resume {resumeRoutes[0].label}
+                    </button>
+                  ) : null}
+                  {isSectionSubroute ? (
+                    <button
+                      type="button"
+                      onClick={() => goToHash(`#${activeSection}`)}
+                      style={{
+                        minHeight: 42,
+                        padding: '0 14px',
+                        borderRadius: 14,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.04)',
+                        color: 'var(--cf-text)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Back to {activeItem.label}
                     </button>
                   ) : null}
                   <button
