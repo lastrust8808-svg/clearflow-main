@@ -337,6 +337,8 @@ export default function AppShell({
     ),
     [activeRouteLabel, currentHash, filteredLauncherItems, palettePinnedRoutes, paletteRecentRoutes]
   );
+  const launcherResultCount = filteredLauncherItems.length;
+  const routeMemoryCount = pinnedRoutes.length + recentRoutes.length;
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
@@ -871,6 +873,41 @@ export default function AppShell({
                   </div>
                   <div style={{ color: 'var(--cf-muted)', marginTop: 4, lineHeight: 1.55, fontSize: 13 }}>
                     Refresh now returns to this active desk instead of restarting the app flow.
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.03)',
+                        fontSize: 12,
+                        color: 'var(--cf-muted)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {pinnedRoutes.length} pinned
+                    </div>
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.03)',
+                        fontSize: 12,
+                        color: 'var(--cf-muted)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {recentRoutes.length} recent
+                    </div>
                   </div>
                 </div>
                 <div
@@ -1435,7 +1472,7 @@ export default function AppShell({
                   </div>
                 </div>
               ) : null}
-              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ display: 'grid', gap: 8 }}>
                 <div
                   style={{
                     fontSize: 11,
@@ -1446,7 +1483,7 @@ export default function AppShell({
                 >
                   Results
                 </div>
-                <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ display: 'grid', gap: 8 }}>
                   {filteredLauncherItems.map((item) => {
                     const resultIndex = paletteResults.findIndex(
                       (candidate) => candidate.hash === item.hash
@@ -1497,6 +1534,30 @@ export default function AppShell({
                     </div>
                   ) : null}
                 </div>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: '14px 18px',
+                borderTop: '1px solid var(--cf-border)',
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                gap: 12,
+                background: 'rgba(255,255,255,0.02)',
+                color: 'var(--cf-muted)',
+                fontSize: 12,
+              }}
+            >
+              <div style={{ display: 'inline-flex', gap: 14, flexWrap: 'wrap' }}>
+                <span>{paletteResults.length} quick-open routes</span>
+                <span>{launcherResultCount} search results</span>
+                <span>{routeMemoryCount} remembered routes</span>
+              </div>
+              <div style={{ display: 'inline-flex', gap: 14, flexWrap: 'wrap' }}>
+                <span>Arrow keys move</span>
+                <span>Enter opens</span>
+                <span>Esc closes</span>
               </div>
             </div>
           </div>
