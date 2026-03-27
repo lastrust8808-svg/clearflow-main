@@ -10,6 +10,7 @@ import type {
 } from '../services/localAuth.service';
 import {
   authenticateLocalPassword,
+  findLocalAccountByGoogleEmail,
   saveLocalAuthAppData,
   startLocalAuthChallenge,
   upsertLocalBackupAccount,
@@ -145,6 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const handleCredentialResponse = useCallback((response: any) => {
     const idToken = response.credential;
     const decodedToken = JSON.parse(atob(idToken.split('.')[1]));
+    userDataService.setActiveUserEmail(decodedToken.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
       name: decodedToken.name,
@@ -173,6 +175,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const profile = await profileResponse.json();
+    userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
       name: profile.name || profile.email,
@@ -376,24 +379,100 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [state.apiAccessToken, state.appData, state.status, state.token, tokenClient]);
 
   useEffect(() => {
+    const hasCompletedGoogleWorkspace = (appData: AppData) =>
+      Boolean(appData.user.clearflowTermsAcceptedAt) &&
+      Boolean(appData.entities.length || appData.coreDataSnapshot?.entities?.length);
+
+    const mergeGoogleIdentity = (appData: AppData, googleIdentity: { name: string; email: string }) => ({
+      ...appData,
+      user: {
+        ...appData.user,
+        name: appData.user.name || googleIdentity.name,
+        email: googleIdentity.email,
+        primaryContactType: 'google' as const,
+      },
+    });
+
     const checkDrive = async () => {
       if (state.status === 'pending-drive-check' && state.apiAccessToken && state.gsiUser) {
         try {
-          const loadedData = await userDataService.loadUserData(state.apiAccessToken);
+          userDataService.setActiveUserEmail(state.gsiUser.email);
+          const loadedData = await userDataService.loadUserData(
+            state.apiAccessToken,
+            state.gsiUser.email
+          );
           if (loadedData) { // Existing user
-            if (loadedData.user.isVerified) {
-              setState(current => ({ ...current, status: 'authenticated', appData: loadedData, gsiUser: null }));
-            } else {
-              setState(current => ({ ...current, status: 'pending-verification', appData: loadedData, gsiUser: null }));
-            }
+            const mergedAppData = mergeGoogleIdentity(loadedData, state.gsiUser);
+            setState(current => ({
+              ...current,
+              status: hasCompletedGoogleWorkspace(mergedAppData)
+                ? 'authenticated'
+                : 'pending-profile-setup',
+              appData: mergedAppData,
+              gsiUser: null,
+            }));
           } else { // New user
-            const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false };
+            const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
+            if (localGoogleMatch) {
+              let recoveredAppData = localGoogleMatch.appData;
+
+              try {
+                const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
+                if (durableAppData) {
+                  recoveredAppData = durableAppData;
+                  saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
+                }
+              } catch (error) {
+                console.warn('Unable to load durable Google-linked workspace. Falling back to local recovery.', error);
+              }
+
+              const mergedAppData = mergeGoogleIdentity(recoveredAppData, state.gsiUser);
+              needsDriveCatchUpRef.current = true;
+              setState((current) => ({
+                ...current,
+                localAccountId: localGoogleMatch.userId,
+                status: hasCompletedGoogleWorkspace(mergedAppData)
+                  ? 'authenticated'
+                  : 'pending-profile-setup',
+                appData: mergedAppData,
+                gsiUser: null,
+              }));
+              return;
+            }
+
+            const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
             const newAppData: AppData = { user: newUser, entities: [] };
             setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
           }
         } catch (error) {
           console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
-          const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false };
+          const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
+          if (localGoogleMatch) {
+            const mergedAppData = {
+              ...localGoogleMatch.appData,
+              user: {
+                ...localGoogleMatch.appData.user,
+                name: localGoogleMatch.appData.user.name || state.gsiUser.name,
+                email: state.gsiUser.email,
+                primaryContactType: 'google' as const,
+              },
+            };
+            needsDriveCatchUpRef.current = true;
+            setState((current) => ({
+              ...current,
+              localAccountId: localGoogleMatch.userId,
+              status:
+                Boolean(mergedAppData.user.clearflowTermsAcceptedAt) &&
+                Boolean(mergedAppData.entities.length || mergedAppData.coreDataSnapshot?.entities?.length)
+                  ? 'authenticated'
+                  : 'pending-profile-setup',
+              appData: mergedAppData,
+              gsiUser: null,
+            }));
+            return;
+          }
+
+          const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
           const newAppData: AppData = { user: newUser, entities: [] };
           setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
         }
@@ -925,7 +1004,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       email: email || state.appData.user.email,
       phone: phone || state.appData.user.phone,
       userHandle: userHandle || state.appData.user.userHandle,
-      isVerified: false,
+      isVerified: Boolean(state.apiAccessToken) || state.appData.user.isVerified,
+      primaryContactType: state.appData.user.primaryContactType || (state.apiAccessToken ? 'google' : state.appData.user.primaryContactType),
     };
     const acceptedAt = new Date().toISOString();
     const enrichedAppData = enrichAppDataFromMembershipDraft({
@@ -939,18 +1019,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     if (state.apiAccessToken) {
-      // Real GSI flow with Drive persistence
-      initialDataLoaded.current = true; // Mark as loaded to prevent immediate re-save
+      // Real Google flow with Drive persistence and durable email-linked recovery.
+      initialDataLoaded.current = true;
+      userDataService.setActiveUserEmail(finalAppData.user.email);
       Promise.resolve(
-        userHandle?.trim() || password?.trim()
-          ? upsertLocalBackupAccount({
-              appData: finalAppData,
-              preferredContactType:
-                finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
-              userHandle,
-              password,
-            })
-          : null
+        upsertLocalBackupAccount({
+          appData: finalAppData,
+          preferredContactType:
+            finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
+          userHandle,
+          password,
+        })
       )
         .then((backupAccountId) =>
           userDataService.saveUserData(state.apiAccessToken!, finalAppData).then(() => backupAccountId)
@@ -960,8 +1039,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ...s,
             appData: finalAppData,
             localAccountId: backupAccountId || s.localAccountId,
-            status: 'pending-verification',
+            status: 'authenticated',
           }));
+          clearStoredMembershipDraft();
         })
         .catch(err => {
           console.error("Failed to create user data file in Drive", err);
@@ -1003,16 +1083,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ...s,
             appData: finalAppData,
             localAccountId: backupAccountId || s.localAccountId,
-            status: 'pending-verification',
+            status: 'authenticated',
           }));
+          clearStoredMembershipDraft();
         })
         .catch((error) => {
           console.warn('Unable to provision fallback storage for Google onboarding.', error);
           setState((s) => ({
             ...s,
             appData: finalAppData,
-            status: 'pending-verification',
+            status: 'authenticated',
           }));
+          clearStoredMembershipDraft();
         });
     } else {
       console.error("Incomplete profile setup attempt without access token or mock token.");

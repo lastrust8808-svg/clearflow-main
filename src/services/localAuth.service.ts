@@ -160,6 +160,27 @@ function findAccountByIdentifier(
   });
 }
 
+export function findLocalAccountByGoogleEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const accounts = loadAccounts();
+  const account = accounts.find(
+    (item) => item.contactType === 'email' && item.contactValue === normalizedEmail
+  );
+
+  if (!account) {
+    return null;
+  }
+
+  return {
+    userId: account.userId,
+    appData: account.appData,
+  };
+}
+
 function inferHandleFromUser(user: User) {
   if (user.userHandle) {
     return normalizeUserHandle(user.userHandle);
