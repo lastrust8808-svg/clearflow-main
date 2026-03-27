@@ -1,16 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Logo } from '../logo/Logo';
 
 interface WelcomeProps {
-  initialView?: 'landing' | 'signin';
+  initialView?: 'landing';
   initialIntent?: 'new' | 'existing';
-  isConfigured: boolean;
   lastKnownGoogleUser?: { name: string; email: string } | null;
   onDevLogin: () => void;
   onStartNewMember: () => void;
   onStartExistingMember: () => void;
   startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
-  renderGoogleButton: (elementId: string) => void;
 }
 
 const platformPillars = [
@@ -35,46 +33,19 @@ const moduleLabels = [
 export const Welcome: React.FC<WelcomeProps> = ({
   initialView = 'landing',
   initialIntent = 'existing',
-  isConfigured,
   lastKnownGoogleUser,
   onDevLogin,
   onStartNewMember,
   onStartExistingMember,
   startGoogleSignIn,
-  renderGoogleButton,
 }) => {
-  const [entryView, setEntryView] = useState<'landing' | 'signin' | 'help'>(initialView);
+  const [entryView, setEntryView] = useState<'landing' | 'help'>(initialView);
   const [signInIntent, setSignInIntent] = useState<'new' | 'existing'>(initialIntent);
   const [googleLaunchError, setGoogleLaunchError] = useState('');
   const [isLaunchingGoogle, setIsLaunchingGoogle] = useState(false);
   const canUseDevAccess =
     typeof window !== 'undefined' &&
     ['localhost', '127.0.0.1'].includes(window.location.hostname);
-
-  useEffect(() => {
-    if (isConfigured && entryView === 'signin') {
-      renderGoogleButton('google-btn-container');
-    }
-  }, [entryView, isConfigured, renderGoogleButton]);
-
-  const signInCopy = useMemo(
-    () =>
-      signInIntent === 'existing'
-        ? {
-            eyebrow: 'Existing Member Sign In',
-            title: 'Use Google to open your existing workspace',
-            description:
-              'Sign in with the same Google account already tied to ClearFlow and you will go straight back into your dashboard.',
-          }
-        : {
-            eyebrow: 'New User Sign Up',
-            title: 'Use Google to start your new ClearFlow workspace',
-            description:
-              'Sign in with the Google account you want tied to this workspace. Right after sign-in, you will choose the account or entity type and continue onboarding.',
-          },
-    [signInIntent]
-  );
-
   const launchGoogle = async (intent: 'new' | 'existing' | 'returning') => {
     setGoogleLaunchError('');
     setSignInIntent(intent === 'new' ? 'new' : 'existing');
@@ -92,12 +63,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
       setIsLaunchingGoogle(false);
       return;
     }
-
-    setEntryView('signin');
   };
 
   useEffect(() => {
-    if (entryView !== 'signin') {
+    if (entryView === 'landing') {
       setIsLaunchingGoogle(false);
     }
   }, [entryView]);
@@ -428,7 +397,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 </div>
               ) : null}
             </>
-          ) : entryView === 'help' ? (
+          ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                 <div>
@@ -510,155 +479,6 @@ export const Welcome: React.FC<WelcomeProps> = ({
               >
                 Request Temporary Access Help
               </a>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      textTransform: 'uppercase',
-                      letterSpacing: 2,
-                      color: '#8cebff',
-                      marginBottom: 10,
-                    }}
-                  >
-                    {signInCopy.eyebrow}
-                  </div>
-                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
-                    {signInCopy.title}
-                  </div>
-                <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                  {signInCopy.description}
-                </div>
-              </div>
-                <button
-                  type="button"
-                  onClick={() => setEntryView('landing')}
-                  style={{
-                    minHeight: 42,
-                    padding: '0 14px',
-                    borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.04)',
-                    color: '#eff6fb',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Back
-                </button>
-              </div>
-
-              <div
-                style={{
-                  padding: 18,
-                  borderRadius: 22,
-                  background:
-                    'linear-gradient(135deg, rgba(54, 215, 255, 0.12), rgba(88, 141, 255, 0.08))',
-                  border: '1px solid rgba(126, 242, 255, 0.2)',
-                  color: '#dff7fb',
-                  lineHeight: 1.7,
-                }}
-              >
-                {signInIntent === 'existing'
-                  ? 'Google authentication and Drive permission are being requested together so your workspace can open without extra setup clicks.'
-                  : 'Google authentication and Drive permission are being requested together. Once approved, ClearFlow will continue straight into onboarding.'}
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 12,
-                  padding: 18,
-                  borderRadius: 22,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <div
-                  style={{
-                    minHeight: 44,
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: '#dff7fb',
-                    lineHeight: 1.7,
-                    textAlign: 'center',
-                  }}
-                >
-                  {isLaunchingGoogle
-                    ? 'Opening Google sign-in and Drive authorization...'
-                    : 'If Google did not open automatically, use the button below.'}
-                </div>
-                <div id="google-btn-container" style={{ minHeight: 44 }} />
-                {!isConfigured ? (
-                  <div
-                    style={{
-                      borderRadius: 16,
-                      padding: 14,
-                      background: 'rgba(245, 158, 11, 0.12)',
-                      border: '1px solid rgba(245, 158, 11, 0.24)',
-                      color: '#fcdca4',
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    Google sign-in is not configured in this environment yet.
-                  </div>
-                ) : null}
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 12,
-                  padding: 18,
-                  borderRadius: 22,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <div style={{ fontSize: 18, fontWeight: 800 }}>Need Help Instead?</div>
-                <div style={{ color: '#c5d7e3', lineHeight: 1.7 }}>
-                  If Google sign-in is not working, open the Google sign-in troubleshooter to recover access or request a temporary login handoff so the workspace email can be changed securely.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEntryView('help')}
-                  style={{
-                    minHeight: 46,
-                    borderRadius: 16,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.04)',
-                    color: '#eff6fb',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                  }}
-                >
-                  Can&apos;t Sign In with Google?
-                </button>
-              </div>
-
-              {canUseDevAccess ? (
-                <button
-                  type="button"
-                  onClick={onDevLogin}
-                  style={{
-                    minHeight: 46,
-                    borderRadius: 16,
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.04)',
-                    color: '#eff6fb',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                  }}
-                >
-                  Dev Login
-                </button>
-              ) : null}
             </>
           )}
         </section>

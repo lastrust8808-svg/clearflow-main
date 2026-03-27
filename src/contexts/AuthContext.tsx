@@ -682,8 +682,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       prompt:
         mode === 'new'
           ? 'consent select_account'
-          : state.apiAccessToken
-            ? ''
+          : mode === 'existing'
+            ? 'select_account'
             : '',
     });
 
