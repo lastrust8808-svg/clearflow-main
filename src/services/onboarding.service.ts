@@ -68,6 +68,22 @@ function getOnboardingApiBase() {
   return `${getApiBaseUrl()}/api/onboarding`;
 }
 
+const ONBOARDING_REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), ONBOARDING_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 function buildLocalDraftResponse(draftId?: string | null, status = 'local_draft'): SavedDraftResponse {
   return {
     success: true,
@@ -83,7 +99,7 @@ export const saveOnboardingDraft = async (
   draftId?: string | null
 ): Promise<SavedDraftResponse> => {
   try {
-    const response = await fetch(`${getOnboardingApiBase()}/drafts`, {
+    const response = await fetchWithTimeout(`${getOnboardingApiBase()}/drafts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -138,7 +154,7 @@ export const uploadOnboardingFile = async (
   }
 
   try {
-    const response = await fetch(`${getOnboardingApiBase()}/drafts/${draftId}/files`, {
+    const response = await fetchWithTimeout(`${getOnboardingApiBase()}/drafts/${draftId}/files`, {
       method: 'POST',
       body: formData,
     });
@@ -167,7 +183,7 @@ export const submitOnboardingDraft = async (draftId: string) => {
   }
 
   try {
-    const response = await fetch(`${getOnboardingApiBase()}/drafts/${draftId}/submit`, {
+    const response = await fetchWithTimeout(`${getOnboardingApiBase()}/drafts/${draftId}/submit`, {
       method: 'POST',
     });
 
@@ -182,7 +198,7 @@ export const submitOnboardingDraft = async (draftId: string) => {
 };
 
 export const getOnboardingDraft = async (draftId: string): Promise<FullDraftResponse> => {
-  const response = await fetch(`${getOnboardingApiBase()}/drafts/${draftId}`);
+  const response = await fetchWithTimeout(`${getOnboardingApiBase()}/drafts/${draftId}`);
 
   if (!response.ok) {
     throw new Error('Failed to load onboarding draft.');
