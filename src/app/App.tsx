@@ -636,7 +636,7 @@ export default function App({
         setStoredOnboardingIntent('new');
       }
 
-      const nextStage: PostAuthOnboardingStage = 'membership';
+      const nextStage: PostAuthOnboardingStage = storedDraft ? 'profile' : 'membership';
       if (postAuthOnboardingStage !== nextStage) {
         setPostAuthOnboardingStage(nextStage);
         setStoredOnboardingStage(nextStage);
