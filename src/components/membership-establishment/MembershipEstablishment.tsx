@@ -10,7 +10,10 @@ import {
 import {
   MEMBERSHIP_DRAFT_ID_STORAGE_KEY,
   MEMBERSHIP_DRAFT_STORAGE_KEY,
+  getStoredMembershipDraft,
 } from '../../services/membershipDraft.service';
+
+const ONBOARDING_STAGE_STORAGE_KEY = 'clearflow-onboarding-stage';
 
 interface MembershipEstablishmentProps {
   selectedPath: OnboardingPath;
@@ -95,6 +98,44 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
       authorizedRepresentative: true,
     }));
   }, [auth.currentUser, isPersonalPath]);
+
+  useEffect(() => {
+    const storedDraft = getStoredMembershipDraft();
+    if (!storedDraft) {
+      return;
+    }
+
+    onSelectPath(storedDraft.selectedPath);
+    setForm((prev) => ({
+      ...prev,
+      legalName: storedDraft.legalName || prev.legalName,
+      displayName: storedDraft.displayName || prev.displayName,
+      ein: storedDraft.ein || prev.ein,
+      representativeName:
+        storedDraft.representativeName || prev.representativeName,
+      representativeEmail:
+        storedDraft.representativeEmail || prev.representativeEmail,
+      representativePhone:
+        storedDraft.representativePhone || prev.representativePhone,
+      representativeRole:
+        storedDraft.representativeRole || prev.representativeRole,
+      stateOfFormation:
+        storedDraft.stateOfFormation || prev.stateOfFormation,
+      country: storedDraft.country || prev.country,
+      authorizedRepresentative:
+        storedDraft.authorizedRepresentative || prev.authorizedRepresentative,
+      googleIdentityMatch:
+        storedDraft.googleIdentityMatch || prev.googleIdentityMatch,
+      trustType: storedDraft.trustType || prev.trustType,
+      exemptClassification:
+        storedDraft.exemptClassification || prev.exemptClassification,
+      acceptsDonations:
+        storedDraft.acceptsDonations || prev.acceptsDonations,
+      acceptsAssignedAssets:
+        storedDraft.acceptsAssignedAssets || prev.acceptsAssignedAssets,
+      notes: storedDraft.notes || prev.notes,
+    }));
+  }, [onSelectPath]);
 
   const pathSummary = useMemo(() => {
     switch (selectedPath) {
@@ -185,8 +226,9 @@ export const MembershipEstablishment: React.FC<MembershipEstablishmentProps> = (
       setSaveMessage('Submitting onboarding draft...');
       await submitOnboardingDraft(backendDraftId);
 
-      setSaveMessage('Draft saved. Continue to profile setup...');
-      onContinue(draft);
+      setSaveMessage('Draft saved. Opening profile setup...');
+      localStorage.setItem(ONBOARDING_STAGE_STORAGE_KEY, 'profile');
+      window.setTimeout(() => onContinue(draft), 200);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to save onboarding draft.');
       setSaveMessage('');
