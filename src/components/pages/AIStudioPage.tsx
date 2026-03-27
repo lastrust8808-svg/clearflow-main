@@ -71,6 +71,12 @@ const researchLinks = [
     detail: 'Research municipal offerings, disclosures, and documents tied to municipal identifiers and issue history.',
   },
   {
+    title: 'MSRB Muni ETF Liquidity Paper',
+    subtitle: 'Market structure and liquidity research',
+    url: 'https://www.msrb.org/sites/default/files/2025-11/Liquidity-Impact-of-Municipal-Bond-ETFs-on-Municipal-Securities-Market.pdf',
+    detail: 'Review municipal bond ETF liquidity research and use it to support reserve-paper review, trading posture, and municipal identifier workflows.',
+  },
+  {
     title: 'OpenFIGI Search',
     subtitle: 'Multi-source identifier mapping',
     url: 'https://www.openfigi.com/search',
@@ -1731,6 +1737,101 @@ ${userOwnedUnrouted
     });
   };
 
+  const launchMunicipalLiquidityReviewReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const municipalAssets = data.assets.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        (item.marketSector === 'municipal' || item.category === 'security') &&
+        isOnOrAfterWindow(item.maturityDate || item.lastLiquidityReviewDate, reportWindow),
+    );
+    const municipalInstruments = data.instruments.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        (item.marketSector === 'municipal' || item.sourceClass === 'bond') &&
+        isOnOrAfterWindow(item.maturityDate || item.issueDate, reportWindow),
+    );
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Municipal Liquidity Review`,
+      category: 'financial',
+      summary:
+        'Municipal security and reserve-paper review covering issuer identifiers, coupon and maturity profile, tax treatment, and liquidity posture.',
+      retentionClass: 'financial_evidence',
+      body: `# Municipal Liquidity Review
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Marketable Municipal Assets
+${municipalAssets
+  .map(
+    (item) =>
+      `- ${item.name} | ${item.identifierCode || 'no identifier'} | ${item.issuerName || 'issuer not set'} | coupon ${item.couponRate || 0}% | maturity ${item.maturityDate || 'not set'} | liquidity ${item.liquidityProfile || 'not reviewed'} | tax ${item.taxTreatment || 'not set'}`,
+  )
+  .join('\n') || '- No municipal reserve assets are currently in scope.'}
+
+## Municipal / Bond Instruments
+${municipalInstruments
+  .map(
+    (item) =>
+      `- ${item.title} | ${item.legalIdentifier || 'no legal id'} | ${item.identifierCode || 'no market id'} | ${item.issuerName || 'issuer not set'} | coupon ${item.couponRate || 0}% | maturity ${item.maturityDate || 'not set'} | liquidity ${item.liquidityProfile || 'not reviewed'} | tax ${item.taxTreatment || 'not set'}`,
+  )
+  .join('\n') || '- No municipal bond instruments are currently in scope.'}
+
+## Operator Follow-Through
+- Review issuer disclosure and continuing event support in MSRB EMMA.
+- Maintain identifier, coupon, maturity, rating, and tax treatment fields on reserve paper.
+- Revisit liquidity posture before using thinly traded holdings for treasury or reserve planning.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchMunicipalSecurityIntakePacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Municipal Security Intake Packet`,
+      category: 'financial',
+      summary:
+        'Operator intake packet for municipal reserve paper, issuer identifiers, coupon and maturity profile, tax treatment, and liquidity review.',
+      retentionClass: 'financial_evidence',
+      body: `# Municipal Security Intake Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Required Capture
+- Issuer name
+- CUSIP / internal identifier / EMMA reference
+- Coupon and maturity
+- Credit rating
+- Tax treatment
+- Liquidity profile
+- Reserve purpose and linked treasury account
+
+## Search Surfaces
+- MSRB EMMA for issuer and continuing disclosure
+- OpenFIGI for identifier support
+- Internal ClearFlow asset ledger for linked reserve and settlement use
+
+## Operator Note
+Use this intake packet when adding municipal or other marketable reserve paper into the asset ledger so the holding is searchable, reportable, and ready for liquidity review.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -1804,6 +1905,14 @@ ${userOwnedUnrouted
       lane: 'operations',
       actionLabel: 'Create Banking Packet',
       onAction: launchBusinessBankingPacket,
+    },
+    {
+      title: 'Municipal Security Intake',
+      subtitle: 'Reserve paper, EMMA, and liquidity capture',
+      detail: 'Create an intake packet for municipal reserve holdings with issuer, identifier, tax, and liquidity fields ready for the asset ledger.',
+      lane: 'ledger',
+      actionLabel: 'Create Intake Packet',
+      onAction: launchMunicipalSecurityIntakePacket,
     },
     {
       title: 'Payroll Onboarding Packet',
@@ -2044,6 +2153,13 @@ ${userOwnedUnrouted
       actionLabel: 'Create Gap Report',
       onAction: launchEvidenceGapReport,
     },
+    {
+      title: 'Municipal Liquidity Review',
+      subtitle: 'Issuer, identifier, coupon, maturity, and liquidity posture',
+      detail: 'Create a municipal reserve-paper report for issuer support, identifier tracking, coupon and maturity profile, and market-liquidity review.',
+      actionLabel: 'Create Muni Review',
+      onAction: launchMunicipalLiquidityReviewReport,
+    },
   ];
   const reportPackPresets = [
     {
@@ -2119,6 +2235,20 @@ ${userOwnedUnrouted
         subtitle: `Document | ${item.category}`,
         haystack: `${item.title} ${item.summary || ''} ${item.category} ${item.templateKey || ''}`,
         hash: `#documents:${item.id}`,
+      })),
+      ...data.assets.map((item) => ({
+        id: `asset-${item.id}`,
+        label: item.name,
+        subtitle: `Asset | ${item.marketSector || item.category}`,
+        haystack: `${item.name} ${item.identifierCode || ''} ${item.issuerName || ''} ${item.marketSector || ''} ${item.creditRating || ''} ${item.taxTreatment || ''} ${item.notes || ''}`,
+        hash: '#assets',
+      })),
+      ...data.instruments.map((item) => ({
+        id: `instrument-${item.id}`,
+        label: item.title,
+        subtitle: `Instrument | ${item.marketSector || item.sourceClass || item.instrumentType}`,
+        haystack: `${item.title} ${item.legalIdentifier || ''} ${item.identifierCode || ''} ${item.issuerName || ''} ${item.marketSector || ''} ${item.creditRating || ''} ${item.taxTreatment || ''} ${item.notes || ''}`,
+        hash: '#assets',
       })),
       ...data.payments.map((item) => ({
         id: `payment-${item.id}`,

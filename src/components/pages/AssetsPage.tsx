@@ -11,6 +11,24 @@ interface AssetsPageProps {
 }
 
 export default function AssetsPage({ data, setData }: AssetsPageProps) {
+  const marketableAssets = data.assets.filter(
+    (asset) =>
+      asset.marketSector === 'municipal' ||
+      asset.category === 'security' ||
+      Boolean(asset.identifierCode),
+  );
+
+  const marketableInstruments = data.instruments.filter(
+    (instrument) =>
+      instrument.marketSector === 'municipal' ||
+      instrument.sourceClass === 'bond' ||
+      Boolean(instrument.identifierCode),
+  );
+
+  const municipalCount =
+    marketableAssets.filter((asset) => asset.marketSector === 'municipal').length +
+    marketableInstruments.filter((instrument) => instrument.marketSector === 'municipal').length;
+
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div>
@@ -28,6 +46,8 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         }}
       >
         <StatCard label="Traditional Assets" value={data.assets.length} />
+        <StatCard label="Marketable Paper" value={marketableAssets.length + marketableInstruments.length} />
+        <StatCard label="Municipal / Fixed Income" value={municipalCount} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
@@ -35,6 +55,100 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
       </div>
 
       <WalletConnectionWorkspace data={data} setData={setData} />
+
+      <PageSection
+        title="Marketable Securities & Muni Ledger"
+        description="Track municipal paper, reserve bonds, identifiers, coupon and maturity data, and liquidity posture without leaving the asset desk."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {marketableAssets.length === 0 && marketableInstruments.length === 0 ? (
+            <WorkbenchRecordCard title="No marketable paper tracked yet" subtitle="Add securities into the reserve ledger">
+              Use identifiers, issuer details, coupon, maturity, tax treatment, and liquidity posture so reserve paper can be searched and reported cleanly.
+            </WorkbenchRecordCard>
+          ) : null}
+
+          {marketableAssets.map((asset) => (
+            <WorkbenchRecordCard
+              key={asset.id}
+              title={asset.name}
+              subtitle={`${asset.marketSector || asset.category} | ${asset.taxTreatment || 'tax posture not set'}`}
+              summaryItems={[
+                { label: 'Identifier', value: asset.identifierCode || 'Not assigned' },
+                { label: 'Issuer', value: asset.issuerName || 'Not assigned' },
+                {
+                  label: 'Coupon / Maturity',
+                  value: asset.couponRate
+                    ? `${asset.couponRate}% | ${asset.maturityDate || 'No maturity'}`
+                    : asset.maturityDate || 'Not set',
+                },
+                { label: 'Liquidity', value: asset.liquidityProfile || 'Not reviewed' },
+                { label: 'Rating', value: asset.creditRating || 'Not tracked' },
+                { label: 'Market Value', value: asset.marketValue?.toLocaleString() || 'Not tracked' },
+              ]}
+              record={asset}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  assets: prev.assets.map((item) => (item.id === asset.id ? nextRecord : item)),
+                }))
+              }
+              actionSlot={
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.hash = '#aiStudio';
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(96,165,250,0.4)',
+                    background: 'rgba(37,99,235,0.18)',
+                    color: '#e5e7eb',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Muni Research
+                </button>
+              }
+            >
+              {asset.notes || 'Use advanced edit to maintain identifier, issuer, tax treatment, and liquidity review details.'}
+            </WorkbenchRecordCard>
+          ))}
+
+          {marketableInstruments.map((instrument) => (
+            <WorkbenchRecordCard
+              key={instrument.id}
+              title={instrument.title}
+              subtitle={`${instrument.marketSector || instrument.sourceClass || instrument.instrumentType} | ${instrument.taxTreatment || 'tax posture not set'}`}
+              summaryItems={[
+                { label: 'Legal ID', value: instrument.legalIdentifier || 'Not assigned' },
+                { label: 'Market ID', value: instrument.identifierCode || 'Not assigned' },
+                { label: 'Issuer', value: instrument.issuerName || 'Internal / not set' },
+                {
+                  label: 'Coupon / Maturity',
+                  value: instrument.couponRate
+                    ? `${instrument.couponRate}% | ${instrument.maturityDate || 'No maturity'}`
+                    : instrument.maturityDate || 'Not set',
+                },
+                { label: 'Liquidity', value: instrument.liquidityProfile || 'Not reviewed' },
+                { label: 'Rating', value: instrument.creditRating || 'Not tracked' },
+              ]}
+              record={instrument}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  instruments: prev.instruments.map((item) =>
+                    item.id === instrument.id ? nextRecord : item
+                  ),
+                }))
+              }
+            >
+              {instrument.notes || 'Use advanced edit to maintain issuer, identifier, liquidity, and reserve posture details.'}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Traditional Assets"
@@ -56,6 +170,13 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 { label: 'Book Value', value: asset.bookValue.toLocaleString() },
                 { label: 'Market Value', value: asset.marketValue?.toLocaleString() || 'Not tracked' },
                 { label: 'Payment Medium', value: asset.paymentMedium || 'Not assigned' },
+                {
+                  label: 'Identifier / Liquidity',
+                  value:
+                    asset.identifierCode || asset.liquidityProfile
+                      ? `${asset.identifierCode || 'No ID'} | ${asset.liquidityProfile || 'No liquidity review'}`
+                      : 'General asset',
+                },
               ]}
               record={asset}
               onSave={(nextRecord) =>

@@ -421,6 +421,19 @@ export interface AssetRecord {
   bookValue: number;
   marketValue?: number;
   paymentMedium?: PaymentMediumClassification;
+  marketSector?: 'municipal' | 'corporate' | 'sovereign' | 'private' | 'other';
+  identifierCode?: string;
+  issuerName?: string;
+  couponRate?: number;
+  maturityDate?: string;
+  creditRating?: string;
+  taxTreatment?: 'tax_exempt' | 'taxable' | 'private_activity_review' | 'other';
+  liquidityProfile?:
+    | 'exchange_traded_fund_proxy'
+    | 'dealer_market'
+    | 'thinly_traded'
+    | 'internal_only';
+  lastLiquidityReviewDate?: string;
   linkedLedgerAccountId?: string;
   linkedDocumentIds?: string[];
   complianceTagIds?: string[];
@@ -499,12 +512,23 @@ export interface InstrumentRecord {
   instrumentType: InstrumentType;
   legalIdentifier?: string;
   sourceClass?: 'note' | 'bond' | 'future' | 'collateral' | 'other';
+  marketSector?: 'municipal' | 'corporate' | 'sovereign' | 'private' | 'other';
+  identifierCode?: string;
+  issuerName?: string;
   issuerEntityId?: string;
   counterpartyEntityId?: string;
   counterpartyLabel?: string;
   issueDate?: string;
   maturityDate?: string;
   denominationValue?: number;
+  couponRate?: number;
+  creditRating?: string;
+  taxTreatment?: 'tax_exempt' | 'taxable' | 'private_activity_review' | 'other';
+  liquidityProfile?:
+    | 'exchange_traded_fund_proxy'
+    | 'dealer_market'
+    | 'thinly_traded'
+    | 'internal_only';
   paymentMedium?: PaymentMediumClassification;
   obligationType?: ObligationType;
   pledgedCollateralValue?: number;
