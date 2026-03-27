@@ -83,6 +83,18 @@ const researchLinks = [
     detail: 'Use FIGI mapping when CUSIP-adjacent identifier research is needed across public market datasets.',
   },
   {
+    title: 'TreasuryDirect Marketable Securities',
+    subtitle: 'Treasury paper reference and issue data',
+    url: 'https://www.treasurydirect.gov/marketable-securities/',
+    detail: 'Review Treasury notes, bonds, bills, and TIPS program references when reserve or ledger holdings include sovereign paper.',
+  },
+  {
+    title: 'FINRA Fixed Income',
+    subtitle: 'Bond market data and fixed-income reference',
+    url: 'https://www.finra.org/finra-data/fixed-income',
+    detail: 'Use FINRA fixed-income market references when intake or review work expands beyond municipal paper into broader bond and dealer-market holdings.',
+  },
+  {
     title: 'Federal Reserve Fedwire',
     subtitle: 'Wire operations reference',
     url: 'https://www.frbservices.org/financial-services/wires/',
@@ -98,6 +110,14 @@ const researchLinks = [
 
 function openLink(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function buildEmmaSearchUrl(identifierCode?: string) {
+  if (!identifierCode) {
+    return 'https://emma.msrb.org/';
+  }
+
+  return `https://emma.msrb.org/`;
 }
 
 function getReportWindowLabel(window: ReportWindowOption) {
@@ -1832,6 +1852,177 @@ Use this intake packet when adding municipal or other marketable reserve paper i
     void appendDocument(document);
   };
 
+  const launchCusipEmmaIntakeWorkflow = async () => {
+    const targetEntity = reportEntity || primaryEntity;
+    if (!targetEntity) {
+      return;
+    }
+
+    const subjectAsset =
+      data.assets.find(
+        (item) => item.entityId === targetEntity.id && item.marketSector === 'municipal',
+      ) ||
+      data.assets.find(
+        (item) => item.entityId === targetEntity.id && item.category === 'security',
+      );
+    const subjectInstrument =
+      data.instruments.find(
+        (item) => item.entityId === targetEntity.id && item.marketSector === 'municipal',
+      ) ||
+      data.instruments.find(
+        (item) => item.entityId === targetEntity.id && item.sourceClass === 'bond',
+      );
+
+    const issuerName =
+      subjectAsset?.issuerName ||
+      subjectInstrument?.issuerName ||
+      targetEntity.displayName ||
+      targetEntity.name;
+    const identifierCode =
+      subjectAsset?.identifierCode || subjectInstrument?.identifierCode || '';
+    const emmaUrl = buildEmmaSearchUrl(identifierCode);
+
+    const document = buildGeneratedDocument({
+      entityId: targetEntity.id,
+      title: `${targetEntity.displayName || targetEntity.name} CUSIP / EMMA Intake Packet`,
+      category: 'financial',
+      summary:
+        'Municipal security intake packet covering issuer name, identifier support, EMMA review, event-watch setup, and reserve ledger mapping.',
+      retentionClass: 'financial_evidence',
+      body: `# CUSIP / EMMA Intake Packet
+
+Entity: ${targetEntity.displayName || targetEntity.name}
+Issuer: ${issuerName}
+Identifier: ${identifierCode || 'to be assigned'}
+EMMA: ${emmaUrl}
+
+## Intake Capture
+- Issuer / obligor
+- CUSIP or internal identifier
+- Coupon, maturity, and rating
+- Tax treatment
+- Liquidity posture
+- Reserve account linkage
+- Disclosure watch owner
+
+## Follow-Through
+- Search MSRB EMMA for continuing disclosures and event notices
+- Record liquidity posture in the asset and instrument ledger
+- Add any event notice into the municipal event-watch layer
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: targetEntity.id,
+      label: `${targetEntity.displayName || targetEntity.name} municipal intake review`,
+      category: 'reporting',
+      notes: 'Generated from the CUSIP / EMMA intake workflow.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const disclosureRecord = {
+      id: `muni-disc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: targetEntity.id,
+      assetId: subjectAsset?.id,
+      instrumentId: subjectInstrument?.id,
+      issuerName,
+      identifierCode: identifierCode || undefined,
+      emmaUrl,
+      disclosureType: 'trade_liquidity_review' as const,
+      disclosureDate: new Date().toISOString().slice(0, 10),
+      status: 'review' as const,
+      linkedDocumentIds: [document.id],
+      notes:
+        'Initial municipal identifier, EMMA, and liquidity review record created from AI Studio intake.',
+    };
+
+    const eventNoticeRecord = {
+      id: `muni-notice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: targetEntity.id,
+      assetId: subjectAsset?.id,
+      instrumentId: subjectInstrument?.id,
+      issuerName,
+      identifierCode: identifierCode || undefined,
+      emmaUrl,
+      eventType: 'other' as const,
+      eventDate: new Date().toISOString().slice(0, 10),
+      severity: 'info' as const,
+      status: 'open' as const,
+      linkedDocumentIds: [document.id],
+      notes:
+        'Placeholder event-watch record opened so future EMMA notices can be tracked against this municipal position.',
+    };
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+      municipalDisclosures: [disclosureRecord, ...prev.municipalDisclosures],
+      municipalEventNotices: [eventNoticeRecord, ...prev.municipalEventNotices],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchMunicipalDisclosureWatchReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const disclosureRecords = data.municipalDisclosures.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        isOnOrAfterWindow(item.disclosureDate || item.filingDate, reportWindow),
+    );
+    const eventNotices = data.municipalEventNotices.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        isOnOrAfterWindow(item.eventDate, reportWindow),
+    );
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Municipal Disclosure Watch`,
+      category: 'compliance',
+      summary:
+        'Disclosure and event-watch report for municipal reserve paper, EMMA review, identifier support, and liquidity notices.',
+      retentionClass: 'compliance',
+      body: `# Municipal Disclosure Watch
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Disclosure Records
+${disclosureRecords
+  .map(
+    (item) =>
+      `- ${item.issuerName} | ${item.identifierCode || 'no identifier'} | ${item.disclosureType} | ${item.status} | ${item.disclosureDate}`,
+  )
+  .join('\n') || '- No municipal disclosure records are currently in scope.'}
+
+## Event Notices
+${eventNotices
+  .map(
+    (item) =>
+      `- ${item.issuerName} | ${item.identifierCode || 'no identifier'} | ${item.eventType} | ${item.severity} | ${item.status} | ${item.eventDate}`,
+  )
+  .join('\n') || '- No municipal event notices are currently in scope.'}
+
+## Operator Follow-Through
+- Review MSRB EMMA for fresh continuing disclosures and material events.
+- Escalate any critical default, rating, or tax-opinion notices into compliance review.
+- Revisit liquidity posture when event notices change trading or reserve usability.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -1909,7 +2100,7 @@ Use this intake packet when adding municipal or other marketable reserve paper i
     {
       title: 'Municipal Security Intake',
       subtitle: 'Reserve paper, EMMA, and liquidity capture',
-      detail: 'Create an intake packet for municipal reserve holdings with issuer, identifier, tax, and liquidity fields ready for the asset ledger.',
+      detail: 'Create an intake packet for municipal reserve holdings with issuer, identifier, tax, and liquidity fields ready for the asset ledger and broader security-master work.',
       lane: 'ledger',
       actionLabel: 'Create Intake Packet',
       onAction: launchMunicipalSecurityIntakePacket,
@@ -1985,6 +2176,16 @@ Use this intake packet when adding municipal or other marketable reserve paper i
       lane: 'compliance',
       actionLabel: 'Create Research Packet',
       onAction: launchIdentifierResearchPacket,
+    },
+    {
+      title: 'CUSIP / EMMA Intake',
+      subtitle: 'Municipal identifier and disclosure-watch setup',
+      detail: 'Create a municipal intake packet, disclosure review record, and event-watch starter so reserve paper is actually tracked in the system.',
+      lane: 'compliance',
+      actionLabel: 'Start Intake',
+      onAction: () => {
+        void launchCusipEmmaIntakeWorkflow();
+      },
     },
     {
       title: 'Beneficial Ownership Packet',
@@ -2160,6 +2361,13 @@ Use this intake packet when adding municipal or other marketable reserve paper i
       actionLabel: 'Create Muni Review',
       onAction: launchMunicipalLiquidityReviewReport,
     },
+    {
+      title: 'Municipal Disclosure Watch',
+      subtitle: 'EMMA follow-through and event-notice review',
+      detail: 'Create a disclosure watch report across municipal issuer filings, identifier coverage, and event notices already tracked in the workspace.',
+      actionLabel: 'Create Watch Report',
+      onAction: launchMunicipalDisclosureWatchReport,
+    },
   ];
   const reportPackPresets = [
     {
@@ -2291,6 +2499,20 @@ Use this intake packet when adding municipal or other marketable reserve paper i
         subtitle: `Compliance | ${item.category} | ${item.status}`,
         haystack: `${item.label} ${item.category} ${item.status} ${item.notes || ''} ${item.jurisdiction || ''}`,
         hash: item.linkedDocumentIds?.[0] ? `#documents:${item.linkedDocumentIds[0]}` : '#compliance',
+      })),
+      ...data.municipalDisclosures.map((item) => ({
+        id: `municipal-disclosure-${item.id}`,
+        label: `${item.issuerName} disclosure`,
+        subtitle: `Municipal disclosure | ${item.disclosureType} | ${item.status}`,
+        haystack: `${item.issuerName} ${item.identifierCode || ''} ${item.disclosureType} ${item.status} ${item.notes || ''}`,
+        hash: '#assets',
+      })),
+      ...data.municipalEventNotices.map((item) => ({
+        id: `municipal-event-${item.id}`,
+        label: `${item.issuerName} event notice`,
+        subtitle: `Municipal event | ${item.eventType} | ${item.severity}`,
+        haystack: `${item.issuerName} ${item.identifierCode || ''} ${item.eventType} ${item.severity} ${item.status} ${item.notes || ''}`,
+        hash: '#assets',
       })),
       ...integrationLaunchers.map((item) => ({
         id: `integration-${item.title}`,

@@ -834,6 +834,50 @@ export interface ComplianceTagRecord {
   notes?: string;
 }
 
+export interface MunicipalDisclosureRecord {
+  id: string;
+  entityId: string;
+  assetId?: string;
+  instrumentId?: string;
+  issuerName: string;
+  identifierCode?: string;
+  emmaUrl?: string;
+  disclosureType:
+    | 'official_statement'
+    | 'continuing_disclosure'
+    | 'material_event'
+    | 'trade_liquidity_review';
+  disclosureDate: string;
+  filingDate?: string;
+  status: 'current' | 'review' | 'stale' | 'missing';
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
+export interface MunicipalEventNoticeRecord {
+  id: string;
+  entityId: string;
+  assetId?: string;
+  instrumentId?: string;
+  issuerName: string;
+  identifierCode?: string;
+  emmaUrl?: string;
+  eventType:
+    | 'rating_change'
+    | 'default'
+    | 'payment_delinquency'
+    | 'tender_offer'
+    | 'defeasance'
+    | 'tax_opinion'
+    | 'liquidity_event'
+    | 'other';
+  eventDate: string;
+  severity: 'info' | 'watch' | 'critical';
+  status: 'open' | 'reviewed' | 'closed';
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
 export interface BankOnboardingChecklistItem {
   id: string;
   label: string;
@@ -1652,6 +1696,8 @@ export interface CoreDataBundle {
   transactions: TransactionRecord[];
   interEntityTransfers: InterEntityTransferRecord[];
   complianceTags: ComplianceTagRecord[];
+  municipalDisclosures: MunicipalDisclosureRecord[];
+  municipalEventNotices: MunicipalEventNoticeRecord[];
   digitalAssetCompliance: DigitalAssetComplianceRecord[];
   documents: DocumentRecord[];
   tokens: TokenRecord[];

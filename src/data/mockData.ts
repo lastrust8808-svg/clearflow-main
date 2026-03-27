@@ -1696,6 +1696,59 @@ export const coreMockData: CoreDataBundle = {
     },
   ],
 
+  municipalDisclosures: [
+    {
+      id: 'muni-disc-001',
+      entityId: 'ent-las-trust',
+      assetId: 'ast-muni-001',
+      instrumentId: 'ins-muni-001',
+      issuerName: 'Detroit Water & Sewerage Department',
+      identifierCode: 'DET-WS-2034-A',
+      emmaUrl: 'https://emma.msrb.org/',
+      disclosureType: 'continuing_disclosure',
+      disclosureDate: '2026-03-20',
+      filingDate: '2026-03-21',
+      status: 'current',
+      linkedDocumentIds: ['doc-reserve-001'],
+      notes:
+        'Continuing disclosure review logged with identifier, issuer, tax-exempt posture, and municipal liquidity notes.',
+    },
+    {
+      id: 'muni-disc-002',
+      entityId: 'ent-las-trust',
+      assetId: 'ast-muni-001',
+      instrumentId: 'ins-muni-001',
+      issuerName: 'Detroit Water & Sewerage Department',
+      identifierCode: 'DET-WS-2034-A',
+      emmaUrl: 'https://emma.msrb.org/',
+      disclosureType: 'trade_liquidity_review',
+      disclosureDate: '2026-03-22',
+      status: 'review',
+      linkedDocumentIds: ['doc-legal-001'],
+      notes:
+        'Liquidity review memo updated to reflect municipal ETF market-structure watch and dealer-market execution posture.',
+    },
+  ],
+
+  municipalEventNotices: [
+    {
+      id: 'muni-notice-001',
+      entityId: 'ent-las-trust',
+      assetId: 'ast-muni-001',
+      instrumentId: 'ins-muni-001',
+      issuerName: 'Detroit Water & Sewerage Department',
+      identifierCode: 'DET-WS-2034-A',
+      emmaUrl: 'https://emma.msrb.org/',
+      eventType: 'liquidity_event',
+      eventDate: '2026-03-22',
+      severity: 'watch',
+      status: 'reviewed',
+      linkedDocumentIds: ['doc-legal-001'],
+      notes:
+        'Operator-noted liquidity event watch tied to municipal ETF liquidity research and reserve-paper execution review.',
+    },
+  ],
+
   digitalAssetCompliance: [
     {
       id: 'dac-001',

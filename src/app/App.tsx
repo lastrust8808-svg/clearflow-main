@@ -215,6 +215,8 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     transactions: [],
     interEntityTransfers: [],
     complianceTags: [],
+    municipalDisclosures: [],
+    municipalEventNotices: [],
     digitalAssetCompliance: [],
     documents: [],
     tokens: [],
@@ -279,6 +281,10 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     transactions: candidate.transactions ?? coreMockData.transactions,
     interEntityTransfers: candidate.interEntityTransfers ?? coreMockData.interEntityTransfers,
     complianceTags: candidate.complianceTags ?? coreMockData.complianceTags,
+    municipalDisclosures:
+      candidate.municipalDisclosures ?? coreMockData.municipalDisclosures,
+    municipalEventNotices:
+      candidate.municipalEventNotices ?? coreMockData.municipalEventNotices,
     digitalAssetCompliance:
       candidate.digitalAssetCompliance ?? coreMockData.digitalAssetCompliance,
     documents: candidate.documents ?? coreMockData.documents,

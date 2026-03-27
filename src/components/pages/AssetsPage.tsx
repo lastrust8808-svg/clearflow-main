@@ -28,6 +28,12 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const municipalCount =
     marketableAssets.filter((asset) => asset.marketSector === 'municipal').length +
     marketableInstruments.filter((instrument) => instrument.marketSector === 'municipal').length;
+  const municipalDisclosureReviews = data.municipalDisclosures.filter(
+    (item) => item.status === 'review' || item.status === 'missing' || item.status === 'stale',
+  );
+  const municipalEventWatchCount = data.municipalEventNotices.filter(
+    (item) => item.severity === 'watch' || item.severity === 'critical' || item.status === 'open',
+  ).length;
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -48,6 +54,8 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Traditional Assets" value={data.assets.length} />
         <StatCard label="Marketable Paper" value={marketableAssets.length + marketableInstruments.length} />
         <StatCard label="Municipal / Fixed Income" value={municipalCount} />
+        <StatCard label="Disclosure Reviews" value={municipalDisclosureReviews.length} />
+        <StatCard label="Event Watch" value={municipalEventWatchCount} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
@@ -146,6 +154,159 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
             >
               {instrument.notes || 'Use advanced edit to maintain issuer, identifier, liquidity, and reserve posture details.'}
             </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Disclosure & Event Watch"
+        description="Work municipal disclosure review, EMMA follow-through, and event-notice posture directly from the asset ledger."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.municipalDisclosures.length === 0 && data.municipalEventNotices.length === 0 ? (
+            <WorkbenchRecordCard
+              title="No disclosure watch records yet"
+              subtitle="Start municipal intake from AI Studio"
+            >
+              Use the CUSIP / EMMA intake tool to create disclosure review records, event-watch starters, and supporting packets for securities entering the ledger.
+            </WorkbenchRecordCard>
+          ) : null}
+
+          {data.municipalDisclosures.map((disclosure) => (
+            <WorkbenchRecordCard
+              key={disclosure.id}
+              title={`${disclosure.issuerName} disclosure`}
+              subtitle={`${disclosure.disclosureType} | ${disclosure.status}`}
+              summaryItems={[
+                { label: 'Identifier', value: disclosure.identifierCode || 'Not assigned' },
+                { label: 'EMMA', value: disclosure.emmaUrl || 'Not linked' },
+                { label: 'Disclosure Date', value: disclosure.disclosureDate || 'Not tracked' },
+                { label: 'Filed', value: disclosure.filingDate || 'Pending review' },
+              ]}
+              record={disclosure}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  municipalDisclosures: prev.municipalDisclosures.map((item) =>
+                    item.id === disclosure.id ? nextRecord : item,
+                  ),
+                }))
+              }
+              actionSlot={
+                disclosure.emmaUrl ? (
+                  <a
+                    href={disclosure.emmaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(96,165,250,0.4)',
+                      background: 'rgba(37,99,235,0.18)',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                      textDecoration: 'none',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Open EMMA
+                  </a>
+                ) : undefined
+              }
+            >
+              {disclosure.notes ||
+                'Use advanced edit to maintain filing posture, linked issuer documents, and municipal disclosure review notes.'}
+            </WorkbenchRecordCard>
+          ))}
+
+          {data.municipalEventNotices.map((notice) => (
+            <WorkbenchRecordCard
+              key={notice.id}
+              title={`${notice.issuerName} event notice`}
+              subtitle={`${notice.eventType} | ${notice.severity} | ${notice.status}`}
+              summaryItems={[
+                { label: 'Identifier', value: notice.identifierCode || 'Not assigned' },
+                { label: 'EMMA', value: notice.emmaUrl || 'Not linked' },
+                { label: 'Event Date', value: notice.eventDate || 'Not tracked' },
+                { label: 'Linked Docs', value: `${notice.linkedDocumentIds?.length || 0}` },
+              ]}
+              record={notice}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  municipalEventNotices: prev.municipalEventNotices.map((item) =>
+                    item.id === notice.id ? nextRecord : item,
+                  ),
+                }))
+              }
+              actionSlot={
+                notice.emmaUrl ? (
+                  <a
+                    href={notice.emmaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(96,165,250,0.4)',
+                      background: 'rgba(37,99,235,0.18)',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                      textDecoration: 'none',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Review Notice
+                  </a>
+                ) : undefined
+              }
+            >
+              {notice.notes ||
+                'Use advanced edit to keep event notices, severity posture, and supporting disclosure links current.'}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Security Source Search"
+        description="Launch research sources for municipal, Treasury, and broader fixed-income/security intake before posting a holding into the ledger."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {[
+            { label: 'MSRB EMMA', url: 'https://emma.msrb.org/' },
+            { label: 'SEC EDGAR', url: 'https://www.sec.gov/edgar/search/' },
+            { label: 'OpenFIGI', url: 'https://www.openfigi.com/search' },
+            { label: 'TreasuryDirect', url: 'https://www.treasurydirect.gov/marketable-securities/' },
+            { label: 'FINRA Fixed Income', url: 'https://www.finra.org/finra-data/fixed-income' },
+          ].map((source) => (
+            <a
+              key={source.label}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 16px',
+                borderRadius: 14,
+                border: '1px solid rgba(126, 242, 255, 0.16)',
+                background: 'rgba(10, 22, 35, 0.72)',
+                color: '#e5e7eb',
+                textDecoration: 'none',
+                fontWeight: 700,
+              }}
+            >
+              <span>{source.label}</span>
+              <span style={{ color: 'var(--cf-muted)' }}>Open</span>
+            </a>
           ))}
         </div>
       </PageSection>
