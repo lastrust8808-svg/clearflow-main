@@ -1749,6 +1749,92 @@ export const coreMockData: CoreDataBundle = {
     },
   ],
 
+  kybReviews: [
+    {
+      id: 'kyb-001',
+      entityId: 'ent-las-trust',
+      reviewType: 'beneficial_ownership',
+      status: 'in_review',
+      reviewDate: '2026-03-20',
+      nextReviewDate: '2026-06-20',
+      beneficialOwnerCount: 2,
+      documentCoverage: 'partial',
+      screeningStatus: 'watch',
+      linkedDocumentIds: ['doc-legal-001'],
+      linkedComplianceTagIds: ['cmp-entity-mi'],
+      notes:
+        'Ownership packet is present, but control-person attestations and one signer document still need refresh before bank-facing use.',
+    },
+    {
+      id: 'kyb-002',
+      entityId: 'ent-rhc',
+      reviewType: 'kyb',
+      status: 'pending',
+      reviewDate: '2026-03-25',
+      nextReviewDate: '2026-04-25',
+      beneficialOwnerCount: 1,
+      documentCoverage: 'missing',
+      screeningStatus: 'not_run',
+      linkedDocumentIds: ['doc-title-001'],
+      notes:
+        'Entity profile exists, but onboarding documents, control-person confirmation, and screening refresh are still incomplete.',
+    },
+  ],
+
+  watchlistScreenings: [
+    {
+      id: 'watch-001',
+      entityId: 'ent-las-trust',
+      subjectType: 'entity',
+      subjectLabel: 'L.A.S. Revocable Living Trust',
+      screeningScope: 'multi',
+      status: 'watch',
+      screenedAt: '2026-03-22',
+      nextScreeningDate: '2026-04-22',
+      providerLabel: 'Internal onboarding review',
+      matchedListName: 'Name similarity / manual review',
+      disposition: 'pending_review',
+      linkedDocumentIds: ['doc-legal-001'],
+      linkedCaseIds: ['aml-001'],
+      notes:
+        'Manual name-review item opened pending ownership and sanctions/adverse-media refresh.',
+    },
+    {
+      id: 'watch-002',
+      entityId: 'ent-rhc',
+      subjectType: 'counterparty',
+      subjectLabel: 'Property Insurance Carrier',
+      screeningScope: 'ofac',
+      status: 'clear',
+      screenedAt: '2026-03-18',
+      nextScreeningDate: '2026-06-18',
+      providerLabel: 'Vendor onboarding',
+      disposition: 'cleared',
+      notes: 'Counterparty screened clear during vendor payment setup.',
+    },
+  ],
+
+  amlCases: [
+    {
+      id: 'aml-001',
+      entityId: 'ent-las-trust',
+      caseType: 'watchlist_review',
+      title: 'Ownership + watchlist refresh for L.A.S. Trust',
+      status: 'under_review',
+      priority: 'elevated',
+      openedAt: '2026-03-22',
+      dueDate: '2026-04-02',
+      linkedWatchlistScreeningIds: ['watch-001'],
+      linkedKybReviewIds: ['kyb-001'],
+      linkedDocumentIds: ['doc-legal-001'],
+      filingPath: 'internal_only',
+      filingStatus: 'draft',
+      retentionUntil: '2031-03-22',
+      notes:
+        'Case opened to resolve ownership refresh, watchlist review, and related onboarding evidence before external banking use.',
+    },
+  ],
+
   digitalAssetCompliance: [
     {
       id: 'dac-001',

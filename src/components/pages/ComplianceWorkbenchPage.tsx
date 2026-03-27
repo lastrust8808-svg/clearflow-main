@@ -65,6 +65,11 @@ export default function ComplianceWorkbenchPage({
   const wealthRailWatchCount = privateWealthRailSummaries.filter(
     (item) => item.overallStatus !== 'ready',
   ).length;
+  const kybReviewCount = data.kybReviews.filter((item) => item.status !== 'cleared').length;
+  const watchlistQueueCount = data.watchlistScreenings.filter(
+    (item) => item.status !== 'clear' || item.disposition === 'pending_review',
+  ).length;
+  const amlCaseCount = data.amlCases.filter((item) => item.status !== 'closed').length;
   const proofChainWatchCount = transactionProofChains.filter(
     (item) => item.verificationStatus !== 'sealed',
   ).length;
@@ -100,6 +105,35 @@ export default function ComplianceWorkbenchPage({
       taxReportingLinks: prev.taxReportingLinks.map((row) =>
         row.id === id ? { ...row, ...patch } : row,
       ),
+    }));
+
+  const updateKybReview = (
+    id: string,
+    patch: Partial<CoreDataBundle['kybReviews'][number]>,
+  ) =>
+    setData((prev) => ({
+      ...prev,
+      kybReviews: prev.kybReviews.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    }));
+
+  const updateWatchlistScreening = (
+    id: string,
+    patch: Partial<CoreDataBundle['watchlistScreenings'][number]>,
+  ) =>
+    setData((prev) => ({
+      ...prev,
+      watchlistScreenings: prev.watchlistScreenings.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
+    }));
+
+  const updateAmlCase = (
+    id: string,
+    patch: Partial<CoreDataBundle['amlCases'][number]>,
+  ) =>
+    setData((prev) => ({
+      ...prev,
+      amlCases: prev.amlCases.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     }));
 
   const renderStatusActions = (id: string, currentStatus: ComplianceStatus) => (
@@ -144,8 +178,8 @@ export default function ComplianceWorkbenchPage({
       <div>
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Compliance & Reports</h1>
         <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
-          Entity obligations, digital-asset review tags, reporting readiness, and classification
-          tracking.
+          Entity obligations, KYC / KYB refresh, watchlist screening, casework, digital-asset
+          review tags, and reporting readiness in one operating desk.
         </p>
       </div>
 
@@ -163,9 +197,256 @@ export default function ComplianceWorkbenchPage({
         <StatCard label="Dated Obligations" value={dueSoon} />
         <StatCard label="Tax Filing Links" value={data.taxReportingLinks.length} />
         <StatCard label="Filing Review Queue" value={filingReadyCount} />
+        <StatCard label="KYC / KYB Reviews" value={kybReviewCount} />
+        <StatCard label="Watchlist Queue" value={watchlistQueueCount} />
+        <StatCard label="AML Casework" value={amlCaseCount} />
         <StatCard label="Wealth Rail Watchlist" value={wealthRailWatchCount} />
         <StatCard label="Proof Chain Watchlist" value={proofChainWatchCount} />
       </div>
+
+      <PageSection
+        title="KYC / KYB & Ownership Reviews"
+        description="Ongoing entity review, beneficial-owner refresh, document coverage, and screening posture before outside banking or payment use."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.kybReviews.map((review) => (
+            <div key={review.id} style={cardStyle}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>
+                    {data.entities.find((entity) => entity.id === review.entityId)?.displayName ||
+                      review.entityId}
+                  </div>
+                  <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                    {review.reviewType.replace(/_/g, ' ')} | {review.status} | next{' '}
+                    {review.nextReviewDate || 'not scheduled'}
+                  </div>
+                </div>
+                <button type="button" onClick={() => goToHash('#entities')} style={chipStyle(false)}>
+                  Open Entity
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Owners / Coverage</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {review.beneficialOwnerCount ?? 0} owners | {review.documentCoverage}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Screening</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>{review.screeningStatus}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Review Date</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>{review.reviewDate}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(['pending', 'in_review', 'cleared', 'restricted'] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => updateKybReview(review.id, { status })}
+                    style={chipStyle(status === review.status)}
+                  >
+                    {status.replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={review.notes || ''}
+                onChange={(event) => updateKybReview(review.id, { notes: event.target.value })}
+                placeholder="KYC / KYB review notes"
+                style={{ ...inputStyle, minHeight: 92, fontFamily: 'inherit' }}
+              />
+            </div>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Watchlist & Screening Queue"
+        description="Sanctions, PEP, adverse-media, and screening follow-up items that other banking and compliance platforms treat as core onboarding controls."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.watchlistScreenings.map((screening) => (
+            <div key={screening.id} style={cardStyle}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{screening.subjectLabel}</div>
+                  <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                    {screening.subjectType} | {screening.screeningScope} | {screening.status}
+                  </div>
+                </div>
+                <button type="button" onClick={() => goToHash('#compliance')} style={chipStyle(false)}>
+                  Review Queue
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Screened / Next</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {screening.screenedAt} | {screening.nextScreeningDate || 'not scheduled'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Provider / Match</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {screening.providerLabel || 'internal'} | {screening.matchedListName || 'none'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Disposition</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>{screening.disposition}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(['clear', 'watch', 'potential_match', 'confirmed_match'] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => updateWatchlistScreening(screening.id, { status })}
+                    style={chipStyle(status === screening.status)}
+                  >
+                    {status.replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={screening.notes || ''}
+                onChange={(event) =>
+                  updateWatchlistScreening(screening.id, { notes: event.target.value })
+                }
+                placeholder="Screening notes and disposition support"
+                style={{ ...inputStyle, minHeight: 92, fontFamily: 'inherit' }}
+              />
+            </div>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="AML Casework & Filing Prep"
+        description="Case handling for suspicious activity, currency activity, watchlist escalation, and refresh work before SAR or CTR preparation."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.amlCases.map((amlCase) => (
+            <div key={amlCase.id} style={cardStyle}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{amlCase.title}</div>
+                  <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                    {amlCase.caseType.replace(/_/g, ' ')} | {amlCase.priority} | {amlCase.status}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    goToHash(
+                      amlCase.linkedDocumentIds?.[0]
+                        ? `#documents:${amlCase.linkedDocumentIds[0]}`
+                        : '#compliance',
+                    )
+                  }
+                  style={chipStyle(false)}
+                >
+                  Open Packet
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Opened / Due</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {amlCase.openedAt} | {amlCase.dueDate || 'no due date'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Filing Path</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {amlCase.filingPath || 'internal_only'} | {amlCase.filingStatus || 'not_started'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Retention Until</div>
+                  <div style={{ marginTop: 6, fontWeight: 700 }}>
+                    {amlCase.retentionUntil || 'not set'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(['open', 'under_review', 'filed', 'closed'] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => updateAmlCase(amlCase.id, { status })}
+                    style={chipStyle(status === amlCase.status)}
+                  >
+                    {status.replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={amlCase.notes || ''}
+                onChange={(event) => updateAmlCase(amlCase.id, { notes: event.target.value })}
+                placeholder="AML case notes and filing rationale"
+                style={{ ...inputStyle, minHeight: 92, fontFamily: 'inherit' }}
+              />
+            </div>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Proof Chain Oversight"

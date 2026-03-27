@@ -59,6 +59,36 @@ const researchLinks = [
     detail: 'Use TIN matching guidance when preparing 1099 filing controls and payee verification workflows.',
   },
   {
+    title: 'FinCEN Beneficial Ownership',
+    subtitle: 'BOI and ownership reporting guidance',
+    url: 'https://www.fincen.gov/beneficial-ownership-information-reporting-rule-fact-sheet',
+    detail: 'Review FinCEN beneficial ownership guidance and use it to structure ownership, control-person, and reporting review workflows.',
+  },
+  {
+    title: 'FinCEN CDD Rule',
+    subtitle: 'Customer due diligence requirements',
+    url: 'https://www.fincen.gov/resources/statutes-regulations/cdd-final-rule',
+    detail: 'Use FinCEN customer due diligence guidance when building KYB, beneficial-owner refresh, and control-person verification workflows.',
+  },
+  {
+    title: 'FinCEN SAR Filing',
+    subtitle: 'Suspicious activity reporting reference',
+    url: 'https://www.fincen.gov/suspicious-activity-report-sar',
+    detail: 'Review SAR filing expectations when casework rises from watchlist or transaction-monitoring review into escalation.',
+  },
+  {
+    title: 'FinCEN CTR Filing',
+    subtitle: 'Currency transaction reporting reference',
+    url: 'https://www.fincen.gov/currency-transaction-reporting',
+    detail: 'Use CTR filing guidance when large currency activity or structured cash patterns need case and filing preparation.',
+  },
+  {
+    title: 'OFAC Sanctions Search',
+    subtitle: 'Treasury sanctions screening reference',
+    url: 'https://ofac.treasury.gov/sanctions-programs-and-country-information',
+    detail: 'Use Treasury sanctions references when clearing entities, counterparties, control persons, or wallet relationships for banking and payment activity.',
+  },
+  {
     title: 'SEC EDGAR Search',
     subtitle: 'Issuer and filing research',
     url: 'https://www.sec.gov/edgar/search/',
@@ -1023,6 +1053,170 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
     });
+  };
+
+  const launchKybRefreshPacket = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} KYC / KYB Refresh Packet`,
+      category: 'compliance',
+      summary:
+        'Refresh packet for customer due diligence, ownership review, document coverage, and screening readiness.',
+      retentionClass: 'compliance',
+      body: `# KYC / KYB Refresh Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Refresh Checklist
+- Confirm legal entity name and tax classification
+- Refresh ownership and control-person details
+- Verify address, jurisdiction, and formation support
+- Confirm bank and payment use cases
+- Review screening, sanctions, and adverse-media posture
+- Link retained documents and next review date
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} KYC / KYB refresh`,
+      category: 'entity',
+      notes: 'Generated from AI Studio to refresh onboarding and ongoing diligence posture.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const kybReview = {
+      id: `kyb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      reviewType: 'kyb' as const,
+      status: 'pending' as const,
+      reviewDate: new Date().toISOString().slice(0, 10),
+      nextReviewDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString().slice(0, 10),
+      beneficialOwnerCount: 0,
+      documentCoverage: 'partial' as const,
+      screeningStatus: 'not_run' as const,
+      linkedDocumentIds: [document.id],
+      linkedComplianceTagIds: [complianceTag.id],
+      notes: 'Refresh review opened from AI Studio packet generation.',
+    };
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+      kybReviews: [kybReview, ...prev.kybReviews],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchWatchlistReviewPacket = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Watchlist Review Packet`,
+      category: 'compliance',
+      summary:
+        'Sanctions, PEP, adverse-media, and control-person watchlist review packet for payment and banking readiness.',
+      retentionClass: 'compliance',
+      body: `# Watchlist Review Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Screening Scope
+- OFAC and sanctions references
+- Control persons and beneficial owners
+- Counterparties and high-value vendors
+- Wallet or destination screening where applicable
+- Disposition, escalation, and re-screen cadence
+`,
+    });
+
+    const screening = {
+      id: `watch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      subjectType: 'entity' as const,
+      subjectLabel: primaryEntity.displayName || primaryEntity.name,
+      screeningScope: 'multi' as const,
+      status: 'watch' as const,
+      screenedAt: new Date().toISOString().slice(0, 10),
+      nextScreeningDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString().slice(0, 10),
+      providerLabel: 'AI Studio review launch',
+      disposition: 'pending_review' as const,
+      linkedDocumentIds: [document.id],
+      notes: 'Screening queue item generated from AI Studio to begin sanctions and adverse-media review.',
+    };
+
+    const persistedDocument = await persistGeneratedDocumentRecord(document);
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      watchlistScreenings: [screening, ...prev.watchlistScreenings],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchAmlCasePacket = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} AML Case Packet`,
+      category: 'compliance',
+      summary:
+        'Case packet for suspicious activity, currency activity, watchlist escalation, and filing-prep support.',
+      retentionClass: 'compliance',
+      body: `# AML Case Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+
+## Case Build
+- Trigger summary
+- Linked transactions or payments
+- Watchlist or KYB refresh linkage
+- SAR / CTR path assessment
+- Internal rationale and retention horizon
+`,
+    });
+
+    const amlCase = {
+      id: `aml-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      caseType: 'suspicious_activity' as const,
+      title: `${primaryEntity.displayName || primaryEntity.name} AML review case`,
+      status: 'open' as const,
+      priority: 'elevated' as const,
+      openedAt: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 10).toISOString().slice(0, 10),
+      linkedDocumentIds: [document.id],
+      filingPath: 'SAR' as const,
+      filingStatus: 'draft' as const,
+      retentionUntil: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 5)
+        .toISOString()
+        .slice(0, 10),
+      notes: 'Case opened from AI Studio for investigation and filing-prep support.',
+    };
+
+    const persistedDocument = await persistGeneratedDocumentRecord(document);
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      amlCases: [amlCase, ...prev.amlCases],
+    }));
+    focusDocument(persistedDocument.id);
   };
 
   const launch1031ExchangePacket = () => {
@@ -2023,6 +2217,71 @@ ${eventNotices
     void appendDocument(document);
   };
 
+  const launchAmlOversightReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const scopedKyb = data.kybReviews.filter(
+      (item) =>
+        item.entityId === reportEntity.id && isOnOrAfterWindow(item.reviewDate, reportWindow),
+    );
+    const scopedScreenings = data.watchlistScreenings.filter(
+      (item) =>
+        item.entityId === reportEntity.id && isOnOrAfterWindow(item.screenedAt, reportWindow),
+    );
+    const scopedCases = data.amlCases.filter(
+      (item) =>
+        item.entityId === reportEntity.id && isOnOrAfterWindow(item.openedAt, reportWindow),
+    );
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} AML Oversight Report`,
+      category: 'compliance',
+      summary:
+        'KYC/KYB, watchlist, and AML casework report for current operating and filing posture.',
+      retentionClass: 'compliance',
+      body: `# AML Oversight Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## KYC / KYB Reviews
+${scopedKyb
+  .map(
+    (item) =>
+      `- ${item.reviewType} | ${item.status} | coverage ${item.documentCoverage} | screening ${item.screeningStatus}`,
+  )
+  .join('\n') || '- No reviews are currently in scope.'}
+
+## Watchlist Screenings
+${scopedScreenings
+  .map(
+    (item) =>
+      `- ${item.subjectLabel} | ${item.screeningScope} | ${item.status} | disposition ${item.disposition}`,
+  )
+  .join('\n') || '- No screening records are currently in scope.'}
+
+## AML Cases
+${scopedCases
+  .map(
+    (item) =>
+      `- ${item.title} | ${item.caseType} | ${item.status} | ${item.filingPath || 'internal_only'} / ${item.filingStatus || 'not_started'}`,
+  )
+  .join('\n') || '- No AML cases are currently in scope.'}
+
+## Operator Focus
+- Clear pending watchlist dispositions before new bank-facing use.
+- Refresh KYB and ownership support where document coverage is partial or missing.
+- Escalate suspicious or currency cases into filing-prep review only when facts support it.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchFullOperationsPack = () => {
     if (!reportEntity) {
       return;
@@ -2170,6 +2429,26 @@ ${eventNotices
       onAction: launchW9CollectionPacket,
     },
     {
+      title: 'KYC / KYB Refresh',
+      subtitle: 'Entity refresh, ownership, and document coverage',
+      detail: 'Open a refresh packet and review record for entity diligence, owner coverage, and next review scheduling.',
+      lane: 'compliance',
+      actionLabel: 'Create Refresh Packet',
+      onAction: () => {
+        void launchKybRefreshPacket();
+      },
+    },
+    {
+      title: 'Watchlist Review',
+      subtitle: 'Sanctions, PEP, and adverse-media screening',
+      detail: 'Create a screening packet and queue item for watchlist disposition before payment or banking use.',
+      lane: 'compliance',
+      actionLabel: 'Start Screening',
+      onAction: () => {
+        void launchWatchlistReviewPacket();
+      },
+    },
+    {
       title: 'Identifier Research Packet',
       subtitle: 'CUSIP-adjacent issuer and instrument lookup support',
       detail: 'Create a structured research packet for identifier mapping, issuer support, and document evidence.',
@@ -2194,6 +2473,16 @@ ${eventNotices
       lane: 'compliance',
       actionLabel: 'Create Ownership Packet',
       onAction: launchBeneficialOwnershipPacket,
+    },
+    {
+      title: 'AML Case Packet',
+      subtitle: 'Investigation, SAR, and CTR prep support',
+      detail: 'Open a case packet for suspicious activity, currency activity, watchlist escalation, and retention handling.',
+      lane: 'compliance',
+      actionLabel: 'Open Case Packet',
+      onAction: () => {
+        void launchAmlCasePacket();
+      },
     },
     {
       title: '1031 Exchange Planning',
@@ -2284,7 +2573,7 @@ ${eventNotices
     {
       title: 'Compliance & Filing',
       subtitle: `${data.taxReportingLinks.filter((item) => item.status !== 'accepted').length} filing links still active`,
-      detail: `${data.complianceTags.filter((item) => item.status === 'review').length} compliance review items and ${data.returnEvents.filter((item) => item.status !== 'resolved').length} open returns are in queue.`,
+      detail: `${data.complianceTags.filter((item) => item.status === 'review').length} compliance reviews, ${data.watchlistScreenings.filter((item) => item.status !== 'clear' || item.disposition === 'pending_review').length} watchlist items, and ${data.amlCases.filter((item) => item.status !== 'closed').length} AML cases are in queue.`,
       actionLabel: 'Open Compliance',
       actionHash: '#compliance',
     },
@@ -2367,6 +2656,13 @@ ${eventNotices
       detail: 'Create a disclosure watch report across municipal issuer filings, identifier coverage, and event notices already tracked in the workspace.',
       actionLabel: 'Create Watch Report',
       onAction: launchMunicipalDisclosureWatchReport,
+    },
+    {
+      title: 'AML Oversight Report',
+      subtitle: 'KYC/KYB, screening, and casework posture',
+      detail: 'Create a compliance report across diligence refresh work, watchlist screening, and AML case escalation posture.',
+      actionLabel: 'Create AML Report',
+      onAction: launchAmlOversightReport,
     },
   ];
   const reportPackPresets = [
@@ -2513,6 +2809,27 @@ ${eventNotices
         subtitle: `Municipal event | ${item.eventType} | ${item.severity}`,
         haystack: `${item.issuerName} ${item.identifierCode || ''} ${item.eventType} ${item.severity} ${item.status} ${item.notes || ''}`,
         hash: '#assets',
+      })),
+      ...data.kybReviews.map((item) => ({
+        id: `kyb-review-${item.id}`,
+        label: `${item.reviewType.replace(/_/g, ' ')} review`,
+        subtitle: `KYC/KYB | ${item.status} | ${item.documentCoverage}`,
+        haystack: `${item.reviewType} ${item.status} ${item.documentCoverage} ${item.screeningStatus} ${item.notes || ''}`,
+        hash: '#compliance',
+      })),
+      ...data.watchlistScreenings.map((item) => ({
+        id: `watchlist-${item.id}`,
+        label: `${item.subjectLabel} screening`,
+        subtitle: `Watchlist | ${item.screeningScope} | ${item.status}`,
+        haystack: `${item.subjectLabel} ${item.subjectType} ${item.screeningScope} ${item.status} ${item.disposition} ${item.notes || ''}`,
+        hash: '#compliance',
+      })),
+      ...data.amlCases.map((item) => ({
+        id: `aml-case-${item.id}`,
+        label: item.title,
+        subtitle: `AML case | ${item.caseType} | ${item.status}`,
+        haystack: `${item.title} ${item.caseType} ${item.status} ${item.filingPath || ''} ${item.filingStatus || ''} ${item.notes || ''}`,
+        hash: item.linkedDocumentIds?.[0] ? `#documents:${item.linkedDocumentIds[0]}` : '#compliance',
       })),
       ...integrationLaunchers.map((item) => ({
         id: `integration-${item.title}`,

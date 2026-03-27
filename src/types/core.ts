@@ -878,6 +878,58 @@ export interface MunicipalEventNoticeRecord {
   notes?: string;
 }
 
+export interface KybReviewRecord {
+  id: string;
+  entityId: string;
+  reviewType: 'cip' | 'kyb' | 'beneficial_ownership' | 'risk_refresh';
+  status: 'pending' | 'in_review' | 'cleared' | 'restricted';
+  reviewDate: string;
+  nextReviewDate?: string;
+  beneficialOwnerCount?: number;
+  documentCoverage: 'complete' | 'partial' | 'missing';
+  screeningStatus: 'clear' | 'watch' | 'hit' | 'not_run';
+  linkedDocumentIds?: string[];
+  linkedComplianceTagIds?: string[];
+  notes?: string;
+}
+
+export interface WatchlistScreeningRecord {
+  id: string;
+  entityId?: string;
+  subjectType: 'entity' | 'individual' | 'counterparty' | 'wallet';
+  subjectLabel: string;
+  screeningScope: 'ofac' | 'pep' | 'adverse_media' | 'multi';
+  status: 'clear' | 'watch' | 'potential_match' | 'confirmed_match';
+  screenedAt: string;
+  nextScreeningDate?: string;
+  providerLabel?: string;
+  matchedListName?: string;
+  disposition: 'pending_review' | 'escalated' | 'cleared' | 'reported';
+  linkedDocumentIds?: string[];
+  linkedCaseIds?: string[];
+  notes?: string;
+}
+
+export interface AmlCaseRecord {
+  id: string;
+  entityId?: string;
+  caseType: 'watchlist_review' | 'suspicious_activity' | 'currency_activity' | 'kyc_refresh';
+  title: string;
+  status: 'open' | 'under_review' | 'filed' | 'closed';
+  priority: 'standard' | 'elevated' | 'critical';
+  openedAt: string;
+  dueDate?: string;
+  linkedTransactionIds?: string[];
+  linkedPaymentIds?: string[];
+  linkedWatchlistScreeningIds?: string[];
+  linkedKybReviewIds?: string[];
+  linkedDocumentIds?: string[];
+  filingPath?: 'SAR' | 'CTR' | 'internal_only';
+  filingStatus?: 'not_started' | 'draft' | 'ready' | 'submitted';
+  retentionUntil?: string;
+  notes?: string;
+}
+
 export interface BankOnboardingChecklistItem {
   id: string;
   label: string;
@@ -1698,6 +1750,9 @@ export interface CoreDataBundle {
   complianceTags: ComplianceTagRecord[];
   municipalDisclosures: MunicipalDisclosureRecord[];
   municipalEventNotices: MunicipalEventNoticeRecord[];
+  kybReviews: KybReviewRecord[];
+  watchlistScreenings: WatchlistScreeningRecord[];
+  amlCases: AmlCaseRecord[];
   digitalAssetCompliance: DigitalAssetComplianceRecord[];
   documents: DocumentRecord[];
   tokens: TokenRecord[];

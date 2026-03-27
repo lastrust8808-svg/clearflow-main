@@ -53,6 +53,11 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const directDepositCount = data.directDepositAuthorizations.filter(
     (item) => item.status === 'returned' || item.status === 'verified',
   ).length;
+  const activeKybReviews = data.kybReviews.filter((item) => item.status !== 'cleared').length;
+  const watchlistItems = data.watchlistScreenings.filter(
+    (item) => item.status !== 'clear' || item.disposition === 'pending_review',
+  ).length;
+  const amlCasesOpen = data.amlCases.filter((item) => item.status !== 'closed').length;
   const retainedRecordCount = data.documents.filter(isClearFlowRetainedDocument).length;
   const userOwnedReadyCount = data.documents.filter(isUserOwnedReadyDocument).length;
   const driveRoutedCount = data.documents.filter(
@@ -157,6 +162,9 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Employees" value={employeeCount} />
         <StatCard label="Tax Filing Queue" value={filingQueueCount} />
         <StatCard label="Direct Deposit Returns" value={directDepositCount} />
+        <StatCard label="KYC / KYB Reviews" value={activeKybReviews} />
+        <StatCard label="Watchlist Items" value={watchlistItems} />
+        <StatCard label="AML Cases" value={amlCasesOpen} />
         <StatCard label="Retained Records" value={retainedRecordCount} />
         <StatCard label="Sealed Proof Chains" value={sealedProofChainCount} />
         <StatCard label="Entity Connections" value={activeEntityConnections} />
@@ -765,7 +773,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
             },
             {
               title: 'Compliance',
-              subtitle: `${filingQueueCount} filing items | ${reviewItems} review items`,
+              subtitle: `${filingQueueCount} filing items | ${reviewItems} review items | ${amlCasesOpen} AML cases`,
               hash: '#compliance',
             },
             {

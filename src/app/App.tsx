@@ -217,6 +217,9 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     complianceTags: [],
     municipalDisclosures: [],
     municipalEventNotices: [],
+    kybReviews: [],
+    watchlistScreenings: [],
+    amlCases: [],
     digitalAssetCompliance: [],
     documents: [],
     tokens: [],
@@ -285,6 +288,10 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
       candidate.municipalDisclosures ?? coreMockData.municipalDisclosures,
     municipalEventNotices:
       candidate.municipalEventNotices ?? coreMockData.municipalEventNotices,
+    kybReviews: candidate.kybReviews ?? coreMockData.kybReviews,
+    watchlistScreenings:
+      candidate.watchlistScreenings ?? coreMockData.watchlistScreenings,
+    amlCases: candidate.amlCases ?? coreMockData.amlCases,
     digitalAssetCompliance:
       candidate.digitalAssetCompliance ?? coreMockData.digitalAssetCompliance,
     documents: candidate.documents ?? coreMockData.documents,
