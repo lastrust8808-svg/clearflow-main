@@ -132,6 +132,7 @@ type AccountingHashAction =
   | 'new-employee'
   | 'new-invoice'
   | 'new-payment'
+  | 'new-remittance'
   | 'new-direct-deposit'
   | 'new-journal'
   | 'new-bill'
@@ -184,6 +185,7 @@ function parseAccountingActionHash(hashValue: string): AccountingHashAction | nu
     'new-employee',
     'new-invoice',
     'new-payment',
+    'new-remittance',
     'new-direct-deposit',
     'new-journal',
     'new-bill',
@@ -279,6 +281,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           setIsPaymentModalOpen(true);
           setActiveSubsection('payments');
           replaceHash('#accounting:payments');
+          break;
+        case 'new-remittance':
+          setPresentmentModalDraft(
+            consumeSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey)
+          );
+          setIsCouponPresentmentModalOpen(true);
+          setActiveSubsection('presentments');
+          replaceHash('#accounting:presentments');
           break;
         case 'new-direct-deposit':
           setIsDirectDepositModalOpen(true);

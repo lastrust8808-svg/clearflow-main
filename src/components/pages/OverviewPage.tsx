@@ -500,7 +500,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
                   fontWeight: 700,
                 }}
               >
-                Open Payments Queue
+                Open Release Queue
               </button>
             </div>
           </RecordCard>
@@ -526,7 +526,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
               ) : null}
               <button
                 type="button"
-                onClick={() => navigate('#accounting:payments')}
+                onClick={() => navigate('#accounting:railOps')}
                 style={{
                   padding: '10px 14px',
                   minHeight: 42,
@@ -538,7 +538,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
                   fontWeight: 700,
                 }}
               >
-                Open Settlement Rail Desk
+                Open Rails & Codes
               </button>
             </div>
           </RecordCard>
@@ -740,8 +740,13 @@ export default function OverviewPage({ data }: OverviewPageProps) {
           {[
             {
               title: 'Accounting',
-              subtitle: `${data.payments.length} payments | ${data.bankFeedEntries.length} bank entries`,
+              subtitle: `${data.payments.length} remittances | ${data.bankFeedEntries.length} bank entries`,
               hash: '#accounting:dashboard',
+            },
+            {
+              title: 'Remittance Intake',
+              subtitle: `${data.couponPresentments.length} presentments | ${data.bills.length} bill-backed sources`,
+              hash: '#accounting:presentments',
             },
             {
               title: 'Recurring',
@@ -808,7 +813,8 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         >
           {[
             { title: 'New Invoice', subtitle: 'Launch receivable intake', hash: '#accounting:new-invoice' },
-            { title: 'Record Payment', subtitle: 'Open payment and remittance flow', hash: '#accounting:new-payment' },
+            { title: 'Start Remittance', subtitle: 'Enter the bill or upload the coupon source first', hash: '#accounting:new-remittance' },
+            { title: 'Record Payment', subtitle: 'Open the release-side payment modal directly', hash: '#accounting:new-payment' },
             { title: 'New Bill', subtitle: 'Capture AP and source file intake', hash: '#accounting:new-bill' },
             { title: 'Log Receipt', subtitle: 'Upload and extract receipt detail', hash: '#accounting:new-receipt' },
             { title: 'Present Coupon', subtitle: 'Create obligation performance presentment', hash: '#accounting:new-presentment' },

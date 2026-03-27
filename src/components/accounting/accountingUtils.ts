@@ -18,7 +18,7 @@ export const subnavItems = [
   { id: 'railOps', label: 'Rails & Codes' },
   { id: 'customers', label: 'Customers' },
   { id: 'vendors', label: 'Vendors' },
-  { id: 'payments', label: 'Payments' },
+  { id: 'payments', label: 'Remittance Desk' },
   { id: 'recurring', label: 'Recurring' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'bankFeed', label: 'Bank Feed' },
