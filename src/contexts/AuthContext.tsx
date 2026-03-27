@@ -57,11 +57,12 @@ interface AuthContextType {
   isConfigured: boolean;
   hasDriveAccess: boolean;
   currentUser: User | null;
+  lastKnownGoogleUser: { name: string; email: string } | null;
   authStatus: AuthStatus;
   savingStatus: SavingStatus;
   appData: AppData | null;
   pendingCredentialAuth: LocalAuthChallenge | null;
-  startGoogleSignIn: () => Promise<{ success: boolean; error?: string }>;
+  startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
   renderGoogleButton: (elementId: string) => void;
   mockLogin: (name: string, email: string) => void;
   startCredentialAuth: (input: {
@@ -109,6 +110,8 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const LAST_GOOGLE_USER_STORAGE_KEY = 'clearflow-last-google-user-v1';
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
     status: 'unauthenticated',
@@ -135,6 +138,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [tokenClient, setTokenClient] = useState<any>(null);
   const tokenClientRef = useRef<any>(null);
   const [savingStatus, setSavingStatus] = useState<SavingStatus>('idle');
+  const [lastKnownGoogleUser, setLastKnownGoogleUser] = useState<{
+    name: string;
+    email: string;
+  } | null>(() => {
+    try {
+      const raw = window.localStorage.getItem(LAST_GOOGLE_USER_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as { name: string; email: string }) : null;
+    } catch {
+      return null;
+    }
+  });
   const initialDataLoaded = useRef(false);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const googleClientsInitializedRef = useRef(false);
@@ -514,6 +528,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [state.status, state.gsiUser]);
 
   useEffect(() => {
+    if (!state.appData?.user.email || state.appData.user.primaryContactType !== 'google') {
+      return;
+    }
+
+    const nextValue = {
+      name: state.appData.user.name || state.appData.user.email,
+      email: state.appData.user.email,
+    };
+
+    setLastKnownGoogleUser((current) => {
+      if (
+        current?.email === nextValue.email &&
+        current?.name === nextValue.name
+      ) {
+        return current;
+      }
+
+      try {
+        window.localStorage.setItem(LAST_GOOGLE_USER_STORAGE_KEY, JSON.stringify(nextValue));
+      } catch {
+        // ignore local storage errors
+      }
+
+      return nextValue;
+    });
+  }, [state.appData?.user.email, state.appData?.user.name, state.appData?.user.primaryContactType]);
+
+  useEffect(() => {
     if (state.status !== 'pending-gsi' || !state.appData?.user) {
       return;
     }
@@ -618,7 +660,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return typeof google !== 'undefined' && !!google.accounts;
   }, [GOOGLE_DRIVE_SCOPE, handleAccessTokenResponse, handleCredentialResponse, isConfigured]);
 
-  const startGoogleSignIn = useCallback(async () => {
+  const startGoogleSignIn = useCallback(async (mode: 'new' | 'existing' | 'returning' = 'existing') => {
     if (!isConfigured) {
       return { success: false, error: 'Google sign-in is not configured in this environment.' };
     }
@@ -637,7 +679,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
 
     activeTokenClient.requestAccessToken({
-      prompt: state.apiAccessToken ? '' : 'consent',
+      prompt:
+        mode === 'new'
+          ? 'consent select_account'
+          : state.apiAccessToken
+            ? ''
+            : '',
     });
 
     return { success: true };
@@ -1199,6 +1246,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isConfigured,
     hasDriveAccess: !!state.apiAccessToken,
     currentUser: state.appData?.user ?? null,
+    lastKnownGoogleUser,
     authStatus: state.status,
     savingStatus: savingStatus,
     appData: state.appData,

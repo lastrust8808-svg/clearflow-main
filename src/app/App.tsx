@@ -873,6 +873,7 @@ export default function App({
           initialView={initialWelcomeView}
           initialIntent={welcomeIntent}
           isConfigured={auth.isConfigured}
+          lastKnownGoogleUser={auth.lastKnownGoogleUser}
           startGoogleSignIn={auth.startGoogleSignIn}
           renderGoogleButton={auth.renderGoogleButton}
           onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}

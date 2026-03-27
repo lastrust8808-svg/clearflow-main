@@ -5,10 +5,11 @@ interface WelcomeProps {
   initialView?: 'landing' | 'signin';
   initialIntent?: 'new' | 'existing';
   isConfigured: boolean;
+  lastKnownGoogleUser?: { name: string; email: string } | null;
   onDevLogin: () => void;
   onStartNewMember: () => void;
   onStartExistingMember: () => void;
-  startGoogleSignIn: () => Promise<{ success: boolean; error?: string }>;
+  startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
   renderGoogleButton: (elementId: string) => void;
 }
 
@@ -35,6 +36,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
   initialView = 'landing',
   initialIntent = 'existing',
   isConfigured,
+  lastKnownGoogleUser,
   onDevLogin,
   onStartNewMember,
   onStartExistingMember,
@@ -73,9 +75,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
     [signInIntent]
   );
 
-  const launchGoogle = async (intent: 'new' | 'existing') => {
+  const launchGoogle = async (intent: 'new' | 'existing' | 'returning') => {
     setGoogleLaunchError('');
-    setSignInIntent(intent);
+    setSignInIntent(intent === 'new' ? 'new' : 'existing');
     setIsLaunchingGoogle(true);
 
     if (intent === 'new') {
@@ -84,7 +86,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
       onStartExistingMember();
     }
 
-    const result = await startGoogleSignIn();
+    const result = await startGoogleSignIn(intent);
     if (!result.success) {
       setGoogleLaunchError(result.error || 'Google sign-in could not start right now.');
       setIsLaunchingGoogle(false);
@@ -293,6 +295,49 @@ export const Welcome: React.FC<WelcomeProps> = ({
               </div>
 
               <div style={{ display: 'grid', gap: 16 }}>
+                {lastKnownGoogleUser ? (
+                  <div
+                    style={{
+                      borderRadius: 24,
+                      padding: 22,
+                      background:
+                        'linear-gradient(180deg, rgba(54, 215, 255, 0.14), rgba(88, 141, 255, 0.08))',
+                      border: '1px solid rgba(126, 242, 255, 0.24)',
+                      display: 'grid',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: '#8cebff' }}>
+                      Returning Member
+                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>Return to Dashboard</div>
+                    <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
+                      Continue as <strong>{lastKnownGoogleUser.name}</strong> using{' '}
+                      <strong>{lastKnownGoogleUser.email}</strong>.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void launchGoogle('returning')}
+                      style={{
+                        minHeight: 50,
+                        borderRadius: 16,
+                        border: '1px solid rgba(126, 242, 255, 0.28)',
+                        background:
+                          'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+                        color: '#fff',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        fontSize: 15,
+                      }}
+                      disabled={isLaunchingGoogle}
+                    >
+                      {isLaunchingGoogle && signInIntent === 'existing'
+                        ? 'Opening Dashboard Access...'
+                        : 'Return with Google'}
+                    </button>
+                  </div>
+                ) : null}
+
                 <div
                   style={{
                     borderRadius: 24,
@@ -361,7 +406,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   >
                     {isLaunchingGoogle && signInIntent === 'existing'
                       ? 'Starting Google...'
-                      : 'Continue with Google'}
+                      : lastKnownGoogleUser
+                        ? 'Use another Google account'
+                        : 'Continue with Google'}
                   </button>
                 </div>
               </div>
