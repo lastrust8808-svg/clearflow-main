@@ -1576,6 +1576,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         : linkedObligation?.linkedInstrumentIds?.[0]
           ? prev.instruments.find((record) => record.id === linkedObligation.linkedInstrumentIds?.[0])
           : undefined;
+      const linkedRegister =
+        linkedInstrument?.instrumentType === 'bill_of_exchange'
+          ? prev.negotiableInstrumentRegisters.find(
+              (record) =>
+                record.instrumentId === linkedInstrument.id || record.obligationId === linkedObligation?.id
+            )
+          : undefined;
 
       const shouldIssueToken = shouldAutoIssueTokens(currentEntity, prev.workspaceSettings);
       const token: TokenRecord | null = shouldIssueToken
@@ -1676,7 +1683,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         entityId: currentEntity.id,
         title:
           payload.title ||
-          `${payload.couponReference || 'Coupon'} Remittance Statement`,
+          `${
+            linkedInstrument?.instrumentType === 'bill_of_exchange'
+              ? payload.couponReference || linkedInstrument.legalIdentifier || 'Bill of Exchange'
+              : payload.couponReference || 'Coupon'
+          } Remittance Statement`,
         statementDate: presentmentDate,
         payerName: currentEntity.displayName || currentEntity.name,
         payeeName: payload.receiverName || extraction.vendorOrMerchantName || 'Receiver',
@@ -1955,7 +1966,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         entityId: currentEntity.id,
         title:
           payload.title ||
-          `${payload.couponReference || 'Coupon'} Presentment`,
+          `${
+            linkedInstrument?.instrumentType === 'bill_of_exchange'
+              ? payload.couponReference || linkedInstrument.legalIdentifier || 'Bill of Exchange'
+              : payload.couponReference || 'Coupon'
+          } Presentment`,
         couponReference: payload.couponReference || undefined,
         instrumentId: linkedInstrument?.id,
         obligationId: linkedObligation?.id,
@@ -1992,6 +2007,72 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           extraction.summary ||
           'Coupon presentment recorded from accounting workflow.',
       };
+      const nextRegister =
+        linkedRegister && linkedInstrument?.instrumentType === 'bill_of_exchange'
+          ? {
+              ...linkedRegister,
+              status:
+                dischargeCompletesPerformance && resolvedAmount >= linkedRegister.outstandingAmount
+                  ? ('performed' as const)
+                  : ('presented' as const),
+              outstandingAmount:
+                dischargeCompletesPerformance
+                  ? Math.max(
+                      Number((linkedRegister.outstandingAmount - resolvedAmount).toFixed(2)),
+                      0
+                    )
+                  : linkedRegister.outstandingAmount,
+              linkedSettlementIds: Array.from(
+                new Set([settlementId, ...(linkedRegister.linkedSettlementIds ?? [])])
+              ),
+              linkedDocumentIds: sourceDocument
+                ? Array.from(new Set([sourceDocument.id, ...(linkedRegister.linkedDocumentIds ?? [])]))
+                : linkedRegister.linkedDocumentIds,
+              linkedTokenIds: token
+                ? Array.from(new Set([token.id, ...(linkedRegister.linkedTokenIds ?? [])]))
+                : linkedRegister.linkedTokenIds,
+              notes:
+                payload.parsedNotes ||
+                extraction.summary ||
+                'Bill of exchange presentment recorded from accounting workflow.',
+            }
+          : null;
+      const nextHolderLedgerEntry =
+        linkedRegister && linkedInstrument?.instrumentType === 'bill_of_exchange'
+          ? {
+              id: `hle-presentment-${stamp}`,
+              entityId: currentEntity.id,
+              registerId: linkedRegister.id,
+              entryDate: presentmentDate,
+              entryType: dischargeCompletesPerformance ? ('performance' as const) : ('presentment' as const),
+              holderEntityId: linkedRegister.currentHolderEntityId,
+              holderConnectionId: linkedRegister.currentHolderConnectionId,
+              holderLabel:
+                linkedRegister.currentHolderLabel ||
+                payload.receiverName ||
+                extraction.vendorOrMerchantName ||
+                'Current holder',
+              amount: resolvedAmount,
+              currency: linkedRegister.currency,
+              resultingBalance:
+                dischargeCompletesPerformance
+                  ? Math.max(
+                      Number((linkedRegister.outstandingAmount - resolvedAmount).toFixed(2)),
+                      0
+                    )
+                  : linkedRegister.outstandingAmount,
+              linkedInstrumentId: linkedInstrument.id,
+              linkedObligationId: linkedObligation?.id,
+              linkedSettlementId: settlementId,
+              linkedRemittanceStatementId: remittanceStatementId,
+              linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
+              linkedTokenIds: token ? [token.id] : undefined,
+              notes:
+                payload.parsedNotes ||
+                extraction.summary ||
+                'Bill of exchange presentment added from accounting remittance intake.',
+            }
+          : null;
 
       return {
         ...prev,
@@ -2010,6 +2091,14 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               item.id === existingInstrumentSettlement.id ? nextInstrumentSettlement : item
             )
           : [nextInstrumentSettlement, ...(prev.instrumentSettlements ?? [])],
+        negotiableInstrumentRegisters: nextRegister
+          ? prev.negotiableInstrumentRegisters.map((item) =>
+              item.id === nextRegister.id ? nextRegister : item
+            )
+          : prev.negotiableInstrumentRegisters,
+        holderLedgerEntries: nextHolderLedgerEntry
+          ? [nextHolderLedgerEntry, ...(prev.holderLedgerEntries ?? [])]
+          : prev.holderLedgerEntries,
         obligations: linkedObligation
           ? prev.obligations.map((item) =>
               item.id === linkedObligation.id
@@ -5829,6 +5918,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         return (
           <AccountingDashboardSection
             stats={stats}
+            entities={data.entities}
             journalDrafts={journalEntries}
             bills={bills}
             payments={payments}
@@ -5844,6 +5934,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             returnEvents={returnEvents}
             railControls={remittanceRailControls}
             obligationLifecycleSummaries={obligationLifecycleSummaries}
+            entityMarkUsageRecords={data.entityMarkUsageRecords}
+            digitalAssets={data.digitalAssets}
+            treasuryAccounts={data.treasuryAccounts}
+            workspaceSettings={data.workspaceSettings}
             onNavigate={navigateToHash}
           />
         );

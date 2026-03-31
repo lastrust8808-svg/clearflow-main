@@ -50,6 +50,24 @@ export default function ComplianceWorkbenchPage({
   data,
   setData,
 }: ComplianceWorkbenchPageProps) {
+  const linkedEftpsTreasury = data.treasuryAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsLinkedTreasuryAccountId,
+  );
+  const linkedEftpsBank = data.bankAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsLinkedBankAccountId,
+  );
+  const linkedEftpsLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsTaxLedgerAccountId,
+  );
+  const linkedUspsBank = data.bankAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsLinkedBankAccountId,
+  );
+  const linkedUspsPostageLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsPostageLedgerAccountId,
+  );
+  const linkedUspsEvidenceLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsEvidenceLedgerAccountId,
+  );
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
   const transactionProofChains = buildTransactionProofChainViews(data);
   const reviewCount = data.complianceTags.filter((item) => item.status === 'review').length;
@@ -203,6 +221,151 @@ export default function ComplianceWorkbenchPage({
         <StatCard label="Wealth Rail Watchlist" value={wealthRailWatchCount} />
         <StatCard label="Proof Chain Watchlist" value={proofChainWatchCount} />
       </div>
+
+      <PageSection
+        title="Treasury Tax & Postal Profiles"
+        description="Operational oversight for EFTPS and USPS gateway posture when those outside accounts are part of the user’s workflow."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <div style={cardStyle}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>EFTPS Payment Controls</div>
+                <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                  {data.workspaceSettings.eftpsEnabled
+                    ? data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'
+                    : 'not enabled'}{' '}
+                  | open filing links{' '}
+                  {data.taxReportingLinks.filter((item) => item.status !== 'accepted').length}
+                </div>
+              </div>
+              <button type="button" onClick={() => goToHash('#settings')} style={chipStyle(false)}>
+                Open Settings
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Identifiers</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  EIN {data.workspaceSettings.eftpsEin || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Operator</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.eftpsOperatorName || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Deposit Mode</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.eftpsDepositMode?.replace(/_/g, ' ') || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Last Evidence</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.eftpsLastEvidenceDate || 'not recorded'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Treasury / Bank / Ledger</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {linkedEftpsTreasury?.name || 'no treasury'} / {linkedEftpsBank?.accountName || 'no bank'} /{' '}
+                  {linkedEftpsLedger ? `${linkedEftpsLedger.code} ${linkedEftpsLedger.name}` : 'no ledger'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>USPS Gateway Operations</div>
+                <div style={{ color: 'var(--cf-muted)', marginTop: 6 }}>
+                  {data.workspaceSettings.uspsGatewayEnabled
+                    ? data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'
+                    : 'not enabled'}{' '}
+                  | service{' '}
+                  {data.workspaceSettings.uspsServiceProfile?.replace(/_/g, ' ') || 'not set'}
+                </div>
+              </div>
+              <button type="button" onClick={() => goToHash('#settings')} style={chipStyle(false)}>
+                Open Settings
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>CRID / MID</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.uspsCrid || 'not set'} /{' '}
+                  {data.workspaceSettings.uspsMailerId || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Permit</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.uspsPermitNumber || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Service Admin</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {data.workspaceSettings.uspsBusinessServiceAdmin || 'not set'}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Bank / Ledgers</div>
+                <div style={{ marginTop: 6, fontWeight: 700 }}>
+                  {linkedUspsBank?.accountName || 'no bank'} /{' '}
+                  {linkedUspsPostageLedger
+                    ? `${linkedUspsPostageLedger.code} ${linkedUspsPostageLedger.name}`
+                    : 'no postage ledger'} /{' '}
+                  {linkedUspsEvidenceLedger
+                    ? `${linkedUspsEvidenceLedger.code} ${linkedUspsEvidenceLedger.name}`
+                    : 'no evidence ledger'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageSection>
 
       <PageSection
         title="KYC / KYB & Ownership Reviews"

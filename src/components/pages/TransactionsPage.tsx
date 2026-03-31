@@ -6,6 +6,7 @@ import {
   type ObligationLifecycleSummary,
 } from '../../services/obligationLifecycle.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
+import { buildDispatchFooter } from '../../services/dispatchIdentity.service';
 import PageSection from '../ui/PageSection';
 import RecordCard from '../ui/RecordCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
@@ -25,6 +26,14 @@ function goToHash(hash: string) {
   }
 }
 
+function storeSessionDraft<T>(key: string, value: T) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(key, JSON.stringify(value));
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -33,6 +42,91 @@ function addDaysToIsoDate(date: string, days: number) {
   const base = new Date(`${date}T00:00:00`);
   base.setDate(base.getDate() + days);
   return base.toISOString().slice(0, 10);
+}
+
+function dispatchTone(status: CoreDataBundle['dispatchRecords'][number]['status']) {
+  switch (status) {
+    case 'accepted':
+      return 'teal';
+    case 'dishonored':
+      return 'rose';
+    case 'response_received':
+    case 'delivered':
+      return 'gold';
+    default:
+      return 'blue';
+  }
+}
+
+function acceptanceTone(status: CoreDataBundle['dispatchRecords'][number]['acceptanceStatus']) {
+  switch (status) {
+    case 'accepted':
+      return 'teal';
+    case 'dishonored':
+      return 'rose';
+    case 'conditional':
+      return 'gold';
+    default:
+      return 'blue';
+  }
+}
+
+function dispatchMethodLabel(method: CoreDataBundle['dispatchRecords'][number]['method']) {
+  switch (method) {
+    case 'internal_clearflow':
+      return 'Internal ClearFlow';
+    case 'postal_mail':
+      return 'Postal dispatch';
+    case 'email':
+      return 'Email';
+    case 'manual_upload':
+      return 'Manual upload';
+    case 'external_courier':
+      return 'Courier';
+    default:
+      return method;
+  }
+}
+
+function originalControlTone(
+  status: CoreDataBundle['dispatchRecords'][number]['originalControlStatus']
+) {
+  switch (status) {
+    case 'returned_original_received':
+      return 'teal';
+    case 'executed_copy_only':
+      return 'gold';
+    default:
+      return 'blue';
+  }
+}
+
+function serviceEvidenceTone(
+  status: CoreDataBundle['dispatchRecords'][number]['serviceEvidenceStatus']
+) {
+  switch (status) {
+    case 'executed_return_retained':
+      return 'teal';
+    case 'delivery_receipt_retained':
+      return 'gold';
+    case 'mailing_prepared':
+      return 'blue';
+    default:
+      return 'rose';
+  }
+}
+
+function counselTone(
+  status: CoreDataBundle['dispatchRecords'][number]['counselReviewStatus']
+) {
+  switch (status) {
+    case 'completed':
+      return 'teal';
+    case 'recommended':
+      return 'gold';
+    default:
+      return 'blue';
+  }
 }
 
 function statusPill(label: string, tone: 'blue' | 'teal' | 'gold' | 'rose') {
@@ -163,6 +257,13 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
   const settlementFlows = buildSettlementFlowViews(data);
   const transactionById = new Map(data.transactions.map((transaction) => [transaction.id, transaction]));
   const settlementById = new Map(data.settlements.map((settlement) => [settlement.id, settlement]));
+  const remittanceById = new Map(
+    data.remittanceStatements.map((statement) => [statement.id, statement])
+  );
+  const entityById = new Map(data.entities.map((entity) => [entity.id, entity]));
+  const connectionById = new Map(
+    data.entityConnections.map((connection) => [connection.id, connection])
+  );
   const entityNameById = new Map(data.entities.map((entity) => [entity.id, entity.name]));
   const coveredTransactions = settlementFlows.filter((flow) => flow.settlement).length;
   const liquidCashReadyCount = settlementFlows.filter((flow) => flow.liquidCashReady).length;
@@ -190,6 +291,722 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
   const sealedProofChainCount = transactionProofChains.filter(
     (item) => item.verificationStatus === 'sealed'
   ).length;
+  const billOfExchangeFlows = data.instruments
+    .filter((instrument) => instrument.instrumentType === 'bill_of_exchange')
+    .map((instrument) => {
+      const obligation = data.obligations.find((item) => item.linkedInstrumentIds?.includes(instrument.id));
+      const register = data.negotiableInstrumentRegisters.find(
+        (item) => item.instrumentId === instrument.id || item.obligationId === obligation?.id
+      );
+      const instrumentSettlement = data.instrumentSettlements.find(
+        (item) => item.instrumentId === instrument.id || item.obligationId === obligation?.id
+      );
+      const presentments = data.couponPresentments
+        .filter(
+          (item) =>
+            item.instrumentId === instrument.id ||
+            item.obligationId === obligation?.id ||
+            item.instrumentSettlementId === instrumentSettlement?.id
+        )
+        .sort((a, b) => b.presentmentDate.localeCompare(a.presentmentDate));
+      const latestPresentment = presentments[0];
+      const settlement =
+        (latestPresentment?.linkedSettlementId
+          ? settlementById.get(latestPresentment.linkedSettlementId)
+          : undefined) ||
+        (instrumentSettlement?.linkedSettlementId
+          ? settlementById.get(instrumentSettlement.linkedSettlementId)
+          : undefined) ||
+        (obligation?.linkedSettlementIds?.[0]
+          ? settlementById.get(obligation.linkedSettlementIds[0])
+          : undefined);
+      const remittance =
+        (latestPresentment?.linkedRemittanceStatementId
+          ? remittanceById.get(latestPresentment.linkedRemittanceStatementId)
+          : undefined) ||
+        (settlement?.linkedRemittanceStatementId
+          ? remittanceById.get(settlement.linkedRemittanceStatementId)
+          : undefined) ||
+        (obligation?.linkedRemittanceStatementIds?.[0]
+          ? remittanceById.get(obligation.linkedRemittanceStatementIds[0])
+          : undefined);
+      const holderConnection =
+        (register?.currentHolderConnectionId
+          ? connectionById.get(register.currentHolderConnectionId)
+          : undefined) ||
+        data.entityConnections.find(
+          (item) =>
+            item.ownerEntityId === instrument.entityId &&
+            item.connectedEntityId === instrument.counterpartyEntityId
+        );
+      const dispatches = data.dispatchRecords
+        .filter(
+          (item) =>
+            item.linkedInstrumentId === instrument.id ||
+            item.linkedObligationId === obligation?.id ||
+            item.subjectId === instrument.id ||
+            item.subjectId === obligation?.id
+        )
+        .sort((a, b) => {
+          const left = `${b.dispatchDate}|${b.deliveredAt || ''}|${b.respondedAt || ''}`;
+          const right = `${a.dispatchDate}|${a.deliveredAt || ''}|${a.respondedAt || ''}`;
+          return left.localeCompare(right);
+        });
+      const latestDispatch = dispatches[0];
+
+      return {
+        instrument,
+        obligation,
+        register,
+        instrumentSettlement,
+        presentments,
+        latestPresentment,
+        settlement,
+        remittance,
+        holderConnection,
+        dispatches,
+        latestDispatch,
+        ownerEntity: entityById.get(instrument.entityId),
+        packetId: instrument.linkedDocumentIds?.[0] || register?.linkedDocumentIds?.[0],
+      };
+    });
+  const activeDispatchCount = billOfExchangeFlows.filter((flow) => flow.latestDispatch).length;
+  const pendingAcceptanceDispatchCount = billOfExchangeFlows.filter(
+    (flow) =>
+      flow.latestDispatch &&
+      !['accepted', 'dishonored'].includes(flow.latestDispatch.acceptanceStatus)
+  ).length;
+
+  const handleDispatchBillExchange = (
+    flow: (typeof billOfExchangeFlows)[number],
+    method: CoreDataBundle['dispatchRecords'][number]['method']
+  ) => {
+    const now = todayIso();
+    const stamp = Date.now();
+    const dispatchId = `dispatch-boe-${stamp}`;
+    const dispatchDocumentId = `doc-boe-dispatch-${stamp}`;
+    const dispatchTokenId = `tok-boe-dispatch-${stamp}`;
+    const complianceTagId = `cmp-boe-dispatch-${stamp}`;
+    const recipientLabel =
+      flow.holderConnection?.connectionName ||
+      flow.register?.currentHolderLabel ||
+      flow.latestPresentment?.receiverName ||
+      flow.instrument.counterpartyLabel ||
+      'Outside drawee / holder';
+    const recipientEntityId =
+      flow.holderConnection?.connectedEntityId || flow.instrument.counterpartyEntityId;
+    const recipientEmail = flow.holderConnection?.connectedUserEmail;
+    const governingLawLabel =
+      flow.ownerEntity?.jurisdiction || flow.ownerEntity?.country || 'Jurisdiction review required';
+    const governingVenueLabel =
+      flow.ownerEntity?.country || flow.ownerEntity?.jurisdiction || 'Venue review required';
+    const dispatchFooter = buildDispatchFooter({
+      mailingLine: flow.ownerEntity?.branding?.entityMailingLine,
+      proofSealCode: flow.ownerEntity?.branding?.entityProofSealCode,
+      qrPayload: flow.ownerEntity?.branding?.entityQrPayload,
+    });
+    const methodLabel = dispatchMethodLabel(method);
+
+    setData((prev) => ({
+      ...prev,
+      dispatchRecords: [
+        {
+          id: dispatchId,
+          entityId: flow.instrument.entityId,
+          title: `Acceptance Dispatch - ${flow.instrument.title}`,
+          subjectType: 'instrument',
+          subjectId: flow.instrument.id,
+          linkedInstrumentId: flow.instrument.id,
+          linkedObligationId: flow.obligation?.id,
+          linkedSettlementId: flow.settlement?.id,
+          linkedRemittanceStatementId: flow.remittance?.id,
+          recipientLabel,
+          recipientEntityId,
+          recipientConnectionId: flow.holderConnection?.id,
+          recipientEmail,
+          method,
+          status: 'sent',
+          acceptanceStatus: 'pending',
+          originalControlStatus: 'issuer_controlled_original',
+          serviceEvidenceStatus:
+            method === 'postal_mail' || method === 'external_courier'
+              ? 'mailing_prepared'
+              : 'delivery_receipt_retained',
+          counselReviewStatus:
+            method === 'postal_mail' || method === 'external_courier' ? 'recommended' : 'not_started',
+          dispatchDate: now,
+          expectedResponseDate: addDaysToIsoDate(now, 7),
+          protestDeadline: addDaysToIsoDate(now, 10),
+          externalReference:
+            method === 'postal_mail'
+              ? flow.ownerEntity?.branding?.entityMailingLine
+              : flow.holderConnection?.connectedWorkspaceLabel || recipientEmail,
+          governingLawLabel,
+          governingVenueLabel,
+          mailingLine: flow.ownerEntity?.branding?.entityMailingLine,
+          proofSealCode: flow.ownerEntity?.branding?.entityProofSealCode,
+          qrPayload: flow.ownerEntity?.branding?.entityQrPayload,
+          linkedDocumentIds: [dispatchDocumentId],
+          linkedTokenIds: [dispatchTokenId],
+          notes:
+            method === 'postal_mail'
+              ? 'Prepared for outside mailing or courier presentment with retained dispatch identity.'
+              : 'Prepared for internal or electronic presentment through the connected ClearFlow counterparty path.',
+          enforceabilityNotes:
+            'Use actual delivery proof, returned evidence, governing-law review, and original-control records before treating the presentment as externally enforceable.',
+        },
+        ...prev.dispatchRecords,
+      ],
+      documents: [
+        {
+          id: dispatchDocumentId,
+          entityId: flow.instrument.entityId,
+          title: `Send For Acceptance - ${flow.instrument.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `SEND FOR ACCEPTANCE\n\nInstrument: ${flow.instrument.title}\nLegal Identifier: ${
+            flow.instrument.legalIdentifier || 'Pending'
+          }\nMethod: ${methodLabel}\nRecipient: ${recipientLabel}\nRecipient Email: ${
+            recipientEmail || 'Not recorded'
+          }\nDispatch Date: ${now}\nExpected Response Date: ${addDaysToIsoDate(
+            now,
+            7
+          )}\nGoverning Law / Venue: ${governingLawLabel} / ${governingVenueLabel}\nOriginal Control: Issuer-controlled original pending returned evidence\nService Evidence: ${
+            method === 'postal_mail' || method === 'external_courier'
+              ? 'Mailing prepared; retain mailing receipt and returned copy.'
+              : 'Electronic or internal delivery launched; retain delivery evidence.'
+          }\nProtest / Escalation Review By: ${addDaysToIsoDate(
+            now,
+            10
+          )}\n\nThis retained dispatch packet records controlled presentment for acceptance, outside-party response tracking, and proof posture. External legal effect still depends on actual delivery, governing law, original-control evidence, and the receiving party's conduct.${dispatchFooter}`,
+          linkedInstrumentIds: [flow.instrument.id],
+          linkedComplianceTagIds: [complianceTagId],
+          linkedTokenIds: [dispatchTokenId],
+          summary: `${methodLabel} acceptance packet prepared from the bill of exchange desk.`,
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      tokens: [
+        {
+          id: dispatchTokenId,
+          entityId: flow.instrument.entityId,
+          subjectType: 'dispatch',
+          subjectId: dispatchId,
+          label: `Dispatch Proof Token - ${flow.instrument.legalIdentifier || flow.instrument.title}`,
+          status: 'issued',
+          issuedAt: new Date().toISOString(),
+          proofReference:
+            flow.ownerEntity?.branding?.entityProofSealCode ||
+            flow.ownerEntity?.branding?.entityMailingLine ||
+            dispatchId,
+          notes: 'Retained to tie the original send-for-acceptance packet to the entity dispatch identity.',
+        },
+        ...prev.tokens,
+      ],
+      complianceTags: [
+        {
+          id: complianceTagId,
+          entityId: flow.instrument.entityId,
+          label: `Acceptance response pending - ${flow.instrument.legalIdentifier || flow.instrument.title}`,
+          category: 'risk',
+          status: 'review',
+          dueDate: addDaysToIsoDate(now, 7),
+          linkedDocumentIds: [dispatchDocumentId],
+          notes:
+            'Dispatch issued for acceptance. Track delivery, returned evidence, and any response before relying on dishonor, protest, or discharge posture.',
+        },
+        ...prev.complianceTags,
+      ],
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.id === flow.register?.id
+          ? {
+              ...item,
+              linkedDocumentIds: [...(item.linkedDocumentIds || []), dispatchDocumentId],
+              linkedTokenIds: [...(item.linkedTokenIds || []), dispatchTokenId],
+            }
+          : item
+      ),
+    }));
+  };
+
+  const handlePrepareReturnEvidence = (
+    flow: (typeof billOfExchangeFlows)[number],
+    dispatchId?: string
+  ) => {
+    const now = todayIso();
+    const evidenceDocumentId = `doc-boe-evidence-${Date.now()}`;
+    const dispatchFooter = buildDispatchFooter({
+      mailingLine: flow.ownerEntity?.branding?.entityMailingLine,
+      proofSealCode: flow.ownerEntity?.branding?.entityProofSealCode,
+      qrPayload: flow.ownerEntity?.branding?.entityQrPayload,
+    });
+
+    setData((prev) => ({
+      ...prev,
+      dispatchRecords: prev.dispatchRecords.map((item) =>
+        item.id === dispatchId
+          ? {
+              ...item,
+              status: item.status === 'accepted' || item.status === 'dishonored'
+                ? item.status
+                : 'response_received',
+              returnedEvidenceDocumentId: evidenceDocumentId,
+              serviceEvidenceStatus:
+                item.serviceEvidenceStatus === 'executed_return_retained'
+                  ? item.serviceEvidenceStatus
+                  : 'delivery_receipt_retained',
+              notes:
+                item.notes ||
+                'Returned evidence intake opened for executed copy, mail receipt, or acceptance-response upload.',
+            }
+          : item
+      ),
+      documents: [
+        {
+          id: evidenceDocumentId,
+          entityId: flow.instrument.entityId,
+          title: `Returned Evidence Intake - ${flow.instrument.title}`,
+          category: 'contract',
+          date: now,
+          status: 'draft',
+          outputStatus: 'review',
+          generatedBody: `RETURNED EVIDENCE INTAKE\n\nInstrument: ${flow.instrument.title}\nLegal Identifier: ${
+            flow.instrument.legalIdentifier || 'Pending'
+          }\nDispatch Date: ${flow.latestDispatch?.dispatchDate || now}\nOriginal Control Goal: Retain the original or best available executed return.\nService Evidence Goal: Retain mailing receipt, courier proof, internal delivery confirmation, or executed acceptance return.\n\nUse this retained record to attach an executed copy, delivery receipt, mailing evidence, acceptance response, or dishonor return received after presentment.${dispatchFooter}`,
+          linkedInstrumentIds: [flow.instrument.id],
+          summary: 'Placeholder for returned evidence, executed copy, or delivery proof after acceptance dispatch.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+    }));
+
+    goToHash(`#documents:${evidenceDocumentId}`);
+  };
+
+  const launchBillExchangePresentment = (
+    flow: (typeof billOfExchangeFlows)[number],
+    mode: 'initial' | 'repeat' = 'initial'
+  ) => {
+    storeSessionDraft(presentmentDraftStorageKey, {
+      title: flow.instrument.title,
+      receiverName:
+        flow.latestPresentment?.receiverName ||
+        flow.register?.currentHolderLabel ||
+        flow.instrument.counterpartyLabel ||
+        '',
+      receiverAccountLabel:
+        flow.latestPresentment?.receiverAccountLabel ||
+        flow.register?.currentHolderLabel ||
+        '',
+      couponReference:
+        flow.latestPresentment?.couponReference || flow.instrument.legalIdentifier || '',
+      presentmentDate: todayIso(),
+      dueDate:
+        flow.instrument.maturityDate ||
+        flow.latestPresentment?.dueDate ||
+        flow.obligation?.cureDeadline ||
+        '',
+      amount: String(
+        flow.obligation?.amount ||
+          flow.instrument.denominationValue ||
+          flow.latestPresentment?.amount ||
+          ''
+      ),
+      obligationId: flow.obligation?.id,
+      instrumentSettlementId: flow.instrumentSettlement?.id,
+      treasuryAccountId: flow.instrumentSettlement?.treasuryAccountId,
+      dischargeMethod: flow.latestPresentment?.dischargeMethod || 'instrument_performance',
+      parsedNotes:
+        mode === 'repeat'
+          ? 'Re-presentment launched from the bill of exchange control desk after prior non-performance or exception review.'
+          : 'Initial bill of exchange presentment launched from the transactions control desk.',
+    });
+    goToHash('#accounting:new-remittance');
+  };
+
+  const handleAcceptBillExchange = (
+    flow: (typeof billOfExchangeFlows)[number],
+    linkedDispatchId?: string
+  ) => {
+    const now = todayIso();
+    const acceptanceDocumentId = `doc-boe-accept-${Date.now()}`;
+    const complianceTagId = `cmp-boe-accept-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === flow.obligation?.id
+          ? {
+              ...item,
+              lifecycleStage: item.lifecycleStage === 'discharged' ? item.lifecycleStage : 'presented',
+              lastPresentmentDate: flow.latestPresentment?.presentmentDate || now,
+              enforcementMemo:
+                'Bill of exchange accepted for controlled settlement follow-through. Final discharge still depends on performance and posted evidence.',
+            }
+          : item
+      ),
+      couponPresentments: prev.couponPresentments.map((item) =>
+        flow.presentments.some((presentment) => presentment.id === item.id) &&
+        item.status !== 'performed'
+          ? {
+              ...item,
+              status: 'accepted',
+              notes:
+                item.notes ||
+                'Marked accepted from the bill of exchange control desk pending performance or final discharge.',
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.id === flow.instrumentSettlement?.id
+          ? {
+              ...item,
+              performanceStatus:
+                item.performanceStatus === 'performed' ? item.performanceStatus : 'accepted',
+              notes:
+                item.notes ||
+                'Acceptance recorded from the bill of exchange control desk pending performance.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        item.id === flow.settlement?.id
+          ? {
+              ...item,
+              status: item.status === 'settled' ? item.status : 'verifying',
+              verificationReference:
+                item.verificationReference ||
+                'Drawee acceptance recorded from bill of exchange control desk.',
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.id === flow.register?.id
+          ? {
+              ...item,
+              status: item.status === 'performed' ? item.status : 'accepted',
+              notes:
+                item.notes ||
+                'Accepted by drawee or reviewer pending final performance and discharge evidence.',
+            }
+          : item
+      ),
+      dispatchRecords: prev.dispatchRecords.map((item) =>
+        item.id === linkedDispatchId
+          ? {
+              ...item,
+              status: 'accepted',
+              acceptanceStatus: 'accepted',
+              originalControlStatus: 'returned_original_received',
+              serviceEvidenceStatus: 'executed_return_retained',
+              respondedAt: now,
+              linkedDocumentIds: [...(item.linkedDocumentIds || []), acceptanceDocumentId],
+            }
+          : item
+      ),
+      holderLedgerEntries: flow.register
+        ? [
+            {
+              id: `hle-boe-accept-${Date.now()}`,
+              entityId: flow.instrument.entityId,
+              registerId: flow.register.id,
+              entryDate: now,
+              entryType: 'presentment',
+              holderEntityId: flow.register.currentHolderEntityId,
+              holderConnectionId: flow.register.currentHolderConnectionId,
+              holderLabel:
+                flow.register.currentHolderLabel ||
+                flow.latestPresentment?.receiverName ||
+                'Current holder',
+              amount: flow.latestPresentment?.amount || flow.register.faceAmount,
+              currency: flow.register.currency,
+              resultingBalance: flow.register.outstandingAmount,
+              linkedInstrumentId: flow.instrument.id,
+              linkedObligationId: flow.obligation?.id,
+              linkedSettlementId: flow.settlement?.id,
+              linkedRemittanceStatementId: flow.remittance?.id,
+              notes: 'Acceptance recorded for bill of exchange presentment.',
+            },
+            ...prev.holderLedgerEntries,
+          ]
+        : prev.holderLedgerEntries,
+      documents: [
+        {
+          id: acceptanceDocumentId,
+          entityId: flow.instrument.entityId,
+          title: `Acceptance Memo - ${flow.instrument.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `ACCEPTANCE MEMO\n\nInstrument: ${flow.instrument.title}\nLegal Identifier: ${
+            flow.instrument.legalIdentifier || 'Pending'
+          }\nAcceptance Date: ${now}\n\nThis memo records internal acceptance posture for the bill of exchange. Final discharge, payment, and enforceability still depend on actual performance, settlement evidence, and governing-law review.`,
+          linkedInstrumentIds: [flow.instrument.id],
+          summary: 'Acceptance memo generated from bill of exchange control desk.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      complianceTags: [
+        {
+          id: complianceTagId,
+          entityId: flow.instrument.entityId,
+          label: `Bill of exchange accepted - ${flow.instrument.legalIdentifier || flow.instrument.title}`,
+          category: 'risk',
+          status: 'review',
+          linkedDocumentIds: [acceptanceDocumentId],
+          notes:
+            'Acceptance recorded. Continue performance, proof-chain, and discharge follow-through before relying on final settlement.',
+        },
+        ...prev.complianceTags,
+      ],
+    }));
+  };
+
+  const handleDishonorBillExchange = (
+    flow: (typeof billOfExchangeFlows)[number],
+    linkedDispatchId?: string
+  ) => {
+    const now = todayIso();
+    const dishonorDocumentId = `doc-boe-dishonor-${Date.now()}`;
+    const complianceTagId = `cmp-boe-dishonor-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === flow.obligation?.id
+          ? {
+              ...item,
+              status: item.status === 'satisfied' ? item.status : 'disputed',
+              lifecycleStage: item.lifecycleStage === 'discharged' ? item.lifecycleStage : 'default_review',
+              defaultBasis: item.defaultBasis || 'non_payment',
+              enforcementMemo:
+                'Bill of exchange dishonor recorded. Review cure, protest, and external enforcement posture before further steps.',
+            }
+          : item
+      ),
+      couponPresentments: prev.couponPresentments.map((item) =>
+        flow.presentments.some((presentment) => presentment.id === item.id)
+          ? {
+              ...item,
+              status: 'exception',
+              notes:
+                item.notes ||
+                'Marked exception after bill of exchange dishonor or non-acceptance.',
+            }
+          : item
+      ),
+      instrumentSettlements: prev.instrumentSettlements.map((item) =>
+        item.id === flow.instrumentSettlement?.id
+          ? {
+              ...item,
+              performanceStatus: 'disputed',
+              notes:
+                item.notes ||
+                'Bill of exchange dishonor pushed this instrument settlement into dispute review.',
+            }
+          : item
+      ),
+      settlements: prev.settlements.map((item) =>
+        item.id === flow.settlement?.id
+          ? {
+              ...item,
+              status: 'exception',
+              processorStatus: 'requires_review',
+              executionReason:
+                item.executionReason ||
+                'Bill of exchange dishonored or not accepted during presentment.',
+              notes:
+                item.notes ||
+                'Settlement moved to exception posture after bill of exchange dishonor.',
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.id === flow.register?.id
+          ? {
+              ...item,
+              status: 'disputed',
+              notes:
+                item.notes ||
+                'Register moved to disputed posture after dishonor or non-acceptance.',
+            }
+          : item
+      ),
+      dispatchRecords: prev.dispatchRecords.map((item) =>
+        item.id === linkedDispatchId
+          ? {
+              ...item,
+              status: 'dishonored',
+              acceptanceStatus: 'dishonored',
+              originalControlStatus:
+                item.returnedEvidenceDocumentId ? 'returned_original_received' : 'executed_copy_only',
+              serviceEvidenceStatus:
+                item.returnedEvidenceDocumentId ? 'executed_return_retained' : 'delivery_receipt_retained',
+              counselReviewStatus: 'recommended',
+              respondedAt: now,
+              linkedDocumentIds: [...(item.linkedDocumentIds || []), dishonorDocumentId],
+            }
+          : item
+      ),
+      holderLedgerEntries: flow.register
+        ? [
+            {
+              id: `hle-boe-dishonor-${Date.now()}`,
+              entityId: flow.instrument.entityId,
+              registerId: flow.register.id,
+              entryDate: now,
+              entryType: 'dishonor',
+              holderEntityId: flow.register.currentHolderEntityId,
+              holderConnectionId: flow.register.currentHolderConnectionId,
+              holderLabel:
+                flow.register.currentHolderLabel ||
+                flow.latestPresentment?.receiverName ||
+                'Current holder',
+              amount: flow.latestPresentment?.amount || flow.register.outstandingAmount,
+              currency: flow.register.currency,
+              resultingBalance: flow.register.outstandingAmount,
+              linkedInstrumentId: flow.instrument.id,
+              linkedObligationId: flow.obligation?.id,
+              linkedSettlementId: flow.settlement?.id,
+              linkedRemittanceStatementId: flow.remittance?.id,
+              notes: 'Dishonor recorded from bill of exchange control desk.',
+            },
+            ...prev.holderLedgerEntries,
+          ]
+        : prev.holderLedgerEntries,
+      documents: [
+        {
+          id: dishonorDocumentId,
+          entityId: flow.instrument.entityId,
+          title: `Notice of Dishonor - ${flow.instrument.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `NOTICE OF DISHONOR\n\nInstrument: ${flow.instrument.title}\nLegal Identifier: ${
+            flow.instrument.legalIdentifier || 'Pending'
+          }\nDishonor Date: ${now}\n\nThis internal record captures dishonor or non-acceptance of the bill of exchange. Review protest rights, cure posture, and any outside enforcement process before escalation.`,
+          linkedInstrumentIds: [flow.instrument.id],
+          summary: 'Dishonor notice generated from bill of exchange control desk.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      complianceTags: [
+        {
+          id: complianceTagId,
+          entityId: flow.instrument.entityId,
+          label: `Dishonor review - ${flow.instrument.legalIdentifier || flow.instrument.title}`,
+          category: 'risk',
+          status: 'restricted',
+          linkedDocumentIds: [dishonorDocumentId],
+          notes:
+            'Dishonor recorded. Review protest, cure, and governing-law steps before any external enforcement action.',
+        },
+        ...prev.complianceTags,
+      ],
+    }));
+  };
+
+  const handleProtestBillExchange = (flow: (typeof billOfExchangeFlows)[number]) => {
+    const now = todayIso();
+    const protestDocumentId = `doc-boe-protest-${Date.now()}`;
+    const complianceTagId = `cmp-boe-protest-${Date.now()}`;
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((item) =>
+        item.id === flow.obligation?.id
+          ? {
+              ...item,
+              enforcementMemo:
+                'Protest support packet issued for bill of exchange. Validate applicable law, notice timing, and evidence requirements before any outside use.',
+            }
+          : item
+      ),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.map((item) =>
+        item.id === flow.register?.id
+          ? {
+              ...item,
+              status: item.status === 'performed' ? item.status : 'disputed',
+              notes:
+                item.notes ||
+                'Protest support recorded for this bill of exchange after dishonor review.',
+            }
+          : item
+      ),
+      holderLedgerEntries: flow.register
+        ? [
+            {
+              id: `hle-boe-protest-${Date.now()}`,
+              entityId: flow.instrument.entityId,
+              registerId: flow.register.id,
+              entryDate: now,
+              entryType: 'protest',
+              holderEntityId: flow.register.currentHolderEntityId,
+              holderConnectionId: flow.register.currentHolderConnectionId,
+              holderLabel:
+                flow.register.currentHolderLabel ||
+                flow.latestPresentment?.receiverName ||
+                'Current holder',
+              amount: flow.latestPresentment?.amount || flow.register.outstandingAmount,
+              currency: flow.register.currency,
+              resultingBalance: flow.register.outstandingAmount,
+              linkedInstrumentId: flow.instrument.id,
+              linkedObligationId: flow.obligation?.id,
+              linkedSettlementId: flow.settlement?.id,
+              linkedRemittanceStatementId: flow.remittance?.id,
+              notes: 'Protest support recorded for the bill of exchange.',
+            },
+            ...prev.holderLedgerEntries,
+          ]
+        : prev.holderLedgerEntries,
+      documents: [
+        {
+          id: protestDocumentId,
+          entityId: flow.instrument.entityId,
+          title: `Protest Packet - ${flow.instrument.title}`,
+          category: 'legal_memo',
+          date: now,
+          status: 'final',
+          outputStatus: 'ready',
+          generatedBody: `PROTEST SUPPORT PACKET\n\nInstrument: ${flow.instrument.title}\nLegal Identifier: ${
+            flow.instrument.legalIdentifier || 'Pending'
+          }\nPacket Date: ${now}\n\nUse this packet to collect notice, presentment, dishonor, and holder evidence for protest review. Confirm the governing law and actual protest requirements with counsel before relying on this record externally.`,
+          linkedInstrumentIds: [flow.instrument.id],
+          summary: 'Protest support packet generated from bill of exchange control desk.',
+          storageOwner: 'clearflow_retained',
+          retentionClass: 'security_support',
+          externalStorageStatus: 'not_applicable',
+        },
+        ...prev.documents,
+      ],
+      complianceTags: [
+        {
+          id: complianceTagId,
+          entityId: flow.instrument.entityId,
+          label: `Protest packet issued - ${flow.instrument.legalIdentifier || flow.instrument.title}`,
+          category: 'risk',
+          status: 'review',
+          linkedDocumentIds: [protestDocumentId],
+          notes:
+            'Protest support issued. Confirm notice timing, evidence, and governing-law requirements before any external protest step.',
+        },
+        ...prev.complianceTags,
+      ],
+    }));
+  };
 
   const handleStartCure = (obligationId: string) => {
     const now = todayIso();
@@ -774,6 +1591,406 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               </div>
             </RecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Bill Of Exchange Control"
+        description="Launch presentment into Accounting, then track acceptance, dishonor, protest support, and linked register or holder-ledger evidence for exchange instruments."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {billOfExchangeFlows.length === 0 ? (
+            <div style={{ color: 'var(--cf-muted)' }}>
+              No international or exchange-style drafts are active yet.
+            </div>
+          ) : (
+            billOfExchangeFlows.map((flow) => (
+              <RecordCard
+                key={flow.instrument.id}
+                title={flow.instrument.title}
+                subtitle={`${flow.instrument.legalIdentifier || 'No legal identifier'} · ${formatMoney(
+                  flow.instrument.denominationValue || flow.obligation?.amount || 0,
+                  'USD'
+                )}`}
+              >
+                <div style={{ display: 'grid', gap: 12, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {statusPill(
+                      `Register: ${flow.register?.status || 'not registered'}`,
+                      flow.register?.status === 'performed'
+                        ? 'teal'
+                        : flow.register?.status === 'disputed'
+                          ? 'rose'
+                          : 'blue'
+                    )}
+                    {statusPill(
+                      `Presentment: ${flow.latestPresentment?.status || 'not started'}`,
+                      flow.latestPresentment?.status === 'performed'
+                        ? 'teal'
+                        : flow.latestPresentment?.status === 'exception'
+                          ? 'rose'
+                          : flow.latestPresentment?.status === 'accepted'
+                            ? 'blue'
+                            : 'gold'
+                    )}
+                    {statusPill(
+                      `Settlement: ${flow.settlement?.status || 'not linked'}`,
+                      flow.settlement?.status === 'settled'
+                        ? 'teal'
+                        : flow.settlement?.status === 'exception'
+                          ? 'rose'
+                          : flow.settlement
+                            ? 'gold'
+                            : 'blue'
+                    )}
+                    {flow.latestDispatch
+                      ? statusPill(
+                          `Dispatch: ${flow.latestDispatch.status}`,
+                          dispatchTone(flow.latestDispatch.status)
+                        )
+                      : statusPill('Dispatch: not sent', 'blue')}
+                    {flow.latestDispatch
+                      ? statusPill(
+                          `Response: ${flow.latestDispatch.acceptanceStatus}`,
+                          acceptanceTone(flow.latestDispatch.acceptanceStatus)
+                        )
+                      : null}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Holder / drawee posture:</strong>{' '}
+                    {flow.register?.currentHolderLabel ||
+                      flow.latestPresentment?.receiverName ||
+                      flow.instrument.counterpartyLabel ||
+                      'Pending holder or drawee'}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Linked obligation / remittance:</strong>{' '}
+                    {flow.obligation?.title || 'No obligation linked'} / {flow.remittance?.title || 'No remittance yet'}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Latest presentment:</strong>{' '}
+                    {flow.latestPresentment
+                      ? `${flow.latestPresentment.presentmentDate} | ${formatMoney(
+                          flow.latestPresentment.amount,
+                          flow.latestPresentment.currency
+                        )}`
+                      : 'No presentment posted yet'}
+                  </div>
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Dispatch posture:</strong>{' '}
+                      {flow.latestDispatch
+                        ? `${dispatchMethodLabel(flow.latestDispatch.method)} sent ${
+                            flow.latestDispatch.dispatchDate
+                          } | response ${flow.latestDispatch.acceptanceStatus}`
+                        : 'No send-for-acceptance record yet'}
+                    </div>
+                  {flow.latestDispatch ? (
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Legal posture:</strong>{' '}
+                      {flow.latestDispatch.governingLawLabel || 'Jurisdiction review required'} /{' '}
+                      {flow.latestDispatch.governingVenueLabel || 'Venue review required'} | original{' '}
+                      {flow.latestDispatch.originalControlStatus} | service{' '}
+                      {flow.latestDispatch.serviceEvidenceStatus}
+                    </div>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        launchBillExchangePresentment(
+                          flow,
+                          flow.latestPresentment ? 'repeat' : 'initial'
+                        )
+                      }
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {flow.latestPresentment ? 'Re-Present Bill' : 'Present Bill'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDispatchBillExchange(
+                          flow,
+                          flow.holderConnection?.connectedEntityId ? 'internal_clearflow' : 'postal_mail'
+                        )
+                      }
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(148,163,184,0.28)',
+                        background: 'rgba(15, 23, 42, 0.4)',
+                        color: '#f8fafc',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {flow.latestDispatch ? 'Re-Send For Acceptance' : 'Send For Acceptance'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptBillExchange(flow)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(140,235,191,0.28)',
+                        background: 'rgba(80, 214, 156, 0.1)',
+                        color: '#dcfff0',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Mark Accepted
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePrepareReturnEvidence(flow, flow.latestDispatch?.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(188,220,255,0.28)',
+                        background: 'rgba(88, 141, 255, 0.08)',
+                        color: '#e4efff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Open Returned Copy Intake
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDishonorBillExchange(flow)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,160,195,0.28)',
+                        background: 'rgba(255, 120, 160, 0.09)',
+                        color: '#ffe1eb',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Record Dishonor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleProtestBillExchange(flow)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(247,211,123,0.28)',
+                        background: 'rgba(247, 211, 123, 0.09)',
+                        color: '#fff2cc',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Issue Protest Packet
+                    </button>
+                    {flow.packetId ? (
+                      <button
+                        type="button"
+                        onClick={() => goToHash(`#documents:${flow.packetId}`)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(148,163,184,0.28)',
+                          background: 'rgba(148,163,184,0.08)',
+                          color: '#e5e7eb',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Open Packet
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </RecordCard>
+            ))
+          )}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Dispatch & Acceptance Desk"
+        description="Track who each exchange packet was sent to, how it was sent, which proof identity was used, and whether a returned copy, acceptance, or dishonor response came back."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <StatCard label="Dispatches Active" value={String(activeDispatchCount)} />
+            <StatCard label="Awaiting Response" value={String(pendingAcceptanceDispatchCount)} />
+            <StatCard
+              label="Accepted Returns"
+              value={String(
+                data.dispatchRecords.filter((item) => item.acceptanceStatus === 'accepted').length
+              )}
+            />
+            <StatCard
+              label="Dishonor Returns"
+              value={String(
+                data.dispatchRecords.filter((item) => item.acceptanceStatus === 'dishonored').length
+              )}
+            />
+          </div>
+          {billOfExchangeFlows.filter((flow) => flow.latestDispatch).length === 0 ? (
+            <div style={{ color: 'var(--cf-muted)' }}>
+              No acceptance dispatches have been launched yet. Use the bill of exchange control desk to send one.
+            </div>
+          ) : (
+            billOfExchangeFlows
+              .filter((flow) => flow.latestDispatch)
+              .map((flow) => (
+                <RecordCard
+                  key={`dispatch-${flow.instrument.id}`}
+                  title={flow.latestDispatch?.title || flow.instrument.title}
+                  subtitle={`${flow.instrument.legalIdentifier || 'No legal identifier'} Â· ${
+                    flow.latestDispatch?.recipientLabel || 'Pending recipient'
+                  }`}
+                >
+                  <div style={{ display: 'grid', gap: 12, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Method: ${dispatchMethodLabel(flow.latestDispatch.method)}`,
+                            'blue'
+                          )
+                        : null}
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Status: ${flow.latestDispatch.status}`,
+                            dispatchTone(flow.latestDispatch.status)
+                          )
+                        : null}
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Acceptance: ${flow.latestDispatch.acceptanceStatus}`,
+                            acceptanceTone(flow.latestDispatch.acceptanceStatus)
+                          )
+                        : null}
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Original: ${flow.latestDispatch.originalControlStatus}`,
+                            originalControlTone(flow.latestDispatch.originalControlStatus)
+                          )
+                        : null}
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Service: ${flow.latestDispatch.serviceEvidenceStatus}`,
+                            serviceEvidenceTone(flow.latestDispatch.serviceEvidenceStatus)
+                          )
+                        : null}
+                      {flow.latestDispatch
+                        ? statusPill(
+                            `Counsel: ${flow.latestDispatch.counselReviewStatus}`,
+                            counselTone(flow.latestDispatch.counselReviewStatus)
+                          )
+                        : null}
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Dispatch identity:</strong>{' '}
+                      {flow.latestDispatch?.proofSealCode || 'No proof seal'} /{' '}
+                      {flow.latestDispatch?.mailingLine || 'No mailing line'}
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Response window:</strong>{' '}
+                      {flow.latestDispatch?.dispatchDate || 'Pending'} to{' '}
+                      {flow.latestDispatch?.expectedResponseDate || 'Not set'}
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Governing posture:</strong>{' '}
+                      {flow.latestDispatch?.governingLawLabel || 'Jurisdiction review required'} /{' '}
+                      {flow.latestDispatch?.governingVenueLabel || 'Venue review required'} | protest review by{' '}
+                      {flow.latestDispatch?.protestDeadline || 'Not set'}
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--cf-text)' }}>Effectiveness note:</strong>{' '}
+                      {flow.latestDispatch?.enforceabilityNotes ||
+                        'Retain actual delivery and returned evidence before relying on outside enforcement.'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => handlePrepareReturnEvidence(flow, flow.latestDispatch?.id)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(188,220,255,0.28)',
+                          background: 'rgba(88, 141, 255, 0.08)',
+                          color: '#e4efff',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Log Returned Evidence
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptBillExchange(flow, flow.latestDispatch?.id)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(140,235,191,0.28)',
+                          background: 'rgba(80, 214, 156, 0.1)',
+                          color: '#dcfff0',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Confirm Returned Acceptance
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDishonorBillExchange(flow, flow.latestDispatch?.id)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(255,160,195,0.28)',
+                          background: 'rgba(255, 120, 160, 0.09)',
+                          color: '#ffe1eb',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Confirm Dishonor Return
+                      </button>
+                      {flow.latestDispatch?.linkedDocumentIds?.[0] ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            goToHash(`#documents:${flow.latestDispatch?.linkedDocumentIds?.[0]}`)
+                          }
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(148,163,184,0.28)',
+                            background: 'rgba(148,163,184,0.08)',
+                            color: '#e5e7eb',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Open Dispatch Packet
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </RecordCard>
+              ))
+          )}
         </div>
       </PageSection>
 

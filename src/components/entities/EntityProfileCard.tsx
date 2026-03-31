@@ -5,9 +5,26 @@ import type {
   InterEntitySettlementMode,
   SettlementPath,
 } from '../../types/core';
+import { buildEntitySealDesign } from '../../services/dispatchIdentity.service';
+
+const sealTemplateOptions: NonNullable<EntityRecord['branding']>['sealTemplate'][] = [
+  'round',
+  'oval',
+  'notary',
+  'minimal',
+];
 
 interface EntityProfileCardProps {
   entity: EntityRecord;
+  defaultCurrency?: string;
+  sealValueSummary?: {
+    usageCount: number;
+    reserveValue: number;
+    unitsIssued: number;
+    treasuryLabel?: string;
+    digitalAssetLabel?: string;
+    currency: string;
+  };
   onSave: (nextEntity: EntityRecord) => void;
 }
 
@@ -54,12 +71,46 @@ function formatModeLabel(value: string) {
   return value.replace(/_/g, ' ');
 }
 
-export default function EntityProfileCard({ entity, onSave }: EntityProfileCardProps) {
+function previewFrameStyle(): CSSProperties {
+  return {
+    borderRadius: 12,
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'rgba(255,255,255,0.03)',
+    padding: 10,
+    minHeight: 88,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+}
+
+export default function EntityProfileCard({
+  entity,
+  defaultCurrency,
+  sealValueSummary,
+  onSave,
+}: EntityProfileCardProps) {
   const [draft, setDraft] = useState<EntityRecord>(entity);
 
   useEffect(() => {
     setDraft(entity);
   }, [entity]);
+
+  const liveSealSvg = buildEntitySealDesign({
+    entityName: draft.displayName || draft.name,
+    jurisdiction: draft.jurisdiction || draft.country,
+    template: draft.branding?.sealTemplate,
+    primaryText: draft.branding?.sealPrimaryText || draft.displayName || draft.name,
+    secondaryText:
+      draft.branding?.sealSecondaryText ||
+      draft.jurisdiction ||
+      draft.country ||
+      'ClearFlow Entity Seal',
+    inkColor:
+      draft.branding?.sealInkColor ||
+      draft.branding?.accentColor ||
+      '#36d7ff',
+  });
 
   return (
     <div
@@ -251,6 +302,130 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
           />
         </label>
         <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Template</span>
+          <select
+            style={inputStyle}
+            value={draft.branding?.sealTemplate ?? 'round'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealTemplate: event.target.value as NonNullable<EntityRecord['branding']>['sealTemplate'],
+                },
+              }))
+            }
+          >
+            {sealTemplateOptions.map((option) => (
+              <option key={option} value={option}>
+                {formatModeLabel(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Primary Text</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.sealPrimaryText ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealPrimaryText: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Secondary Text</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.sealSecondaryText ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealSecondaryText: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Ink Color</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.sealInkColor ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealInkColor: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Value Reserve Enabled</span>
+          <select
+            style={inputStyle}
+            value={draft.branding?.sealValueEnabled ? 'yes' : 'no'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealValueEnabled: event.target.value === 'yes',
+                },
+              }))
+            }
+          >
+            <option value="yes">yes</option>
+            <option value="no">no</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Unit Value</span>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            style={inputStyle}
+            value={draft.branding?.sealUnitValue ?? 1}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealUnitValue: Number(event.target.value || 1),
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Value Currency</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.sealValueCurrency ?? defaultCurrency ?? 'USD'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  sealValueCurrency: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
           <span>Email From Name</span>
           <input
             style={inputStyle}
@@ -315,7 +490,149 @@ export default function EntityProfileCard({ entity, onSave }: EntityProfileCardP
             }
           />
         </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Auto Dispatch Identity</span>
+          <select
+            style={inputStyle}
+            value={draft.branding?.autoGenerateDispatchIdentity ? 'yes' : 'no'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  autoGenerateDispatchIdentity: event.target.value === 'yes',
+                },
+              }))
+            }
+          >
+            <option value="yes">yes</option>
+            <option value="no">no</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Entity Mailing Line</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.entityMailingLine ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  entityMailingLine: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Proof Seal Code</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.entityProofSealCode ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  entityProofSealCode: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>QR Payload</span>
+          <input
+            style={inputStyle}
+            value={draft.branding?.entityQrPayload ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  entityQrPayload: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
       </div>
+
+      {(draft.branding?.entityQrSealSvg || draft.branding?.entityMailingBarcodeSvg) ? (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span>Proof QR / Seal</span>
+            <div
+              style={previewFrameStyle()}
+              dangerouslySetInnerHTML={{ __html: draft.branding?.entityQrSealSvg || '' }}
+            />
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span>Mailing Barcode</span>
+            <div
+              style={previewFrameStyle()}
+              dangerouslySetInnerHTML={{ __html: draft.branding?.entityMailingBarcodeSvg || '' }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {liveSealSvg ? (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <span>Entity Stamp / Seal Design Space</span>
+          <div style={{ ...previewFrameStyle(), minHeight: 220 }}>
+            <div
+              style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+              dangerouslySetInnerHTML={{ __html: liveSealSvg }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {sealValueSummary ? (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div style={previewFrameStyle()}>
+            <div style={{ display: 'grid', gap: 4, textAlign: 'center' }}>
+              <strong>Mark Usage Events</strong>
+              <span>{sealValueSummary.usageCount}</span>
+            </div>
+          </div>
+          <div style={previewFrameStyle()}>
+            <div style={{ display: 'grid', gap: 4, textAlign: 'center' }}>
+              <strong>Reserve Value</strong>
+              <span>
+                {sealValueSummary.currency} {sealValueSummary.reserveValue.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div style={previewFrameStyle()}>
+            <div style={{ display: 'grid', gap: 4, textAlign: 'center' }}>
+              <strong>Units Issued</strong>
+              <span>{sealValueSummary.unitsIssued}</span>
+            </div>
+          </div>
+          <div style={previewFrameStyle()}>
+            <div style={{ display: 'grid', gap: 4, textAlign: 'center' }}>
+              <strong>Reserve Links</strong>
+              <span>{sealValueSummary.treasuryLabel || 'Treasury auto-routes when used'}</span>
+              <span>{sealValueSummary.digitalAssetLabel || 'Digital asset auto-issues when used'}</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{

@@ -9,6 +9,10 @@ import { setDocumentVaultScope } from '../services/documentVault.service';
 import { getStoredMembershipDraft } from '../services/membershipDraft.service';
 import { buildTransactionProofChainEnvelopes } from '../services/transactionProofChain.service';
 import { saveTransactionProofChains } from '../services/transactionProofVault.service';
+import {
+  applyEntityMarkValueToBundle,
+  findNextEntityMarkEligibleDocument,
+} from '../services/entityMarkReserve.service';
 import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
@@ -177,10 +181,12 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
   return {
     ...coreMockData,
     entities: seedEntities,
+    entityMarkUsageRecords: [],
     entityConnections: [],
     creditRails: [],
     negotiableInstrumentRegisters: [],
     holderLedgerEntries: [],
+    dispatchRecords: [],
     customers: [],
     vendors: [],
     invoices: [],
@@ -237,11 +243,13 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     ...coreMockData,
     ...candidate,
     entities: candidate.entities ?? coreMockData.entities,
+    entityMarkUsageRecords: candidate.entityMarkUsageRecords ?? coreMockData.entityMarkUsageRecords,
     entityConnections: candidate.entityConnections ?? coreMockData.entityConnections,
     creditRails: candidate.creditRails ?? coreMockData.creditRails,
     negotiableInstrumentRegisters:
       candidate.negotiableInstrumentRegisters ?? coreMockData.negotiableInstrumentRegisters,
     holderLedgerEntries: candidate.holderLedgerEntries ?? coreMockData.holderLedgerEntries,
+    dispatchRecords: candidate.dispatchRecords ?? coreMockData.dispatchRecords,
     customers: candidate.customers ?? coreMockData.customers,
     vendors: candidate.vendors ?? coreMockData.vendors,
     invoices: candidate.invoices ?? coreMockData.invoices,
@@ -299,7 +307,10 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     aiWorkflows: candidate.aiWorkflows ?? coreMockData.aiWorkflows,
     bankFeedRules: candidate.bankFeedRules ?? coreMockData.bankFeedRules,
     bankFeedEntries: candidate.bankFeedEntries ?? coreMockData.bankFeedEntries,
-    workspaceSettings: candidate.workspaceSettings ?? coreMockData.workspaceSettings,
+    workspaceSettings: {
+      ...coreMockData.workspaceSettings,
+      ...(candidate.workspaceSettings ?? {}),
+    },
   };
 }
 
@@ -774,6 +785,19 @@ export default function App({
       setData((prev) => ({ ...prev, entities: mappedAuthEntities }));
     }
   }, [auth.authStatus, data.entities.length, mappedAuthEntities]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated') {
+      return;
+    }
+
+    const nextEligibleDocument = findNextEntityMarkEligibleDocument(data);
+    if (!nextEligibleDocument) {
+      return;
+    }
+
+    setData((prev) => applyEntityMarkValueToBundle(prev, nextEligibleDocument.id));
+  }, [auth.authStatus, data]);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !currentUserId || data.transactions.length === 0) {

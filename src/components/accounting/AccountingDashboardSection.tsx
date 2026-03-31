@@ -1,8 +1,11 @@
 import type {
   BillRecord,
   ComplianceTagRecord,
+  DigitalAssetRecord,
   DirectDepositAuthorizationRecord,
   DocumentRecord,
+  EntityRecord,
+  EntityMarkUsageRecord,
   EmployeeRecord,
   ExpenseRecord,
   MovementIdentifierRecord,
@@ -11,15 +14,19 @@ import type {
   ReceiptRecord,
   ReturnEventRecord,
   TaxReportingLinkRecord,
+  TreasuryAccountRecord,
+  WorkspaceSettingsRecord,
 } from '../../types/core';
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
+import { buildEntityMarkRailViews } from '../../services/entityMarkRail.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import type { AccountingStats, JournalDraft } from './accountingTypes';
 
 interface AccountingDashboardSectionProps {
   stats: AccountingStats;
+  entities: EntityRecord[];
   journalDrafts: JournalDraft[];
   bills: BillRecord[];
   payments: PaymentRecord[];
@@ -35,11 +42,16 @@ interface AccountingDashboardSectionProps {
   returnEvents: ReturnEventRecord[];
   railControls: SettlementRailControlView[];
   obligationLifecycleSummaries: ObligationLifecycleSummary[];
+  entityMarkUsageRecords: EntityMarkUsageRecord[];
+  digitalAssets: DigitalAssetRecord[];
+  treasuryAccounts: TreasuryAccountRecord[];
+  workspaceSettings: WorkspaceSettingsRecord;
   onNavigate?: (hash: string) => void;
 }
 
 export default function AccountingDashboardSection({
   stats,
+  entities,
   journalDrafts,
   bills,
   payments,
@@ -55,6 +67,10 @@ export default function AccountingDashboardSection({
   returnEvents,
   railControls,
   obligationLifecycleSummaries,
+  entityMarkUsageRecords,
+  digitalAssets,
+  treasuryAccounts,
+  workspaceSettings,
   onNavigate,
 }: AccountingDashboardSectionProps) {
   const incomingReceiptsTotal = payments
@@ -172,6 +188,26 @@ export default function AccountingDashboardSection({
           item.watchItems.length > 0)
     )
     .slice(0, 5);
+  const markReserveValue = entityMarkUsageRecords.reduce((sum, item) => sum + item.totalValue, 0);
+  const markUnitsIssued = entityMarkUsageRecords.reduce((sum, item) => sum + item.unitsIssued, 0);
+  const activeMarkAssets = digitalAssets.filter((item) =>
+    item.name.toLowerCase().includes('mark reserve')
+  );
+  const markTreasuryAccounts = treasuryAccounts.filter((item) =>
+    item.name.toLowerCase().includes('mark reserve')
+  );
+  const markRailViews = buildEntityMarkRailViews({
+    entities,
+    entityMarkUsageRecords,
+    taxReportingLinks,
+    workspaceSettings,
+  });
+  const markReadyCount = markRailViews.filter((item) => item.railStatus === 'ready').length;
+  const markWatchCount = markRailViews.filter((item) => item.railStatus === 'watch').length;
+  const liquidationCandidateCount = markRailViews.filter(
+    (item) => item.liquidationFocus && item.liquidationFocus !== 'none',
+  ).length;
+  const markCurrency = entityMarkUsageRecords[0]?.currency || workspaceSettings.baseCurrency || 'USD';
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -288,6 +324,67 @@ export default function AccountingDashboardSection({
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Entity Mark Reserve"
+        description="Controlled-value usage issued from entity seal and signature application on generated records."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <StatCard label="Mark Usage Events" value={entityMarkUsageRecords.length} />
+            <StatCard label="Mark Units Issued" value={markUnitsIssued} />
+            <StatCard
+              label="Reserve Value"
+              value={`${markCurrency} ${markReserveValue.toLocaleString()}`}
+            />
+            <StatCard label="Reserve Accounts" value={markTreasuryAccounts.length} />
+            <StatCard label="Ready Rails" value={markReadyCount} />
+            <StatCard label="Watch Rails" value={markWatchCount} />
+            <StatCard label="Liquidation Candidates" value={liquidationCandidateCount} />
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={infoCardStyle}>
+              Controlled mark assets live across {activeMarkAssets.length} digital reserve position(s)
+              and {markTreasuryAccounts.length} treasury reserve account(s). Each stamped document can
+              auto-create a journal-backed issuance event tied to the entity profile.
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {markRailViews.slice(0, 4).map((item) => (
+                <div key={item.usageId} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{item.markLabel}</div>
+                  <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                    Rails: {item.appliedRails.join(', ')} | liquidation focus:{' '}
+                    {item.liquidationFocus?.replace(/_/g, ' ') || 'none'} | value {item.currency}{' '}
+                    {item.totalValue.toLocaleString()}
+                  </div>
+                  {item.watchReasons.length ? (
+                    <div style={{ color: '#fca5a5', marginTop: 8 }}>
+                      {item.watchReasons.join(' ')}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <button type="button" style={actionButtonStyle} onClick={() => navigate('#entities')}>
+                Open Entity Profiles
+              </button>
+              <button type="button" style={actionButtonStyle} onClick={() => navigate('#assets')}>
+                Open Assets
+              </button>
+              <button type="button" style={actionButtonStyle} onClick={() => navigate('#documents')}>
+                Open Documents
+              </button>
+            </div>
           </div>
         </div>
       </PageSection>

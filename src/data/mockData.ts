@@ -83,6 +83,7 @@ export const coreMockData: CoreDataBundle = {
       },
     },
   ],
+  entityMarkUsageRecords: [],
 
   entityConnections: [
     {
@@ -272,6 +273,8 @@ export const coreMockData: CoreDataBundle = {
       notes: 'Performance completed and holder balance reduced to zero for the presented amount.',
     },
   ],
+
+  dispatchRecords: [],
 
   customers: [
     {
@@ -2269,6 +2272,25 @@ export const coreMockData: CoreDataBundle = {
     vaultRetentionPolicy: 'core_records_permanent',
     autoRouteUserOwnedDocumentsToDrive: true,
     preferredAccentColor: '#36d7ff',
+    eftpsEnabled: false,
+    eftpsEnrollmentStatus: 'not_started',
+    eftpsEin: undefined,
+    eftpsOperatorName: undefined,
+    eftpsDepositMode: 'manual_site',
+    eftpsLastEvidenceDate: undefined,
+    eftpsLinkedTreasuryAccountId: undefined,
+    eftpsLinkedBankAccountId: undefined,
+    eftpsTaxLedgerAccountId: undefined,
+    uspsGatewayEnabled: false,
+    uspsGatewayStatus: 'not_started',
+    uspsCrid: undefined,
+    uspsMailerId: undefined,
+    uspsPermitNumber: undefined,
+    uspsServiceProfile: 'mailing_only',
+    uspsBusinessServiceAdmin: undefined,
+    uspsLinkedBankAccountId: undefined,
+    uspsPostageLedgerAccountId: undefined,
+    uspsEvidenceLedgerAccountId: undefined,
   },
 };
 

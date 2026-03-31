@@ -14,6 +14,7 @@ import type {
 } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
 import { saveDocumentFile } from '../../services/documentVault.service';
+import { buildDispatchFooter } from '../../services/dispatchIdentity.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
@@ -57,6 +58,18 @@ const researchLinks = [
     subtitle: 'Taxpayer ID verification reference',
     url: 'https://www.irs.gov/tax-professionals/taxpayer-identification-number-tin-matching',
     detail: 'Use TIN matching guidance when preparing 1099 filing controls and payee verification workflows.',
+  },
+  {
+    title: 'IRS Forms & Instructions',
+    subtitle: 'Current tax form library and filing instructions',
+    url: 'https://www.irs.gov/forms-instructions',
+    detail: 'Open the IRS forms library for current tax forms, instructions, and schedules used in operating, payroll, and information-return workflows.',
+  },
+  {
+    title: 'EFTPS',
+    subtitle: 'Treasury federal tax payment enrollment and payments',
+    url: 'https://www.eftps.gov/eftps/',
+    detail: 'Open Treasury EFTPS for business enrollment, scheduled federal tax payments, and payment-history access.',
   },
   {
     title: 'FinCEN Beneficial Ownership',
@@ -125,10 +138,28 @@ const researchLinks = [
     detail: 'Use FINRA fixed-income market references when intake or review work expands beyond municipal paper into broader bond and dealer-market holdings.',
   },
   {
+    title: 'USPS Business Customer Gateway',
+    subtitle: 'Business mail, permits, MIDs, and service enrollment',
+    url: 'https://gateway.usps.com/',
+    detail: 'Open USPS Business Customer Gateway for business account access, Mailer IDs, permits, and postal service enrollment.',
+  },
+  {
+    title: 'USPS PDX API',
+    subtitle: 'Parcel Data Exchange API for shipping files',
+    url: 'https://postalpro.usps.com/shipping/parcel-data-exchange-pdx-api',
+    detail: 'Review USPS Parcel Data Exchange for manifest-file transmission and outbound extracts using Business Customer Gateway credentials.',
+  },
+  {
     title: 'Federal Reserve Fedwire',
     subtitle: 'Wire operations reference',
     url: 'https://www.frbservices.org/financial-services/wires/',
     detail: 'Review Fedwire operating guidance, identifiers, and service references for wire movement controls.',
+  },
+  {
+    title: 'IRS IRM Remittance Processing',
+    subtitle: 'IRS handling posture for non-standard remittances',
+    url: 'https://www.irs.gov/irm/part3/irm_03-008-045r',
+    detail: 'Review the Internal Revenue Manual before treating drafts, special instruments, or other imperfect remittances as accepted tax payments.',
   },
   {
     title: 'Cornell LII UCC Library',
@@ -136,10 +167,39 @@ const researchLinks = [
     url: 'https://www.law.cornell.edu/ucc',
     detail: 'Reference UCC articles and core commercial-law text while drafting notes, assignments, and remittance logic.',
   },
+  {
+    title: 'UCC 3-104',
+    subtitle: 'Negotiable instrument elements',
+    url: 'https://www.law.cornell.edu/ucc/3/3-104',
+    detail: 'Use UCC 3-104 to confirm the formal elements of a negotiable draft or bill of exchange.',
+  },
+  {
+    title: 'UCC 3-107',
+    subtitle: 'Instrument payable in foreign money',
+    url: 'https://www.law.cornell.edu/ucc/3/3-107',
+    detail: 'Use UCC 3-107 when the draft is payable in foreign money or needs international currency language.',
+  },
+  {
+    title: 'UCC 3-409',
+    subtitle: 'Acceptance of draft',
+    url: 'https://www.law.cornell.edu/ucc/3/3-409',
+    detail: 'Review acceptance rules before treating a drawee as obligated on an international bill of exchange.',
+  },
+  {
+    title: 'UCC 3-501',
+    subtitle: 'Presentment procedure',
+    url: 'https://www.law.cornell.edu/ucc/3/3-501',
+    detail: 'Use UCC 3-501 when structuring presentment, dishonor, and evidence flow for drafts and exchange instruments.',
+  },
 ];
 
 function openLink(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function buildEntityCode(label?: string) {
+  const cleaned = (label || 'ENTITY').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return cleaned.slice(0, 10) || 'ENTITY';
 }
 
 function buildEmmaSearchUrl(identifierCode?: string) {
@@ -295,6 +355,44 @@ function buildComplianceTag(input: {
   };
 }
 
+function formatDispatchMethod(
+  method?: CoreDataBundle['dispatchRecords'][number]['method']
+) {
+  switch (method) {
+    case 'internal_clearflow':
+      return 'Internal ClearFlow';
+    case 'postal_mail':
+      return 'Postal dispatch';
+    case 'email':
+      return 'Email';
+    case 'manual_upload':
+      return 'Manual upload';
+    case 'external_courier':
+      return 'Courier';
+    default:
+      return 'To be inserted';
+  }
+}
+
+function buildEntityDocumentBrandingAppendix(
+  entity?: CoreDataBundle['entities'][number]
+) {
+  if (!entity?.branding) {
+    return '';
+  }
+
+  const sealSvg = entity.branding.entitySealSvg;
+  const logoText = entity.branding.documentLogoText || entity.displayName || entity.name;
+  const footerNote = entity.branding.invoiceFooterNote;
+  const signerLabel = entity.representativeName || entity.ownerDisplay || entity.displayName || entity.name;
+
+  return `\n\n## Entity Branding Layer\n**${logoText}**\n\n${
+    sealSvg
+      ? `<div style="display:flex;justify-content:center;padding:12px 0;">${sealSvg}</div>\n\n`
+      : ''
+  }${footerNote ? `_${footerNote}_\n\n` : ''}## Signature Support\n| Authorized Signature | Seal / Stamp |\n| --- | --- |\n| ________________________________  \n${signerLabel} | ${entity.branding.entityProofSealCode || 'Entity seal retained on profile'} |\n`;
+}
+
 export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const auth = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -322,6 +420,26 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     [data.entities, primaryEntity, reportEntityId],
   );
   const reportWindowLabel = useMemo(() => getReportWindowLabel(reportWindow), [reportWindow]);
+  const linkedEftpsTreasury = useMemo(
+    () => data.treasuryAccounts.find((item) => item.id === data.workspaceSettings.eftpsLinkedTreasuryAccountId),
+    [data.treasuryAccounts, data.workspaceSettings.eftpsLinkedTreasuryAccountId],
+  );
+  const linkedEftpsBank = useMemo(
+    () => data.bankAccounts.find((item) => item.id === data.workspaceSettings.eftpsLinkedBankAccountId),
+    [data.bankAccounts, data.workspaceSettings.eftpsLinkedBankAccountId],
+  );
+  const linkedEftpsLedger = useMemo(
+    () => data.ledgerAccounts.find((item) => item.id === data.workspaceSettings.eftpsTaxLedgerAccountId),
+    [data.ledgerAccounts, data.workspaceSettings.eftpsTaxLedgerAccountId],
+  );
+  const linkedUspsBank = useMemo(
+    () => data.bankAccounts.find((item) => item.id === data.workspaceSettings.uspsLinkedBankAccountId),
+    [data.bankAccounts, data.workspaceSettings.uspsLinkedBankAccountId],
+  );
+  const linkedUspsPostageLedger = useMemo(
+    () => data.ledgerAccounts.find((item) => item.id === data.workspaceSettings.uspsPostageLedgerAccountId),
+    [data.ledgerAccounts, data.workspaceSettings.uspsPostageLedgerAccountId],
+  );
   const reportScopeSummary = useMemo(() => {
     if (!reportEntity) {
       return null;
@@ -357,6 +475,35 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     };
   }, [data.complianceTags, data.documents, data.payments, data.taxReportingLinks, paymentsById, remittanceRailControls, reportEntity, reportWindow, transactionProofChains]);
 
+  const taxScopeSummary = useMemo(() => {
+    if (!reportEntity) {
+      return null;
+    }
+
+    const taxDocuments = data.documents.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        item.category === 'tax' &&
+        isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const filingLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const openFilingLinks = filingLinks.filter((item) => item.status !== 'accepted');
+    const tinReviewItems = filingLinks.filter(
+      (item) => item.tinMatchStatus === 'pending' || item.tinMatchStatus === 'not_checked',
+    );
+    const employeeRecords = data.employees.filter((item) => item.entityId === reportEntity.id);
+    const contractorRecords = employeeRecords.filter((item) => item.employeeType === 'contractor');
+    const payrollRecords = employeeRecords.filter((item) => item.employeeType !== 'contractor');
+
+    return {
+      taxDocuments: taxDocuments.length,
+      openFilingLinks: openFilingLinks.length,
+      tinReviewItems: tinReviewItems.length,
+      contractorRecords: contractorRecords.length,
+      payrollRecords: payrollRecords.length,
+    };
+  }, [data.documents, data.employees, data.taxReportingLinks, reportEntity, reportWindow]);
+
   useEffect(() => {
     if (!reportEntityId && primaryEntity) {
       setReportEntityId(primaryEntity.id);
@@ -381,8 +528,19 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
     }
 
     try {
+      const entity = data.entities.find((item) => item.id === document.entityId);
+      const dispatchFooter =
+        entity?.branding?.autoGenerateDispatchIdentity
+          ? buildDispatchFooter({
+              mailingLine: entity.branding.entityMailingLine,
+              proofSealCode: entity.branding.entityProofSealCode,
+              qrPayload: entity.branding.entityQrPayload,
+            })
+          : '';
+      const brandingAppendix = buildEntityDocumentBrandingAppendix(entity);
+      const documentBody = `${document.generatedBody}${brandingAppendix}${dispatchFooter}`;
       const generatedFile = new File(
-        [document.generatedBody],
+        [documentBody],
         `${slugifyFileStem(document.title)}.md`,
         { type: 'text/markdown' },
       );
@@ -400,6 +558,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
 
       return {
         ...document,
+        generatedBody: documentBody,
         fileName: fileMetadata.fileName,
         mimeType: fileMetadata.mimeType,
         sizeBytes: fileMetadata.sizeBytes,
@@ -786,6 +945,202 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
       document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
       complianceTags: [complianceTag],
       taxReportingLinks: [taxReportingLink],
+    });
+  };
+
+  const launchTaxFormGeneratorPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Tax Form Generator Packet`,
+      category: 'tax',
+      summary:
+        'Multi-form tax packet for payer, payee, payroll, withholding, and information-return workflows.',
+      body: `# Tax Form Generator Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Common Form Paths
+- W-9: U.S. payee tax certification, classification, and TIN collection
+- W-8BEN / W-8BEN-E: non-U.S. beneficial owner certification and treaty posture
+- 1099-NEC / 1099-MISC: information return support for contractors, vendors, and reportable payments
+- W-2: employee wage reporting and annual payroll close
+- Form 941: quarterly federal payroll tax return
+- Form 940: annual federal unemployment return
+
+## Intake Checklist
+- Confirm legal entity name and tax ID
+- Confirm worker or payee classification
+- Verify address, withholding, and backup-withholding posture
+- Reconcile reportable totals to ERP activity
+- Route signed forms into retained tax records
+
+## Output Notes
+- Link payee-facing forms to vendor, employee, or contractor records
+- Create or update the 1099 queue when reportable payments apply
+- Retain filing proof, corrections, and exception notes
+`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: 'Tax Form Generator Verification Token',
+      proofReference: 'Issued when the broader tax form generator packet is created for controlled review.',
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} tax form generation review`,
+      category: 'tax',
+      dueDate: new Date().toISOString().slice(0, 10),
+      notes:
+        'Generated from AI Studio to coordinate multi-form tax intake, payroll filing, and information-return readiness.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const taxReportingLink = {
+      id: `trl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entityId: primaryEntity.id,
+      railNamespace: 'irs_reporting' as const,
+      counterpartyName: `${primaryEntity.displayName || primaryEntity.name} tax operations queue`,
+      tinMatchStatus: 'pending' as const,
+      formType: 'other' as const,
+      filingChannel: 'manual' as const,
+      correctionStatus: 'none' as const,
+      status: 'draft' as const,
+      notes:
+        'Created from the tax form generator packet to track broader tax-form prep, filing follow-through, and retained records.',
+    };
+
+    void appendDocumentBundle({
+      document: {
+        ...document,
+        linkedTokenIds: [token.id],
+        linkedComplianceTagIds: [complianceTag.id],
+      },
+      tokens: [token],
+      complianceTags: [complianceTag],
+      taxReportingLinks: [taxReportingLink],
+    });
+  };
+
+  const launchEftpsOperationsPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} EFTPS Operations Packet`,
+      category: 'tax',
+      summary:
+        'Federal tax payment setup packet for EFTPS enrollment, deposit scheduling, payment evidence, and Treasury control notes.',
+      body: `# EFTPS Operations Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Enrollment and Access
+- Confirm EIN and IRS address of record
+- Confirm the business taxpayer is enrolled in EFTPS
+- Record whether the enrollment PIN has been received by U.S. Mail
+- Record the responsible signer or operator for payment scheduling
+- Maintain Login.gov or ID.me access notes separately from ClearFlow secrets
+
+## Payment Control
+- Map federal deposit categories by entity and obligation type
+- Track due dates and 8 p.m. ET cutoff on the day before the due date
+- Retain confirmation numbers, scheduled dates, and settlement dates
+- Record whether payment was initiated directly in EFTPS, by ACH credit, or by wire alternative
+
+## ClearFlow Follow-Through
+- Link payment evidence into the tax and treasury records
+- Reconcile EFTPS payments against payroll, estimated tax, or information-return support
+- Preserve Treasury-facing evidence and internal approval notes
+`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: 'EFTPS Operations Verification Token',
+      proofReference: 'Issued when the EFTPS operations packet is generated for controlled treasury and tax-payment setup.',
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} EFTPS payment controls`,
+      category: 'tax',
+      dueDate: new Date().toISOString().slice(0, 10),
+      notes: 'Track EFTPS enrollment, deposit scheduling controls, and retained federal payment evidence.',
+      linkedDocumentIds: [document.id],
+    });
+
+    void appendDocumentBundle({
+      document: {
+        ...document,
+        linkedTokenIds: [token.id],
+        linkedComplianceTagIds: [complianceTag.id],
+      },
+      tokens: [token],
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchUspsBusinessGatewayPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} USPS Business Gateway Packet`,
+      category: 'compliance',
+      summary:
+        'USPS business-mail and parcel-operations packet for Business Customer Gateway, PostalOne, permits, and PDX/eVS readiness.',
+      body: `# USPS Business Gateway Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Account Setup
+- Confirm USPS Business Customer Gateway username and business profile
+- Record CRID, Mailer ID (MID), and linked permit posture
+- Record whether a Business Service Administrator is designated
+- Identify which services are in use: PostalOne, eVS, PRS, PDX, or mailing activity only
+
+## Operational Controls
+- Link postage, mailing, or manifest activity to the right entity ledger
+- Track permit balances, fees, and statement evidence
+- Preserve manifest, acceptance, and outbound extract files
+- Maintain role ownership for mailing, audit, and electronic verification activity
+
+## ClearFlow Follow-Through
+- Route mailing evidence and manifests into retained or user-owned storage as needed
+- Reconcile postage and shipping activity into ERP/accounting
+- Track counterparties, return activity, and permit-linked records
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} USPS gateway setup review`,
+      category: 'reporting',
+      dueDate: new Date().toISOString().slice(0, 10),
+      notes: 'Track Business Customer Gateway, PostalOne, permit, and parcel-data setup for the entity.',
+      linkedDocumentIds: [document.id],
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
     });
   };
 
@@ -1342,6 +1697,664 @@ Taxpayer / Entity: ${primaryEntity.displayName || primaryEntity.name}
     focusDocument(document.id);
   };
 
+  const launchInternationalBillOfExchangePacket = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const stamp = Date.now();
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const maturityDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const entityLabel = primaryEntity.displayName || primaryEntity.name;
+    const entityCode = buildEntityCode(entityLabel);
+    const currency = primaryEntity.operationalDefaults?.baseCurrency || 'USD';
+    const legalIdentifier = `${entityCode}-IBOE-${issueDate.replace(/-/g, '')}-${String(stamp).slice(-4)}`;
+    const instrumentId = `ins-iboe-${stamp}`;
+    const obligationId = `obl-iboe-${stamp}`;
+    const documentId = `doc-iboe-${stamp}`;
+    const amount = 25000;
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'instrument',
+      subjectId: instrumentId,
+      label: 'International Bill of Exchange Verification Token',
+      proofReference:
+        'Issued automatically when an international bill of exchange packet is generated for presentment and acceptance review.',
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${entityLabel} bill of exchange presentment review`,
+      category: 'risk',
+      dueDate: issueDate,
+      notes:
+        'Confirm UCC draft formalities, foreign-money language, drawee acceptance posture, presentment evidence, and any IRM special-handling caveat before relying on the instrument externally.',
+      linkedDocumentIds: [documentId],
+    });
+
+    const instrument: InstrumentRecord = {
+      id: instrumentId,
+      entityId: primaryEntity.id,
+      title: `International Bill of Exchange Draft ${issueDate}`,
+      instrumentType: 'bill_of_exchange',
+      legalIdentifier,
+      sourceClass: 'other',
+      marketSector: 'private',
+      identifierCode: `${currency}-IBOE`,
+      issuerName: entityLabel,
+      issueDate,
+      maturityDate,
+      denominationValue: amount,
+      paymentMedium: 'mixed_contractual_tender',
+      obligationType: 'private_obligation',
+      counterpartyLabel: 'Named drawee / acceptor to be completed at issuance',
+      performanceSecurityStatus: 'none',
+      linkedTokenIds: [token.id],
+      linkedDocumentIds: [documentId],
+      notes:
+        'Studio-generated international bill of exchange draft for controlled ledger tracking, presentment review, acceptance handling, and foreign-money / remittance analysis.',
+    };
+
+    const obligation: ObligationRecord = {
+      id: obligationId,
+      entityId: primaryEntity.id,
+      title: `Bill of Exchange Obligation ${issueDate}`,
+      legalIdentifier,
+      obligationType: 'private_obligation',
+      amount,
+      paymentMedium: 'mixed_contractual_tender',
+      status: 'open',
+      linkedInstrumentIds: [instrumentId],
+      linkedDocumentIds: [documentId],
+      lifecycleStage: 'presentment_due',
+      gainOrLossOnDischarge: 0,
+      enforcementMemo:
+        'Treat external enforceability, acceptance, dishonor, protest, and any tax-remittance use as counsel-and-operations review items, not automatic acceptance.',
+    };
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${entityLabel} International Bill of Exchange Packet`,
+      category: 'financial',
+      summary:
+        'Ledger-aware international bill of exchange packet with UCC-style draft elements, presentment and acceptance workflow, and IRM remittance caution notes.',
+      retentionClass: 'financial_evidence',
+      body: `# International Bill of Exchange Draft Packet
+
+Entity: ${entityLabel}
+Issue Date: ${issueDate}
+Maturity / Review Date: ${maturityDate}
+Draft Identifier: ${legalIdentifier}
+
+## Face Draft Elements
+- Drawer: ${entityLabel}
+- Drawee / Acceptor: ____________________
+- Payee / Holder: ____________________
+- Place of Issue: ____________________
+- Amount Certain: ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}
+- Foreign Money Option: If issued in stated foreign money, review UCC 3-107 and any governing-law conflict rules before release.
+- Tenor: At sight / ___ days after sight / on definite date
+
+## Order to Pay
+Pay against this bill of exchange the stated sum in lawful money or stated foreign money, according to the accepted tenor, without offset except as shown on the face of the instrument or controlling agreement.
+
+## Presentment and Acceptance
+- Present the draft to the named drawee and record date, place, and method of presentment.
+- Do not treat the drawee as obligated until acceptance posture is confirmed and evidenced.
+- If dishonored, log the exception, supporting notices, and any protest or reservation memo.
+
+## Ledger and Control Notes
+- Link the draft to the underlying obligation, reserve source, and remittance path before issue.
+- Maintain holder-chain, endorsement, and assignment support in the instrument register.
+- Capture identifiers, verification tokens, and settlement references in ClearFlow before external use.
+
+## IRM / Special Handling Note
+- If this draft is ever used in a federal-tax or other remittance context, do not assume acceptance merely because it was tendered.
+- Route the item for special handling, evidence retention, and operator review under the applicable IRS or receiving-party procedures.
+
+## Operator Review
+- Confirm UCC Article 3 draft formalities and any international presentment requirements.
+- Confirm governing law, venue, notice, and protest language with counsel if the instrument will be used externally.
+- Confirm whether the item is tracking-only, controlled private presentment, or intended for third-party bank-sponsored handling.
+`,
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      id: documentId,
+      linkedInstrumentIds: [instrumentId],
+      linkedTokenIds: [token.id],
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      instruments: [instrument, ...prev.instruments],
+      obligations: [obligation, ...prev.obligations],
+      documents: [persistedDocument, ...prev.documents],
+      tokens: [token, ...prev.tokens],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+      journalEntries: [
+        {
+          id: `je-iboe-${stamp}`,
+          entityId: primaryEntity.id,
+          entryNumber: `${primaryEntity.numbering?.journalPrefix || 'JE'}-${stamp}`,
+          entryDate: issueDate,
+          memo: 'Draft recognition entry for international bill of exchange presentment workflow.',
+          debitAccount: '1106 Bills of Exchange Receivable',
+          creditAccount: '2306 Draft Exchange Obligation',
+          amount,
+          status: 'draft',
+          source: 'system',
+          linkedDocumentIds: [documentId],
+          verificationRequired: true,
+        },
+        ...prev.journalEntries,
+      ],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchBillExchangeAcceptanceCertificate = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const targetInstrument = data.instruments.find(
+      (item) =>
+        item.entityId === primaryEntity.id && item.instrumentType === 'bill_of_exchange'
+    );
+    const linkedObligation = targetInstrument
+      ? data.obligations.find((item) => item.linkedInstrumentIds?.includes(targetInstrument.id))
+      : undefined;
+    const linkedRegister = targetInstrument
+      ? data.negotiableInstrumentRegisters.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const linkedPresentment = targetInstrument
+      ? data.couponPresentments.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Bill of Exchange Acceptance Certificate`,
+      category: 'legal_memo',
+      summary:
+        'Acceptance certificate packet for an international bill of exchange, tied to presentment evidence, holder posture, and controlled settlement follow-through.',
+      retentionClass: 'security_support',
+      body: `# Bill of Exchange Acceptance Certificate
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Certificate Date: ${issueDate}
+Instrument Reference: ${legalIdentifier}
+
+## Instrument Context
+- Bill of exchange title: ${targetInstrument?.title || 'To be inserted'}
+- Drawer: ${targetInstrument?.issuerName || primaryEntity.displayName || primaryEntity.name}
+- Drawee / Acceptor: ${targetInstrument?.counterpartyLabel || linkedPresentment?.receiverName || 'To be inserted'}
+- Payee / Holder: ${linkedRegister?.currentHolderLabel || linkedPresentment?.receiverName || 'To be inserted'}
+- Face amount: ${(targetInstrument?.denominationValue || linkedObligation?.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${primaryEntity.operationalDefaults?.baseCurrency || 'USD'}
+
+## Acceptance Statement
+The undersigned acknowledges acceptance of the referenced bill of exchange according to its stated tenor, subject to the instrument itself, any linked agreements, and any applicable governing law requirements.
+
+## Presentment Evidence
+- Presentment date: ${linkedPresentment?.presentmentDate || 'To be inserted'}
+- Presentment reference: ${linkedPresentment?.couponReference || 'To be inserted'}
+- Register label: ${linkedRegister?.registerLabel || 'To be inserted'}
+
+## Operator Controls
+- Confirm the drawee signature or other acceptance evidence is retained.
+- Confirm the instrument register and holder ledger reflect acceptance posture.
+- Do not treat this certificate as final discharge without actual performance and settlement evidence.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} bill acceptance certificate review`,
+      category: 'risk',
+      dueDate: issueDate,
+      notes:
+        'Review acceptance evidence, register status, holder posture, and any governing-law requirements before relying on the acceptance certificate externally.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchBillExchangeDishonorNotice = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const targetInstrument = data.instruments.find(
+      (item) =>
+        item.entityId === primaryEntity.id && item.instrumentType === 'bill_of_exchange'
+    );
+    const linkedObligation = targetInstrument
+      ? data.obligations.find((item) => item.linkedInstrumentIds?.includes(targetInstrument.id))
+      : undefined;
+    const linkedRegister = targetInstrument
+      ? data.negotiableInstrumentRegisters.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const linkedPresentment = targetInstrument
+      ? data.couponPresentments.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Notice of Dishonor`,
+      category: 'legal_memo',
+      summary:
+        'Dishonor notice packet for a bill of exchange with presentment, non-acceptance or non-payment, and next-step review fields.',
+      retentionClass: 'security_support',
+      body: `# Notice of Dishonor
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Notice Date: ${issueDate}
+Instrument Reference: ${legalIdentifier}
+
+## Instrument Context
+- Bill of exchange title: ${targetInstrument?.title || 'To be inserted'}
+- Drawer: ${targetInstrument?.issuerName || primaryEntity.displayName || primaryEntity.name}
+- Drawee / Acceptor: ${targetInstrument?.counterpartyLabel || linkedPresentment?.receiverName || 'To be inserted'}
+- Payee / Holder: ${linkedRegister?.currentHolderLabel || linkedPresentment?.receiverName || 'To be inserted'}
+- Face amount: ${(targetInstrument?.denominationValue || linkedObligation?.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${primaryEntity.operationalDefaults?.baseCurrency || 'USD'}
+
+## Dishonor Statement
+Notice is given that the referenced bill of exchange was presented and was dishonored by non-acceptance, non-payment, or other exception requiring review.
+
+## Presentment Record
+- Presentment date: ${linkedPresentment?.presentmentDate || 'To be inserted'}
+- Due date: ${linkedPresentment?.dueDate || targetInstrument?.maturityDate || 'To be inserted'}
+- Presentment reference: ${linkedPresentment?.couponReference || 'To be inserted'}
+
+## Operator Controls
+- Confirm evidence of presentment and the dishonor event is retained.
+- Update the register, holder ledger, and settlement exception posture.
+- Review cure, protest, and notice timing before any outside enforcement step.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} bill dishonor review`,
+      category: 'risk',
+      dueDate: issueDate,
+      notes:
+        'Review dishonor support, cure posture, protest rights, and governing-law requirements before any external enforcement action.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchBillExchangeProtestCertificate = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const targetInstrument = data.instruments.find(
+      (item) =>
+        item.entityId === primaryEntity.id && item.instrumentType === 'bill_of_exchange'
+    );
+    const linkedObligation = targetInstrument
+      ? data.obligations.find((item) => item.linkedInstrumentIds?.includes(targetInstrument.id))
+      : undefined;
+    const linkedRegister = targetInstrument
+      ? data.negotiableInstrumentRegisters.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const linkedPresentment = targetInstrument
+      ? data.couponPresentments.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Protest Certificate Packet`,
+      category: 'legal_memo',
+      summary:
+        'Protest support packet for a bill of exchange, with presentment, dishonor, notice, and holder evidence fields for controlled review.',
+      retentionClass: 'security_support',
+      body: `# Protest Certificate Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Packet Date: ${issueDate}
+Instrument Reference: ${legalIdentifier}
+
+## Instrument Context
+- Bill of exchange title: ${targetInstrument?.title || 'To be inserted'}
+- Drawer: ${targetInstrument?.issuerName || primaryEntity.displayName || primaryEntity.name}
+- Drawee / Acceptor: ${targetInstrument?.counterpartyLabel || linkedPresentment?.receiverName || 'To be inserted'}
+- Holder: ${linkedRegister?.currentHolderLabel || linkedPresentment?.receiverName || 'To be inserted'}
+
+## Protest Support
+- Presentment date: ${linkedPresentment?.presentmentDate || 'To be inserted'}
+- Dishonor date: ____________________
+- Notice given to liable parties: ____________________
+- Place of protest or formal record: ____________________
+
+## Evidence Checklist
+- Copy of the bill of exchange
+- Evidence of presentment
+- Evidence of dishonor or non-acceptance
+- Notice log to indorsers or liable parties
+- Register and holder-ledger tie-out
+
+## Operator Controls
+- Confirm whether protest is actually required or useful under the governing law.
+- Confirm notice timing and evidentiary requirements with counsel before outside use.
+- Preserve this as a controlled support packet, not a standalone guarantee of enforceability.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} bill protest packet review`,
+      category: 'risk',
+      dueDate: issueDate,
+      notes:
+        'Review protest evidence, notice timing, and governing-law requirements before using the protest packet outside the controlled ledger workflow.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const getCurrentBillExchangeContext = () => {
+    if (!primaryEntity) {
+      return null;
+    }
+
+    const targetInstrument = data.instruments.find(
+      (item) => item.entityId === primaryEntity.id && item.instrumentType === 'bill_of_exchange'
+    );
+    const linkedObligation = targetInstrument
+      ? data.obligations.find((item) => item.linkedInstrumentIds?.includes(targetInstrument.id))
+      : undefined;
+    const linkedRegister = targetInstrument
+      ? data.negotiableInstrumentRegisters.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const linkedPresentment = targetInstrument
+      ? data.couponPresentments.find(
+          (item) =>
+            item.instrumentId === targetInstrument.id || item.obligationId === linkedObligation?.id
+        )
+      : undefined;
+    const latestDispatch = targetInstrument
+      ? [...data.dispatchRecords]
+          .filter(
+            (item) =>
+              item.linkedInstrumentId === targetInstrument.id ||
+              item.linkedObligationId === linkedObligation?.id
+          )
+          .sort((a, b) => `${b.dispatchDate}|${b.respondedAt || ''}`.localeCompare(`${a.dispatchDate}|${a.respondedAt || ''}`))[0]
+      : undefined;
+    const returnedEvidenceDocument = latestDispatch?.returnedEvidenceDocumentId
+      ? data.documents.find((item) => item.id === latestDispatch.returnedEvidenceDocumentId)
+      : undefined;
+
+    return {
+      targetInstrument,
+      linkedObligation,
+      linkedRegister,
+      linkedPresentment,
+      latestDispatch,
+      returnedEvidenceDocument,
+    };
+  };
+
+  const launchBillExchangeServiceAffidavit = async () => {
+    const context = getCurrentBillExchangeContext();
+    if (!primaryEntity || !context) {
+      return;
+    }
+
+    const {
+      targetInstrument,
+      linkedObligation,
+      linkedRegister,
+      linkedPresentment,
+      latestDispatch,
+      returnedEvidenceDocument,
+    } = context;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+    const dispatchMethod = formatDispatchMethod(latestDispatch?.method);
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Service Affidavit`,
+      category: 'legal_memo',
+      summary:
+        'Affidavit-style service record tied to the active bill of exchange dispatch, delivery method, proof seal, and returned evidence posture.',
+      retentionClass: 'security_support',
+      storageOwner: 'clearflow_retained',
+      body: `# Service Affidavit\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\nAffidavit Date: ${issueDate}\nInstrument Reference: ${legalIdentifier}\n\n## Dispatch Record\n- Dispatch title: ${latestDispatch?.title || 'No dispatch record found'}\n- Dispatch method: ${dispatchMethod}\n- Dispatch date: ${latestDispatch?.dispatchDate || 'To be inserted'}\n- Recipient: ${latestDispatch?.recipientLabel || targetInstrument?.counterpartyLabel || 'To be inserted'}\n- Governing law / venue: ${latestDispatch?.governingLawLabel || 'To be inserted'} / ${latestDispatch?.governingVenueLabel || 'To be inserted'}\n\n## Proof & Original Control\n- Proof seal code: ${latestDispatch?.proofSealCode || primaryEntity.branding?.entityProofSealCode || 'To be inserted'}\n- Mailing line: ${latestDispatch?.mailingLine || primaryEntity.branding?.entityMailingLine || 'To be inserted'}\n- Original control posture: ${latestDispatch?.originalControlStatus || 'To be inserted'}\n- Service evidence posture: ${latestDispatch?.serviceEvidenceStatus || 'To be inserted'}\n- Returned evidence record: ${returnedEvidenceDocument?.title || 'No returned evidence linked yet'}\n\n## Affiant Statement\nThe undersigned affiant states that the referenced bill of exchange or related acceptance packet was dispatched using the method shown above and that the retained proof references, mailing identity, and supporting records are maintained in the ordinary control environment of ClearFlow and the issuing entity.\n\n## Operator Controls\n- Confirm the service details match the actual dispatch event and any mailing or courier receipt.\n- Confirm the returned evidence record is linked if a signed or executed copy has been received.\n- Do not rely on this affidavit alone as proof of legal effectiveness without actual governing-law review and supporting evidence.\n`,
+    });
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'document',
+      subjectId: document.id,
+      label: 'Service Affidavit Proof Token',
+      proofReference:
+        latestDispatch?.proofSealCode ||
+        latestDispatch?.mailingLine ||
+        legalIdentifier,
+    });
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} service affidavit review`,
+      category: 'risk',
+      dueDate: latestDispatch?.protestDeadline || issueDate,
+      notes:
+        'Review service facts, proof references, returned evidence, and governing-law posture before relying on the affidavit outside the controlled ledger workflow.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+      linkedTokenIds: [token.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      tokens: [token, ...prev.tokens],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchBillExchangeCertificateOfMailing = async () => {
+    const context = getCurrentBillExchangeContext();
+    if (!primaryEntity || !context) {
+      return;
+    }
+
+    const {
+      targetInstrument,
+      linkedObligation,
+      latestDispatch,
+      returnedEvidenceDocument,
+    } = context;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Certificate of Mailing`,
+      category: 'legal_memo',
+      summary:
+        'Certificate-style mailing proof for a bill of exchange or acceptance packet, tied to entity mailing identity and dispatch controls.',
+      retentionClass: 'security_support',
+      storageOwner: 'clearflow_retained',
+      body: `# Certificate of Mailing\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\nCertificate Date: ${issueDate}\nInstrument Reference: ${legalIdentifier}\n\n## Mailing Record\n- Dispatch method: ${formatDispatchMethod(latestDispatch?.method)}\n- Dispatch date: ${latestDispatch?.dispatchDate || 'To be inserted'}\n- Recipient: ${latestDispatch?.recipientLabel || targetInstrument?.counterpartyLabel || 'To be inserted'}\n- Recipient email / route: ${latestDispatch?.recipientEmail || latestDispatch?.externalReference || 'To be inserted'}\n- Mailing line: ${latestDispatch?.mailingLine || primaryEntity.branding?.entityMailingLine || 'To be inserted'}\n- Proof seal code: ${latestDispatch?.proofSealCode || primaryEntity.branding?.entityProofSealCode || 'To be inserted'}\n- QR payload: ${latestDispatch?.qrPayload || primaryEntity.branding?.entityQrPayload || 'To be inserted'}\n\n## Delivery Support\n- Service evidence posture: ${latestDispatch?.serviceEvidenceStatus || 'To be inserted'}\n- Returned evidence record: ${returnedEvidenceDocument?.title || 'No returned evidence linked yet'}\n- Protest deadline: ${latestDispatch?.protestDeadline || 'To be inserted'}\n\n## Operator Controls\n- Attach actual mailing receipt, courier receipt, or equivalent delivery confirmation when available.\n- Confirm the mailing identity belongs to the issuing entity and was used on the outgoing original packet.\n- Do not treat the certificate of mailing as proof of acceptance or final enforceability by itself.\n`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} certificate of mailing review`,
+      category: 'risk',
+      dueDate: latestDispatch?.expectedResponseDate || issueDate,
+      notes:
+        'Review service method, mailing identity, receipt support, and protest timing before relying on postal or courier proof.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
+  const launchBillExchangeCounselReviewMemo = async () => {
+    const context = getCurrentBillExchangeContext();
+    if (!primaryEntity || !context) {
+      return;
+    }
+
+    const {
+      targetInstrument,
+      linkedObligation,
+      linkedRegister,
+      linkedPresentment,
+      latestDispatch,
+      returnedEvidenceDocument,
+    } = context;
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const legalIdentifier =
+      targetInstrument?.legalIdentifier ||
+      linkedObligation?.legalIdentifier ||
+      `${buildEntityCode(primaryEntity.displayName || primaryEntity.name)}-IBOE-PENDING`;
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Counsel Review Memo`,
+      category: 'legal_memo',
+      summary:
+        'Review memo that frames the facts, governing-law posture, service evidence, and protest timing for counsel or legal-risk review.',
+      retentionClass: 'security_support',
+      storageOwner: 'clearflow_retained',
+      body: `# Counsel Review Memo\n\nEntity: ${primaryEntity.displayName || primaryEntity.name}\nMemo Date: ${issueDate}\nInstrument Reference: ${legalIdentifier}\n\n## Facts To Review\n- Bill of exchange title: ${targetInstrument?.title || 'To be inserted'}\n- Drawer: ${targetInstrument?.issuerName || primaryEntity.displayName || primaryEntity.name}\n- Drawee / Acceptor: ${targetInstrument?.counterpartyLabel || linkedPresentment?.receiverName || 'To be inserted'}\n- Holder / Register: ${linkedRegister?.currentHolderLabel || 'To be inserted'}\n- Presentment date: ${linkedPresentment?.presentmentDate || latestDispatch?.dispatchDate || 'To be inserted'}\n- Response posture: ${latestDispatch?.acceptanceStatus || 'No response recorded'}\n\n## Service & Original Control\n- Dispatch method: ${formatDispatchMethod(latestDispatch?.method)}\n- Original control status: ${latestDispatch?.originalControlStatus || 'To be inserted'}\n- Service evidence status: ${latestDispatch?.serviceEvidenceStatus || 'To be inserted'}\n- Returned evidence: ${returnedEvidenceDocument?.title || 'No returned evidence linked yet'}\n- Proof seal / mailing line: ${latestDispatch?.proofSealCode || primaryEntity.branding?.entityProofSealCode || 'To be inserted'} / ${latestDispatch?.mailingLine || primaryEntity.branding?.entityMailingLine || 'To be inserted'}\n\n## Governing Posture\n- Governing law: ${latestDispatch?.governingLawLabel || primaryEntity.jurisdiction || primaryEntity.country || 'To be inserted'}\n- Governing venue: ${latestDispatch?.governingVenueLabel || primaryEntity.country || primaryEntity.jurisdiction || 'To be inserted'}\n- Protest or escalation review date: ${latestDispatch?.protestDeadline || 'To be inserted'}\n\n## Questions For Counsel\n- What law controls presentment, acceptance, dishonor, and protest for this instrument and parties?\n- Is protest required, useful, or unnecessary under the governing law and facts?\n- Does the current service evidence support outside enforcement or is more proof needed?\n- Is the retained original-control record sufficient, or is the original instrument still missing?\n\n## Operator Controls\n- Treat this as a review memo, not legal advice or a determination of enforceability.\n- Update the dispatch, returned evidence, and dishonor / acceptance records after counsel review.\n`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${primaryEntity.displayName || primaryEntity.name} counsel review memo`,
+      category: 'risk',
+      dueDate: latestDispatch?.protestDeadline || issueDate,
+      notes:
+        'Use this memo to organize facts and open issues for counsel. It does not itself determine enforceability.',
+      linkedDocumentIds: [document.id],
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      linkedInstrumentIds: targetInstrument ? [targetInstrument.id] : undefined,
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [persistedDocument, ...prev.documents],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+      dispatchRecords: prev.dispatchRecords.map((item) =>
+        item.id === latestDispatch?.id
+          ? {
+              ...item,
+              counselReviewStatus: 'recommended',
+              linkedDocumentIds: [...(item.linkedDocumentIds || []), persistedDocument.id],
+            }
+          : item
+      ),
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
   const launchSettlementRailAuditReport = () => {
     if (!reportEntity) {
       return;
@@ -1663,6 +2676,181 @@ Scope Window: ${reportWindowLabel}
       category: 'tax',
       linkedDocumentIds: [document.id],
       notes: 'Generated from AI Studio tax and payroll summary reporting.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchTaxFormCoverageReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const entityTaxDocuments = data.documents.filter(
+      (item) =>
+        item.entityId === reportEntity.id &&
+        item.category === 'tax' &&
+        isOnOrAfterWindow(item.date, reportWindow),
+    );
+    const filingLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const entityEmployees = data.employees.filter((item) => item.entityId === reportEntity.id);
+    const contractorCount = entityEmployees.filter((item) => item.employeeType === 'contractor').length;
+    const employeeCount = entityEmployees.filter((item) => item.employeeType !== 'contractor').length;
+    const readyForms = filingLinks.filter((item) => item.status === 'accepted' || item.status === 'filed').length;
+    const pendingForms = filingLinks.filter((item) => item.status === 'draft').length;
+    const tinReviewItems = filingLinks.filter(
+      (item) => item.tinMatchStatus === 'pending' || item.tinMatchStatus === 'not_checked',
+    ).length;
+    const correctiveItems = filingLinks.filter((item) => item.correctionStatus !== 'none').length;
+
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Tax Form Coverage Report`,
+      category: 'tax',
+      summary:
+        'Coverage report across generated tax packets, active filing links, payroll forms, contractor reporting, and open tax-form gaps.',
+      retentionClass: 'tax',
+      body: `# Tax Form Coverage Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Form Coverage Snapshot
+- Tax packets generated in scope: ${entityTaxDocuments.length}
+- Active filing links: ${filingLinks.length}
+- Filing links ready or completed: ${readyForms}
+- Filing links still in draft: ${pendingForms}
+- TIN review items still open: ${tinReviewItems}
+- Correction items still open: ${correctiveItems}
+
+## Workforce / Payee Exposure
+- Employee records in scope: ${employeeCount}
+- Contractor records in scope: ${contractorCount}
+- W-2 / payroll posture needed: ${employeeCount > 0 ? 'yes' : 'no'}
+- 1099 / payee intake posture needed: ${contractorCount > 0 ? 'yes' : 'no'}
+
+## Packet Coverage
+${entityTaxDocuments.map((item) => `- ${item.title} | ${item.status} | ${item.date}`).join('\n') || '- No tax packets are currently in scope.'}
+
+## Operator Follow-Through
+- Generate or refresh W-9 / W-8 intake where payee tax posture is still incomplete.
+- Reconcile payroll and contractor records against filing links before annual close.
+- Retain signed forms, filing proof, and correction evidence inside tax records.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} tax form coverage review`,
+      category: 'tax',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio to review tax packet coverage and open filing gaps.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchEftpsControlReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const settings = data.workspaceSettings;
+    const taxLinks = data.taxReportingLinks.filter((item) => item.entityId === reportEntity.id);
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} EFTPS Control Report`,
+      category: 'tax',
+      summary:
+        'Scoped EFTPS control report covering enrollment posture, deposit mode, filing links, and retained evidence expectations.',
+      retentionClass: 'tax',
+      body: `# EFTPS Control Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## EFTPS Profile
+- Enabled in workspace: ${settings.eftpsEnabled ? 'yes' : 'no'}
+- Enrollment status: ${settings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'not started'}
+- EIN on record: ${settings.eftpsEin || 'not set'}
+- Operator: ${settings.eftpsOperatorName || 'not set'}
+- Deposit mode: ${settings.eftpsDepositMode?.replace(/_/g, ' ') || 'not set'}
+- Last evidence date: ${settings.eftpsLastEvidenceDate || 'not recorded'}
+
+## Filing / Deposit Context
+- Tax reporting links for entity: ${taxLinks.length}
+- Filing links still open: ${taxLinks.filter((item) => item.status !== 'accepted').length}
+- TIN review items still open: ${taxLinks.filter((item) => item.tinMatchStatus === 'pending' || item.tinMatchStatus === 'not_checked').length}
+
+## Operator Follow-Through
+- Verify EFTPS enrollment and payment authority for the entity.
+- Retain confirmation numbers and payment evidence in tax records.
+- Reconcile EFTPS payment activity against payroll, estimated tax, or filing support.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} EFTPS control review`,
+      category: 'tax',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio for EFTPS enrollment, evidence, and tax-payment control review.',
+    });
+
+    void appendDocumentBundle({
+      document: { ...document, linkedComplianceTagIds: [complianceTag.id] },
+      complianceTags: [complianceTag],
+    });
+  };
+
+  const launchUspsOperationsReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const settings = data.workspaceSettings;
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} USPS Operations Report`,
+      category: 'compliance',
+      summary:
+        'Scoped USPS business operations report covering gateway status, permit identifiers, service profile, and mailing evidence posture.',
+      body: `# USPS Operations Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## USPS Profile
+- Gateway enabled: ${settings.uspsGatewayEnabled ? 'yes' : 'no'}
+- Gateway status: ${settings.uspsGatewayStatus?.replace(/_/g, ' ') || 'not started'}
+- CRID: ${settings.uspsCrid || 'not set'}
+- Mailer ID: ${settings.uspsMailerId || 'not set'}
+- Permit number: ${settings.uspsPermitNumber || 'not set'}
+- Service profile: ${settings.uspsServiceProfile?.replace(/_/g, ' ') || 'not set'}
+- Business Service Administrator: ${settings.uspsBusinessServiceAdmin || 'not set'}
+
+## Operator Follow-Through
+- Confirm Business Customer Gateway access and service enrollments.
+- Retain permit, manifest, and acceptance evidence in the vault.
+- Reconcile postage, mailing, and shipping activity into ERP/accounting.
+`,
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: reportEntity.id,
+      label: `${reportEntity.displayName || reportEntity.name} USPS operations review`,
+      category: 'reporting',
+      linkedDocumentIds: [document.id],
+      notes: 'Generated from AI Studio for USPS gateway, permit, and mailing operations oversight.',
     });
 
     void appendDocumentBundle({
@@ -2389,6 +3577,62 @@ ${scopedCases
       onAction: launchPromissoryNote,
     },
     {
+      title: 'International Bill of Exchange',
+      subtitle: 'Draft, presentment, and acceptance packet',
+      detail: 'Create a ledger-aware international bill of exchange packet with UCC-style draft elements, foreign-money review, presentment controls, and IRM caution notes.',
+      lane: 'ledger',
+      actionLabel: 'Draft Exchange',
+      onAction: launchInternationalBillOfExchangePacket,
+    },
+    {
+      title: 'Acceptance Certificate',
+      subtitle: 'Bill of exchange acceptance support',
+      detail: 'Generate an acceptance certificate tied to the current bill of exchange, holder posture, and presentment evidence.',
+      lane: 'ledger',
+      actionLabel: 'Create Certificate',
+      onAction: launchBillExchangeAcceptanceCertificate,
+    },
+    {
+      title: 'Notice of Dishonor',
+      subtitle: 'Non-acceptance or non-payment support',
+      detail: 'Generate a dishonor notice packet tied to the current bill of exchange and presentment trail.',
+      lane: 'ledger',
+      actionLabel: 'Create Notice',
+      onAction: launchBillExchangeDishonorNotice,
+    },
+    {
+      title: 'Protest Certificate Packet',
+      subtitle: 'Presentment and protest evidence support',
+      detail: 'Generate a protest support packet with notice, evidence, and holder-ledger tie-out fields for the current bill of exchange.',
+      lane: 'ledger',
+      actionLabel: 'Create Protest Packet',
+      onAction: launchBillExchangeProtestCertificate,
+    },
+    {
+      title: 'Service Affidavit',
+      subtitle: 'Dispatch facts and proof identity support',
+      detail: 'Generate an affidavit-style service record from the active dispatch, mailing identity, and returned evidence posture.',
+      lane: 'ledger',
+      actionLabel: 'Create Affidavit',
+      onAction: launchBillExchangeServiceAffidavit,
+    },
+    {
+      title: 'Certificate of Mailing',
+      subtitle: 'Mailing proof and service timing',
+      detail: 'Generate a retained certificate of mailing tied to the entity mailing line, proof seal, dispatch method, and response window.',
+      lane: 'ledger',
+      actionLabel: 'Create Mailing Record',
+      onAction: launchBillExchangeCertificateOfMailing,
+    },
+    {
+      title: 'Counsel Review Memo',
+      subtitle: 'Governing-law and protest issue memo',
+      detail: 'Generate a counsel-review memo that frames governing law, service evidence, original control, and protest timing without overstating enforceability.',
+      lane: 'ledger',
+      actionLabel: 'Create Review Memo',
+      onAction: launchBillExchangeCounselReviewMemo,
+    },
+    {
       title: 'Secured Note Package',
       subtitle: 'Collateral-aware note drafting into ledger',
       detail: 'Create a secured note packet with collateral support, linked obligation, and verification token.',
@@ -2419,6 +3663,22 @@ ${scopedCases
       lane: 'compliance',
       actionLabel: 'Create 1099 Packet',
       onAction: launch1099PrepPacket,
+    },
+    {
+      title: 'Tax Form Generator',
+      subtitle: 'W-9, W-8, W-2, 941, 940, and 1099 support',
+      detail: 'Create a broader tax packet for payee intake, payroll filing, and information-return follow-through with linked compliance and reporting records.',
+      lane: 'compliance',
+      actionLabel: 'Create Tax Packet',
+      onAction: launchTaxFormGeneratorPacket,
+    },
+    {
+      title: 'EFTPS Operations Packet',
+      subtitle: 'Treasury tax-payment enrollment and scheduling controls',
+      detail: 'Create a setup packet for EFTPS enrollment, federal deposit scheduling, payment evidence, and Treasury control review.',
+      lane: 'compliance',
+      actionLabel: 'Create EFTPS Packet',
+      onAction: launchEftpsOperationsPacket,
     },
     {
       title: 'W-9 Collection Packet',
@@ -2508,6 +3768,14 @@ ${scopedCases
       actionLabel: 'Create Storage Packet',
       onAction: launchStorageRetentionPacket,
     },
+    {
+      title: 'USPS Business Gateway Packet',
+      subtitle: 'BCG, PostalOne, permit, and PDX/eVS setup',
+      detail: 'Create a USPS operations packet for Business Customer Gateway access, permit controls, manifest handling, and parcel-data readiness.',
+      lane: 'operations',
+      actionLabel: 'Create USPS Packet',
+      onAction: launchUspsBusinessGatewayPacket,
+    },
   ];
 
   const studioLanes: Array<{
@@ -2577,6 +3845,70 @@ ${scopedCases
       actionLabel: 'Open Compliance',
       actionHash: '#compliance',
     },
+    {
+      title: 'EFTPS Tax Payments',
+      subtitle: data.workspaceSettings.eftpsEnabled
+        ? `Profile ${data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'}`
+        : 'EFTPS profile not enabled',
+      detail: data.workspaceSettings.eftpsEnabled
+        ? `Operator ${data.workspaceSettings.eftpsOperatorName || 'not set'}, treasury ${linkedEftpsTreasury?.name || 'not linked'}, bank ${linkedEftpsBank?.accountName || 'not linked'}, ledger ${linkedEftpsLedger ? `${linkedEftpsLedger.code} ${linkedEftpsLedger.name}` : 'not linked'}.`
+        : 'Enable EFTPS in Settings to track tax-payment enrollment, operator, EIN, and retained payment evidence.',
+      actionLabel: 'Open Settings',
+      actionHash: '#settings',
+    },
+    {
+      title: 'USPS Business Gateway',
+      subtitle: data.workspaceSettings.uspsGatewayEnabled
+        ? `Profile ${data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'}`
+        : 'USPS gateway profile not enabled',
+      detail: data.workspaceSettings.uspsGatewayEnabled
+        ? `CRID ${data.workspaceSettings.uspsCrid || 'not set'}, MID ${data.workspaceSettings.uspsMailerId || 'not set'}, bank ${linkedUspsBank?.accountName || 'not linked'}, postage ledger ${linkedUspsPostageLedger ? `${linkedUspsPostageLedger.code} ${linkedUspsPostageLedger.name}` : 'not linked'}.`
+        : 'Enable USPS Gateway in Settings to track CRID, MID, permit, and service enrollments.',
+      actionLabel: 'Open Settings',
+      actionHash: '#settings',
+    },
+  ];
+
+  const taxFormTools = [
+    {
+      title: 'Broad Tax Packet',
+      subtitle: 'W-9, W-8, W-2, 941, 940, and 1099 support',
+      detail: 'Build a general tax-form generator packet for payee intake, payroll filing, and information-return follow-through.',
+      actionLabel: 'Create Tax Packet',
+      onAction: launchTaxFormGeneratorPacket,
+    },
+    {
+      title: 'Payee Tax Intake',
+      subtitle: 'W-9 and TIN support',
+      detail: 'Open the payee-facing intake packet for tax certification, classification review, and 1099 queue setup.',
+      actionLabel: 'Create W-9 Packet',
+      onAction: launchW9CollectionPacket,
+    },
+    {
+      title: '1099 Filing Prep',
+      subtitle: 'IRIS / FIRE readiness',
+      detail: 'Create a payer-side 1099 prep packet with evidence, vendor review, and filing controls.',
+      actionLabel: 'Create 1099 Packet',
+      onAction: launch1099PrepPacket,
+    },
+    {
+      title: 'Coverage Review',
+      subtitle: 'Packet and filing-gap visibility',
+      detail: 'Generate a coverage report for tax packets, filing links, payroll form posture, and contractor reporting gaps.',
+      actionLabel: 'Create Coverage Report',
+      onAction: launchTaxFormCoverageReport,
+    },
+    {
+      title: 'Tax Readiness Pack',
+      subtitle: 'Generator plus summary and gap review',
+      detail: 'Run the broader generator, tax coverage review, and tax/payroll summary together for the current report scope.',
+      actionLabel: 'Generate Tax Pack',
+      onAction: () => {
+        launchTaxFormGeneratorPacket();
+        launchTaxFormCoverageReport();
+        launchTaxAndPayrollSummaryReport();
+      },
+    },
   ];
 
   const reportTools = [
@@ -2616,11 +3948,32 @@ ${scopedCases
       onAction: launchTaxAndPayrollSummaryReport,
     },
     {
+      title: 'Tax Form Coverage Report',
+      subtitle: 'Generated packets, filing links, and tax-form gaps',
+      detail: 'Create a coverage report across generated tax packets, open filing links, contractor posture, and payroll form readiness.',
+      actionLabel: 'Create Coverage Report',
+      onAction: launchTaxFormCoverageReport,
+    },
+    {
       title: 'Storage & Retention Audit',
       subtitle: 'User-owned routing and retained-record posture',
       detail: 'Create a storage audit for Google Drive routing, retained records, and document retention coverage.',
       actionLabel: 'Create Storage Audit',
       onAction: launchStorageRetentionAuditReport,
+    },
+    {
+      title: 'EFTPS Control Report',
+      subtitle: 'Enrollment, evidence, and tax-payment posture',
+      detail: 'Create a scoped EFTPS oversight report from the workspace integration profile and tax queue.',
+      actionLabel: 'Create EFTPS Report',
+      onAction: launchEftpsControlReport,
+    },
+    {
+      title: 'USPS Operations Report',
+      subtitle: 'Gateway, permit, and mailing evidence posture',
+      detail: 'Create a USPS operations report from the workspace gateway profile and mailing setup posture.',
+      actionLabel: 'Create USPS Report',
+      onAction: launchUspsOperationsReport,
     },
     {
       title: 'Counterparty Exposure Report',
@@ -2695,6 +4048,28 @@ ${scopedCases
       onAction: () => {
         launchTaxAndPayrollSummaryReport();
         launchStorageRetentionAuditReport();
+      },
+    },
+    {
+      title: 'EFTPS & USPS Ops Pack',
+      subtitle: 'Treasury tax payments and mailing operations together',
+      detail: 'Generate the EFTPS operations packet plus both EFTPS and USPS oversight reports for the current scope.',
+      actionLabel: 'Generate Ops Pack',
+      onAction: () => {
+        launchEftpsOperationsPacket();
+        launchEftpsControlReport();
+        launchUspsOperationsReport();
+      },
+    },
+    {
+      title: 'Tax Form Readiness Pack',
+      subtitle: 'Form generation, payroll summary, and coverage review',
+      detail: 'Generate the broader tax form generator packet, the tax form coverage report, and the tax and payroll summary for the current scope.',
+      actionLabel: 'Generate Tax Pack',
+      onAction: () => {
+        launchTaxFormGeneratorPacket();
+        launchTaxFormCoverageReport();
+        launchTaxAndPayrollSummaryReport();
       },
     },
     {
@@ -2838,6 +4213,20 @@ ${scopedCases
         haystack: `${item.title} ${item.subtitle} ${item.detail}`,
         hash: item.actionHash,
       })),
+      {
+        id: 'workspace-eftps-profile',
+        label: 'EFTPS integration profile',
+        subtitle: `Workspace settings | ${data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'not started'}`,
+        haystack: `EFTPS ${data.workspaceSettings.eftpsEin || ''} ${data.workspaceSettings.eftpsOperatorName || ''} ${data.workspaceSettings.eftpsDepositMode || ''} ${data.workspaceSettings.eftpsLastEvidenceDate || ''}`,
+        hash: '#settings',
+      },
+      {
+        id: 'workspace-usps-profile',
+        label: 'USPS gateway profile',
+        subtitle: `Workspace settings | ${data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'not started'}`,
+        haystack: `USPS Business Customer Gateway ${data.workspaceSettings.uspsCrid || ''} ${data.workspaceSettings.uspsMailerId || ''} ${data.workspaceSettings.uspsPermitNumber || ''} ${data.workspaceSettings.uspsServiceProfile || ''} ${data.workspaceSettings.uspsBusinessServiceAdmin || ''}`,
+        hash: '#settings',
+      },
       ...reportPackPresets.map((item) => ({
         id: `report-pack-${item.title}`,
         label: item.title,
@@ -3005,6 +4394,64 @@ ${scopedCases
               {item.detail}
             </WorkbenchRecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Tax Form Desk"
+        description="Focused tax-form launchers and filing posture for the current reporting scope."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {taxScopeSummary ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <StatCard label="Tax Packets" value={taxScopeSummary.taxDocuments} />
+              <StatCard label="Open Filing Links" value={taxScopeSummary.openFilingLinks} />
+              <StatCard label="TIN Reviews" value={taxScopeSummary.tinReviewItems} />
+              <StatCard label="Payroll Records" value={taxScopeSummary.payrollRecords} />
+              <StatCard label="Contractor Records" value={taxScopeSummary.contractorRecords} />
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {taxFormTools.map((tool) => (
+              <WorkbenchRecordCard
+                key={tool.title}
+                title={tool.title}
+                subtitle={tool.subtitle}
+                actionSlot={
+                  <button
+                    type="button"
+                    onClick={tool.onAction}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126, 242, 255, 0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {tool.actionLabel}
+                  </button>
+                }
+              >
+                {tool.detail}
+              </WorkbenchRecordCard>
+            ))}
+          </div>
         </div>
       </PageSection>
 

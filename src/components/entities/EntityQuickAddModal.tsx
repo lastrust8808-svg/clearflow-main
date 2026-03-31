@@ -12,6 +12,7 @@ interface EntityQuickAddModalProps {
     country: string;
     representativeName: string;
     representativeRole: string;
+    generateDispatchIdentity: boolean;
   }) => void;
 }
 
@@ -69,6 +70,7 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
   const [country, setCountry] = useState('United States');
   const [representativeName, setRepresentativeName] = useState('');
   const [representativeRole, setRepresentativeRole] = useState('');
+  const [generateDispatchIdentity, setGenerateDispatchIdentity] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -79,6 +81,7 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
     setCountry('United States');
     setRepresentativeName('');
     setRepresentativeRole('');
+    setGenerateDispatchIdentity(true);
   }, [open]);
 
   if (!open) return null;
@@ -109,6 +112,14 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
           <input value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Representative name" style={inputStyle} />
           <input value={representativeRole} onChange={(e) => setRepresentativeRole(e.target.value)} placeholder="Representative role" style={inputStyle} />
         </div>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#cbd5e1' }}>
+          <input
+            type="checkbox"
+            checked={generateDispatchIdentity}
+            onChange={(event) => setGenerateDispatchIdentity(event.target.checked)}
+          />
+          Generate entity mailing line and proof QR for outgoing records
+        </label>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} style={buttonStyle}>Cancel</button>
           <button
@@ -122,6 +133,7 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
                 country,
                 representativeName,
                 representativeRole,
+                generateDispatchIdentity,
               })
             }
             style={{ ...buttonStyle, background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))', borderColor: 'rgba(126,242,255,0.28)' }}

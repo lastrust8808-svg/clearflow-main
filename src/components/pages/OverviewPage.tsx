@@ -21,6 +21,18 @@ export default function OverviewPage({ data }: OverviewPageProps) {
       window.location.hash = hash;
     }
   };
+  const linkedEftpsTreasury = data.treasuryAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsLinkedTreasuryAccountId,
+  );
+  const linkedEftpsLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsTaxLedgerAccountId,
+  );
+  const linkedUspsBank = data.bankAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsLinkedBankAccountId,
+  );
+  const linkedUspsPostageLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsPostageLedgerAccountId,
+  );
   const settlementFlows = buildSettlementFlowViews(data);
   const remittanceRailControls = buildRemittanceRailControls(data);
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
@@ -82,6 +94,7 @@ export default function OverviewPage({ data }: OverviewPageProps) {
   const recurringObligationCount = data.obligations.filter(
     (item) => item.recurringSchedule?.enabled,
   ).length;
+  const eftpsOpenTaxItems = data.taxReportingLinks.filter((item) => item.status !== 'accepted').length;
   const sealedProofChainCount = transactionProofChains.filter(
     (item) => item.verificationStatus === 'sealed',
   ).length;
@@ -172,6 +185,22 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
         <StatCard label="Partner-Bank Required" value={partnerBankRequiredCount} />
         <StatCard
+          label="EFTPS Profile"
+          value={
+            data.workspaceSettings.eftpsEnabled
+              ? data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'
+              : 'off'
+          }
+        />
+        <StatCard
+          label="USPS Gateway"
+          value={
+            data.workspaceSettings.uspsGatewayEnabled
+              ? data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'
+              : 'off'
+          }
+        />
+        <StatCard
           label="Rail Exceptions"
           value={
             remittanceRailControls.filter((item) => item.overallStatus === 'exception').length
@@ -179,6 +208,95 @@ export default function OverviewPage({ data }: OverviewPageProps) {
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Tax & Postal Connections"
+        description="Treasury tax-payment and postal-operation profiles tied back into the workspace so operators can keep them active and evidenced."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="EFTPS Tax Payment Posture"
+            subtitle={
+              data.workspaceSettings.eftpsEnabled
+                ? `${data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'} | ${eftpsOpenTaxItems} tax items still open`
+                : 'EFTPS profile not enabled'
+            }
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                EIN {data.workspaceSettings.eftpsEin || 'not set'} | operator{' '}
+                {data.workspaceSettings.eftpsOperatorName || 'not set'} | evidence{' '}
+                {data.workspaceSettings.eftpsLastEvidenceDate || 'not recorded'}.
+              </div>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                Treasury {linkedEftpsTreasury?.name || 'not linked'} | ledger{' '}
+                {linkedEftpsLedger ? `${linkedEftpsLedger.code} ${linkedEftpsLedger.name}` : 'not linked'}.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('#settings')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open EFTPS Profile
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="USPS Business Gateway Posture"
+            subtitle={
+              data.workspaceSettings.uspsGatewayEnabled
+                ? `${data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'} | ${data.workspaceSettings.uspsServiceProfile?.replace(/_/g, ' ') || 'service not set'}`
+                : 'USPS gateway profile not enabled'
+            }
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                CRID {data.workspaceSettings.uspsCrid || 'not set'} | MID{' '}
+                {data.workspaceSettings.uspsMailerId || 'not set'} | permit{' '}
+                {data.workspaceSettings.uspsPermitNumber || 'not set'}.
+              </div>
+              <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                Bank {linkedUspsBank?.accountName || 'not linked'} | postage ledger{' '}
+                {linkedUspsPostageLedger
+                  ? `${linkedUspsPostageLedger.code} ${linkedUspsPostageLedger.name}`
+                  : 'not linked'}.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('#settings')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open USPS Profile
+              </button>
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Proof Chain Posture"

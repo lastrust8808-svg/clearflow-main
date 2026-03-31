@@ -24,6 +24,24 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
   const auth = useAuth();
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatusSnapshot | null>(null);
   const [integrationLoading, setIntegrationLoading] = useState(true);
+  const linkedEftpsTreasury = data.treasuryAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsLinkedTreasuryAccountId,
+  );
+  const linkedEftpsBank = data.bankAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsLinkedBankAccountId,
+  );
+  const linkedEftpsLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.eftpsTaxLedgerAccountId,
+  );
+  const linkedUspsBank = data.bankAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsLinkedBankAccountId,
+  );
+  const linkedUspsPostageLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsPostageLedgerAccountId,
+  );
+  const linkedUspsEvidenceLedger = data.ledgerAccounts.find(
+    (item) => item.id === data.workspaceSettings.uspsEvidenceLedgerAccountId,
+  );
   const retainedDocumentCount = data.documents.filter(isClearFlowRetainedDocument).length;
   const userOwnedReadyCount = data.documents.filter(isUserOwnedReadyDocument).length;
   const driveRoutedCount = data.documents.filter(
@@ -62,6 +80,18 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
           label="Sign-In Priority"
           value={auth.isConfigured ? 'Google first' : 'Google pending setup'}
         />
+        <StatCard
+          label="EFTPS"
+          value={data.workspaceSettings.eftpsEnabled
+            ? data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'
+            : 'not enabled'}
+        />
+        <StatCard
+          label="USPS Gateway"
+          value={data.workspaceSettings.uspsGatewayEnabled
+            ? data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'
+            : 'not enabled'}
+        />
       </div>
 
       <PageSection
@@ -70,6 +100,10 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
       >
         <WorkspaceSettingsCard
           settings={data.workspaceSettings}
+          entities={data.entities}
+          treasuryAccounts={data.treasuryAccounts}
+          bankAccounts={data.bankAccounts}
+          ledgerAccounts={data.ledgerAccounts}
           onSave={(nextSettings) =>
             setData((prev) => ({
               ...prev,
@@ -211,6 +245,54 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
               <div>4. Plaid credentials and backend hosting must be live for bank-feed sync.</div>
               <div>5. Backend must stay reachable from the deployed frontend for all external actions.</div>
             </div>
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Tax & Postal Profiles"
+        description="Workspace-level setup for Treasury tax payments and USPS business mailing operations when the user already has those accounts."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="EFTPS Integration Profile"
+            subtitle={data.workspaceSettings.eftpsEnabled ? 'Enabled for tax-payment controls' : 'Not enabled'}
+            summaryItems={[
+              { label: 'Status', value: data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'Not started' },
+              { label: 'EIN', value: data.workspaceSettings.eftpsEin || 'Not set' },
+              { label: 'Operator', value: data.workspaceSettings.eftpsOperatorName || 'Not set' },
+              { label: 'Deposit Mode', value: data.workspaceSettings.eftpsDepositMode?.replace(/_/g, ' ') || 'Not set' },
+              { label: 'Last Evidence', value: data.workspaceSettings.eftpsLastEvidenceDate || 'Not recorded' },
+              { label: 'Treasury', value: linkedEftpsTreasury?.name || 'Not linked' },
+              { label: 'Bank', value: linkedEftpsBank?.accountName || 'Not linked' },
+              { label: 'Ledger', value: linkedEftpsLedger ? `${linkedEftpsLedger.code} ${linkedEftpsLedger.name}` : 'Not linked' },
+            ]}
+          >
+            EFTPS should be treated as a guided Treasury tax-payment profile: enrollment, PIN receipt posture, scheduled deposits, retained payment evidence, and explicit links into the treasury, bank, and tax-ledger accounts where those movements belong.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="USPS Business Gateway Profile"
+            subtitle={data.workspaceSettings.uspsGatewayEnabled ? 'Enabled for mailing operations' : 'Not enabled'}
+            summaryItems={[
+              { label: 'Status', value: data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'Not started' },
+              { label: 'CRID', value: data.workspaceSettings.uspsCrid || 'Not set' },
+              { label: 'Mailer ID', value: data.workspaceSettings.uspsMailerId || 'Not set' },
+              { label: 'Permit', value: data.workspaceSettings.uspsPermitNumber || 'Not set' },
+              { label: 'Service Profile', value: data.workspaceSettings.uspsServiceProfile?.replace(/_/g, ' ') || 'Not set' },
+              { label: 'BSA', value: data.workspaceSettings.uspsBusinessServiceAdmin || 'Not set' },
+              { label: 'Bank', value: linkedUspsBank?.accountName || 'Not linked' },
+              { label: 'Postage Ledger', value: linkedUspsPostageLedger ? `${linkedUspsPostageLedger.code} ${linkedUspsPostageLedger.name}` : 'Not linked' },
+              { label: 'Evidence Ledger', value: linkedUspsEvidenceLedger ? `${linkedUspsEvidenceLedger.code} ${linkedUspsEvidenceLedger.name}` : 'Not linked' },
+            ]}
+          >
+            USPS Business Customer Gateway can support mail, permit, PostalOne, eVS, or PDX-linked operations. These fields now let ClearFlow retain both the operational identifiers and the exact bank and ledger destinations where postage, fees, and evidence should be recorded.
           </WorkbenchRecordCard>
         </div>
       </PageSection>
