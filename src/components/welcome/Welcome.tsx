@@ -397,6 +397,41 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   {googleLaunchError}
                 </div>
               ) : null}
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingTop: 4,
+                }}
+              >
+                <a
+                  href="/privacy"
+                  style={{
+                    color: '#9fe8ff',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  Privacy
+                </a>
+                <span style={{ color: 'rgba(255,255,255,0.22)' }}>|</span>
+                <a
+                  href="/terms"
+                  style={{
+                    color: '#9fe8ff',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  Terms
+                </a>
+              </div>
             </>
           ) : (
             <>
