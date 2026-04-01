@@ -7,9 +7,10 @@ class GeminiService {
   readonly isConfigured: boolean = true;
 
   constructor() {
-    // FIX: Access API_KEY from the custom window.process object.
-    const apiKey = (window as any).process?.env?.API_KEY;
-    if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI') {
+    const apiKey = ((window as any).process?.env?.API_KEY || '').trim();
+    const looksUnresolvedPlaceholder =
+      apiKey.startsWith('%') && apiKey.endsWith('%');
+    if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI' || looksUnresolvedPlaceholder) {
       console.warn('API_KEY environment variable not set. Gemini Service will not work.');
       this.isConfigured = false;
     } else {
