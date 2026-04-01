@@ -13,6 +13,8 @@ import type {
   InstrumentSettlementRecord,
   NegotiableInstrumentRegisterRecord,
   ObligationRecord,
+  RemittanceStatementRecord,
+  SettlementRecord,
   TokenRecord,
 } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
@@ -1884,6 +1886,8 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
     const instrumentId = `ins-bond-${stamp}`;
     const obligationId = `obl-bond-${stamp}`;
     const settlementId = `iset-bond-${stamp}`;
+    const remittanceStatementId = `remit-bond-${stamp}`;
+    const settlementRecordId = `set-bond-${stamp}`;
     const registerId = `reg-bond-${stamp}`;
     const holderEntryId = `hle-bond-${stamp}`;
     const documentId = `doc-bond-${stamp}`;
@@ -1945,6 +1949,8 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       status: 'open',
       linkedInstrumentIds: [instrumentId],
       linkedDocumentIds: [documentId],
+      linkedSettlementIds: [settlementRecordId],
+      linkedRemittanceStatementIds: [remittanceStatementId],
       gainOrLossOnDischarge: 0,
       lifecycleStage: 'recognized',
       recurringSchedule: {
@@ -2007,6 +2013,7 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       legalIdentifier,
       instrumentId,
       obligationId,
+      linkedSettlementId: settlementRecordId,
       linkedDocumentIds: [documentId],
       linkedTokenIds: [token.id],
       dischargeMethod: 'instrument_performance',
@@ -2020,6 +2027,57 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       sourceDepositStatus: 'not_deposited',
       notes:
         'Use presentment, remittance, settlement, or posted performance evidence to move this bond from issued to performed and ultimately discharge the linked obligation.',
+    };
+
+    const remittanceStatement: RemittanceStatementRecord = {
+      id: remittanceStatementId,
+      entityId: primaryEntity.id,
+      title: `${entityLabel} Bond Remittance Direction ${issueDate}`,
+      statementDate: issueDate,
+      payerName: entityLabel,
+      payeeName: 'Registered holder or performing counterparty to be confirmed',
+      amount,
+      currency,
+      dischargeMethod: 'instrument_performance',
+      linkedInstrumentSettlementId: settlementId,
+      linkedSettlementId: settlementRecordId,
+      linkedObligationIds: [obligationId],
+      linkedDocumentIds: [documentId],
+      status: 'draft',
+      notes:
+        'Draft remittance direction created with the bond execution packet so the discharge path is already tied to the instrument and obligation.',
+    };
+
+    const settlementRecord: SettlementRecord = {
+      id: settlementRecordId,
+      entityId: primaryEntity.id,
+      linkedTransactionId: transactionId,
+      linkedJournalEntryIds: [journalId],
+      linkedInstrumentSettlementId: settlementId,
+      linkedRemittanceStatementId: remittanceStatementId,
+      path: 'internal_ledger',
+      dischargeMethod: 'instrument_performance',
+      direction: 'outgoing',
+      status: 'draft',
+      liquidCashStage: 'unfunded',
+      verificationMethod: 'internal_control_token',
+      verificationStatus: 'pending',
+      linkedTokenIds: [token.id],
+      grossAmount: amount,
+      settledAmount: 0,
+      currency,
+      initiatedAt: issueDate,
+      expectedSettlementDate: maturityDate,
+      originSourceType: 'manual_remittance',
+      executionRail: 'LedgerRemittance',
+      processorStatus: 'queued',
+      executionReason:
+        'Draft settlement rail opened from the private bond execution packet pending presentment, reserve performance, or other discharge evidence.',
+      reserveBacked: true,
+      requiresManualReview: true,
+      autoReconcileStatus: 'pending',
+      notes:
+        'Initial draft settlement opened so the bond, obligation, and remittance direction already share one controlled performance rail.',
     };
 
     const document = buildGeneratedDocument({
@@ -2080,6 +2138,8 @@ Bond Identifier: ${legalIdentifier}
       negotiableInstrumentRegisters: [registerRecord, ...prev.negotiableInstrumentRegisters],
       holderLedgerEntries: [holderEntry, ...prev.holderLedgerEntries],
       instrumentSettlements: [instrumentSettlement, ...prev.instrumentSettlements],
+      remittanceStatements: [remittanceStatement, ...prev.remittanceStatements],
+      settlements: [settlementRecord, ...prev.settlements],
       documents: [persistedDocument, ...prev.documents],
       tokens: [token, ...prev.tokens],
       complianceTags: [complianceTag, ...prev.complianceTags],
