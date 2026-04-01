@@ -232,6 +232,11 @@ export interface AnalysisResult {
   entityName: string;
   ein: string;
   summary: string;
+  remitAddress?: string;
+  contactPhone?: string;
+  accountReference?: string;
+  processingReference?: string;
+  paymentInstructionSummary?: string;
   keyDates: KeyDate[];
   financialHighlights: FinancialHighlight[];
 }

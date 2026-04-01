@@ -10,6 +10,11 @@ export interface IntakeExtractionResult {
   amount?: number;
   date?: string;
   categoryHint?: string;
+  remitAddress?: string;
+  contactPhone?: string;
+  accountReference?: string;
+  processingReference?: string;
+  paymentInstructionSummary?: string;
   rawAnalysis?: AnalysisResult;
 }
 
@@ -89,6 +94,11 @@ export async function analyzeAccountingUpload(
       amount,
       date: detectedDate,
       categoryHint: categorizeDocument(analysis.documentType),
+      remitAddress: analysis.remitAddress || undefined,
+      contactPhone: analysis.contactPhone || undefined,
+      accountReference: analysis.accountReference || undefined,
+      processingReference: analysis.processingReference || undefined,
+      paymentInstructionSummary: analysis.paymentInstructionSummary || undefined,
       rawAnalysis: analysis,
     };
   } catch (error) {

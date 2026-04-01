@@ -117,7 +117,7 @@ Instructions:
     try {
       const filePart = await this.fileToGenerativePart(file);
       const textPart = {
-        text: `Analyze the provided financial document (e.g., bank statement, IRS form like CP575, ledger). Extract key information and return it as a JSON object matching the specified schema. The summary should be a concise overview of the document's purpose and contents.`
+        text: `Analyze the provided financial document (e.g., bank statement, IRS form like CP575, ledger, bill coupon, utility statement). Extract key information and return it as a JSON object matching the specified schema. The summary should be a concise overview of the document's purpose and contents. If the document is a bill or remittance coupon, also extract any visible remit address, customer-service phone, account reference, payment processing code, and short payment-instruction summary when those fields are visible.`
       };
 
       const responseSchema = {
@@ -127,6 +127,26 @@ Instructions:
           entityName: { type: Type.STRING, description: 'The name of the business or individual entity found.' },
           ein: { type: Type.STRING, description: 'The Employer Identification Number (EIN) if present. Format as XX-XXXXXXX.' },
           summary: { type: Type.STRING, description: 'A brief summary of the document.' },
+          remitAddress: {
+            type: Type.STRING,
+            description: 'The remittance or mailing address shown on the document, if any.',
+          },
+          contactPhone: {
+            type: Type.STRING,
+            description: 'A customer-service or remittance contact phone shown on the document, if any.',
+          },
+          accountReference: {
+            type: Type.STRING,
+            description: 'The customer account number, remit account, or statement account reference shown on the document, if any.',
+          },
+          processingReference: {
+            type: Type.STRING,
+            description: 'A coupon, processing, lockbox, or other routing-style reference code shown on the document, if any.',
+          },
+          paymentInstructionSummary: {
+            type: Type.STRING,
+            description: 'A short note describing the payment or remittance instructions visible on the document, if any.',
+          },
           keyDates: {
             type: Type.ARRAY,
             items: {

@@ -1544,6 +1544,7 @@ export interface VendorRecord {
     arbitrationProcedureNotes?: string;
     linkedArbitrationPacketDocumentId?: string;
     contractExtractionSummary?: string;
+    referenceLinks?: string[];
     escalationChannel?: string;
     linkedTermsDocumentId?: string;
     linkedAdminProcessDocumentId?: string;

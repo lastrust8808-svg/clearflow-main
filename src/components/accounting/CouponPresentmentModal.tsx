@@ -176,6 +176,8 @@ export default function CouponPresentmentModal({
     try {
       const extraction = await analyzeAccountingUpload('coupon', uploadedFile);
       setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
+      setReceiverAccountLabel((current) => current || extraction.accountReference || '');
+      setCouponReference((current) => current || extraction.processingReference || '');
       setAmount((current) => {
         if (current) {
           return current;
@@ -185,7 +187,20 @@ export default function CouponPresentmentModal({
       setDueDate((current) => current || extraction.date || '');
       setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
       setParsedNotes((current) =>
-        [current, extraction.summary].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n\n'),
+        [
+          current,
+          extraction.summary,
+          extraction.paymentInstructionSummary,
+          extraction.remitAddress ? `Remit address: ${extraction.remitAddress}` : '',
+          extraction.contactPhone ? `Contact phone: ${extraction.contactPhone}` : '',
+          extraction.accountReference ? `Account reference: ${extraction.accountReference}` : '',
+          extraction.processingReference
+            ? `Processing reference: ${extraction.processingReference}`
+            : '',
+        ]
+          .filter(Boolean)
+          .filter((value, index, all) => all.indexOf(value) === index)
+          .join('\n\n'),
       );
       setExtractionSummary(
         extraction.status === 'failed'

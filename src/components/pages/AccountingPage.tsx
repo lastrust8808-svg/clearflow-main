@@ -29,6 +29,7 @@ import {
   type ObligationLifecycleSummary,
 } from '../../services/obligationLifecycle.service';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
+import { resolveVendorProviderPreset } from '../../services/vendorProviderPreset.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -635,6 +636,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       returnInstrumentRule?: string;
       billingErrorProcess?: string;
       contractExtractionSummary?: string;
+      referenceLinks?: string[];
       linkedTermsDocumentId?: string;
       linkedAdminProcessDocumentId?: string;
       linkedArbitrationPacketDocumentId?: string;
@@ -645,7 +647,24 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       autoAnnualizeFromBills?: boolean;
     },
   ) => {
-    const normalizedName = payload.name?.trim();
+    const detectedPreset = resolveVendorProviderPreset(payload.name);
+    const normalizedName = (detectedPreset?.canonicalName || payload.name?.trim() || '').trim();
+    const mergedNotes = [
+      detectedPreset?.notes,
+      payload.notes,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .join('\n\n');
+    const resolvedPhone = payload.phone || detectedPreset?.phone;
+    const resolvedAddress = payload.address || detectedPreset?.remitAddress;
+    const resolvedOrganizationClass =
+      payload.organizationClass || detectedPreset?.organizationClass;
+    const resolvedTermsIntakeMode = payload.termsIntakeMode || detectedPreset?.termsIntakeMode;
+    const resolvedReferenceLinks = [
+      ...(detectedPreset?.referenceLinks || []),
+      ...(payload.referenceLinks || []),
+    ].filter((value, index, all) => all.indexOf(value) === index);
     const paymentInstructions =
       payload.routingNumber || payload.accountNumber || payload.bankName || payload.beneficiaryName
         ? {
@@ -669,8 +688,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         : undefined;
 
     const buildCounterpartyTermsProfile = () => {
-      const organizationClass = payload.organizationClass || 'general';
-      const termsIntakeMode = payload.termsIntakeMode || 'none';
+      const organizationClass = resolvedOrganizationClass || 'general';
+      const termsIntakeMode = resolvedTermsIntakeMode || 'none';
 
       const presetByClass: Record<
         NonNullable<typeof organizationClass>,
@@ -731,7 +750,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
       if (
         termsIntakeMode === 'none' &&
-        !payload.billingErrorSupport &&
+        !(payload.billingErrorSupport ?? detectedPreset?.billingErrorSupport) &&
         !payload.linkedTermsDocumentId &&
         !payload.linkedAdminProcessDocumentId
       ) {
@@ -743,24 +762,34 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         termsIntakeMode,
         autoLoadedPreset: termsIntakeMode === 'auto_load' ? presetByClass[organizationClass] : undefined,
         remittanceApplicationRule:
-          payload.remittanceApplicationRule || remittanceRuleByClass[organizationClass],
+          payload.remittanceApplicationRule ||
+          detectedPreset?.remittanceApplicationRule ||
+          remittanceRuleByClass[organizationClass],
         returnInstrumentRule:
-          payload.returnInstrumentRule || returnRuleByClass[organizationClass],
+          payload.returnInstrumentRule ||
+          detectedPreset?.returnInstrumentRule ||
+          returnRuleByClass[organizationClass],
         billingErrorProcess:
           payload.billingErrorProcess ||
-          (payload.billingErrorSupport ? billingProcessByClass[organizationClass] : undefined),
-        disputeResolutionPath: payload.disputeResolutionPath,
-        arbitrationForum: payload.arbitrationForum,
-        mediationStepPresent: payload.mediationStepPresent,
-        cureOfferRequired: payload.cureOfferRequired,
+          detectedPreset?.billingErrorProcess ||
+          ((payload.billingErrorSupport ?? detectedPreset?.billingErrorSupport)
+            ? billingProcessByClass[organizationClass]
+            : undefined),
+        disputeResolutionPath:
+          payload.disputeResolutionPath || detectedPreset?.disputeResolutionPath,
+        arbitrationForum: payload.arbitrationForum || detectedPreset?.arbitrationForum,
+        mediationStepPresent: payload.mediationStepPresent ?? detectedPreset?.mediationStepPresent,
+        cureOfferRequired: payload.cureOfferRequired ?? detectedPreset?.cureOfferRequired,
         disputeNoticeDays: payload.disputeNoticeDays
           ? Number(payload.disputeNoticeDays)
           : undefined,
         disputeVenue: payload.disputeVenue || undefined,
         arbitrationProcedureNotes: payload.arbitrationProcedureNotes || undefined,
         linkedArbitrationPacketDocumentId: payload.linkedArbitrationPacketDocumentId,
-        contractExtractionSummary: payload.contractExtractionSummary,
-        escalationChannel: payload.email || payload.address || undefined,
+        contractExtractionSummary:
+          payload.contractExtractionSummary || detectedPreset?.contractExtractionSummary,
+        referenceLinks: resolvedReferenceLinks.length ? resolvedReferenceLinks : undefined,
+        escalationChannel: payload.email || resolvedAddress || undefined,
         linkedTermsDocumentId: payload.linkedTermsDocumentId,
         linkedAdminProcessDocumentId: payload.linkedAdminProcessDocumentId,
         lastReviewedAt: new Date().toISOString(),
@@ -774,11 +803,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       : undefined;
     const creditLineProfile =
       payload.lineOfCreditEnabled ||
+      detectedPreset?.lineOfCreditEnabled ||
       typeof nextCreditLimit === 'number' ||
       typeof nextStartingAccountAmount === 'number'
         ? {
-            enabled: payload.lineOfCreditEnabled ?? true,
-            facilityType: payload.creditLineType,
+            enabled: payload.lineOfCreditEnabled ?? detectedPreset?.lineOfCreditEnabled ?? true,
+            facilityType: payload.creditLineType || detectedPreset?.creditLineType,
             creditLimit: nextCreditLimit,
             startingAccountAmount: nextStartingAccountAmount,
             currentBalance: nextStartingAccountAmount ?? 0,
@@ -786,7 +816,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               typeof nextCreditLimit === 'number'
                 ? Number((nextCreditLimit - (nextStartingAccountAmount ?? 0)).toFixed(2))
                 : undefined,
-            autoAnnualizeFromBills: payload.autoAnnualizeFromBills ?? true,
+            autoAnnualizeFromBills:
+              payload.autoAnnualizeFromBills ?? detectedPreset?.autoAnnualizeFromBills ?? true,
             lastActivityAt: new Date().toISOString(),
           } satisfies NonNullable<CoreDataBundle['vendors'][number]['creditLineProfile']>
         : undefined;
@@ -810,10 +841,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           record.id === existingVendor.id
             ? {
                 ...record,
+                name: normalizedName || record.name,
                 email: payload.email || record.email,
-                phone: payload.phone || record.phone,
-                remitAddress: payload.address || record.remitAddress,
-                notes: payload.notes || record.notes,
+                phone: resolvedPhone || record.phone,
+                remitAddress: resolvedAddress || record.remitAddress,
+                notes: mergedNotes || record.notes,
                 paymentInstructions: paymentInstructions
                   ? {
                       ...record.paymentInstructions,
@@ -869,8 +901,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           entityId,
           name: normalizedName,
           email: payload.email || undefined,
-          phone: payload.phone || undefined,
-          remitAddress: payload.address || undefined,
+          phone: resolvedPhone || undefined,
+          remitAddress: resolvedAddress || undefined,
           status: 'active' as const,
           paymentInstructions,
           counterpartyTermsProfile,
@@ -880,7 +912,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             payload.linkedTermsDocumentId,
             payload.linkedAdminProcessDocumentId,
           ].filter((value): value is string => Boolean(value)),
-          notes: payload.notes || undefined,
+          notes: mergedNotes || undefined,
         },
         ...prev.vendors,
       ],
@@ -1954,6 +1986,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (!entity) return prev;
       const { vendorId, vendors: vendorSeed } = ensureVendorRecord(prev, entity.id, {
         name: payload.vendorName || extraction.vendorOrMerchantName,
+        phone: extraction.contactPhone,
+        address: extraction.remitAddress,
+        notes: extraction.paymentInstructionSummary,
       });
       const billNumber = payload.billNumber || buildEntityScopedNumber(entity, 'bill', '', String(getEntityNextSequence(entity, 'bill')));
 
@@ -6975,6 +7010,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                           {vendor.counterpartyTermsProfile?.contractExtractionSummary ? (
                             <div style={{ color: '#fde68a', lineHeight: 1.5, fontSize: 13 }}>
                               {vendor.counterpartyTermsProfile.contractExtractionSummary}
+                            </div>
+                          ) : null}
+                          {vendor.counterpartyTermsProfile?.referenceLinks?.length ? (
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: 10,
+                                fontSize: 13,
+                              }}
+                            >
+                              {vendor.counterpartyTermsProfile.referenceLinks.map((link, index) => (
+                                <a
+                                  key={link}
+                                  href={link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: '#93c5fd' }}
+                                >
+                                  {`Reference ${index + 1}`}
+                                </a>
+                              ))}
                             </div>
                           ) : null}
                           {vendor.creditLineProfile?.enabled ? (
