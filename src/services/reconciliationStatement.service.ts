@@ -11,7 +11,7 @@ interface ParsedStatementResult {
   summary: string;
 }
 
-function splitCsvLine(line: string) {
+function splitDelimitedLine(line: string, delimiter: string) {
   const values: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -30,7 +30,7 @@ function splitCsvLine(line: string) {
       continue;
     }
 
-    if (character === ',' && !inQuotes) {
+    if (character === delimiter && !inQuotes) {
       values.push(current.trim());
       current = '';
       continue;
@@ -47,12 +47,22 @@ function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
 }
 
+function detectDelimiter(line: string) {
+  const candidates = [',', '\t', ';', '|'];
+  const counts = candidates.map((delimiter) => ({
+    delimiter,
+    count: line.split(delimiter).length - 1,
+  }));
+  const best = counts.sort((left, right) => right.count - left.count)[0];
+  return best && best.count > 0 ? best.delimiter : ',';
+}
+
 function parseAmount(value?: string) {
   if (!value) {
     return null;
   }
 
-  const cleaned = value.replace(/[$,\s]/g, '').trim();
+  const cleaned = value.replace(/[$,\s]/g, '').replace(/^\((.+)\)$/, '-$1').trim();
   if (!cleaned) {
     return null;
   }
@@ -168,7 +178,8 @@ function parseDelimitedStatement(
     return null;
   }
 
-  const headerValues = splitCsvLine(rawLines[0]).map(normalizeHeader);
+  const delimiter = detectDelimiter(rawLines[0]);
+  const headerValues = splitDelimitedLine(rawLines[0], delimiter).map(normalizeHeader);
   const columns = detectColumns(headerValues);
 
   if (!columns.date || !columns.description || (!columns.amount && !columns.debit && !columns.credit)) {
@@ -176,7 +187,7 @@ function parseDelimitedStatement(
   }
 
   const lines = rawLines.slice(1).flatMap((rawLine, index) => {
-    const values = splitCsvLine(rawLine);
+    const values = splitDelimitedLine(rawLine, delimiter);
     const row = Object.fromEntries(headerValues.map((header, valueIndex) => [header, values[valueIndex] ?? '']));
     const creditAmount = columns.credit ? parseAmount(row[columns.credit]) : null;
     const debitAmount = columns.debit ? parseAmount(row[columns.debit]) : null;

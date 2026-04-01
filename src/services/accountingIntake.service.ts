@@ -53,10 +53,16 @@ function categorizeDocument(documentType: string | undefined) {
 function fallbackExtraction(kind: IntakeKind, file: File): IntakeExtractionResult {
   const nameWithoutExtension = file.name.replace(/\.[^.]+$/, '');
   const normalizedName = nameWithoutExtension.replace(/[-_]+/g, ' ').trim();
+  const configurationSummary =
+    geminiService.configurationIssue === 'unresolved_placeholder'
+      ? 'Gemini document analysis is still using an unresolved deployment placeholder, so OCR-style extraction is unavailable until the frontend env is redeployed.'
+      : geminiService.configurationIssue === 'missing_api_key'
+        ? 'Gemini document analysis is not configured yet for this frontend deployment, so OCR-style extraction is unavailable until the Gemini key is added and redeployed.'
+        : `Automatic ${kind} extraction is not configured, so ClearFlow stored the source file and created a review-ready draft from file metadata.`;
 
   return {
     status: 'needs_review',
-    summary: `Automatic ${kind} extraction is not configured, so ClearFlow stored the source file and created a review-ready draft from file metadata.`,
+    summary: configurationSummary,
     vendorOrMerchantName: normalizedName || undefined,
   };
 }

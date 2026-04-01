@@ -5,14 +5,20 @@ import { GOVERNANCE_DOCUMENTS_RAW } from '../data/governance-docs';
 class GeminiService {
   private ai: GoogleGenAI | null = null;
   readonly isConfigured: boolean = true;
+  readonly configurationIssue: 'missing_api_key' | 'unresolved_placeholder' | null = null;
 
   constructor() {
     const apiKey = ((window as any).process?.env?.API_KEY || '').trim();
     const looksUnresolvedPlaceholder =
       apiKey.startsWith('%') && apiKey.endsWith('%');
-    if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI' || looksUnresolvedPlaceholder) {
+    if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI') {
       console.warn('API_KEY environment variable not set. Gemini Service will not work.');
       this.isConfigured = false;
+      this.configurationIssue = 'missing_api_key';
+    } else if (looksUnresolvedPlaceholder) {
+      console.warn('Gemini API key placeholder was not resolved. Gemini Service will not work.');
+      this.isConfigured = false;
+      this.configurationIssue = 'unresolved_placeholder';
     } else {
       this.ai = new GoogleGenAI({ apiKey });
     }

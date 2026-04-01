@@ -16,7 +16,13 @@ class SystemHealthService {
   getSystemStatus(): Promise<SystemStatus[]> {
     const statuses: SystemStatus[] = [
       { serviceName: 'Plaid API', status: 'online', details: 'All systems operational.' },
-      { serviceName: 'Gemini API', status: 'online', details: 'All systems operational.' },
+      {
+        serviceName: 'Gemini API',
+        status: geminiService.isConfigured ? 'online' : 'degraded',
+        details: geminiService.isConfigured
+          ? 'Document analysis is configured.'
+          : 'Document analysis is not configured for this deployment.',
+      },
       { serviceName: 'Authentication Service', status: 'degraded', details: 'Slight latency increase.' },
       { serviceName: 'Database', status: 'online', details: 'All systems operational.' },
     ];
