@@ -88,6 +88,17 @@ export default function CounterpartyModal({
     'none' | 'auto_load' | 'upload_contract' | 'manual_reference'
   >('none');
   const [billingErrorSupport, setBillingErrorSupport] = useState(false);
+  const [disputeResolutionPath, setDisputeResolutionPath] = useState<
+    'none' | 'notice_and_cure' | 'notice_mediation_arbitration' | 'notice_arbitration' | 'court_litigation'
+  >('none');
+  const [arbitrationForum, setArbitrationForum] = useState<
+    'aaa' | 'jams' | 'private_forum' | 'court_only' | 'unspecified'
+  >('unspecified');
+  const [mediationStepPresent, setMediationStepPresent] = useState(false);
+  const [cureOfferRequired, setCureOfferRequired] = useState(false);
+  const [disputeNoticeDays, setDisputeNoticeDays] = useState('');
+  const [disputeVenue, setDisputeVenue] = useState('');
+  const [arbitrationProcedureNotes, setArbitrationProcedureNotes] = useState('');
   const [contractFile, setContractFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -111,6 +122,13 @@ export default function CounterpartyModal({
     setOrganizationClass('general');
     setTermsIntakeMode('none');
     setBillingErrorSupport(false);
+    setDisputeResolutionPath('none');
+    setArbitrationForum('unspecified');
+    setMediationStepPresent(false);
+    setCureOfferRequired(false);
+    setDisputeNoticeDays('');
+    setDisputeVenue('');
+    setArbitrationProcedureNotes('');
     setContractFile(null);
   }, [open, mode]);
 
@@ -265,6 +283,105 @@ export default function CounterpartyModal({
                   />
                   Start billing-error / escalation admin process support for this counterparty
                 </label>
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 12,
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid rgba(96,165,250,0.28)',
+                    background: 'rgba(30,41,59,0.4)',
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#bfdbfe' }}>
+                    Arbitration / mediation posture
+                  </div>
+                  <div style={{ color: '#bfdbfe', fontSize: 13 }}>
+                    If the agreement has a dispute-resolution clause, save the path here so ClearFlow can guide notice, cure, mediation, and arbitration steps after admin process.
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                    <select
+                      value={disputeResolutionPath}
+                      onChange={(e) =>
+                        setDisputeResolutionPath(e.target.value as typeof disputeResolutionPath)
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="none">No ADR path saved</option>
+                      <option value="notice_and_cure">Notice and cure only</option>
+                      <option value="notice_mediation_arbitration">Notice, mediation, then arbitration</option>
+                      <option value="notice_arbitration">Notice, then arbitration</option>
+                      <option value="court_litigation">Court / litigation path</option>
+                    </select>
+                    <select
+                      value={arbitrationForum}
+                      onChange={(e) =>
+                        setArbitrationForum(e.target.value as typeof arbitrationForum)
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="unspecified">Forum not yet captured</option>
+                      <option value="aaa">AAA</option>
+                      <option value="jams">JAMS</option>
+                      <option value="private_forum">Private / custom forum</option>
+                      <option value="court_only">Court only</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                    <input
+                      value={disputeNoticeDays}
+                      onChange={(e) => setDisputeNoticeDays(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                      placeholder="Notice / cure days (optional)"
+                      style={inputStyle}
+                    />
+                    <input
+                      value={disputeVenue}
+                      onChange={(e) => setDisputeVenue(e.target.value)}
+                      placeholder="Venue / seat / governing location"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        fontSize: 13,
+                        color: '#bfdbfe',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cureOfferRequired}
+                        onChange={(event) => setCureOfferRequired(event.target.checked)}
+                      />
+                      Agreement requires notice and an opportunity to cure before default or escalation
+                    </label>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        fontSize: 13,
+                        color: '#bfdbfe',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mediationStepPresent}
+                        onChange={(event) => setMediationStepPresent(event.target.checked)}
+                      />
+                      Agreement calls for mediation or negotiated settlement before arbitration
+                    </label>
+                  </div>
+                  <textarea
+                    value={arbitrationProcedureNotes}
+                    onChange={(e) => setArbitrationProcedureNotes(e.target.value)}
+                    placeholder="Paste or summarize the dispute-resolution clause, notice language, demand path, forum rules, and filing posture here."
+                    style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
+                  />
+                </div>
               </div>
             </div>
           ) : null}
@@ -301,6 +418,13 @@ export default function CounterpartyModal({
                 organizationClass,
                 termsIntakeMode,
                 billingErrorSupport,
+                disputeResolutionPath,
+                arbitrationForum,
+                mediationStepPresent,
+                cureOfferRequired,
+                disputeNoticeDays: disputeNoticeDays || undefined,
+                disputeVenue: disputeVenue || undefined,
+                arbitrationProcedureNotes: arbitrationProcedureNotes || undefined,
                 contractFile,
                 contractFileName: contractFile?.name,
               })

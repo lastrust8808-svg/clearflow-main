@@ -618,8 +618,21 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         | 'servicer';
       termsIntakeMode?: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
       billingErrorSupport?: boolean;
+      disputeResolutionPath?:
+        | 'none'
+        | 'notice_and_cure'
+        | 'notice_mediation_arbitration'
+        | 'notice_arbitration'
+        | 'court_litigation';
+      arbitrationForum?: 'aaa' | 'jams' | 'private_forum' | 'court_only' | 'unspecified';
+      mediationStepPresent?: boolean;
+      cureOfferRequired?: boolean;
+      disputeNoticeDays?: string;
+      disputeVenue?: string;
+      arbitrationProcedureNotes?: string;
       linkedTermsDocumentId?: string;
       linkedAdminProcessDocumentId?: string;
+      linkedArbitrationPacketDocumentId?: string;
     },
   ) => {
     const normalizedName = payload.name?.trim();
@@ -724,6 +737,16 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         billingErrorProcess: payload.billingErrorSupport
           ? billingProcessByClass[organizationClass]
           : undefined,
+        disputeResolutionPath: payload.disputeResolutionPath,
+        arbitrationForum: payload.arbitrationForum,
+        mediationStepPresent: payload.mediationStepPresent,
+        cureOfferRequired: payload.cureOfferRequired,
+        disputeNoticeDays: payload.disputeNoticeDays
+          ? Number(payload.disputeNoticeDays)
+          : undefined,
+        disputeVenue: payload.disputeVenue || undefined,
+        arbitrationProcedureNotes: payload.arbitrationProcedureNotes || undefined,
+        linkedArbitrationPacketDocumentId: payload.linkedArbitrationPacketDocumentId,
         escalationChannel: payload.email || payload.address || undefined,
         linkedTermsDocumentId: payload.linkedTermsDocumentId,
         linkedAdminProcessDocumentId: payload.linkedAdminProcessDocumentId,
@@ -1188,6 +1211,140 @@ ${
         ? `Generated a remittance-application notice for ${vendor.name}.`
         : `Generated a billing-error / administrative notice for ${vendor.name}.`
     );
+    navigateToHash(`#documents:${persistedDocument.id}`);
+  };
+
+  const handleLaunchVendorArbitrationPacket = async (vendorId: string) => {
+    const vendor = vendors.find((item) => item.id === vendorId);
+    if (!vendor) {
+      return;
+    }
+
+    const profile = vendor.counterpartyTermsProfile;
+    if (!profile || !profile.disputeResolutionPath || profile.disputeResolutionPath === 'none') {
+      setOperationsNotice(`No arbitration or ADR posture is saved for ${vendor.name}.`);
+      return;
+    }
+
+    const entity = data.entities.find((item) => item.id === vendor.entityId) || defaultEntity;
+    if (!entity) {
+      return;
+    }
+
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const noticeDays = profile.disputeNoticeDays || 10;
+    const cureDeadline = addDaysToIsoDate(issueDate, noticeDays);
+    const title = `${vendor.name} ADR / Arbitration Procedure Packet`;
+    const forumLabel =
+      profile.arbitrationForum === 'aaa'
+        ? 'AAA'
+        : profile.arbitrationForum === 'jams'
+          ? 'JAMS'
+          : profile.arbitrationForum === 'private_forum'
+            ? 'Private / custom forum'
+            : profile.arbitrationForum === 'court_only'
+              ? 'Court / litigation only'
+              : 'Forum to be confirmed';
+    const stepLines = [
+      `1. Open or complete the administrative billing-error and remittance research process using the saved counterparty profile.`,
+      profile.cureOfferRequired
+        ? `2. Serve a notice of dispute and offer an opportunity to cure before default or escalation. Current working cure / notice window: ${noticeDays} day(s), ending ${cureDeadline}.`
+        : `2. Serve a notice of dispute using the saved contract, notice address, and delivery evidence posture.`,
+      profile.mediationStepPresent || profile.disputeResolutionPath === 'notice_mediation_arbitration'
+        ? `3. Offer willingness to mediate or negotiate in good faith before filing an arbitration demand. Retain the offer, response, and scheduling evidence.`
+        : `3. If no mediation step is required, document whether the agreement allows direct arbitration demand after notice.`,
+      profile.disputeResolutionPath === 'court_litigation'
+        ? `4. Escalate to counsel review for court or litigation filing posture rather than arbitration demand.`
+        : `4. If no relief is provided after notice${profile.mediationStepPresent ? ', mediation,' : ''} and cure handling, prepare the arbitration demand packet and filing checklist for ${forumLabel}.`,
+      `5. Preserve the contract, statements, returned instruments, remittance evidence, admin notices, and delivery proofs in one file chain before relying on default or enforcement posture.`,
+    ];
+
+    const generatedBody = `# ${title}
+
+Issuing Entity: ${entity.displayName || entity.name}
+Counterparty: ${vendor.name}
+Packet Date: ${issueDate}
+
+## Saved Dispute Resolution Profile
+- Dispute path: ${profile.disputeResolutionPath}
+- Forum: ${forumLabel}
+- Mediation step present: ${profile.mediationStepPresent ? 'Yes' : 'No'}
+- Cure / notice before default: ${profile.cureOfferRequired ? `Yes, ${noticeDays} day(s)` : 'Not specifically captured'}
+- Venue / seat: ${profile.disputeVenue || 'To be inserted'}
+- Escalation channel: ${profile.escalationChannel || vendor.email || vendor.remitAddress || 'To be inserted'}
+
+## Procedural Direction
+${stepLines.join('\n')}
+
+## Procedural Inputs To Confirm
+- Contract / tariff / servicing guide reference: ${profile.linkedTermsDocumentId || 'To be inserted'}
+- Administrative process packet: ${profile.linkedAdminProcessDocumentId || 'To be inserted'}
+- Notice of dispute dispatch reference: ____________________
+- Cure response due date: ${cureDeadline}
+- Mediation offer / response reference: ____________________
+- Arbitration demand readiness review: ____________________
+
+## Clause Summary / Notes
+${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause text, forum rules, notice requirements, and exceptions here.'}
+
+## Operator Controls
+- This packet is a workflow aid, not a legal determination.
+- Confirm the actual agreement language, forum rules, governing law, and filing prerequisites before external use.
+- Do not skip notice, cure, or mediation steps if the agreement actually requires them.
+`;
+
+    const generatedFile = new File(
+      [generatedBody],
+      `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'adr-packet'}.md`,
+      { type: 'text/markdown' }
+    );
+
+    const persistedDocument = await persistUploadDocument({
+      entityId: entity.id,
+      folder: 'documents',
+      title,
+      summary:
+        'Generated ADR / arbitration procedure packet using the saved counterparty dispute-resolution profile, admin process, and notice / cure posture.',
+      sourceRecordType: 'document',
+      sourceRecordId: `adr-${vendor.id}-${Date.now()}`,
+      file: generatedFile,
+      date: issueDate,
+      storageOwner: 'user_owned',
+      retentionClass: 'compliance',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+      storageNotes:
+        'Generated from saved counterparty ADR posture to guide notice, cure, mediation, and arbitration follow-through.',
+    });
+
+    if (!persistedDocument) {
+      setOperationsNotice(`Unable to generate an ADR packet for ${vendor.name}.`);
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      vendors: prev.vendors.map((item) =>
+        item.id === vendor.id
+          ? {
+              ...item,
+              linkedDocumentIds: Array.from(
+                new Set([...(item.linkedDocumentIds ?? []), persistedDocument.id])
+              ),
+              counterpartyTermsProfile: item.counterpartyTermsProfile
+                ? {
+                    ...item.counterpartyTermsProfile,
+                    linkedArbitrationPacketDocumentId: persistedDocument.id,
+                    lastReviewedAt: new Date().toISOString(),
+                  }
+                : item.counterpartyTermsProfile,
+            }
+          : item
+      ),
+      documents: [persistedDocument, ...prev.documents],
+    }));
+
+    setOperationsNotice(`Generated an ADR / arbitration procedure packet for ${vendor.name}.`);
     navigateToHash(`#documents:${persistedDocument.id}`);
   };
 
@@ -2584,6 +2741,13 @@ ${
         ...payload,
         linkedTermsDocumentId,
         linkedAdminProcessDocumentId,
+        disputeResolutionPath: payload.disputeResolutionPath,
+        arbitrationForum: payload.arbitrationForum,
+        mediationStepPresent: payload.mediationStepPresent,
+        cureOfferRequired: payload.cureOfferRequired,
+        disputeNoticeDays: payload.disputeNoticeDays,
+        disputeVenue: payload.disputeVenue,
+        arbitrationProcedureNotes: payload.arbitrationProcedureNotes,
       });
       return {
         ...prev,
@@ -6403,15 +6567,19 @@ ${
                     <RecordCard
                       key={vendor.id}
                       title={vendor.name}
-                      subtitle={[
-                        vendor.counterpartyTermsProfile?.organizationClass
-                          ? `terms ${vendor.counterpartyTermsProfile.organizationClass}`
-                          : 'terms pending',
-                        vendor.counterpartyTermsProfile?.termsIntakeMode || 'no intake mode',
-                        vendor.counterpartyTermsProfile?.billingErrorProcess
-                          ? 'admin process ready'
-                          : 'admin process off',
-                      ].join(' | ')}
+      subtitle={[
+        vendor.counterpartyTermsProfile?.organizationClass
+          ? `terms ${vendor.counterpartyTermsProfile.organizationClass}`
+          : 'terms pending',
+        vendor.counterpartyTermsProfile?.termsIntakeMode || 'no intake mode',
+        vendor.counterpartyTermsProfile?.billingErrorProcess
+          ? 'admin process ready'
+          : 'admin process off',
+        vendor.counterpartyTermsProfile?.disputeResolutionPath &&
+        vendor.counterpartyTermsProfile.disputeResolutionPath !== 'none'
+          ? 'adr path ready'
+          : 'adr off',
+      ].join(' | ')}
                     >
                       <div
                         style={{
@@ -6471,6 +6639,30 @@ ${
                               }
                             >
                               Open Admin Packet
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            style={sectionButtonStyle(false)}
+                            onClick={() => void handleLaunchVendorArbitrationPacket(vendor.id)}
+                            disabled={
+                              !vendor.counterpartyTermsProfile?.disputeResolutionPath ||
+                              vendor.counterpartyTermsProfile.disputeResolutionPath === 'none'
+                            }
+                          >
+                            Generate ADR Packet
+                          </button>
+                          {vendor.counterpartyTermsProfile?.linkedArbitrationPacketDocumentId ? (
+                            <button
+                              type="button"
+                              style={sectionButtonStyle(false)}
+                              onClick={() =>
+                                navigateToHash(
+                                  `#documents:${vendor.counterpartyTermsProfile?.linkedArbitrationPacketDocumentId}`
+                                )
+                              }
+                            >
+                              Open ADR Packet
                             </button>
                           ) : null}
                         </div>

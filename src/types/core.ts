@@ -1529,6 +1529,19 @@ export interface VendorRecord {
     remittanceApplicationRule?: string;
     returnInstrumentRule?: string;
     billingErrorProcess?: string;
+    disputeResolutionPath?:
+      | 'none'
+      | 'notice_and_cure'
+      | 'notice_mediation_arbitration'
+      | 'notice_arbitration'
+      | 'court_litigation';
+    arbitrationForum?: 'aaa' | 'jams' | 'private_forum' | 'court_only' | 'unspecified';
+    mediationStepPresent?: boolean;
+    cureOfferRequired?: boolean;
+    disputeNoticeDays?: number;
+    disputeVenue?: string;
+    arbitrationProcedureNotes?: string;
+    linkedArbitrationPacketDocumentId?: string;
     escalationChannel?: string;
     linkedTermsDocumentId?: string;
     linkedAdminProcessDocumentId?: string;

@@ -88,6 +88,18 @@ export interface CounterpartySubmitPayload {
     | 'servicer';
   termsIntakeMode?: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
   billingErrorSupport?: boolean;
+  disputeResolutionPath?:
+    | 'none'
+    | 'notice_and_cure'
+    | 'notice_mediation_arbitration'
+    | 'notice_arbitration'
+    | 'court_litigation';
+  arbitrationForum?: 'aaa' | 'jams' | 'private_forum' | 'court_only' | 'unspecified';
+  mediationStepPresent?: boolean;
+  cureOfferRequired?: boolean;
+  disputeNoticeDays?: string;
+  disputeVenue?: string;
+  arbitrationProcedureNotes?: string;
   contractFile?: File | null;
   contractFileName?: string;
 }
