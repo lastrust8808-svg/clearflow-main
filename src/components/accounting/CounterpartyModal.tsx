@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { CounterpartySubmitPayload } from './accountingTypes';
+import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
 
 interface CounterpartyModalProps {
   open: boolean;
@@ -107,6 +108,8 @@ export default function CounterpartyModal({
   const [startingAccountAmount, setStartingAccountAmount] = useState('');
   const [autoAnnualizeFromBills, setAutoAnnualizeFromBills] = useState(true);
   const [contractFile, setContractFile] = useState<File | null>(null);
+  const [contractExtractionStatus, setContractExtractionStatus] = useState('');
+  const [isContractExtracting, setIsContractExtracting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -142,7 +145,65 @@ export default function CounterpartyModal({
     setStartingAccountAmount('');
     setAutoAnnualizeFromBills(true);
     setContractFile(null);
+    setContractExtractionStatus('');
+    setIsContractExtracting(false);
   }, [open, mode]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      mode !== 'vendor' ||
+      termsIntakeMode !== 'upload_contract' ||
+      !contractFile
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsContractExtracting(true);
+    setContractExtractionStatus('Reading uploaded contract and prefilling editable fields...');
+
+    void extractVendorContractClauses(contractFile)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setOrganizationClass(result.organizationClass || 'general');
+        setBillingErrorSupport(
+          Boolean(result.billingErrorProcess) || Boolean(result.cureOfferRequired),
+        );
+        setDisputeResolutionPath(result.disputeResolutionPath || 'none');
+        setArbitrationForum(result.arbitrationForum || 'unspecified');
+        setMediationStepPresent(result.mediationStepPresent ?? false);
+        setCureOfferRequired(result.cureOfferRequired ?? false);
+        setDisputeNoticeDays(
+          result.disputeNoticeDays ? String(result.disputeNoticeDays) : '',
+        );
+        setDisputeVenue(result.disputeVenue || '');
+        setArbitrationProcedureNotes(result.arbitrationProcedureNotes || '');
+        setContractExtractionStatus(
+          `${result.summary} You can edit any autofilled field before saving.`,
+        );
+      })
+      .catch((error) => {
+        console.warn('Vendor contract extraction prefill failed.', error);
+        if (!cancelled) {
+          setContractExtractionStatus(
+            'Contract extraction could not prefill the fields. You can still enter them manually.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsContractExtracting(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contractFile, mode, open, termsIntakeMode]);
 
   if (!open) return null;
 
@@ -271,13 +332,27 @@ export default function CounterpartyModal({
                   </select>
                 </div>
                 {termsIntakeMode === 'upload_contract' ? (
-                  <input
-                    type="file"
-                    onChange={(event) =>
-                      setContractFile(event.target.files?.[0] || null)
-                    }
-                    style={inputStyle}
-                  />
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <input
+                      type="file"
+                      onChange={(event) =>
+                        setContractFile(event.target.files?.[0] || null)
+                      }
+                      style={inputStyle}
+                    />
+                    {contractExtractionStatus ? (
+                      <div
+                        style={{
+                          color: '#fde68a',
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {isContractExtracting ? 'Analyzing upload. ' : ''}
+                        {contractExtractionStatus}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 <label
                   style={{

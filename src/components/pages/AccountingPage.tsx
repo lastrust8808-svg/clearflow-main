@@ -3019,28 +3019,36 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         ...payload,
         linkedTermsDocumentId,
         linkedAdminProcessDocumentId,
-        organizationClass: extractedTermsProfile?.organizationClass || payload.organizationClass,
+        organizationClass: payload.organizationClass || extractedTermsProfile?.organizationClass,
         remittanceApplicationRule:
-          extractedTermsProfile?.remittanceApplicationRule || undefined,
-        returnInstrumentRule: extractedTermsProfile?.returnInstrumentRule || undefined,
+          payload.termsIntakeMode === 'upload_contract'
+            ? extractedTermsProfile?.remittanceApplicationRule || undefined
+            : undefined,
+        returnInstrumentRule:
+          payload.termsIntakeMode === 'upload_contract'
+            ? extractedTermsProfile?.returnInstrumentRule || undefined
+            : undefined,
         billingErrorProcess:
-          extractedTermsProfile?.billingErrorProcess || undefined,
+          payload.billingErrorSupport
+            ? extractedTermsProfile?.billingErrorProcess || undefined
+            : undefined,
         contractExtractionSummary,
         disputeResolutionPath:
-          extractedTermsProfile?.disputeResolutionPath || payload.disputeResolutionPath,
+          payload.disputeResolutionPath || extractedTermsProfile?.disputeResolutionPath,
         arbitrationForum:
-          extractedTermsProfile?.arbitrationForum || payload.arbitrationForum,
+          payload.arbitrationForum || extractedTermsProfile?.arbitrationForum,
         mediationStepPresent:
-          extractedTermsProfile?.mediationStepPresent ?? payload.mediationStepPresent,
+          payload.mediationStepPresent ?? extractedTermsProfile?.mediationStepPresent,
         cureOfferRequired:
-          extractedTermsProfile?.cureOfferRequired ?? payload.cureOfferRequired,
+          payload.cureOfferRequired ?? extractedTermsProfile?.cureOfferRequired,
         disputeNoticeDays:
-          extractedTermsProfile?.disputeNoticeDays
+          payload.disputeNoticeDays ||
+          (extractedTermsProfile?.disputeNoticeDays
             ? String(extractedTermsProfile.disputeNoticeDays)
-            : payload.disputeNoticeDays,
-        disputeVenue: extractedTermsProfile?.disputeVenue || payload.disputeVenue,
+            : undefined),
+        disputeVenue: payload.disputeVenue || extractedTermsProfile?.disputeVenue,
         arbitrationProcedureNotes:
-          extractedTermsProfile?.arbitrationProcedureNotes || payload.arbitrationProcedureNotes,
+          payload.arbitrationProcedureNotes || extractedTermsProfile?.arbitrationProcedureNotes,
       });
       return {
         ...prev,
