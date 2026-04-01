@@ -3335,7 +3335,7 @@ EMMA: ${emmaUrl}
       status: 'open' as const,
       linkedDocumentIds: [document.id],
       notes:
-        'Placeholder event-watch record opened so future EMMA notices can be tracked against this municipal position.',
+        'Municipal event-watch record opened so future EMMA notices and issuer updates can be tracked against this position.',
     };
 
     const persistedDocument = await persistGeneratedDocumentRecord({

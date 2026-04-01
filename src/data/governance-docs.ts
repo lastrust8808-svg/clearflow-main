@@ -540,6 +540,10 @@ export const SECURITY_DOCUMENTS: GovernanceDocument[] = [
   encryptionPolicy
 ];
 
+export const PRIVACY_DOCUMENTS: GovernanceDocument[] = [dataRetentionPolicy, encryptionPolicy];
+
+export const TERMS_DOCUMENTS: GovernanceDocument[] = [operatingAgreement, foundationalCharter];
+
 // Combine all documents into a single string for the Gemini API context
 const allDocuments = [...GOVERNANCE_DOCUMENTS, ...SECURITY_DOCUMENTS];
 export const GOVERNANCE_DOCUMENTS_RAW: string = allDocuments

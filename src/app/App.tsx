@@ -3,7 +3,9 @@ import type { AppSection, CoreDataBundle, EntityRecord } from '../types/core';
 import type { Entity } from '../types/app.models';
 import { useAuth } from '../hooks/useAuth';
 import { coreMockData } from '../data/mockData';
+import { PRIVACY_DOCUMENTS, TERMS_DOCUMENTS } from '../data/governance-docs';
 import AppShell from '../components/layout/AppShell';
+import PublicLegalPage from '../components/public/PublicLegalPage';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
 import { buildTransactionProofChainEnvelopes } from '../services/transactionProofChain.service';
@@ -48,6 +50,24 @@ type PostAuthOnboardingStage = 'membership' | 'profile';
 
 interface AppProps {
   initialWelcomeView?: 'landing' | 'signin';
+}
+
+type PublicRoute = 'privacy' | 'terms' | null;
+
+function resolvePublicRoute(): PublicRoute {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  if (window.location.pathname === '/privacy' || window.location.hash === '#privacy') {
+    return 'privacy';
+  }
+
+  if (window.location.pathname === '/terms' || window.location.hash === '#terms') {
+    return 'terms';
+  }
+
+  return null;
 }
 
 function loadStoredOnboardingIntent(): WelcomeIntent {
@@ -591,6 +611,7 @@ function preloadWorkspaceSection(section: AppSection) {
 export default function App({
   initialWelcomeView = 'landing',
 }: AppProps) {
+  const publicRoute = resolvePublicRoute();
   const auth = useAuth();
   const [welcomeIntent, setWelcomeIntent] = useState<WelcomeIntent>(() =>
     loadStoredOnboardingIntent()
@@ -951,6 +972,26 @@ export default function App({
       <LoadingShell
         title="Preparing ClearFlow"
         subtitle="Loading secure sign-in, onboarding, and user workspace state."
+      />
+    );
+  }
+
+  if (publicRoute === 'privacy') {
+    return (
+      <PublicLegalPage
+        title="ClearFlow Privacy & Data Retention"
+        description="Public privacy and retention materials for ClearFlow users, platform records, and protected financial workflow data."
+        documents={PRIVACY_DOCUMENTS}
+      />
+    );
+  }
+
+  if (publicRoute === 'terms') {
+    return (
+      <PublicLegalPage
+        title="ClearFlow Terms & Governing Documents"
+        description="Public operating and foundational terms for ClearFlow, including organizational authority and platform governance posture."
+        documents={TERMS_DOCUMENTS}
       />
     );
   }

@@ -579,7 +579,7 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
             flow.instrument.legalIdentifier || 'Pending'
           }\nDispatch Date: ${flow.latestDispatch?.dispatchDate || now}\nOriginal Control Goal: Retain the original or best available executed return.\nService Evidence Goal: Retain mailing receipt, courier proof, internal delivery confirmation, or executed acceptance return.\n\nUse this retained record to attach an executed copy, delivery receipt, mailing evidence, acceptance response, or dishonor return received after presentment.${dispatchFooter}`,
           linkedInstrumentIds: [flow.instrument.id],
-          summary: 'Placeholder for returned evidence, executed copy, or delivery proof after acceptance dispatch.',
+          summary: 'Returned evidence intake for executed copy, delivery proof, or acceptance response after dispatch.',
           storageOwner: 'clearflow_retained',
           retentionClass: 'security_support',
           externalStorageStatus: 'not_applicable',

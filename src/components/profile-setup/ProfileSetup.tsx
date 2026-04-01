@@ -85,7 +85,7 @@ export const ProfileSetup: React.FC = () => {
             <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
               <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>
               <div className="mt-2 leading-6 text-slate-300">
-                Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, internal security agreement support, and the internal deposit ledger for protected security instruments held in custody or retention.
+                Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, retained security support, and related compliance or custody records needed for platform operation.
               </div>
               <div className="mt-4">
                 <label htmlFor="signerName" className="block text-sm font-medium text-slate-300">
@@ -114,7 +114,7 @@ export const ProfileSetup: React.FC = () => {
                   required
                 />
                 <span>
-                  I agree to ClearFlow&apos;s terms and conditions, authorize the creation of a retained security agreement record, and understand that required platform custody and compliance records may be retained by ClearFlow.
+                  I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, and understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation.
                 </span>
               </label>
             </div>
