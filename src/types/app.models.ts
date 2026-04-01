@@ -13,6 +13,9 @@ export interface User {
   clearflowTermsSignerName?: string;
   clearflowTermsDocumentId?: string;
   clearflowRetainedRecordDocumentId?: string;
+  clearflowInternalLedgerDepositId?: string;
+  clearflowInternalLedgerDepositedAt?: string;
+  clearflowInternalLedgerStatus?: 'pending' | 'recorded' | 'error';
 }
 
 export type EntityType = 'LLC' | 'C-Corp' | 'S-Corp' | 'Trust/Estate' | 'Non-profit' | 'Personal';

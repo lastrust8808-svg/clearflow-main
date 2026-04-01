@@ -762,6 +762,10 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         ? await auth.routeDocumentToDrive({
             sourceFileId: fileMetadata.sourceFileId,
             fileName: fileMetadata.fileName,
+            entityId,
+            targetGoogleEmail:
+              data.entities.find((item) => item.id === entityId)?.entityAccess?.googleStorageEmail ||
+              data.entities.find((item) => item.id === entityId)?.primaryEmail,
           })
         : null;
 
@@ -4666,6 +4670,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       ? await auth.routeDocumentToDrive({
           sourceFileId: exportFileMetadata.sourceFileId,
           fileName: exportFileMetadata.fileName,
+          entityId: invoice.entityId,
+          targetGoogleEmail: entity?.entityAccess?.googleStorageEmail || entity?.primaryEmail,
         })
       : null;
 

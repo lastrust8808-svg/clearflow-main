@@ -12,6 +12,7 @@ import {
   applyEntityMarkValueToBundle,
   findNextEntityMarkEligibleDocument,
 } from '../services/entityMarkReserve.service';
+import { scopeBundleToEntity } from '../services/entityBundleScope.service';
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
 const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
@@ -610,6 +611,10 @@ export default function App({
     [auth.appData?.entities]
   );
   const dataSignature = useMemo(() => JSON.stringify(data), [data]);
+  const scopedData = useMemo(
+    () => (activeEntityId ? scopeBundleToEntity(data, activeEntityId) : data),
+    [activeEntityId, data]
+  );
   const authSnapshotSignature = useMemo(
     () => JSON.stringify(auth.appData?.coreDataSnapshot ?? null),
     [auth.appData?.coreDataSnapshot]
@@ -896,29 +901,30 @@ export default function App({
           />
         );
       case 'accounting':
-        return <AccountingPage data={data} setData={setData} />;
+        return <AccountingPage data={scopedData} setData={setData} />;
       case 'entities':
         return (
           <EntitiesPage
             data={data}
             setData={setData}
             currentUser={auth.currentUser}
+            hasDriveAccess={auth.hasDriveAccess}
             activeEntityId={activeEntityId}
             onSetActiveEntity={setActiveEntityId}
           />
         );
       case 'ledger':
-        return <LedgerPage data={data} setData={setData} />;
+        return <LedgerPage data={scopedData} setData={setData} />;
       case 'assets':
-        return <AssetsPage data={data} setData={setData} />;
+        return <AssetsPage data={scopedData} setData={setData} />;
       case 'transactions':
-        return <TransactionsPage data={data} setData={setData} />;
+        return <TransactionsPage data={scopedData} setData={setData} />;
       case 'compliance':
-        return <CompliancePage data={data} setData={setData} />;
+        return <CompliancePage data={scopedData} setData={setData} />;
       case 'documents':
-        return <DocumentsPage data={data} setData={setData} />;
+        return <DocumentsPage data={scopedData} setData={setData} />;
       case 'aiStudio':
-        return <AIStudioPage data={data} setData={setData} />;
+        return <AIStudioPage data={scopedData} setData={setData} />;
       case 'settings':
         return (
           <SettingsPage

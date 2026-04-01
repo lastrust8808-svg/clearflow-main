@@ -9,6 +9,7 @@ import {
   saveAccountRemittanceVault,
   saveAccountTransactionProofVault,
 } from '../services/accountStorage.js';
+import { recordClearFlowAgreementDeposit } from '../services/clearflowInternalLedger.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
@@ -233,6 +234,58 @@ router.put('/accounts/:accountId/transaction-proof-chains', async (req, res) => 
         error instanceof Error
           ? error.message
           : 'Failed to save encrypted transaction proof chains.',
+    });
+  }
+});
+
+router.post('/internal/clearflow-ledger/agreement-deposits', async (req, res) => {
+  const {
+    depositId,
+    userId,
+    userEmail,
+    signerName,
+    entityId,
+    termsDocumentId,
+    retainedRecordDocumentId,
+    termsAcceptedAt,
+  } = req.body || {};
+
+  if (
+    !depositId ||
+    !userId ||
+    !termsDocumentId ||
+    !retainedRecordDocumentId ||
+    !termsAcceptedAt
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing internal agreement deposit payload.',
+    });
+  }
+
+  try {
+    const result = await recordClearFlowAgreementDeposit({
+      depositId,
+      userId,
+      userEmail,
+      signerName,
+      entityId,
+      termsDocumentId,
+      retainedRecordDocumentId,
+      termsAcceptedAt,
+    });
+
+    return res.status(200).json({
+      success: true,
+      result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to record ClearFlow internal agreement deposit.',
     });
   }
 });

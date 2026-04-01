@@ -10,7 +10,13 @@ interface LedgerPageProps {
 }
 
 export default function LedgerPage({ data, setData }: LedgerPageProps) {
-  const remittanceEligible = data.ledgerAccounts.filter((item) => item.remittanceEligible).length;
+  const visibleTreasuryAccounts = data.treasuryAccounts.filter(
+    (item) => !item.name.startsWith('ClearFlow '),
+  );
+  const visibleLedgerAccounts = data.ledgerAccounts.filter(
+    (item) => !item.name.startsWith('ClearFlow '),
+  );
+  const remittanceEligible = visibleLedgerAccounts.filter((item) => item.remittanceEligible).length;
   const postedJournals = data.journalEntries.filter((item) => item.status === 'posted').length;
 
   return (
@@ -29,8 +35,8 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
           gap: 16,
         }}
       >
-        <StatCard label="Treasury Accounts" value={data.treasuryAccounts.length} />
-        <StatCard label="Ledger Accounts" value={data.ledgerAccounts.length} />
+        <StatCard label="Treasury Accounts" value={visibleTreasuryAccounts.length} />
+        <StatCard label="Ledger Accounts" value={visibleLedgerAccounts.length} />
         <StatCard label="Remittance-Eligible" value={remittanceEligible} />
         <StatCard label="Posted Journals" value={postedJournals} />
       </div>
@@ -40,10 +46,10 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
         description="Private reserve, remittance-clearing, and instrument-pool accounts that govern how obligations are discharged."
       >
         <div style={{ display: 'grid', gap: 16 }}>
-          {data.treasuryAccounts.length === 0 ? (
+          {visibleTreasuryAccounts.length === 0 ? (
             <div style={{ color: 'var(--cf-muted)' }}>No treasury accounts have been established yet.</div>
           ) : (
-            data.treasuryAccounts.map((account) => (
+            visibleTreasuryAccounts.map((account) => (
               <WorkbenchRecordCard
                 key={account.id}
                 title={account.name}
@@ -74,7 +80,7 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
 
       <PageSection title="Ledger Accounts" description="Books, reserve sources, memo accounts, and remittance-capable balances.">
         <div style={{ display: 'grid', gap: 16 }}>
-          {data.ledgerAccounts.map((account) => (
+          {visibleLedgerAccounts.map((account) => (
             <WorkbenchRecordCard
               key={account.id}
               title={`${account.code} | ${account.name}`}

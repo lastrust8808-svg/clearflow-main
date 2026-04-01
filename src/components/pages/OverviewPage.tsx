@@ -122,9 +122,6 @@ export default function OverviewPage({
   const partnerBankRequiredCount = privateWealthRailSummaries.filter(
     (item) => item.legalUsePosture === 'partner_bank_required_external_presentment',
   ).length;
-  const internalRetentionLedgerCount = data.ledgerAccounts.filter((item) =>
-    item.name.includes('ClearFlow Retained Security Instruments Held')
-  ).length;
   const recurringPaymentCount = data.payments.filter(
     (item) => item.recurringSchedule?.enabled,
   ).length;
@@ -718,7 +715,7 @@ export default function OverviewPage({
         >
           <RecordCard
             title="Retained Record Layer"
-            subtitle={`${retainedRecordCount} retained documents | ${internalRetentionLedgerCount} internal deposit ledgers`}
+            subtitle={`${retainedRecordCount} retained documents`}
           >
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>

@@ -553,6 +553,9 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
         ? await auth.routeDocumentToDrive({
             sourceFileId: fileMetadata.sourceFileId,
             fileName: fileMetadata.fileName,
+            entityId: document.entityId,
+            targetGoogleEmail:
+              entity?.entityAccess?.googleStorageEmail || entity?.primaryEmail,
           })
         : null;
 

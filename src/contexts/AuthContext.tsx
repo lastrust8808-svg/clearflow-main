@@ -22,11 +22,13 @@ import {
   saveAccountAppData,
 } from '../services/accountPersistence.service';
 import { deliverVerificationCode } from '../services/authVerification.service';
+import { recordClearFlowAgreementDeposit } from '../services/clearflowInternalLedger.service';
 import {
   applyClearFlowRetentionRecords,
   CLEARFLOW_TERMS_VERSION,
   clearStoredMembershipDraft,
   enrichAppDataFromMembershipDraft,
+  hasClearFlowRetentionPackage,
 } from '../services/membershipDraft.service';
 
 declare const google: any;
@@ -87,6 +89,8 @@ interface AuthContextType {
   routeDocumentToDrive: (input: {
     sourceFileId: string;
     fileName: string;
+    entityId?: string;
+    targetGoogleEmail?: string;
   }) => Promise<{ success: boolean; fileId?: string; error?: string }>;
   updateBackupAccess: (input: {
     userHandle?: string;
@@ -153,6 +157,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const googleClientsInitializedRef = useRef(false);
   const needsDriveCatchUpRef = useRef(false);
+  const clearflowLedgerDepositSyncRef = useRef(false);
   const GOOGLE_DRIVE_SCOPE =
     'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 
@@ -344,11 +349,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
-    const hasRetainedTerms =
-      Boolean(state.appData.user.clearflowTermsDocumentId) &&
-      Boolean(state.appData.user.clearflowRetainedRecordDocumentId);
-
-    if (hasRetainedTerms) {
+    if (hasClearFlowRetentionPackage(state.appData)) {
       return;
     }
 
@@ -378,6 +379,87 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.appData?.user.clearflowTermsAcceptedAt,
     state.appData?.user.clearflowTermsDocumentId,
     state.appData?.user.clearflowTermsVersion,
+  ]);
+
+  useEffect(() => {
+    if (
+      !state.appData?.user.clearflowTermsAcceptedAt ||
+      !state.appData.user.clearflowTermsDocumentId ||
+      !state.appData.user.clearflowRetainedRecordDocumentId ||
+      state.appData.user.clearflowInternalLedgerStatus === 'recorded' ||
+      state.appData.user.clearflowInternalLedgerStatus === 'error' ||
+      clearflowLedgerDepositSyncRef.current
+    ) {
+      return;
+    }
+
+    clearflowLedgerDepositSyncRef.current = true;
+    const primaryEntityId =
+      state.appData.entities[0]?.id ?? state.appData.coreDataSnapshot?.entities[0]?.id;
+
+    void recordClearFlowAgreementDeposit({
+      depositId: `dep-clearflow-terms-${state.appData.user.id}`,
+      userId: state.appData.user.id,
+      userEmail: state.appData.user.email,
+      signerName: state.appData.user.clearflowTermsSignerName || state.appData.user.name,
+      entityId: primaryEntityId,
+      termsDocumentId: state.appData.user.clearflowTermsDocumentId,
+      retainedRecordDocumentId: state.appData.user.clearflowRetainedRecordDocumentId,
+      termsAcceptedAt: state.appData.user.clearflowTermsAcceptedAt,
+    })
+      .then((response) => {
+        setState((current) => {
+          if (!current.appData) {
+            return current;
+          }
+
+          return {
+            ...current,
+            appData: {
+              ...current.appData,
+              user: {
+                ...current.appData.user,
+                clearflowInternalLedgerDepositId: response.result.depositId,
+                clearflowInternalLedgerDepositedAt: response.result.recordedAt,
+                clearflowInternalLedgerStatus: response.result.status,
+              },
+            },
+          };
+        });
+      })
+      .catch((error) => {
+        console.warn('Failed to record ClearFlow internal ledger deposit.', error);
+        setState((current) => {
+          if (!current.appData) {
+            return current;
+          }
+
+          return {
+            ...current,
+            appData: {
+              ...current.appData,
+              user: {
+                ...current.appData.user,
+                clearflowInternalLedgerStatus: 'error',
+              },
+            },
+          };
+        });
+      })
+      .finally(() => {
+        clearflowLedgerDepositSyncRef.current = false;
+      });
+  }, [
+    state.appData?.coreDataSnapshot,
+    state.appData?.entities,
+    state.appData?.user.clearflowInternalLedgerStatus,
+    state.appData?.user.clearflowRetainedRecordDocumentId,
+    state.appData?.user.clearflowTermsAcceptedAt,
+    state.appData?.user.clearflowTermsDocumentId,
+    state.appData?.user.clearflowTermsSignerName,
+    state.appData?.user.email,
+    state.appData?.user.id,
+    state.appData?.user.name,
   ]);
   
   useEffect(() => {
@@ -931,9 +1013,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const routeDocumentToDrive = async (input: {
     sourceFileId: string;
     fileName: string;
+    entityId?: string;
+    targetGoogleEmail?: string;
   }) => {
     if (!state.apiAccessToken) {
       return { success: false, error: 'Google Drive access is not available yet.' };
+    }
+
+    const currentGoogleEmail = state.appData?.user.email?.trim().toLowerCase();
+    const targetGoogleEmail = input.targetGoogleEmail?.trim().toLowerCase();
+    if (targetGoogleEmail && currentGoogleEmail && targetGoogleEmail !== currentGoogleEmail) {
+      return {
+        success: false,
+        error: `Reconnect Google as ${input.targetGoogleEmail} before routing this entity document to Drive.`,
+      };
     }
 
     try {

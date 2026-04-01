@@ -440,6 +440,11 @@ export default function EntityResourceStudio({
         ? await auth.routeDocumentToDrive({
             sourceFileId: fileMetadata.sourceFileId,
             fileName: fileMetadata.fileName,
+            entityId: document.entityId,
+            targetGoogleEmail:
+              data.entities.find((item) => item.id === document.entityId)?.entityAccess
+                ?.googleStorageEmail ||
+              data.entities.find((item) => item.id === document.entityId)?.primaryEmail,
           })
         : null;
 

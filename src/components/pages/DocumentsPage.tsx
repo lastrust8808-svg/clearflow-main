@@ -42,6 +42,14 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const finalCount = data.documents.filter((item) => item.status === 'final').length;
   const draftCount = data.documents.filter((item) => item.status === 'draft').length;
   const verifiedTokenCount = data.tokens.filter((item) => item.status === 'verified').length;
+  const resolveEntityStorageEmail = (entityId?: string) => {
+    if (!entityId) {
+      return undefined;
+    }
+
+    const entity = data.entities.find((item) => item.id === entityId);
+    return entity?.entityAccess?.googleStorageEmail || entity?.primaryEmail;
+  };
 
   useEffect(() => {
     const applyHash = () => {
@@ -103,6 +111,8 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
     const result = await auth.routeDocumentToDrive({
       sourceFileId: doc.sourceFileId,
       fileName: doc.fileName || `${doc.title}.pdf`,
+      entityId: doc.entityId,
+      targetGoogleEmail: resolveEntityStorageEmail(doc.entityId),
     });
 
     setData((prev) => ({
@@ -147,6 +157,8 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
             ? await auth.routeDocumentToDrive({
                 sourceFileId: fileMetadata.sourceFileId,
                 fileName: fileMetadata.fileName,
+                entityId: payload.entityId,
+                targetGoogleEmail: resolveEntityStorageEmail(payload.entityId),
               })
             : null;
 
