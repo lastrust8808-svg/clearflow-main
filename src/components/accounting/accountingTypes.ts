@@ -79,6 +79,17 @@ export interface CounterpartySubmitPayload {
   digitalWalletNetwork?: string;
   digitalAssetSymbol?: string;
   digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
+  organizationClass?:
+    | 'general'
+    | 'large_bank'
+    | 'large_corporation'
+    | 'utility'
+    | 'government'
+    | 'servicer';
+  termsIntakeMode?: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
+  billingErrorSupport?: boolean;
+  contractFile?: File | null;
+  contractFileName?: string;
 }
 
 export interface BillSubmitPayload {

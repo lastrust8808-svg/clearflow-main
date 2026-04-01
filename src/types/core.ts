@@ -1516,6 +1516,24 @@ export interface VendorRecord {
     lastValidatedAt?: string;
     storedInVault?: boolean;
   };
+  counterpartyTermsProfile?: {
+    organizationClass?:
+      | 'general'
+      | 'large_bank'
+      | 'large_corporation'
+      | 'utility'
+      | 'government'
+      | 'servicer';
+    termsIntakeMode?: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
+    autoLoadedPreset?: 'bank_remittance' | 'utility_billing' | 'corporate_ap' | 'government_lockbox';
+    remittanceApplicationRule?: string;
+    returnInstrumentRule?: string;
+    billingErrorProcess?: string;
+    escalationChannel?: string;
+    linkedTermsDocumentId?: string;
+    linkedAdminProcessDocumentId?: string;
+    lastReviewedAt?: string;
+  };
   linkedDocumentIds?: string[];
   notes?: string;
 }

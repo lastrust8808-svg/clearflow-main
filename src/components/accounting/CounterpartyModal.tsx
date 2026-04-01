@@ -81,6 +81,14 @@ export default function CounterpartyModal({
   const [digitalPayoutTemplate, setDigitalPayoutTemplate] = useState<
     'stablecoin' | 'native_asset' | 'manual_confirmation'
   >('stablecoin');
+  const [organizationClass, setOrganizationClass] = useState<
+    'general' | 'large_bank' | 'large_corporation' | 'utility' | 'government' | 'servicer'
+  >('general');
+  const [termsIntakeMode, setTermsIntakeMode] = useState<
+    'none' | 'auto_load' | 'upload_contract' | 'manual_reference'
+  >('none');
+  const [billingErrorSupport, setBillingErrorSupport] = useState(false);
+  const [contractFile, setContractFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +108,10 @@ export default function CounterpartyModal({
     setDigitalWalletNetwork('Ethereum');
     setDigitalAssetSymbol('');
     setDigitalPayoutTemplate('stablecoin');
+    setOrganizationClass('general');
+    setTermsIntakeMode('none');
+    setBillingErrorSupport(false);
+    setContractFile(null);
   }, [open, mode]);
 
   if (!open) return null;
@@ -184,6 +196,76 @@ export default function CounterpartyModal({
                   <option value="manual_confirmation">Manual release required</option>
                 </select>
               </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  padding: 14,
+                  borderRadius: 12,
+                  border: '1px solid rgba(251,191,36,0.28)',
+                  background: 'rgba(120,53,15,0.18)',
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fde68a' }}>
+                  Counterparty terms and billing-admin posture
+                </div>
+                <div style={{ color: '#fde68a', fontSize: 13 }}>
+                  Capture the governing remittance, return, and billing-dispute posture now so outgoing instruments and admin notices can follow the counterparty's own rules.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                  <select
+                    value={organizationClass}
+                    onChange={(e) =>
+                      setOrganizationClass(e.target.value as typeof organizationClass)
+                    }
+                    style={inputStyle}
+                  >
+                    <option value="general">General vendor</option>
+                    <option value="large_bank">Large bank / financial institution</option>
+                    <option value="large_corporation">Large corporation</option>
+                    <option value="utility">Utility / telecom</option>
+                    <option value="government">Government / agency</option>
+                    <option value="servicer">Servicer / processor</option>
+                  </select>
+                  <select
+                    value={termsIntakeMode}
+                    onChange={(e) =>
+                      setTermsIntakeMode(e.target.value as typeof termsIntakeMode)
+                    }
+                    style={inputStyle}
+                  >
+                    <option value="none">No contract intake yet</option>
+                    <option value="auto_load">Auto-load control packet</option>
+                    <option value="upload_contract">Upload counterparty terms</option>
+                    <option value="manual_reference">Manual reference only</option>
+                  </select>
+                </div>
+                {termsIntakeMode === 'upload_contract' ? (
+                  <input
+                    type="file"
+                    onChange={(event) =>
+                      setContractFile(event.target.files?.[0] || null)
+                    }
+                    style={inputStyle}
+                  />
+                ) : null}
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: 13,
+                    color: '#fde68a',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={billingErrorSupport}
+                    onChange={(event) => setBillingErrorSupport(event.target.checked)}
+                  />
+                  Start billing-error / escalation admin process support for this counterparty
+                </label>
+              </div>
             </div>
           ) : null}
           <textarea
@@ -216,6 +298,11 @@ export default function CounterpartyModal({
                 digitalWalletNetwork: digitalWalletAddress ? digitalWalletNetwork : undefined,
                 digitalAssetSymbol: digitalAssetSymbol || undefined,
                 digitalPayoutTemplate: digitalWalletAddress ? digitalPayoutTemplate : undefined,
+                organizationClass,
+                termsIntakeMode,
+                billingErrorSupport,
+                contractFile,
+                contractFileName: contractFile?.name,
               })
             }
             style={buttonStyle}

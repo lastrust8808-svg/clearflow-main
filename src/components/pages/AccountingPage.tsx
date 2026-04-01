@@ -608,6 +608,17 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       digitalWalletNetwork?: string;
       digitalAssetSymbol?: string;
       digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
+      organizationClass?:
+        | 'general'
+        | 'large_bank'
+        | 'large_corporation'
+        | 'utility'
+        | 'government'
+        | 'servicer';
+      termsIntakeMode?: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
+      billingErrorSupport?: boolean;
+      linkedTermsDocumentId?: string;
+      linkedAdminProcessDocumentId?: string;
     },
   ) => {
     const normalizedName = payload.name?.trim();
@@ -632,6 +643,94 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
               payload.routingNumber?.length === 9 ? new Date().toISOString() : undefined,
           }
         : undefined;
+
+    const buildCounterpartyTermsProfile = () => {
+      const organizationClass = payload.organizationClass || 'general';
+      const termsIntakeMode = payload.termsIntakeMode || 'none';
+
+      const presetByClass: Record<
+        NonNullable<typeof organizationClass>,
+        NonNullable<NonNullable<CoreDataBundle['vendors'][number]['counterpartyTermsProfile']>['autoLoadedPreset']>
+      > = {
+        general: 'corporate_ap',
+        large_bank: 'bank_remittance',
+        large_corporation: 'corporate_ap',
+        utility: 'utility_billing',
+        government: 'government_lockbox',
+        servicer: 'corporate_ap',
+      };
+
+      const remittanceRuleByClass: Record<NonNullable<typeof organizationClass>, string> = {
+        general:
+          'Apply remittances by invoice, account, or written servicing instructions retained in the vendor profile.',
+        large_bank:
+          'Apply remittances and returned instruments according to the bank remittance, lockbox, and exception terms retained in the counterparty file.',
+        large_corporation:
+          'Apply remittances by account number, invoice reference, and accounts-payable posting instructions retained in the vendor file.',
+        utility:
+          'Apply remittances by service address, account number, statement date, and billing-cycle instructions retained in the utility profile.',
+        government:
+          'Apply remittances according to agency notice, coupon, claim, or account-reference instructions retained in the governmental file.',
+        servicer:
+          'Apply remittances according to servicing platform instructions, remit codes, and borrower/account references retained in the counterparty file.',
+      };
+
+      const returnRuleByClass: Record<NonNullable<typeof organizationClass>, string> = {
+        general:
+          'Return instruments or unsupported tender with the counterparty reason, posting outcome, and retained evidence trail.',
+        large_bank:
+          'Return unsupported instruments with documented exception coding, remittance posting outcome, and retained delivery evidence.',
+        large_corporation:
+          'Return unsupported instruments or admin notices through the corporate billing or legal intake channel with retained proof.',
+        utility:
+          'Return unsupported tender or disputed billing items through the utility billing-error or remittance-research channel with retained proof.',
+        government:
+          'Return unsupported tender or administrative notices through the agency-designated correspondence channel with retained proof.',
+        servicer:
+          'Return unsupported remittances or disputed items through the servicing correspondence channel with account-level proof retained.',
+      };
+
+      const billingProcessByClass: Record<NonNullable<typeof organizationClass>, string> = {
+        general:
+          'Generate a billing-error or remittance-application notice using the saved vendor address, email, and account references.',
+        large_bank:
+          'Start a bank billing or remittance exception process with account references, delivery proof, and response tracking.',
+        large_corporation:
+          'Start an accounts-payable escalation packet with billing references, remittance evidence, and corporate correspondence tracking.',
+        utility:
+          'Start a utility billing-error packet with meter/service references, statement evidence, and escalation tracking.',
+        government:
+          'Start an administrative correspondence packet with agency references, response deadline tracking, and retained proof.',
+        servicer:
+          'Start a servicing dispute or payment-research packet with servicing references, account history, and response tracking.',
+      };
+
+      if (
+        termsIntakeMode === 'none' &&
+        !payload.billingErrorSupport &&
+        !payload.linkedTermsDocumentId &&
+        !payload.linkedAdminProcessDocumentId
+      ) {
+        return undefined;
+      }
+
+      return {
+        organizationClass,
+        termsIntakeMode,
+        autoLoadedPreset: termsIntakeMode === 'auto_load' ? presetByClass[organizationClass] : undefined,
+        remittanceApplicationRule: remittanceRuleByClass[organizationClass],
+        returnInstrumentRule: returnRuleByClass[organizationClass],
+        billingErrorProcess: payload.billingErrorSupport
+          ? billingProcessByClass[organizationClass]
+          : undefined,
+        escalationChannel: payload.email || payload.address || undefined,
+        linkedTermsDocumentId: payload.linkedTermsDocumentId,
+        linkedAdminProcessDocumentId: payload.linkedAdminProcessDocumentId,
+        lastReviewedAt: new Date().toISOString(),
+      } satisfies NonNullable<CoreDataBundle['vendors'][number]['counterpartyTermsProfile']>;
+    };
+
+    const counterpartyTermsProfile = buildCounterpartyTermsProfile();
 
     if (!normalizedName) {
       return {
@@ -665,6 +764,18 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                         record.paymentInstructions?.accountMask,
                     }
                   : record.paymentInstructions,
+                counterpartyTermsProfile: counterpartyTermsProfile
+                  ? {
+                      ...record.counterpartyTermsProfile,
+                      ...counterpartyTermsProfile,
+                    }
+                  : record.counterpartyTermsProfile,
+                linkedDocumentIds: [
+                  ...(record.linkedDocumentIds || []),
+                  ...[payload.linkedTermsDocumentId, payload.linkedAdminProcessDocumentId].filter(
+                    (value): value is string => Boolean(value)
+                  ),
+                ].filter((value, index, all) => all.indexOf(value) === index),
               }
             : record
         ),
@@ -684,6 +795,11 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           remitAddress: payload.address || undefined,
           status: 'active' as const,
           paymentInstructions,
+          counterpartyTermsProfile,
+          linkedDocumentIds: [
+            payload.linkedTermsDocumentId,
+            payload.linkedAdminProcessDocumentId,
+          ].filter((value): value is string => Boolean(value)),
           notes: payload.notes || undefined,
         },
         ...prev.vendors,
@@ -833,6 +949,116 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
   const buildNumericReference = (seed: number, length = 15) =>
     String(seed).replace(/\D/g, '').padStart(length, '0').slice(-length);
+
+  const buildCounterpartyTermsPacket = ({
+    entityId,
+    vendorId,
+    vendorName,
+    organizationClass,
+    intakeMode,
+    billingErrorSupport,
+  }: {
+    entityId: string;
+    vendorId: string;
+    vendorName: string;
+    organizationClass:
+      | 'general'
+      | 'large_bank'
+      | 'large_corporation'
+      | 'utility'
+      | 'government'
+      | 'servicer';
+    intakeMode: 'none' | 'auto_load' | 'upload_contract' | 'manual_reference';
+    billingErrorSupport?: boolean;
+  }) => {
+    const issuedAt = new Date().toISOString();
+    const classLabelMap = {
+      general: 'General Counterparty',
+      large_bank: 'Large Bank / Financial Institution',
+      large_corporation: 'Large Corporation',
+      utility: 'Utility / Telecom',
+      government: 'Government / Agency',
+      servicer: 'Servicer / Processor',
+    } as const;
+
+    const termsDocumentId = `doc-vendor-terms-${vendorId}-${Date.now()}`;
+    const adminDocumentId = `doc-vendor-admin-${vendorId}-${Date.now()}`;
+
+    const termsDocument: DocumentRecord = {
+      id: termsDocumentId,
+      entityId,
+      title: `${vendorName} Counterparty Terms & Remittance Application Profile`,
+      category: 'contract',
+      date: issuedAt.slice(0, 10),
+      status: 'final',
+      sourceRecordType: 'document',
+      sourceRecordId: vendorId,
+      outputStatus: 'ready',
+      summary:
+        'Auto-generated counterparty terms control packet for remittance application, returned instruments, and communications handling.',
+      generatedBody: [
+        `${vendorName}`,
+        '',
+        `Counterparty class: ${classLabelMap[organizationClass]}`,
+        `Intake mode: ${intakeMode}`,
+        '',
+        'Remittance application controls:',
+        '- Apply remittances strictly by the counterparty account, invoice, statement, or servicing references retained in this profile.',
+        '- Retain delivery proof, account references, and posting outcome for every remittance or returned instrument.',
+        '- If the counterparty rejects or misapplies value, move into documented admin correspondence rather than informal rework.',
+        '',
+        'Returned instrument posture:',
+        '- Preserve original or executed-copy control facts, date of dispatch, response date, and posted-account outcome.',
+        '- Retain the counterparty contract, tariff, servicing guide, or remittance instructions used for the presentment.',
+      ].join('\n'),
+      storageOwner: 'user_owned',
+      retentionClass: 'agreement',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+      storageNotes:
+        'Counterparty terms packet used to support remittance application and returned-instrument workflow.',
+    };
+
+    const adminDocument: DocumentRecord | null = billingErrorSupport
+      ? {
+          id: adminDocumentId,
+          entityId,
+          title: `${vendorName} Billing Error / Administrative Process Packet`,
+          category: 'legal_memo',
+          date: issuedAt.slice(0, 10),
+          status: 'final',
+          sourceRecordType: 'document',
+          sourceRecordId: vendorId,
+          outputStatus: 'ready',
+          summary:
+            'Administrative billing-error and escalation packet aligned to the saved counterparty profile.',
+          generatedBody: [
+            `${vendorName}`,
+            '',
+            'Administrative process support:',
+            '- Use saved remit, billing, and correspondence addresses from the vendor profile.',
+            '- Include account number, statement date, invoice/bill references, and delivery evidence in each notice.',
+            '- Track deadline, response, returned correspondence, and posting correction outcome in the retained file.',
+            '',
+            'Notice posture:',
+            '- Billing error or remittance application notice',
+            '- Escalation correspondence',
+            '- Returned instrument / rejected tender follow-up',
+          ].join('\n'),
+          storageOwner: 'user_owned',
+          retentionClass: 'compliance',
+          externalStorageTarget: 'google_drive',
+          externalStorageStatus: 'ready',
+          storageNotes:
+            'Administrative process packet for billing-error and escalation handling under the counterparty profile.',
+        }
+      : null;
+
+    return {
+      termsDocument,
+      adminDocument,
+    };
+  };
 
   const startOfCurrentMonthIso = () => {
     const now = new Date();
@@ -2155,15 +2381,66 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     setIsCouponPresentmentModalOpen(false);
   };
 
-  const handleCounterpartySubmit = (payload: CounterpartySubmitPayload) => {
+  const handleCounterpartySubmit = async (payload: CounterpartySubmitPayload) => {
     if (!counterpartyModalMode) {
       return;
     }
 
-    setData((prev) => {
-      const entity = prev.entities[0];
-      if (!entity) return prev;
+    const entity = data.entities[0];
+    if (!entity) {
+      return;
+    }
 
+    let linkedTermsDocumentId: string | undefined;
+    let linkedAdminProcessDocumentId: string | undefined;
+    let uploadedTermsDocument: DocumentRecord | null = null;
+    const organizationClass = payload.organizationClass || 'general';
+    const termsIntakeMode = payload.termsIntakeMode || 'none';
+
+    if (counterpartyModalMode === 'vendor' && termsIntakeMode === 'upload_contract') {
+      uploadedTermsDocument = await persistUploadDocument({
+        entityId: entity.id,
+        folder: 'documents',
+        title: `${payload.name || 'Vendor'} counterparty terms`,
+        summary:
+          'Uploaded counterparty agreement, tariff, remittance terms, or servicing guide for remittance application controls.',
+        sourceRecordType: 'document',
+        sourceRecordId: `vendor-terms-${Date.now()}`,
+        file: payload.contractFile,
+        date: new Date().toISOString().slice(0, 10),
+        storageOwner: 'user_owned',
+        retentionClass: 'agreement',
+        externalStorageTarget: 'google_drive',
+        externalStorageStatus: 'ready',
+        storageNotes:
+          'User-uploaded counterparty terms retained for remittance application, returned instrument, and billing-admin workflow.',
+      });
+      linkedTermsDocumentId = uploadedTermsDocument?.id;
+    } else if (
+      counterpartyModalMode === 'vendor' &&
+      (termsIntakeMode === 'auto_load' || payload.billingErrorSupport)
+    ) {
+      const generatedPackets = buildCounterpartyTermsPacket({
+        entityId: entity.id,
+        vendorId: `vendor-profile-${Date.now()}`,
+        vendorName: payload.name || 'Vendor',
+        organizationClass,
+        intakeMode: termsIntakeMode,
+        billingErrorSupport: payload.billingErrorSupport,
+      });
+      linkedTermsDocumentId = generatedPackets.termsDocument.id;
+      linkedAdminProcessDocumentId = generatedPackets.adminDocument?.id;
+      setData((prev) => ({
+        ...prev,
+        documents: [
+          generatedPackets.termsDocument,
+          ...(generatedPackets.adminDocument ? [generatedPackets.adminDocument] : []),
+          ...prev.documents,
+        ],
+      }));
+    }
+
+    setData((prev) => {
       if (counterpartyModalMode === 'customer') {
         const { customers: nextCustomers } = ensureCustomerRecord(prev, entity.id, payload);
         return {
@@ -2172,14 +2449,26 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         };
       }
 
-      const { vendors: nextVendors } = ensureVendorRecord(prev, entity.id, payload);
+      const { vendors: nextVendors } = ensureVendorRecord(prev, entity.id, {
+        ...payload,
+        linkedTermsDocumentId,
+        linkedAdminProcessDocumentId,
+      });
       return {
         ...prev,
         vendors: nextVendors,
+        documents: uploadedTermsDocument ? [uploadedTermsDocument, ...prev.documents] : prev.documents,
       };
     });
 
     setActiveSubsection(counterpartyModalMode === 'customer' ? 'customers' : 'vendors');
+    if (counterpartyModalMode === 'vendor') {
+      setOperationsNotice(
+        linkedTermsDocumentId || linkedAdminProcessDocumentId
+          ? 'Vendor terms and admin process controls were attached to the counterparty profile.'
+          : 'Vendor profile saved.'
+      );
+    }
     setCounterpartyModalMode(null);
   };
 
@@ -5970,11 +6259,21 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         return (
           <EditableRecordSection
             title="Vendors"
-            description="Editable vendor records."
+            description="Editable vendor records with remittance instructions, counterparty terms posture, and billing-admin support."
             emptyMessage="No vendor records yet."
             records={vendors}
             getTitle={(record) => record.name ?? record.id}
-            getSubtitle={(record) => record.status ?? 'active'}
+            getSubtitle={(record) =>
+              [
+                record.status ?? 'active',
+                record.counterpartyTermsProfile?.organizationClass
+                  ? `terms ${record.counterpartyTermsProfile.organizationClass}`
+                  : 'terms pending',
+                record.counterpartyTermsProfile?.billingErrorProcess
+                  ? 'admin process ready'
+                  : 'admin process off',
+              ].join(' | ')
+            }
             onSave={(nextRecord) =>
               setData((prev) => ({
                 ...prev,
