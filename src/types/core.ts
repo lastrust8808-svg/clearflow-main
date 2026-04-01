@@ -624,6 +624,7 @@ export interface ObligationRecord {
   id: string;
   entityId: string;
   title: string;
+  linkedVendorId?: string;
   legalIdentifier?: string;
   obligationType: ObligationType;
   amount: number;
@@ -1542,11 +1543,34 @@ export interface VendorRecord {
     disputeVenue?: string;
     arbitrationProcedureNotes?: string;
     linkedArbitrationPacketDocumentId?: string;
+    contractExtractionSummary?: string;
     escalationChannel?: string;
     linkedTermsDocumentId?: string;
     linkedAdminProcessDocumentId?: string;
     lastReviewedAt?: string;
   };
+  creditLineProfile?: {
+    enabled: boolean;
+    facilityType?: 'revolving_trade' | 'term_vendor' | 'utility_credit' | 'service_contract';
+    creditLimit?: number;
+    startingAccountAmount?: number;
+    currentBalance?: number;
+    availableCredit?: number;
+    autoAnnualizeFromBills?: boolean;
+    lastActivityAt?: string;
+    linkedObligationId?: string;
+  };
+  creditLineEntries?: Array<{
+    id: string;
+    entryDate: string;
+    direction: 'debit_draw' | 'credit_paydown' | 'fee' | 'adjustment';
+    amount: number;
+    resultingBalance: number;
+    linkedBillId?: string;
+    linkedPaymentId?: string;
+    linkedObligationId?: string;
+    notes?: string;
+  }>;
   linkedDocumentIds?: string[];
   notes?: string;
 }

@@ -28,6 +28,7 @@ import {
   buildObligationLifecycleSummaries,
   type ObligationLifecycleSummary,
 } from '../../services/obligationLifecycle.service';
+import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -630,9 +631,18 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       disputeNoticeDays?: string;
       disputeVenue?: string;
       arbitrationProcedureNotes?: string;
+      remittanceApplicationRule?: string;
+      returnInstrumentRule?: string;
+      billingErrorProcess?: string;
+      contractExtractionSummary?: string;
       linkedTermsDocumentId?: string;
       linkedAdminProcessDocumentId?: string;
       linkedArbitrationPacketDocumentId?: string;
+      lineOfCreditEnabled?: boolean;
+      creditLineType?: 'revolving_trade' | 'term_vendor' | 'utility_credit' | 'service_contract';
+      creditLimit?: string;
+      startingAccountAmount?: string;
+      autoAnnualizeFromBills?: boolean;
     },
   ) => {
     const normalizedName = payload.name?.trim();
@@ -732,11 +742,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         organizationClass,
         termsIntakeMode,
         autoLoadedPreset: termsIntakeMode === 'auto_load' ? presetByClass[organizationClass] : undefined,
-        remittanceApplicationRule: remittanceRuleByClass[organizationClass],
-        returnInstrumentRule: returnRuleByClass[organizationClass],
-        billingErrorProcess: payload.billingErrorSupport
-          ? billingProcessByClass[organizationClass]
-          : undefined,
+        remittanceApplicationRule:
+          payload.remittanceApplicationRule || remittanceRuleByClass[organizationClass],
+        returnInstrumentRule:
+          payload.returnInstrumentRule || returnRuleByClass[organizationClass],
+        billingErrorProcess:
+          payload.billingErrorProcess ||
+          (payload.billingErrorSupport ? billingProcessByClass[organizationClass] : undefined),
         disputeResolutionPath: payload.disputeResolutionPath,
         arbitrationForum: payload.arbitrationForum,
         mediationStepPresent: payload.mediationStepPresent,
@@ -747,6 +759,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         disputeVenue: payload.disputeVenue || undefined,
         arbitrationProcedureNotes: payload.arbitrationProcedureNotes || undefined,
         linkedArbitrationPacketDocumentId: payload.linkedArbitrationPacketDocumentId,
+        contractExtractionSummary: payload.contractExtractionSummary,
         escalationChannel: payload.email || payload.address || undefined,
         linkedTermsDocumentId: payload.linkedTermsDocumentId,
         linkedAdminProcessDocumentId: payload.linkedAdminProcessDocumentId,
@@ -755,6 +768,28 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     };
 
     const counterpartyTermsProfile = buildCounterpartyTermsProfile();
+    const nextCreditLimit = payload.creditLimit ? Number(payload.creditLimit) : undefined;
+    const nextStartingAccountAmount = payload.startingAccountAmount
+      ? Number(payload.startingAccountAmount)
+      : undefined;
+    const creditLineProfile =
+      payload.lineOfCreditEnabled ||
+      typeof nextCreditLimit === 'number' ||
+      typeof nextStartingAccountAmount === 'number'
+        ? {
+            enabled: payload.lineOfCreditEnabled ?? true,
+            facilityType: payload.creditLineType,
+            creditLimit: nextCreditLimit,
+            startingAccountAmount: nextStartingAccountAmount,
+            currentBalance: nextStartingAccountAmount ?? 0,
+            availableCredit:
+              typeof nextCreditLimit === 'number'
+                ? Number((nextCreditLimit - (nextStartingAccountAmount ?? 0)).toFixed(2))
+                : undefined,
+            autoAnnualizeFromBills: payload.autoAnnualizeFromBills ?? true,
+            lastActivityAt: new Date().toISOString(),
+          } satisfies NonNullable<CoreDataBundle['vendors'][number]['creditLineProfile']>
+        : undefined;
 
     if (!normalizedName) {
       return {
@@ -794,6 +829,25 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                       ...counterpartyTermsProfile,
                     }
                   : record.counterpartyTermsProfile,
+                creditLineProfile: creditLineProfile
+                  ? {
+                      ...record.creditLineProfile,
+                      ...creditLineProfile,
+                      currentBalance:
+                        record.creditLineProfile?.currentBalance ?? creditLineProfile.currentBalance,
+                      availableCredit:
+                        typeof creditLineProfile.creditLimit === 'number'
+                          ? Number(
+                              (
+                                creditLineProfile.creditLimit -
+                                (record.creditLineProfile?.currentBalance ??
+                                  creditLineProfile.currentBalance ??
+                                  0)
+                              ).toFixed(2)
+                            )
+                          : record.creditLineProfile?.availableCredit,
+                    }
+                  : record.creditLineProfile,
                 linkedDocumentIds: [
                   ...(record.linkedDocumentIds || []),
                   ...[payload.linkedTermsDocumentId, payload.linkedAdminProcessDocumentId].filter(
@@ -820,6 +874,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           status: 'active' as const,
           paymentInstructions,
           counterpartyTermsProfile,
+          creditLineProfile,
+          creditLineEntries: creditLineProfile ? [] : undefined,
           linkedDocumentIds: [
             payload.linkedTermsDocumentId,
             payload.linkedAdminProcessDocumentId,
@@ -829,6 +885,36 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         ...prev.vendors,
       ],
     };
+  };
+
+  const isRecurringVendorAccountCandidate = (
+    vendor: CoreDataBundle['vendors'][number] | undefined,
+  ) =>
+    Boolean(
+      vendor?.creditLineProfile?.enabled ||
+        vendor?.creditLineProfile?.autoAnnualizeFromBills ||
+        vendor?.counterpartyTermsProfile?.organizationClass === 'utility',
+    );
+
+  const deriveAnnualizedStartingAmount = ({
+    vendorId,
+    currentAmount,
+    bills: vendorBills,
+  }: {
+    vendorId: string;
+    currentAmount: number;
+    bills: CoreDataBundle['bills'];
+  }) => {
+    const historicalAmounts = vendorBills
+      .filter((bill) => bill.vendorId === vendorId && bill.totalAmount > 0)
+      .map((bill) => bill.totalAmount);
+    const amounts = currentAmount > 0 ? [...historicalAmounts, currentAmount] : historicalAmounts;
+    if (!amounts.length) {
+      return 0;
+    }
+
+    const averageMonthly = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+    return Number((averageMonthly * 12).toFixed(2));
   };
 
   const resolveLedgerBalance = (
@@ -1866,12 +1952,65 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (!base) return prev;
       const entity = prev.entities[0];
       if (!entity) return prev;
-      const { vendorId, vendors: nextVendors } = ensureVendorRecord(prev, entity.id, {
+      const { vendorId, vendors: vendorSeed } = ensureVendorRecord(prev, entity.id, {
         name: payload.vendorName || extraction.vendorOrMerchantName,
       });
       const billNumber = payload.billNumber || buildEntityScopedNumber(entity, 'bill', '', String(getEntityNextSequence(entity, 'bill')));
 
       const resolvedAmount = numericAmount || extraction.amount || 0;
+      const seededVendor = vendorSeed.find((item) => item.id === vendorId);
+      const seededLinkedObligationId = (
+        seededVendor?.creditLineProfile as CoreDataBundle['vendors'][number]['creditLineProfile']
+      )?.linkedObligationId;
+      const recurringVendor = isRecurringVendorAccountCandidate(seededVendor);
+      const annualizedStartingAmount =
+        recurringVendor && resolvedAmount > 0
+          ? deriveAnnualizedStartingAmount({
+              vendorId,
+              currentAmount: resolvedAmount,
+              bills: prev.bills ?? [],
+            })
+          : undefined;
+      const creditProfile: CoreDataBundle['vendors'][number]['creditLineProfile'] =
+        recurringVendor || seededVendor?.creditLineProfile?.enabled
+          ? {
+              enabled: true,
+              facilityType:
+                seededVendor?.creditLineProfile?.facilityType ||
+                (seededVendor?.counterpartyTermsProfile?.organizationClass === 'utility'
+                  ? ('utility_credit' as const)
+                  : ('service_contract' as const)),
+              creditLimit: seededVendor?.creditLineProfile?.creditLimit,
+              startingAccountAmount:
+                seededVendor?.creditLineProfile?.autoAnnualizeFromBills === false
+                  ? seededVendor?.creditLineProfile?.startingAccountAmount
+                  : annualizedStartingAmount ||
+                    seededVendor?.creditLineProfile?.startingAccountAmount ||
+                    resolvedAmount,
+              currentBalance: Number(
+                (
+                  (seededVendor?.creditLineProfile?.currentBalance ?? 0) + resolvedAmount
+                ).toFixed(2)
+              ),
+              autoAnnualizeFromBills:
+                seededVendor?.creditLineProfile?.autoAnnualizeFromBills ?? true,
+              lastActivityAt: issuedDate,
+            }
+          : seededVendor?.creditLineProfile;
+      const nextCreditEntry =
+        creditProfile?.enabled && resolvedAmount > 0
+          ? {
+              id: `vcl-${Date.now()}`,
+              entryDate: issuedDate,
+              direction: 'debit_draw' as const,
+              amount: resolvedAmount,
+              resultingBalance: creditProfile.currentBalance ?? resolvedAmount,
+              linkedBillId: billId,
+              linkedObligationId: seededLinkedObligationId,
+              notes:
+                'Vendor bill intake increased the tracked recurring account or line-of-credit balance.',
+            }
+          : undefined;
       const nextRecord = {
         ...base,
         id: billId,
@@ -1894,6 +2033,138 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           ? [documentRecord.id, ...(base.linkedDocumentIds ?? [])]
           : base.linkedDocumentIds,
       };
+      const obligationBase = prev.obligations?.[0];
+      const existingRecurringObligation =
+        seededLinkedObligationId
+          ? prev.obligations.find((item) => item.id === seededLinkedObligationId)
+          : prev.obligations.find(
+              (item) =>
+                item.entityId === entity.id &&
+                item.linkedVendorId === vendorId &&
+                item.recurringSchedule?.enabled,
+            );
+      const recurringObligationId =
+        existingRecurringObligation?.id || seededLinkedObligationId || `obl-vendor-${Date.now()}`;
+      const nextObligations =
+        creditProfile?.enabled && obligationBase
+          ? existingRecurringObligation
+            ? prev.obligations.map((item) =>
+                item.id === existingRecurringObligation.id
+                  ? {
+                      ...item,
+                      amount: creditProfile.currentBalance ?? item.amount,
+                      status:
+                        (creditProfile.currentBalance ?? 0) > 0 ? ('open' as const) : ('satisfied' as const),
+                      lifecycleStage:
+                        (creditProfile.currentBalance ?? 0) > 0
+                          ? ('presented' as const)
+                          : ('discharged' as const),
+                      linkedVendorId: vendorId,
+                      linkedDocumentIds: documentRecord
+                        ? Array.from(new Set([documentRecord.id, ...(item.linkedDocumentIds ?? [])]))
+                        : item.linkedDocumentIds,
+                      recurringSchedule: {
+                        enabled: true,
+                        frequency: 'monthly',
+                        interval: 1,
+                        nextDueDate: payload.dueDate || extraction.date || item.recurringSchedule?.nextDueDate,
+                        autoCreatePresentment: true,
+                        note:
+                          annualizedStartingAmount
+                            ? `Annualized starting account amount: ${formatCurrency(
+                                annualizedStartingAmount,
+                                entity.operationalDefaults?.baseCurrency ||
+                                  prev.workspaceSettings.baseCurrency,
+                              )}. Rolling balance updates from bill and payment history.`
+                            : item.recurringSchedule?.note,
+                      },
+                      enforcementMemo:
+                        annualizedStartingAmount
+                          ? `Recurring vendor account is annualized from monthly history at ${formatCurrency(
+                              annualizedStartingAmount,
+                              entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                            )}; current tracked balance is ${formatCurrency(
+                              creditProfile.currentBalance ?? 0,
+                              entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                            )}.`
+                          : item.enforcementMemo,
+                    }
+                  : item,
+              )
+            : [
+                {
+                  ...obligationBase,
+                  id: recurringObligationId,
+                  entityId: entity.id,
+                  title: `${seededVendor?.name || payload.vendorName || 'Vendor'} recurring account obligation`,
+                  linkedVendorId: vendorId,
+                  legalIdentifier: `VOB-${Date.now()}`,
+                  obligationType: 'private_obligation' as const,
+                  amount: creditProfile.currentBalance ?? resolvedAmount,
+                  paymentMedium: 'fiat' as const,
+                  status: 'open' as const,
+                  linkedDocumentIds: documentRecord ? [documentRecord.id] : undefined,
+                  linkedSettlementIds: undefined,
+                  linkedRemittanceStatementIds: undefined,
+                  linkedCouponPresentmentIds: undefined,
+                  lifecycleStage: 'presented' as const,
+                  lastPresentmentDate: issuedDate,
+                  recurringSchedule: {
+                    enabled: true,
+                    frequency: 'monthly',
+                    interval: 1,
+                    nextDueDate: payload.dueDate || extraction.date || issuedDate,
+                    autoCreatePresentment: true,
+                    note:
+                      annualizedStartingAmount
+                        ? `Annualized starting account amount: ${formatCurrency(
+                            annualizedStartingAmount,
+                            entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                          )}.`
+                        : 'Recurring vendor account tied to monthly bill history.',
+                  },
+                  enforcementMemo:
+                    annualizedStartingAmount
+                      ? `Created from recurring vendor bill intake. Annualized starting account amount is ${formatCurrency(
+                          annualizedStartingAmount,
+                          entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                        )}; current tracked balance is ${formatCurrency(
+                          creditProfile.currentBalance ?? resolvedAmount,
+                          entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                        )}.`
+                      : 'Created from recurring vendor bill intake.',
+                },
+                ...(prev.obligations ?? []),
+              ]
+          : prev.obligations;
+      const nextVendors = vendorSeed.map((item) => {
+        if (item.id !== vendorId || !creditProfile?.enabled) {
+          return item;
+        }
+        const nextLimit = creditProfile.creditLimit;
+        const nextBalance = creditProfile.currentBalance ?? 0;
+        return {
+          ...item,
+          creditLineProfile: {
+            ...item.creditLineProfile,
+            ...creditProfile,
+            linkedObligationId: recurringObligationId,
+            availableCredit:
+              typeof nextLimit === 'number'
+                ? Number((nextLimit - nextBalance).toFixed(2))
+                : item.creditLineProfile?.availableCredit,
+          },
+          creditLineEntries: nextCreditEntry
+            ? [
+                {
+                  ...nextCreditEntry,
+                  linkedObligationId: recurringObligationId,
+                },
+                ...(item.creditLineEntries ?? []),
+              ]
+            : item.creditLineEntries,
+        };
+      });
 
       return {
         ...prev,
@@ -1905,6 +2176,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ),
         vendors: nextVendors,
         bills: [nextRecord, ...(prev.bills ?? [])],
+        obligations: nextObligations,
         documents: documentRecord
           ? [documentRecord, ...(prev.documents ?? [])]
           : prev.documents,
@@ -2684,8 +2956,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     let uploadedTermsDocument: DocumentRecord | null = null;
     const organizationClass = payload.organizationClass || 'general';
     const termsIntakeMode = payload.termsIntakeMode || 'none';
+    let contractExtractionSummary: string | undefined;
+    let extractedTermsProfile:
+      | Awaited<ReturnType<typeof extractVendorContractClauses>>
+      | undefined;
 
     if (counterpartyModalMode === 'vendor' && termsIntakeMode === 'upload_contract') {
+      extractedTermsProfile = await extractVendorContractClauses(payload.contractFile);
+      contractExtractionSummary = extractedTermsProfile.summary;
       uploadedTermsDocument = await persistUploadDocument({
         entityId: entity.id,
         folder: 'documents',
@@ -2741,13 +3019,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         ...payload,
         linkedTermsDocumentId,
         linkedAdminProcessDocumentId,
-        disputeResolutionPath: payload.disputeResolutionPath,
-        arbitrationForum: payload.arbitrationForum,
-        mediationStepPresent: payload.mediationStepPresent,
-        cureOfferRequired: payload.cureOfferRequired,
-        disputeNoticeDays: payload.disputeNoticeDays,
-        disputeVenue: payload.disputeVenue,
-        arbitrationProcedureNotes: payload.arbitrationProcedureNotes,
+        organizationClass: extractedTermsProfile?.organizationClass || payload.organizationClass,
+        remittanceApplicationRule:
+          extractedTermsProfile?.remittanceApplicationRule || undefined,
+        returnInstrumentRule: extractedTermsProfile?.returnInstrumentRule || undefined,
+        billingErrorProcess:
+          extractedTermsProfile?.billingErrorProcess || undefined,
+        contractExtractionSummary,
+        disputeResolutionPath:
+          extractedTermsProfile?.disputeResolutionPath || payload.disputeResolutionPath,
+        arbitrationForum:
+          extractedTermsProfile?.arbitrationForum || payload.arbitrationForum,
+        mediationStepPresent:
+          extractedTermsProfile?.mediationStepPresent ?? payload.mediationStepPresent,
+        cureOfferRequired:
+          extractedTermsProfile?.cureOfferRequired ?? payload.cureOfferRequired,
+        disputeNoticeDays:
+          extractedTermsProfile?.disputeNoticeDays
+            ? String(extractedTermsProfile.disputeNoticeDays)
+            : payload.disputeNoticeDays,
+        disputeVenue: extractedTermsProfile?.disputeVenue || payload.disputeVenue,
+        arbitrationProcedureNotes:
+          extractedTermsProfile?.arbitrationProcedureNotes || payload.arbitrationProcedureNotes,
       });
       return {
         ...prev,
@@ -2760,7 +3053,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     if (counterpartyModalMode === 'vendor') {
       setOperationsNotice(
         linkedTermsDocumentId || linkedAdminProcessDocumentId
-          ? 'Vendor terms and admin process controls were attached to the counterparty profile.'
+          ? extractedTermsProfile?.summary
+            ? `Vendor terms were attached and contract clauses were autofilled for ${payload.name || 'the vendor'}.`
+            : 'Vendor terms and admin process controls were attached to the counterparty profile.'
           : 'Vendor profile saved.'
       );
     }
@@ -3586,6 +3881,82 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               : bill
           )
         : prev.bills;
+      const nextVendorCreditBalance =
+        payload.direction === 'outgoing' &&
+        payload.counterpartyType === 'vendor' &&
+        selectedVendor?.creditLineProfile?.enabled
+          ? Math.max(0, (selectedVendor.creditLineProfile.currentBalance ?? 0) - amount)
+          : undefined;
+      const nextVendors =
+        payload.direction === 'outgoing' &&
+        payload.counterpartyType === 'vendor' &&
+        selectedVendor?.creditLineProfile?.enabled
+          ? prev.vendors.map((vendor) => {
+              if (vendor.id !== selectedVendor.id) {
+                return vendor;
+              }
+              const nextLimit = vendor.creditLineProfile?.creditLimit;
+              const creditPaydownEntry = {
+                id: `vcl-pay-${stamp}`,
+                entryDate: nextPayment.paymentDate,
+                direction: 'credit_paydown' as const,
+                amount,
+                resultingBalance: nextVendorCreditBalance ?? 0,
+                linkedPaymentId: paymentId,
+                linkedBillId: payload.linkedBillId,
+                linkedObligationId: vendor.creditLineProfile?.linkedObligationId,
+                notes: 'Vendor payment reduced the tracked recurring account or line-of-credit balance.',
+              };
+
+              return {
+                ...vendor,
+                creditLineProfile: vendor.creditLineProfile
+                  ? {
+                      ...vendor.creditLineProfile,
+                      currentBalance: nextVendorCreditBalance,
+                      availableCredit:
+                        typeof nextLimit === 'number'
+                          ? Number((nextLimit - (nextVendorCreditBalance ?? 0)).toFixed(2))
+                          : vendor.creditLineProfile.availableCredit,
+                      lastActivityAt: nextPayment.paymentDate,
+                    }
+                  : vendor.creditLineProfile,
+                creditLineEntries: [creditPaydownEntry, ...(vendor.creditLineEntries ?? [])],
+              };
+            })
+          : prev.vendors;
+      const nextObligations =
+        payload.direction === 'outgoing' &&
+        payload.counterpartyType === 'vendor' &&
+        selectedVendor?.creditLineProfile?.linkedObligationId
+          ? prev.obligations.map((obligation) =>
+              obligation.id === selectedVendor.creditLineProfile?.linkedObligationId
+                ? {
+                    ...obligation,
+                    amount: nextVendorCreditBalance ?? obligation.amount,
+                    status:
+                      (nextVendorCreditBalance ?? 0) <= 0 ? ('satisfied' as const) : ('open' as const),
+                    lifecycleStage:
+                      (nextVendorCreditBalance ?? 0) <= 0
+                        ? ('discharged' as const)
+                        : ('presented' as const),
+                    linkedSettlementIds: Array.from(
+                      new Set([settlementId, ...(obligation.linkedSettlementIds ?? [])]),
+                    ),
+                    linkedRemittanceStatementIds: Array.from(
+                      new Set([nextRemittanceStatement.id, ...(obligation.linkedRemittanceStatementIds ?? [])]),
+                    ),
+                    enforcementMemo:
+                      (nextVendorCreditBalance ?? 0) <= 0
+                        ? 'Vendor account balance was fully cured through linked payment performance.'
+                        : `Vendor account balance was reduced to ${formatCurrency(
+                            nextVendorCreditBalance ?? 0,
+                            entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
+                          )} through linked payment performance.`,
+                  }
+                : obligation,
+            )
+          : prev.obligations;
 
       const nextBankAccounts = sourceBankAccount
         ? prev.bankAccounts.map((account) =>
@@ -3706,6 +4077,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         ),
         invoices: nextInvoices,
         bills: nextBills,
+        vendors: nextVendors,
+        obligations: nextObligations,
         payments: [nextPayment, ...(prev.payments ?? [])],
         bankAccounts: nextBankAccounts,
         reconciliations: operationalReconciliation.reconciliations,
@@ -6580,21 +6953,61 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           ? 'adr path ready'
           : 'adr off',
       ].join(' | ')}
-                    >
-                      <div
-                        style={{
-                          display: 'grid',
-                          gap: 10,
-                        }}
                       >
-                        <div style={{ color: 'var(--cf-muted)', lineHeight: 1.5 }}>
-                          {vendor.counterpartyTermsProfile?.remittanceApplicationRule ||
-                            'Save a counterparty terms profile to generate remittance-application notices.'}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                          <button
-                            type="button"
-                            style={sectionButtonStyle(false)}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gap: 10,
+                          }}
+                        >
+                          <div style={{ color: 'var(--cf-muted)', lineHeight: 1.5 }}>
+                            {vendor.counterpartyTermsProfile?.remittanceApplicationRule ||
+                              'Save a counterparty terms profile to generate remittance-application notices.'}
+                          </div>
+                          {vendor.counterpartyTermsProfile?.contractExtractionSummary ? (
+                            <div style={{ color: '#fde68a', lineHeight: 1.5, fontSize: 13 }}>
+                              {vendor.counterpartyTermsProfile.contractExtractionSummary}
+                            </div>
+                          ) : null}
+                          {vendor.creditLineProfile?.enabled ? (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gap: 6,
+                                padding: 12,
+                                borderRadius: 12,
+                                border: '1px solid rgba(74,222,128,0.24)',
+                                background: 'rgba(20,83,45,0.18)',
+                                color: '#bbf7d0',
+                                fontSize: 13,
+                              }}
+                            >
+                              <div>
+                                Current balance:{' '}
+                                {formatCurrency(
+                                  vendor.creditLineProfile.currentBalance ?? 0,
+                                  data.workspaceSettings.baseCurrency,
+                                )}
+                              </div>
+                              <div>
+                                Starting account amount:{' '}
+                                {formatCurrency(
+                                  vendor.creditLineProfile.startingAccountAmount ?? 0,
+                                  data.workspaceSettings.baseCurrency,
+                                )}
+                              </div>
+                              <div>
+                                Entries tracked: {vendor.creditLineEntries?.length ?? 0}
+                                {vendor.creditLineProfile.linkedObligationId
+                                  ? ` | obligation ${vendor.creditLineProfile.linkedObligationId}`
+                                  : ''}
+                              </div>
+                            </div>
+                          ) : null}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                            <button
+                              type="button"
+                              style={sectionButtonStyle(false)}
                             onClick={() =>
                               void handleLaunchVendorFollowThroughNotice(
                                 vendor.id,
@@ -6684,6 +7097,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                   record.counterpartyTermsProfile?.organizationClass
                     ? `terms ${record.counterpartyTermsProfile.organizationClass}`
                     : 'terms pending',
+                  record.creditLineProfile?.enabled
+                    ? `credit ${formatCurrency(
+                        record.creditLineProfile.currentBalance ?? 0,
+                        data.workspaceSettings.baseCurrency,
+                      )}`
+                    : 'credit off',
                   record.counterpartyTermsProfile?.billingErrorProcess
                     ? 'admin process ready'
                     : 'admin process off',

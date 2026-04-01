@@ -99,6 +99,13 @@ export default function CounterpartyModal({
   const [disputeNoticeDays, setDisputeNoticeDays] = useState('');
   const [disputeVenue, setDisputeVenue] = useState('');
   const [arbitrationProcedureNotes, setArbitrationProcedureNotes] = useState('');
+  const [lineOfCreditEnabled, setLineOfCreditEnabled] = useState(false);
+  const [creditLineType, setCreditLineType] = useState<
+    'revolving_trade' | 'term_vendor' | 'utility_credit' | 'service_contract'
+  >('revolving_trade');
+  const [creditLimit, setCreditLimit] = useState('');
+  const [startingAccountAmount, setStartingAccountAmount] = useState('');
+  const [autoAnnualizeFromBills, setAutoAnnualizeFromBills] = useState(true);
   const [contractFile, setContractFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -129,6 +136,11 @@ export default function CounterpartyModal({
     setDisputeNoticeDays('');
     setDisputeVenue('');
     setArbitrationProcedureNotes('');
+    setLineOfCreditEnabled(false);
+    setCreditLineType('revolving_trade');
+    setCreditLimit('');
+    setStartingAccountAmount('');
+    setAutoAnnualizeFromBills(true);
     setContractFile(null);
   }, [open, mode]);
 
@@ -382,6 +394,86 @@ export default function CounterpartyModal({
                     style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
                   />
                 </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 12,
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid rgba(74,222,128,0.28)',
+                    background: 'rgba(20,83,45,0.2)',
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#bbf7d0' }}>
+                    Vendor line of credit / recurring account rail
+                  </div>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      fontSize: 13,
+                      color: '#bbf7d0',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={lineOfCreditEnabled}
+                      onChange={(event) => setLineOfCreditEnabled(event.target.checked)}
+                    />
+                    Track this counterparty as a line-of-credit or recurring account
+                  </label>
+                  {lineOfCreditEnabled ? (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                        <select
+                          value={creditLineType}
+                          onChange={(e) => setCreditLineType(e.target.value as typeof creditLineType)}
+                          style={inputStyle}
+                        >
+                          <option value="revolving_trade">Revolving trade credit</option>
+                          <option value="term_vendor">Term vendor account</option>
+                          <option value="utility_credit">Utility / telecom account</option>
+                          <option value="service_contract">Service contract account</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={creditLimit}
+                          onChange={(e) => setCreditLimit(e.target.value)}
+                          placeholder="Credit limit (optional)"
+                          style={inputStyle}
+                        />
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={startingAccountAmount}
+                        onChange={(e) => setStartingAccountAmount(e.target.value)}
+                        placeholder="Starting account amount"
+                        style={inputStyle}
+                      />
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          fontSize: 13,
+                          color: '#bbf7d0',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={autoAnnualizeFromBills}
+                          onChange={(event) => setAutoAnnualizeFromBills(event.target.checked)}
+                        />
+                        Auto-annualize from monthly bills or utility history when a total is not stated
+                      </label>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
@@ -425,6 +517,11 @@ export default function CounterpartyModal({
                 disputeNoticeDays: disputeNoticeDays || undefined,
                 disputeVenue: disputeVenue || undefined,
                 arbitrationProcedureNotes: arbitrationProcedureNotes || undefined,
+                lineOfCreditEnabled,
+                creditLineType,
+                creditLimit: creditLimit || undefined,
+                startingAccountAmount: startingAccountAmount || undefined,
+                autoAnnualizeFromBills,
                 contractFile,
                 contractFileName: contractFile?.name,
               })

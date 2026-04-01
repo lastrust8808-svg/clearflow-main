@@ -100,6 +100,11 @@ export interface CounterpartySubmitPayload {
   disputeNoticeDays?: string;
   disputeVenue?: string;
   arbitrationProcedureNotes?: string;
+  lineOfCreditEnabled?: boolean;
+  creditLineType?: 'revolving_trade' | 'term_vendor' | 'utility_credit' | 'service_contract';
+  creditLimit?: string;
+  startingAccountAmount?: string;
+  autoAnnualizeFromBills?: boolean;
   contractFile?: File | null;
   contractFileName?: string;
 }
