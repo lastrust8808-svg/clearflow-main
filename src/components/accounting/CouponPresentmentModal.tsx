@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
 import type {
   InstrumentSettlementRecord,
   ObligationRecord,
@@ -111,6 +112,11 @@ export default function CouponPresentmentModal({
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedNotes, setParsedNotes] = useState('');
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionSummary, setExtractionSummary] = useState('');
+  const [extractionStatus, setExtractionStatus] = useState<
+    'idle' | 'ready' | 'complete' | 'failed'
+  >('idle');
 
   useEffect(() => {
     if (!open) return;
@@ -131,6 +137,9 @@ export default function CouponPresentmentModal({
     setUploadedFileName('');
     setUploadedFile(null);
     setParsedNotes('');
+    setIsExtracting(false);
+    setExtractionSummary('');
+    setExtractionStatus('idle');
   }, [open]);
 
   useEffect(() => {
@@ -150,7 +159,50 @@ export default function CouponPresentmentModal({
     setSourceLedgerAccountId(draft.sourceLedgerAccountId ?? '');
     setDischargeMethod(draft.dischargeMethod ?? 'instrument_performance');
     setParsedNotes(draft.parsedNotes ?? '');
+    setExtractionSummary(draft.parsedNotes ? 'Draft values loaded and ready for review.' : '');
+    setExtractionStatus(draft.parsedNotes ? 'complete' : 'idle');
   }, [draft, open]);
+
+  const handleExtractUploadedData = async () => {
+    if (!uploadedFile) {
+      setExtractionSummary('Choose a coupon or utility statement file first.');
+      setExtractionStatus('failed');
+      return;
+    }
+
+    setIsExtracting(true);
+    setExtractionSummary('Reading the uploaded coupon and extracting receiver, amount, and date data...');
+
+    try {
+      const extraction = await analyzeAccountingUpload('coupon', uploadedFile);
+      setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
+      setAmount((current) => {
+        if (current) {
+          return current;
+        }
+        return typeof extraction.amount === 'number' ? String(extraction.amount) : '';
+      });
+      setDueDate((current) => current || extraction.date || '');
+      setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
+      setParsedNotes((current) =>
+        [current, extraction.summary].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n\n'),
+      );
+      setExtractionSummary(
+        extraction.status === 'failed'
+          ? 'Extraction could not confidently read the upload. You can still edit the fields manually before submit.'
+          : `${extraction.summary} Review and edit any field before presenting the coupon.`,
+      );
+      setExtractionStatus(extraction.status === 'failed' ? 'failed' : 'complete');
+    } catch (error) {
+      console.warn('Coupon upload extraction failed.', error);
+      setExtractionSummary(
+        'Extraction failed on this upload. You can still enter or edit the coupon fields manually.',
+      );
+      setExtractionStatus('failed');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -181,9 +233,50 @@ export default function CouponPresentmentModal({
                 const file = event.target.files?.[0] ?? null;
                 setUploadedFile(file);
                 setUploadedFileName(file?.name ?? '');
+                setExtractionSummary(
+                  file ? 'File loaded. Run extraction to preview and review the uploaded coupon data.' : '',
+                );
+                setExtractionStatus(file ? 'ready' : 'idle');
               }}
               style={inputStyle}
             />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => void handleExtractUploadedData()}
+                style={buttonStyle}
+                disabled={!uploadedFile || isExtracting}
+              >
+                {isExtracting ? 'Extracting...' : 'Extract Uploaded Data'}
+              </button>
+              {uploadedFileName ? (
+                <div style={{ alignSelf: 'center', color: '#94a3b8', fontSize: 13 }}>
+                  {uploadedFileName}
+                </div>
+              ) : null}
+            </div>
+            {extractionSummary ? (
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  border:
+                    extractionStatus === 'failed'
+                      ? '1px solid rgba(248,113,113,0.28)'
+                      : '1px solid rgba(96,165,250,0.24)',
+                  background:
+                    extractionStatus === 'failed'
+                      ? 'rgba(127,29,29,0.18)'
+                      : 'rgba(30,41,59,0.4)',
+                  color:
+                    extractionStatus === 'failed' ? '#fecaca' : '#bfdbfe',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                {extractionSummary}
+              </div>
+            ) : null}
             <textarea
               value={parsedNotes}
               onChange={(event) => setParsedNotes(event.target.value)}
