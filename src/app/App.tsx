@@ -737,6 +737,29 @@ export default function App({
       return;
     }
 
+    const hasAnyEntities = data.entities.length > 0;
+    if (hasAnyEntities) {
+      return;
+    }
+
+    const browserHash = typeof window !== 'undefined' ? window.location.hash : '';
+    const storedRoute = loadRouteForUser(currentUserId);
+    const hasExistingWorkspaceRoute = Boolean(parseHashSection(browserHash) || parseHashSection(storedRoute));
+    if (hasExistingWorkspaceRoute && parseHashSection(browserHash) !== 'overview') {
+      return;
+    }
+
+    setActiveSection((previous) => (previous === 'entities' ? previous : 'entities'));
+    if (typeof window !== 'undefined' && window.location.hash !== '#entities') {
+      replaceWindowHash('#entities');
+    }
+  }, [auth.authStatus, currentUserId, data.entities.length]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId) {
+      return;
+    }
+
     const storedEntityId = loadActiveEntityForUser(currentUserId);
     const availableEntityIds = new Set(data.entities.map((entity) => entity.id));
     const nextEntityId = storedEntityId && availableEntityIds.has(storedEntityId)

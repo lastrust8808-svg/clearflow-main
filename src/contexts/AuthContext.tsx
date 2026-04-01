@@ -1187,7 +1187,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         })
         .catch(err => {
           console.error("Failed to create user data file in Drive", err);
-          logout();
+          Promise.resolve(
+            upsertLocalBackupAccount({
+              appData: finalAppData,
+              preferredContactType:
+                finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
+              userHandle,
+              password,
+            })
+          )
+            .then((backupAccountId) => {
+              if (backupAccountId) {
+                saveLocalAuthAppData(backupAccountId, finalAppData);
+                void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
+                  console.warn('Failed to persist Google onboarding fallback after Drive save error.', error);
+                });
+              }
+
+              setState((s) => ({
+                ...s,
+                appData: finalAppData,
+                localAccountId: backupAccountId || s.localAccountId,
+                status: 'authenticated',
+              }));
+              clearStoredMembershipDraft();
+            })
+            .catch((fallbackError) => {
+              console.warn('Unable to complete Google onboarding fallback after Drive save error.', fallbackError);
+              setState((s) => ({
+                ...s,
+                appData: finalAppData,
+                status: 'authenticated',
+              }));
+              clearStoredMembershipDraft();
+            });
         });
     } else if (state.token === 'mock-token') {
       // Dev login flow, no persistence
