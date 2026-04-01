@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AppSection, WorkspaceSettingsRecord } from '../../types/core';
+import type { AppSection, EntityRecord, WorkspaceSettingsRecord } from '../../types/core';
+import type { User } from '../../types/app.models';
+import { buildEntityWorkspaceView } from '../../services/entityWorkspace.service';
 import { subnavItems } from '../accounting/accountingUtils';
 
 interface AppShellProps {
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
   workspaceSettings: WorkspaceSettingsRecord;
+  currentUser: User | null;
+  entities: EntityRecord[];
+  activeEntityId: string | null;
+  onActiveEntityChange: (entityId: string | null) => void;
+  hasDriveAccess: boolean;
   children: ReactNode;
 }
 
@@ -150,6 +157,11 @@ export default function AppShell({
   activeSection,
   onSectionChange,
   workspaceSettings,
+  currentUser,
+  entities,
+  activeEntityId,
+  onActiveEntityChange,
+  hasDriveAccess,
   children,
 }: AppShellProps) {
   const [currentHash, setCurrentHash] = useState(() =>
@@ -261,6 +273,16 @@ export default function AppShell({
   const activeItem =
     navGroups.flatMap((group) => group.items).find((item) => item.id === activeSection) ||
     navGroups[0].items[0];
+  const activeEntity = activeEntityId
+    ? entities.find((entity) => entity.id === activeEntityId) || null
+    : null;
+  const activeEntityWorkspace = activeEntity
+    ? buildEntityWorkspaceView({
+        entity: activeEntity,
+        currentGoogleEmail: currentUser?.email,
+        hasDriveAccess,
+      })
+    : null;
   const activeRouteLabel = useMemo(
     () => formatRouteLabel(currentHash, activeSection),
     [activeSection, currentHash]
@@ -632,6 +654,64 @@ export default function AppShell({
           </div>
         </div>
 
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 18,
+            background: 'var(--cf-panel-soft)',
+            border: '1px solid var(--cf-border)',
+            boxShadow: 'var(--cf-shadow)',
+            display: 'grid',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 1.6,
+              color: 'var(--cf-accent-soft)',
+            }}
+          >
+            Operator & Board
+          </div>
+          <div style={{ color: 'var(--cf-text)', fontWeight: 700 }}>
+            {currentUser?.name || 'Operator profile'}
+          </div>
+          <div style={{ color: 'var(--cf-muted)', fontSize: 13, lineHeight: 1.55 }}>
+            {currentUser?.email || 'No Google identity loaded yet'}
+          </div>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--cf-muted)' }}>Active board</span>
+            <select
+              value={activeEntityId ?? ''}
+              onChange={(event) => onActiveEntityChange(event.target.value || null)}
+              style={{
+                width: '100%',
+                minHeight: 42,
+                borderRadius: 12,
+                border: '1px solid var(--cf-border)',
+                background: 'rgba(10, 16, 28, 0.72)',
+                color: 'var(--cf-text)',
+                padding: '0 12px',
+                outline: 'none',
+              }}
+            >
+              <option value="">Collective workspace</option>
+              {entities.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.displayName || entity.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.55 }}>
+            {activeEntityWorkspace
+              ? activeEntityWorkspace.sessionStatusLabel
+              : 'Collective workspace view combines the connected entity boards.'}
+          </div>
+        </div>
+
         <nav style={{ display: 'grid', gap: 16 }}>
           {navGroups.map((group) => (
             <div key={group.title} style={{ display: 'grid', gap: 8 }}>
@@ -769,6 +849,24 @@ export default function AppShell({
                     }}
                   >
                     {activeRouteLabel}
+                  </div>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '7px 12px',
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid var(--cf-border)',
+                      color: 'var(--cf-muted)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {activeEntity
+                      ? `Board: ${activeEntity.displayName || activeEntity.name}`
+                      : 'Board: Collective workspace'}
                   </div>
                   {currentHash ? (
                     <button

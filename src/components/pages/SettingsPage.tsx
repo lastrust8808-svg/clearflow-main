@@ -10,6 +10,7 @@ import {
   loadIntegrationStatus,
   type IntegrationStatusSnapshot,
 } from '../../services/integrationStatus.service';
+import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
 import WorkspaceSettingsCard from '../settings/WorkspaceSettingsCard';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -18,9 +19,10 @@ import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
 interface SettingsPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
+  activeEntityId?: string | null;
 }
 
-export default function SettingsPage({ data, setData }: SettingsPageProps) {
+export default function SettingsPage({ data, setData, activeEntityId }: SettingsPageProps) {
   const auth = useAuth();
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatusSnapshot | null>(null);
   const [integrationLoading, setIntegrationLoading] = useState(true);
@@ -47,6 +49,11 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
   const driveRoutedCount = data.documents.filter(
     (item) => item.externalStorageStatus === 'routed'
   ).length;
+  const entityWorkspaceViews = buildEntityWorkspaceViews({
+    entities: data.entities,
+    currentGoogleEmail: auth.currentUser?.email,
+    hasDriveAccess: auth.hasDriveAccess,
+  });
 
   useEffect(() => {
     void loadIntegrationStatus()
@@ -204,6 +211,42 @@ export default function SettingsPage({ data, setData }: SettingsPageProps) {
               </div>
             </div>
           </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Operator & Entity Routing"
+        description="One operator login can manage multiple entity boards while each entity keeps its own email and Google Drive storage mapping."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {entityWorkspaceViews.map((workspace) => (
+            <WorkbenchRecordCard
+              key={workspace.entityId}
+              title={workspace.entityLabel}
+              subtitle={workspace.sessionStatusLabel}
+              summaryItems={[
+                { label: 'Primary Email', value: workspace.primaryEmail || 'Not set' },
+                { label: 'Storage Email', value: workspace.storageEmail || 'Not set' },
+                { label: 'Mode', value: workspace.storageModeLabel },
+                {
+                  label: 'Active Board',
+                  value: activeEntityId === workspace.entityId ? 'Yes' : 'No',
+                },
+                {
+                  label: 'Collective View',
+                  value: workspace.shareInCollectiveOverview ? 'Shared' : 'Hidden',
+                },
+              ]}
+            >
+              Use the entity board to change the mapped email and storage mode. If an entity uses its own Google account for storage, ClearFlow will expect the operator to reconnect Google as that entity when Drive routing is needed.
+            </WorkbenchRecordCard>
+          ))}
         </div>
       </PageSection>
 

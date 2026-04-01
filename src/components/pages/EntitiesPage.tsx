@@ -1,6 +1,7 @@
 ﻿import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useState } from 'react';
 import type { CoreDataBundle } from '../../types/core';
+import type { User } from '../../types/app.models';
 import PageSection from '../ui/PageSection';
 import EntityProfileCard from '../entities/EntityProfileCard';
 import EntityResourceStudio from '../entities/EntityResourceStudio';
@@ -18,6 +19,9 @@ import {
 interface EntitiesPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
+  currentUser?: User | null;
+  activeEntityId?: string | null;
+  onSetActiveEntity?: (entityId: string | null) => void;
 }
 
 function goToHash(hash: string) {
@@ -26,7 +30,13 @@ function goToHash(hash: string) {
   }
 }
 
-export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
+export default function EntitiesPage({
+  data,
+  setData,
+  currentUser,
+  activeEntityId,
+  onSetActiveEntity,
+}: EntitiesPageProps) {
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const [isConnectionRailModalOpen, setIsConnectionRailModalOpen] = useState(false);
   const [connectionRailPreset, setConnectionRailPreset] = useState<'general' | 'business_partner'>(
@@ -56,6 +66,11 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
   );
   const treasuryNameById = new Map(data.treasuryAccounts.map((account) => [account.id, account.name]));
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
+  const orderedEntities = [...data.entities].sort((left, right) => {
+    if (left.id === activeEntityId) return -1;
+    if (right.id === activeEntityId) return 1;
+    return (left.displayName || left.name).localeCompare(right.displayName || right.name);
+  });
 
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
@@ -97,6 +112,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
     <div style={{ display: 'grid', gap: 20 }}>
       <EntityQuickAddModal
         open={isEntityModalOpen}
+        currentUserEmail={currentUser?.email}
         onClose={() => setIsEntityModalOpen(false)}
         onSubmit={(payload) => {
           const stamp = Date.now();
@@ -122,16 +138,44 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
                 name: payload.name.trim(),
                 displayName: entityDisplayName,
                 type: payload.type,
+                primaryEmail:
+                  payload.primaryEmail.trim() ||
+                  payload.googleStorageEmail.trim() ||
+                  currentUser?.email ||
+                  undefined,
                 jurisdiction: payload.jurisdiction.trim() || undefined,
                 country: payload.country.trim() || undefined,
                 formationDate: new Date().toISOString().slice(0, 10),
                 status: 'active',
                 representativeName: payload.representativeName.trim() || undefined,
                 representativeRole: payload.representativeRole.trim() || undefined,
+                entityAccess: {
+                  googleStorageEmail:
+                    payload.googleStorageEmail.trim() ||
+                    payload.primaryEmail.trim() ||
+                    currentUser?.email ||
+                    undefined,
+                  storageMode:
+                    payload.storageMode ||
+                    (currentUser?.email ? 'operator_google' : 'internal_only'),
+                  driveConnectionStatus:
+                    payload.storageMode === 'internal_only'
+                      ? 'internal_only'
+                      : currentUser?.email
+                        ? 'connected'
+                        : 'not_connected',
+                  shareInCollectiveOverview: true,
+                  shareInOperatorDashboard: true,
+                },
                 branding: {
                   accentColor: prev.workspaceSettings.preferredAccentColor || '#36d7ff',
                   documentLogoText: entityDisplayName,
                   emailFromName: entityDisplayName,
+                  replyToEmail:
+                    payload.primaryEmail.trim() ||
+                    payload.googleStorageEmail.trim() ||
+                    currentUser?.email ||
+                    undefined,
                   invoiceFooterNote: 'Operational records generated through ClearFlow.',
                   sealValueEnabled: true,
                   sealUnitValue: 1,
@@ -246,6 +290,7 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
             ],
           }));
           setIsEntityModalOpen(false);
+          onSetActiveEntity?.(entityId);
           goToHash(`#documents:${documentId}`);
         }}
       />
@@ -737,10 +782,13 @@ export default function EntitiesPage({ data, setData }: EntitiesPageProps) {
         description="Edit legal identity, numbering, branding, and default settlement behavior without touching raw JSON."
       >
         <div style={{ display: 'grid', gap: 16 }}>
-          {data.entities.map((entity) => (
+          {orderedEntities.map((entity) => (
             <div key={entity.id}>
               <EntityProfileCard
                 entity={entity}
+                currentGoogleEmail={currentUser?.email}
+                isActive={entity.id === activeEntityId}
+                onSetActive={() => onSetActiveEntity?.(entity.id)}
                 defaultCurrency={data.workspaceSettings.baseCurrency}
                 sealValueSummary={(() => {
                   const usageRecords = data.entityMarkUsageRecords.filter((item) => item.entityId === entity.id);

@@ -3,11 +3,15 @@ import type { EntityType } from '../../types/core';
 
 interface EntityQuickAddModalProps {
   open: boolean;
+  currentUserEmail?: string;
   onClose: () => void;
   onSubmit: (payload: {
     name: string;
     displayName: string;
     type: EntityType;
+    primaryEmail: string;
+    googleStorageEmail: string;
+    storageMode: 'operator_google' | 'entity_google' | 'internal_only';
     jurisdiction: string;
     country: string;
     representativeName: string;
@@ -62,10 +66,20 @@ const buttonStyle: CSSProperties = {
   fontWeight: 600,
 };
 
-export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQuickAddModalProps) {
+export default function EntityQuickAddModal({
+  open,
+  currentUserEmail,
+  onClose,
+  onSubmit,
+}: EntityQuickAddModalProps) {
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [type, setType] = useState<EntityType>('llc');
+  const [primaryEmail, setPrimaryEmail] = useState('');
+  const [googleStorageEmail, setGoogleStorageEmail] = useState('');
+  const [storageMode, setStorageMode] = useState<
+    'operator_google' | 'entity_google' | 'internal_only'
+  >('operator_google');
   const [jurisdiction, setJurisdiction] = useState('');
   const [country, setCountry] = useState('United States');
   const [representativeName, setRepresentativeName] = useState('');
@@ -77,12 +91,15 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
     setName('');
     setDisplayName('');
     setType('llc');
+    setPrimaryEmail('');
+    setGoogleStorageEmail(currentUserEmail || '');
+    setStorageMode(currentUserEmail ? 'operator_google' : 'internal_only');
     setJurisdiction('');
     setCountry('United States');
     setRepresentativeName('');
     setRepresentativeRole('');
     setGenerateDispatchIdentity(true);
-  }, [open]);
+  }, [currentUserEmail, open]);
 
   if (!open) return null;
 
@@ -107,6 +124,13 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
             <option value="individual">Individual</option>
             <option value="other">Other</option>
           </select>
+          <input value={primaryEmail} onChange={(e) => setPrimaryEmail(e.target.value)} placeholder="Entity email" style={inputStyle} />
+          <input value={googleStorageEmail} onChange={(e) => setGoogleStorageEmail(e.target.value)} placeholder="Google storage email" style={inputStyle} />
+          <select value={storageMode} onChange={(e) => setStorageMode(e.target.value as 'operator_google' | 'entity_google' | 'internal_only')} style={inputStyle}>
+            <option value="operator_google">Operator Google Drive</option>
+            <option value="entity_google">Entity Google Drive</option>
+            <option value="internal_only">Internal only</option>
+          </select>
           <input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="Jurisdiction" style={inputStyle} />
           <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Country" style={inputStyle} />
           <input value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Representative name" style={inputStyle} />
@@ -129,6 +153,9 @@ export default function EntityQuickAddModal({ open, onClose, onSubmit }: EntityQ
                 name,
                 displayName,
                 type,
+                primaryEmail,
+                googleStorageEmail,
+                storageMode,
                 jurisdiction,
                 country,
                 representativeName,

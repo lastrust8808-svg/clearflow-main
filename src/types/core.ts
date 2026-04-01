@@ -401,6 +401,7 @@ export interface EntityRecord {
   name: string;
   type: EntityType;
   displayName?: string;
+  primaryEmail?: string;
   jurisdiction?: string;
   country?: string;
   formationDate?: string;
@@ -409,6 +410,18 @@ export interface EntityRecord {
   ownerDisplay?: string;
   representativeName?: string;
   representativeRole?: string;
+  entityAccess?: {
+    googleStorageEmail?: string;
+    storageMode?: 'operator_google' | 'entity_google' | 'internal_only';
+    driveConnectionStatus?:
+      | 'not_connected'
+      | 'connected'
+      | 'needs_google_switch'
+      | 'internal_only';
+    shareInCollectiveOverview?: boolean;
+    shareInOperatorDashboard?: boolean;
+    notes?: string;
+  };
   branding?: {
     accentColor?: string;
     documentLogoText?: string;

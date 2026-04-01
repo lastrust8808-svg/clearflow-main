@@ -1,4 +1,5 @@
 import type { CoreDataBundle } from '../../types/core';
+import type { User } from '../../types/app.models';
 import {
   isClearFlowRetainedDocument,
   isUserOwnedReadyDocument,
@@ -7,20 +8,56 @@ import { buildSettlementFlowViews } from '../../services/settlementAnalytics.ser
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
+import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
 
 interface OverviewPageProps {
   data: CoreDataBundle;
+  currentUser?: User | null;
+  activeEntityId?: string | null;
+  onSelectActiveEntity?: (entityId: string | null) => void;
+  hasDriveAccess?: boolean;
 }
 
-export default function OverviewPage({ data }: OverviewPageProps) {
+export default function OverviewPage({
+  data,
+  currentUser,
+  activeEntityId,
+  onSelectActiveEntity,
+  hasDriveAccess = false,
+}: OverviewPageProps) {
   const navigate = (hash: string) => {
     if (typeof window !== 'undefined') {
       window.location.hash = hash;
     }
   };
+  const entityWorkspaceViews = buildEntityWorkspaceViews({
+    entities: data.entities,
+    currentGoogleEmail: currentUser?.email,
+    hasDriveAccess,
+  });
+  const activeEntity = activeEntityId
+    ? data.entities.find((entity) => entity.id === activeEntityId) || null
+    : null;
+  const activeEntityWorkspace =
+    entityWorkspaceViews.find((item) => item.entityId === activeEntity?.id) || null;
+  const sharedEntityCount = entityWorkspaceViews.filter(
+    (item) => item.shareInCollectiveOverview,
+  ).length;
+  const operatorVisibleEntityCount = entityWorkspaceViews.filter(
+    (item) => item.shareInOperatorDashboard,
+  ).length;
+  const activeEntityAssets = activeEntity
+    ? data.assets.filter((item) => item.entityId === activeEntity.id)
+    : [];
+  const activeEntityDocuments = activeEntity
+    ? data.documents.filter((item) => item.entityId === activeEntity.id)
+    : [];
+  const activeEntityPayments = activeEntity
+    ? data.payments.filter((item) => item.entityId === activeEntity.id)
+    : [];
   const linkedEftpsTreasury = data.treasuryAccounts.find(
     (item) => item.id === data.workspaceSettings.eftpsLinkedTreasuryAccountId,
   );
@@ -151,6 +188,144 @@ export default function OverviewPage({ data }: OverviewPageProps) {
           records, with settlement-to-cash controls now folded into the same operating view.
         </p>
       </div>
+
+      <PageSection
+        title="Operator Workspace"
+        description="Your login opens into a personal operator view first, then fans out into connected entity boards and a collective oversight layer."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Personal Operator Overview"
+            subtitle={currentUser?.email || 'No Google identity loaded'}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Name: {currentUser?.name || 'Pending profile setup'}</div>
+              <div>Drive access: {hasDriveAccess ? 'Connected' : 'Not connected'}</div>
+              <div>Entities visible: {operatorVisibleEntityCount}</div>
+              <div>Retained agreement: {currentUser?.clearflowTermsAcceptedAt ? 'Signed' : 'Pending'}</div>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Collective Overview"
+            subtitle="Cross-entity operating view"
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Entities included: {sharedEntityCount}</div>
+              <div>Total documents: {data.documents.length}</div>
+              <div>Total assets: {data.assets.length}</div>
+              <div>Total payments: {data.payments.length}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelectActiveEntity?.(null)}
+              style={{
+                marginTop: 14,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              View Collective Board
+            </button>
+          </RecordCard>
+
+          <RecordCard
+            title={activeEntity ? `${activeEntity.displayName || activeEntity.name} Board` : 'No Active Entity Yet'}
+            subtitle={activeEntityWorkspace?.sessionStatusLabel || 'Create or connect an entity to start its board'}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Primary email: {activeEntity?.primaryEmail || 'Not set'}</div>
+              <div>Storage email: {activeEntityWorkspace?.storageEmail || 'Not set'}</div>
+              <div>Documents: {activeEntityDocuments.length}</div>
+              <div>Assets: {activeEntityAssets.length}</div>
+              <div>Payments: {activeEntityPayments.length}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(activeEntity ? '#entities' : '#entities:new')}
+              style={{
+                marginTop: 14,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              {activeEntity ? 'Open Entity Board' : 'Add First Entity'}
+            </button>
+          </RecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Connected Entity Boards"
+        description="Keep one operator login while mapping each entity to its own email and preferred Google Drive storage posture."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {entityWorkspaceViews.length === 0 ? (
+            <RecordCard title="No connected entities yet" subtitle="Create your first entity">
+              Add an entity after your operator profile is complete. Each entity can carry its own primary email, Google storage email, and collective sharing posture.
+            </RecordCard>
+          ) : (
+            entityWorkspaceViews.map((workspace) => (
+              <RecordCard
+                key={workspace.entityId}
+                title={workspace.entityLabel}
+                subtitle={workspace.sessionStatusLabel}
+              >
+                <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                  <div>Primary email: {workspace.primaryEmail || 'Not set'}</div>
+                  <div>Storage email: {workspace.storageEmail || 'Not set'}</div>
+                  <div>Storage mode: {workspace.storageModeLabel}</div>
+                  <div>Collective view: {workspace.shareInCollectiveOverview ? 'Shared' : 'Hidden'}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSelectActiveEntity?.(workspace.entityId)}
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 14px',
+                    minHeight: 42,
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background:
+                      activeEntity?.id === workspace.entityId
+                        ? 'rgba(54, 215, 255, 0.16)'
+                        : 'rgba(54, 215, 255, 0.1)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  {activeEntity?.id === workspace.entityId ? 'Active Board' : 'Switch To This Board'}
+                </button>
+              </RecordCard>
+            ))
+          )}
+        </div>
+      </PageSection>
 
       <div
         style={{

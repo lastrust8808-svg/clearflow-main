@@ -6,14 +6,12 @@ import { coreMockData } from '../data/mockData';
 import AppShell from '../components/layout/AppShell';
 import { Welcome } from '../components/welcome/Welcome';
 import { setDocumentVaultScope } from '../services/documentVault.service';
-import { getStoredMembershipDraft } from '../services/membershipDraft.service';
 import { buildTransactionProofChainEnvelopes } from '../services/transactionProofChain.service';
 import { saveTransactionProofChains } from '../services/transactionProofVault.service';
 import {
   applyEntityMarkValueToBundle,
   findNextEntityMarkEligibleDocument,
 } from '../services/entityMarkReserve.service';
-import type { OnboardingPath } from '../components/onboarding-path-select/OnboardingPathSelect';
 const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
 const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
@@ -25,11 +23,6 @@ const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
 const AIStudioPage = lazy(() => import('../components/pages/AIStudioPage'));
 const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
 
-const MembershipEstablishment = lazy(() =>
-  import('../components/membership-establishment/MembershipEstablishment').then((module) => ({
-    default: module.MembershipEstablishment,
-  }))
-);
 const ProfileSetup = lazy(() =>
   import('../components/profile-setup/ProfileSetup').then((module) => ({
     default: module.ProfileSetup,
@@ -44,6 +37,7 @@ const Verification = lazy(() =>
 const DATA_STORAGE_KEY = 'clearflow-core-data';
 const SECTION_STORAGE_KEY = 'clearflow-active-section-v2';
 const ROUTE_STORAGE_KEY = 'clearflow-active-route-v1';
+const ACTIVE_ENTITY_STORAGE_KEY = 'clearflow-active-entity-v1';
 const DOCUMENT_HASH_PREFIX = '#documents:';
 const ONBOARDING_INTENT_STORAGE_KEY = 'clearflow-onboarding-intent';
 const ONBOARDING_STAGE_STORAGE_KEY = 'clearflow-onboarding-stage';
@@ -117,6 +111,14 @@ const allowedSections: AppSection[] = [
 
 function buildScopedKey(base: string, userId: string) {
   return `${base}:${userId}`;
+}
+
+function loadActiveEntityForUser(userId: string): string | null {
+  try {
+    return window.localStorage.getItem(buildScopedKey(ACTIVE_ENTITY_STORAGE_KEY, userId));
+  } catch {
+    return null;
+  }
 }
 
 function mapAuthEntityTypeToCore(type: Entity['type']): EntityRecord['type'] {
@@ -589,14 +591,13 @@ export default function App({
   initialWelcomeView = 'landing',
 }: AppProps) {
   const auth = useAuth();
-  const [selectedOnboardingPath, setSelectedOnboardingPath] =
-    useState<OnboardingPath>('business_entity');
   const [welcomeIntent, setWelcomeIntent] = useState<WelcomeIntent>(() =>
     loadStoredOnboardingIntent()
   );
   const [postAuthOnboardingStage, setPostAuthOnboardingStage] =
     useState<PostAuthOnboardingStage>(() => loadStoredOnboardingStage());
   const [activeSection, setActiveSection] = useState<AppSection>('overview');
+  const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
   const [data, setData] = useState<CoreDataBundle>(coreMockData);
   const hydratedUserIdRef = useRef<string | null>(null);
   const initializedSectionUserIdRef = useRef<string | null>(null);
@@ -617,6 +618,7 @@ export default function App({
   useEffect(() => {
     if (auth.authStatus === 'unauthenticated') {
       setActiveSection('overview');
+      setActiveEntityId(null);
       setData(coreMockData);
       setDocumentVaultScope(null);
       hydratedUserIdRef.current = null;
@@ -640,39 +642,16 @@ export default function App({
       return;
     }
 
-    const storedDraft = getStoredMembershipDraft();
-    const hasEntitySeed = Boolean(
-      auth.appData?.entities?.length || auth.appData?.coreDataSnapshot?.entities?.length
-    );
-    const needsStructuredOnboarding =
-      !auth.currentUser?.clearflowTermsAcceptedAt && !hasEntitySeed;
-
-    if (!needsStructuredOnboarding) {
-      return;
+    if (welcomeIntent !== 'new') {
+      setWelcomeIntent('new');
+      setStoredOnboardingIntent('new');
     }
 
-    if (storedDraft) {
-      setSelectedOnboardingPath(storedDraft.selectedPath);
+    if (postAuthOnboardingStage !== 'profile') {
+      setPostAuthOnboardingStage('profile');
+      setStoredOnboardingStage('profile');
     }
-
-      if (welcomeIntent !== 'new') {
-        setWelcomeIntent('new');
-        setStoredOnboardingIntent('new');
-      }
-
-      const nextStage: PostAuthOnboardingStage = storedDraft ? 'profile' : 'membership';
-      if (postAuthOnboardingStage !== nextStage) {
-        setPostAuthOnboardingStage(nextStage);
-        setStoredOnboardingStage(nextStage);
-    }
-  }, [
-    auth.appData?.coreDataSnapshot?.entities?.length,
-    auth.appData?.entities?.length,
-    auth.authStatus,
-    auth.currentUser?.clearflowTermsAcceptedAt,
-    postAuthOnboardingStage,
-    welcomeIntent,
-  ]);
+  }, [auth.authStatus, postAuthOnboardingStage, welcomeIntent]);
 
   useEffect(() => {
     setDocumentVaultScope(currentUserId);
@@ -728,6 +707,20 @@ export default function App({
   }, [auth.authStatus, currentUserId]);
 
   useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId) {
+      return;
+    }
+
+    const storedEntityId = loadActiveEntityForUser(currentUserId);
+    const availableEntityIds = new Set(data.entities.map((entity) => entity.id));
+    const nextEntityId = storedEntityId && availableEntityIds.has(storedEntityId)
+      ? storedEntityId
+      : null;
+
+    setActiveEntityId((previous) => (previous === nextEntityId ? previous : nextEntityId));
+  }, [auth.authStatus, currentUserId, data.entities]);
+
+  useEffect(() => {
     const handleHashChange = () => {
       const nextSection = parseHashSection(window.location.hash);
       if (nextSection) {
@@ -762,6 +755,28 @@ export default function App({
     const hashValue = resolvePreferredRoute(window.location.hash, activeSection);
     window.localStorage.setItem(buildScopedKey(ROUTE_STORAGE_KEY, currentUserId), hashValue);
   }, [activeSection, auth.authStatus, currentUserId]);
+
+  useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !currentUserId) {
+      return;
+    }
+
+    if (activeEntityId && !data.entities.some((entity) => entity.id === activeEntityId)) {
+      setActiveEntityId(null);
+      return;
+    }
+
+    try {
+      const storageKey = buildScopedKey(ACTIVE_ENTITY_STORAGE_KEY, currentUserId);
+      if (activeEntityId) {
+        window.localStorage.setItem(storageKey, activeEntityId);
+      } else {
+        window.localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // ignore local storage failures
+    }
+  }, [activeEntityId, auth.authStatus, currentUserId, data.entities]);
 
   useEffect(() => {
     if (auth.authStatus !== 'authenticated' || !auth.appData) {
@@ -871,11 +886,27 @@ export default function App({
   const renderSection = () => {
     switch (activeSection) {
       case 'overview':
-        return <OverviewPage data={data} />;
+        return (
+          <OverviewPage
+            data={data}
+            currentUser={auth.currentUser}
+            activeEntityId={activeEntityId}
+            onSelectActiveEntity={setActiveEntityId}
+            hasDriveAccess={auth.hasDriveAccess}
+          />
+        );
       case 'accounting':
         return <AccountingPage data={data} setData={setData} />;
       case 'entities':
-        return <EntitiesPage data={data} setData={setData} />;
+        return (
+          <EntitiesPage
+            data={data}
+            setData={setData}
+            currentUser={auth.currentUser}
+            activeEntityId={activeEntityId}
+            onSetActiveEntity={setActiveEntityId}
+          />
+        );
       case 'ledger':
         return <LedgerPage data={data} setData={setData} />;
       case 'assets':
@@ -889,9 +920,23 @@ export default function App({
       case 'aiStudio':
         return <AIStudioPage data={data} setData={setData} />;
       case 'settings':
-        return <SettingsPage data={data} setData={setData} />;
+        return (
+          <SettingsPage
+            data={data}
+            setData={setData}
+            activeEntityId={activeEntityId}
+          />
+        );
       default:
-        return <OverviewPage data={data} />;
+        return (
+          <OverviewPage
+            data={data}
+            currentUser={auth.currentUser}
+            activeEntityId={activeEntityId}
+            onSelectActiveEntity={setActiveEntityId}
+            hasDriveAccess={auth.hasDriveAccess}
+          />
+        );
     }
   };
 
@@ -915,8 +960,8 @@ export default function App({
           onStartNewMember={() => {
             setWelcomeIntent('new');
             setStoredOnboardingIntent('new');
-            setPostAuthOnboardingStage('membership');
-            setStoredOnboardingStage('membership');
+            setPostAuthOnboardingStage('profile');
+            setStoredOnboardingStage('profile');
           }}
         onStartExistingMember={() => {
           setWelcomeIntent('existing');
@@ -943,29 +988,7 @@ export default function App({
     );
   }
 
-    if (auth.authStatus === 'pending-profile-setup') {
-      if (welcomeIntent === 'new' && postAuthOnboardingStage === 'membership') {
-        return (
-          <Suspense fallback={<SuspenseShell title="Loading Secure Intake" />}>
-            <MembershipEstablishment
-              selectedPath={selectedOnboardingPath}
-              onSelectPath={setSelectedOnboardingPath}
-              onBack={() => {
-                auth.logout();
-                setWelcomeIntent('new');
-                setStoredOnboardingIntent('new');
-                setPostAuthOnboardingStage('membership');
-                setStoredOnboardingStage('membership');
-              }}
-              onContinue={() => {
-                setPostAuthOnboardingStage('profile');
-              setStoredOnboardingStage('profile');
-            }}
-          />
-        </Suspense>
-      );
-    }
-
+  if (auth.authStatus === 'pending-profile-setup') {
     return (
       <Suspense fallback={<SuspenseShell title="Loading Profile Setup" />}>
         <ProfileSetup />
@@ -995,6 +1018,11 @@ export default function App({
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
       workspaceSettings={data.workspaceSettings}
+      currentUser={auth.currentUser}
+      entities={data.entities}
+      activeEntityId={activeEntityId}
+      onActiveEntityChange={setActiveEntityId}
+      hasDriveAccess={auth.hasDriveAccess}
     >
       <Suspense fallback={<WorkspaceSectionLoading title="Loading Workspace" />}>
         {renderSection()}

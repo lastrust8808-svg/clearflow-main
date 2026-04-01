@@ -16,6 +16,9 @@ const sealTemplateOptions: NonNullable<EntityRecord['branding']>['sealTemplate']
 
 interface EntityProfileCardProps {
   entity: EntityRecord;
+  currentGoogleEmail?: string;
+  isActive?: boolean;
+  onSetActive?: () => void;
   defaultCurrency?: string;
   sealValueSummary?: {
     usageCount: number;
@@ -86,6 +89,9 @@ function previewFrameStyle(): CSSProperties {
 
 export default function EntityProfileCard({
   entity,
+  currentGoogleEmail,
+  isActive = false,
+  onSetActive,
   defaultCurrency,
   sealValueSummary,
   onSave,
@@ -111,6 +117,18 @@ export default function EntityProfileCard({
       draft.branding?.accentColor ||
       '#36d7ff',
   });
+  const storageMode = draft.entityAccess?.storageMode ?? 'operator_google';
+  const storageEmail = draft.entityAccess?.googleStorageEmail || draft.primaryEmail || '';
+  const currentEmail = (currentGoogleEmail || '').trim().toLowerCase();
+  const targetEmail = storageEmail.trim().toLowerCase();
+  const storageStatus =
+    storageMode === 'internal_only'
+      ? 'Internal only'
+      : !storageEmail
+        ? 'Google storage email needed'
+        : currentEmail && currentEmail === targetEmail
+          ? 'Connected to current Google session'
+          : 'Needs Google account switch for entity storage';
 
   return (
     <div
@@ -148,6 +166,28 @@ export default function EntityProfileCard({
         </div>
       </div>
 
+      {onSetActive ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+          <button
+            type="button"
+            onClick={onSetActive}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 999,
+              border: '1px solid rgba(126, 242, 255, 0.22)',
+              background: isActive ? 'rgba(54, 215, 255, 0.16)' : 'rgba(255,255,255,0.04)',
+              color: isActive ? 'var(--cf-accent-soft)' : 'var(--cf-text)',
+              fontSize: 12,
+              letterSpacing: 1,
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            {isActive ? 'Active Board' : 'Set Active Board'}
+          </button>
+        </div>
+      ) : null}
+
       <div
         style={{
           display: 'grid',
@@ -155,6 +195,108 @@ export default function EntityProfileCard({
           gap: 12,
         }}
       >
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Primary Entity Email</span>
+          <input
+            style={inputStyle}
+            type="email"
+            value={draft.primaryEmail ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({ ...prev, primaryEmail: event.target.value || undefined }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Google Storage Email</span>
+          <input
+            style={inputStyle}
+            type="email"
+            value={draft.entityAccess?.googleStorageEmail ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                entityAccess: {
+                  ...prev.entityAccess,
+                  googleStorageEmail: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Entity Storage Mode</span>
+          <select
+            style={inputStyle}
+            value={storageMode}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                entityAccess: {
+                  ...prev.entityAccess,
+                  storageMode: event.target.value as NonNullable<EntityRecord['entityAccess']>['storageMode'],
+                },
+              }))
+            }
+          >
+            <option value="operator_google">Operator Google Drive</option>
+            <option value="entity_google">Entity Google Drive</option>
+            <option value="internal_only">Internal only</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Share In Collective Overview</span>
+          <select
+            style={inputStyle}
+            value={draft.entityAccess?.shareInCollectiveOverview === false ? 'no' : 'yes'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                entityAccess: {
+                  ...prev.entityAccess,
+                  shareInCollectiveOverview: event.target.value === 'yes',
+                },
+              }))
+            }
+          >
+            <option value="yes">yes</option>
+            <option value="no">no</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Share In Operator Dashboard</span>
+          <select
+            style={inputStyle}
+            value={draft.entityAccess?.shareInOperatorDashboard === false ? 'no' : 'yes'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                entityAccess: {
+                  ...prev.entityAccess,
+                  shareInOperatorDashboard: event.target.value === 'yes',
+                },
+              }))
+            }
+          >
+            <option value="yes">yes</option>
+            <option value="no">no</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Storage Notes</span>
+          <input
+            style={inputStyle}
+            value={draft.entityAccess?.notes ?? ''}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                entityAccess: {
+                  ...prev.entityAccess,
+                  notes: event.target.value || undefined,
+                },
+              }))
+            }
+          />
+        </label>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Legal Name</span>
           <input
@@ -557,6 +699,23 @@ export default function EntityProfileCard({
             }
           />
         </label>
+      </div>
+
+      <div
+        style={{
+          borderRadius: 14,
+          border: '1px solid rgba(126, 242, 255, 0.16)',
+          background: 'rgba(54, 215, 255, 0.06)',
+          padding: 14,
+          color: '#d1d5db',
+          lineHeight: 1.65,
+        }}
+      >
+        <strong style={{ display: 'block', marginBottom: 8 }}>Entity Storage Routing</strong>
+        <div>Current Google session: {currentGoogleEmail || 'Not connected'}</div>
+        <div>Storage target: {storageEmail || 'Not set'}</div>
+        <div>Mode: {storageMode.replace(/_/g, ' ')}</div>
+        <div>Status: {storageStatus}</div>
       </div>
 
       {(draft.branding?.entityQrSealSvg || draft.branding?.entityMailingBarcodeSvg) ? (

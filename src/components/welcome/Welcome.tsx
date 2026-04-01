@@ -259,7 +259,8 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 </div>
                 <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
                   Existing members use Google to go straight into their dashboard. New users sign
-                  in with Google first, then choose their account or entity type and continue onboarding.
+                  in with Google first, complete their personal operator profile, then connect
+                  entities from inside the workspace.
                 </div>
               </div>
 
@@ -320,7 +321,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 >
                   <div style={{ fontSize: 22, fontWeight: 800 }}>New User Sign Up</div>
                   <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Start with Google, then choose the account or entity type and continue secure onboarding.
+                    Start with Google, then complete your operator profile first and connect entities afterward.
                   </div>
                   <button
                     type="button"
