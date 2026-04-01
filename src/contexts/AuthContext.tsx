@@ -23,6 +23,7 @@ import {
 } from '../services/accountPersistence.service';
 import { deliverVerificationCode } from '../services/authVerification.service';
 import { recordClearFlowAgreementDeposit } from '../services/clearflowInternalLedger.service';
+import { getApiBaseUrl, getGoogleClientId } from '../services/runtimeConfig.service';
 import {
   applyClearFlowRetentionRecords,
   CLEARFLOW_TERMS_VERSION,
@@ -128,16 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfigured] = useState(() => {
-    // FIX: Cast window to 'any' to access the custom 'process' property
-    // defined in index.html for environment variables.
-    const env = (window as any).process?.env;
-    if (!env) return false;
-    const googleId = env.GOOGLE_CLIENT_ID;
-    return (
-      !!googleId && 
-      googleId !== 'YOUR_GOOGLE_CLIENT_ID_HERE' && 
-      googleId !== '%VITE_GOOGLE_CLIENT_ID%'
-    );
+    return Boolean(getGoogleClientId());
   });
   const [tokenClient, setTokenClient] = useState<any>(null);
   const tokenClientRef = useRef<any>(null);
@@ -160,40 +152,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const clearflowLedgerDepositSyncRef = useRef(false);
   const GOOGLE_DRIVE_SCOPE =
     'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
+  
+  const hydrateGoogleAccessSession = useCallback(async (
+    accessToken: string,
+    providedProfile?: { name?: string; email?: string | null }
+  ) => {
+    const profile =
+      providedProfile?.email
+        ? providedProfile
+        : await (async () => {
+            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+              },
+            });
 
+            if (!profileResponse.ok) {
+              throw new Error('Google profile lookup failed after authorization.');
+            }
 
-  const handleCredentialResponse = useCallback((response: any) => {
-    const idToken = response.credential;
-    const decodedToken = JSON.parse(atob(idToken.split('.')[1]));
-    userDataService.setActiveUserEmail(decodedToken.email);
-    const provisionalUser: User = {
-      id: crypto.randomUUID(),
-      name: decodedToken.name,
-      email: decodedToken.email,
-      isVerified: false,
-      primaryContactType: 'google',
-    };
-    setState(current => ({
-      ...current,
-      token: idToken,
-      status: 'pending-gsi',
-      gsiUser: { name: decodedToken.name, email: decodedToken.email },
-      appData: { user: provisionalUser, entities: [] },
-    }));
-  }, []);
+            return profileResponse.json();
+          })();
 
-  const hydrateGoogleAccessSession = useCallback(async (accessToken: string) => {
-    const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!profileResponse.ok) {
-      throw new Error('Google profile lookup failed after authorization.');
-    }
-
-    const profile = await profileResponse.json();
     userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
@@ -213,9 +193,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
   }, []);
 
-  const handleAccessTokenResponse = useCallback((response: any) => {
-    if (response.error) {
-        console.error('OAuth Error:', response.error);
+  const exchangeGoogleAuthorizationCode = useCallback(async (code: string) => {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/google/exchange`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({
+        code,
+        redirectUri: window.location.origin,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok || !payload?.success) {
+      throw new Error(
+        payload?.error || 'Google authorization exchange failed.'
+      );
+    }
+
+    return payload as {
+      success: true;
+      auth: {
+        accessToken: string;
+        expiresIn?: number | null;
+        scope?: string | null;
+        tokenType?: string | null;
+      };
+      profile?: {
+        email?: string;
+        name?: string;
+      };
+    };
+  }, []);
+
+  const handleAuthorizationCodeResponse = useCallback((response: any) => {
+    if (response.error || !response.code) {
+        console.error('OAuth Error:', response.error || 'Missing authorization code.');
         setState((current) => {
           if (
             (current.status === 'pending-gsi' || current.status === 'pending-drive-check') &&
@@ -239,30 +255,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         return;
     }
+
     needsDriveCatchUpRef.current = true;
-    void hydrateGoogleAccessSession(response.access_token).catch((error) => {
-      console.error('OAuth profile hydration failed:', error);
-      setState((current) => {
-        if (current.appData?.user) {
+    void exchangeGoogleAuthorizationCode(response.code)
+      .then((payload) =>
+        hydrateGoogleAccessSession(payload.auth.accessToken, payload.profile)
+      )
+      .catch((error) => {
+        console.error('OAuth profile hydration failed:', error);
+        setState((current) => {
+          if (current.appData?.user) {
+            return {
+              ...current,
+              status: 'pending-profile-setup',
+              gsiUser: null,
+            };
+          }
+
           return {
             ...current,
-            status: 'pending-profile-setup',
+            status: 'unauthenticated',
             gsiUser: null,
-            apiAccessToken: response.access_token || current.apiAccessToken,
+            token: null,
+            apiAccessToken: null,
+            appData: null,
           };
-        }
-
-        return {
-          ...current,
-          status: 'unauthenticated',
-          gsiUser: null,
-          token: null,
-          apiAccessToken: null,
-          appData: null,
-        };
+        });
       });
-    });
-  }, [hydrateGoogleAccessSession]);
+  }, [exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
@@ -463,18 +483,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
   
   useEffect(() => {
-    if (
-      state.status === 'pending-gsi' &&
-      tokenClient &&
-      state.token &&
-      state.appData?.user &&
-      !state.apiAccessToken
-    ) {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    }
-  }, [state.apiAccessToken, state.appData, state.status, state.token, tokenClient]);
-
-  useEffect(() => {
     const hasCompletedGoogleWorkspace = (appData: AppData) =>
       Boolean(appData.user.clearflowTermsAcceptedAt) &&
       Boolean(appData.entities.length || appData.coreDataSnapshot?.entities?.length);
@@ -670,15 +678,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (typeof google !== 'undefined' && google.accounts) {
       if (!googleClientsInitializedRef.current) {
-        google.accounts.id.initialize({
-          client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
-          callback: handleCredentialResponse,
-          auto_select: false,
-        });
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
+        const client = google.accounts.oauth2.initCodeClient({
+          client_id: getGoogleClientId(),
           scope: GOOGLE_DRIVE_SCOPE,
-          callback: handleAccessTokenResponse,
+          ux_mode: 'popup',
+          callback: handleAuthorizationCodeResponse,
         });
         setTokenClient(client);
         tokenClientRef.current = client;
@@ -724,15 +728,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (typeof google !== 'undefined' && google.accounts && !googleClientsInitializedRef.current) {
-      google.accounts.id.initialize({
-        client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-        auto_select: false,
-      });
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: (window as any).process.env.GOOGLE_CLIENT_ID,
+      const client = google.accounts.oauth2.initCodeClient({
+        client_id: getGoogleClientId(),
         scope: GOOGLE_DRIVE_SCOPE,
-        callback: handleAccessTokenResponse,
+        ux_mode: 'popup',
+        callback: handleAuthorizationCodeResponse,
       });
       setTokenClient(client);
       tokenClientRef.current = client;
@@ -740,7 +740,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     return typeof google !== 'undefined' && !!google.accounts;
-  }, [GOOGLE_DRIVE_SCOPE, handleAccessTokenResponse, handleCredentialResponse, isConfigured]);
+  }, [GOOGLE_DRIVE_SCOPE, handleAuthorizationCodeResponse, isConfigured]);
 
   const startGoogleSignIn = useCallback(async (mode: 'new' | 'existing' | 'returning' = 'existing') => {
     if (!isConfigured) {
@@ -760,7 +760,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       pendingCredentialAuth: null,
     }));
 
-    activeTokenClient.requestAccessToken({
+    activeTokenClient.requestCode({
       prompt:
         mode === 'new'
           ? 'consent select_account'
@@ -770,7 +770,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return { success: true };
-  }, [ensureGoogleClients, isConfigured, tokenClient, state.apiAccessToken]);
+  }, [ensureGoogleClients, isConfigured, tokenClient]);
 
   const renderGoogleButton = useCallback((elementId: string) => {
     if (!isInitialized || !isConfigured) {
@@ -784,15 +784,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       target.replaceChildren();
-      google.accounts.id.renderButton(target, {
-        theme: 'outline',
-        size: 'large',
-        type: 'standard',
-        text: 'signin_with',
-        width: '280',
-      });
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'inline-flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-sky-400 hover:bg-sky-50';
+      button.textContent = 'Continue with Google';
+      button.onclick = () => {
+        void startGoogleSignIn('existing');
+      };
+      target.appendChild(button);
     });
-  }, [ensureGoogleClients, isConfigured, isInitialized]);
+  }, [ensureGoogleClients, isConfigured, isInitialized, startGoogleSignIn]);
 
   const mockLogin = (name: string, email: string) => {
     const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: true };
@@ -1313,7 +1315,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const requestDriveAccess = () => {
     const activeTokenClient = tokenClientRef.current || tokenClient;
-    if (activeTokenClient) activeTokenClient.requestAccessToken({ prompt: 'consent' });
+    if (activeTokenClient) {
+      setState((current) => ({
+        ...current,
+        status:
+          current.appData?.user && current.status !== 'unauthenticated'
+            ? 'pending-gsi'
+            : current.status,
+      }));
+      activeTokenClient.requestCode({ prompt: 'consent select_account' });
+    }
   };
 
   const continueGoogleOnboardingFallback = () => {
