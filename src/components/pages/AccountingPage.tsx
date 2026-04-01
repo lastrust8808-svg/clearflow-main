@@ -92,6 +92,7 @@ import {
   updateCollectionRecord,
 } from '../accounting/accountingUtils';
 import PageSection from '../ui/PageSection';
+import RecordCard from '../ui/RecordCard';
 import type { PlaidConnectionPayload } from '../../types/app.models';
 
 interface AccountingPageProps {
@@ -1058,6 +1059,136 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       termsDocument,
       adminDocument,
     };
+  };
+
+  const handleLaunchVendorFollowThroughNotice = async (
+    vendorId: string,
+    noticeType: 'remittance_application' | 'billing_error'
+  ) => {
+    const vendor = vendors.find((item) => item.id === vendorId);
+    if (!vendor) {
+      return;
+    }
+
+    const entity = data.entities.find((item) => item.id === vendor.entityId) || defaultEntity;
+    if (!entity) {
+      return;
+    }
+
+    const issuedAt = new Date().toISOString();
+    const issueDate = issuedAt.slice(0, 10);
+    const remitContact =
+      vendor.paymentInstructions?.remittanceEmail ||
+      vendor.email ||
+      vendor.remitAddress ||
+      vendor.phone ||
+      'To be inserted';
+    const accountReference =
+      vendor.paymentInstructions?.beneficiaryName ||
+      vendor.paymentInstructions?.accountMask ||
+      vendor.name;
+    const title =
+      noticeType === 'remittance_application'
+        ? `${vendor.name} Remittance Application Notice`
+        : `${vendor.name} Billing Error / Administrative Notice`;
+    const summary =
+      noticeType === 'remittance_application'
+        ? 'Generated notice for remittance application, returned instrument support, and posting instructions under the saved vendor profile.'
+        : 'Generated administrative billing-error notice aligned to the saved vendor profile and escalation process.';
+    const generatedBody = `# ${title}
+
+Issuing Entity: ${entity.displayName || entity.name}
+Counterparty: ${vendor.name}
+Issue Date: ${issueDate}
+Counterparty Class: ${vendor.counterpartyTermsProfile?.organizationClass || 'general'}
+
+## Delivery / Contact
+- Remit or correspondence contact: ${remitContact}
+- Saved address: ${vendor.remitAddress || 'To be inserted'}
+- Saved phone: ${vendor.phone || 'To be inserted'}
+- Account / beneficiary reference: ${accountReference}
+
+## Contract / Terms Profile
+- Terms intake mode: ${vendor.counterpartyTermsProfile?.termsIntakeMode || 'not recorded'}
+- Remittance application rule: ${vendor.counterpartyTermsProfile?.remittanceApplicationRule || 'To be inserted from the governing agreement or statement instructions.'}
+- Return / exception rule: ${vendor.counterpartyTermsProfile?.returnInstrumentRule || 'To be inserted from the governing agreement or statement instructions.'}
+- Administrative process: ${vendor.counterpartyTermsProfile?.billingErrorProcess || 'Escalation procedure not yet saved on the vendor profile.'}
+
+## Notice Direction
+${
+  noticeType === 'remittance_application'
+    ? `Apply the enclosed or referenced remittance strictly according to the written account, statement, invoice, servicing, coupon, or remittance instructions retained for this counterparty. If the item cannot be applied as directed, return or exception the item with the reason, posting outcome, and retained proof.`
+    : `This notice opens the administrative billing-error or remittance-research process under the saved counterparty profile. Review the statement, account references, and delivery evidence, then respond or correct the posting according to the counterparty's written escalation process.`
+}
+
+## Included Control Fields
+- Statement / invoice / coupon reference: ____________________
+- Account number or service reference: ____________________
+- Delivery evidence reference: ____________________
+- Posted or returned date: ____________________
+- Response deadline: ____________________
+
+## Operator Controls
+- Attach the governing contract, statement, tariff, or servicing guide if not already linked.
+- Keep the remittance, returned instrument, and correspondence evidence in the same retained file chain.
+- Do not rely on this notice alone as a legal conclusion without the actual counterparty terms and delivery facts.
+`;
+
+    const generatedFile = new File(
+      [generatedBody],
+      `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'vendor-notice'}.md`,
+      { type: 'text/markdown' }
+    );
+
+    const persistedDocument = await persistUploadDocument({
+      entityId: entity.id,
+      folder: 'documents',
+      title,
+      summary,
+      sourceRecordType: 'document',
+      sourceRecordId: `${noticeType}-${vendor.id}-${Date.now()}`,
+      file: generatedFile,
+      date: issueDate,
+      storageOwner: 'user_owned',
+      retentionClass: 'compliance',
+      externalStorageTarget: 'google_drive',
+      externalStorageStatus: 'ready',
+      storageNotes:
+        'Generated from the saved vendor terms profile for remittance-application and billing-admin follow-through.',
+    });
+
+    if (!persistedDocument) {
+      setOperationsNotice(`Unable to generate a follow-through notice for ${vendor.name}.`);
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      vendors: prev.vendors.map((item) =>
+        item.id === vendor.id
+          ? {
+              ...item,
+              linkedDocumentIds: Array.from(
+                new Set([...(item.linkedDocumentIds ?? []), persistedDocument.id])
+              ),
+              counterpartyTermsProfile: item.counterpartyTermsProfile
+                ? {
+                    ...item.counterpartyTermsProfile,
+                    lastReviewedAt: issuedAt,
+                  }
+                : item.counterpartyTermsProfile,
+            }
+          : item
+      ),
+      documents: [persistedDocument, ...prev.documents],
+    }));
+
+    setOperationsNotice(
+      noticeType === 'remittance_application'
+        ? `Generated a remittance-application notice for ${vendor.name}.`
+        : `Generated a billing-error / administrative notice for ${vendor.name}.`
+    );
+    navigateToHash(`#documents:${persistedDocument.id}`);
   };
 
   const startOfCurrentMonthIso = () => {
@@ -6257,30 +6388,123 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
 
       case 'vendors':
         return (
-          <EditableRecordSection
-            title="Vendors"
-            description="Editable vendor records with remittance instructions, counterparty terms posture, and billing-admin support."
-            emptyMessage="No vendor records yet."
-            records={vendors}
-            getTitle={(record) => record.name ?? record.id}
-            getSubtitle={(record) =>
-              [
-                record.status ?? 'active',
-                record.counterpartyTermsProfile?.organizationClass
-                  ? `terms ${record.counterpartyTermsProfile.organizationClass}`
-                  : 'terms pending',
-                record.counterpartyTermsProfile?.billingErrorProcess
-                  ? 'admin process ready'
-                  : 'admin process off',
-              ].join(' | ')
-            }
-            onSave={(nextRecord) =>
-              setData((prev) => ({
-                ...prev,
-                vendors: updateCollectionRecord(prev.vendors, nextRecord),
-              }))
-            }
-          />
+          <div style={{ display: 'grid', gap: 16 }}>
+            <PageSection
+              title="Vendor Notice Follow-Through"
+              description="Turn the saved counterparty terms profile into an actual remittance-application or billing-admin notice with one click."
+            >
+              <div style={{ display: 'grid', gap: 12 }}>
+                {vendors.length === 0 ? (
+                  <div style={{ color: 'var(--cf-muted)' }}>
+                    Add a vendor with saved terms or admin posture first, then generate follow-through notices here.
+                  </div>
+                ) : (
+                  vendors.map((vendor) => (
+                    <RecordCard
+                      key={vendor.id}
+                      title={vendor.name}
+                      subtitle={[
+                        vendor.counterpartyTermsProfile?.organizationClass
+                          ? `terms ${vendor.counterpartyTermsProfile.organizationClass}`
+                          : 'terms pending',
+                        vendor.counterpartyTermsProfile?.termsIntakeMode || 'no intake mode',
+                        vendor.counterpartyTermsProfile?.billingErrorProcess
+                          ? 'admin process ready'
+                          : 'admin process off',
+                      ].join(' | ')}
+                    >
+                      <div
+                        style={{
+                          display: 'grid',
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ color: 'var(--cf-muted)', lineHeight: 1.5 }}>
+                          {vendor.counterpartyTermsProfile?.remittanceApplicationRule ||
+                            'Save a counterparty terms profile to generate remittance-application notices.'}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                          <button
+                            type="button"
+                            style={sectionButtonStyle(false)}
+                            onClick={() =>
+                              void handleLaunchVendorFollowThroughNotice(
+                                vendor.id,
+                                'remittance_application'
+                              )
+                            }
+                            disabled={!vendor.counterpartyTermsProfile}
+                          >
+                            Generate Remittance Notice
+                          </button>
+                          <button
+                            type="button"
+                            style={sectionButtonStyle(false)}
+                            onClick={() =>
+                              void handleLaunchVendorFollowThroughNotice(vendor.id, 'billing_error')
+                            }
+                            disabled={!vendor.counterpartyTermsProfile?.billingErrorProcess}
+                          >
+                            Generate Billing Error Notice
+                          </button>
+                          {vendor.counterpartyTermsProfile?.linkedTermsDocumentId ? (
+                            <button
+                              type="button"
+                              style={sectionButtonStyle(false)}
+                              onClick={() =>
+                                navigateToHash(
+                                  `#documents:${vendor.counterpartyTermsProfile?.linkedTermsDocumentId}`
+                                )
+                              }
+                            >
+                              Open Terms Packet
+                            </button>
+                          ) : null}
+                          {vendor.counterpartyTermsProfile?.linkedAdminProcessDocumentId ? (
+                            <button
+                              type="button"
+                              style={sectionButtonStyle(false)}
+                              onClick={() =>
+                                navigateToHash(
+                                  `#documents:${vendor.counterpartyTermsProfile?.linkedAdminProcessDocumentId}`
+                                )
+                              }
+                            >
+                              Open Admin Packet
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </RecordCard>
+                  ))
+                )}
+              </div>
+            </PageSection>
+            <EditableRecordSection
+              title="Vendors"
+              description="Editable vendor records with remittance instructions, counterparty terms posture, and billing-admin support."
+              emptyMessage="No vendor records yet."
+              records={vendors}
+              getTitle={(record) => record.name ?? record.id}
+              getSubtitle={(record) =>
+                [
+                  record.status ?? 'active',
+                  record.counterpartyTermsProfile?.organizationClass
+                    ? `terms ${record.counterpartyTermsProfile.organizationClass}`
+                    : 'terms pending',
+                  record.counterpartyTermsProfile?.billingErrorProcess
+                    ? 'admin process ready'
+                    : 'admin process off',
+                ].join(' | ')
+              }
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  vendors: updateCollectionRecord(prev.vendors, nextRecord),
+                }))
+              }
+            />
+          </div>
         );
 
       case 'invoices':

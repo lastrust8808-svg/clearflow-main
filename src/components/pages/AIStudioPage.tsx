@@ -8,7 +8,10 @@ import type {
   DocumentRecord,
   DocumentRetentionClass,
   DocumentStorageOwner,
+  HolderLedgerEntryRecord,
   InstrumentRecord,
+  InstrumentSettlementRecord,
+  NegotiableInstrumentRegisterRecord,
   ObligationRecord,
   TokenRecord,
 } from '../../types/core';
@@ -1859,6 +1862,268 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
     focusDocument(persistedDocument.id);
   };
 
+  const launchBondExecutionPacket = async () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const stamp = Date.now();
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const maturityDate = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const nextReviewDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const entityLabel = primaryEntity.displayName || primaryEntity.name;
+    const entityCode = buildEntityCode(entityLabel);
+    const currency = primaryEntity.operationalDefaults?.baseCurrency || 'USD';
+    const amount = 50000;
+    const couponRate = 6.25;
+    const legalIdentifier = `${entityCode}-PBOND-${issueDate.replace(/-/g, '')}-${String(stamp).slice(-4)}`;
+    const instrumentId = `ins-bond-${stamp}`;
+    const obligationId = `obl-bond-${stamp}`;
+    const settlementId = `iset-bond-${stamp}`;
+    const registerId = `reg-bond-${stamp}`;
+    const holderEntryId = `hle-bond-${stamp}`;
+    const documentId = `doc-bond-${stamp}`;
+    const journalId = `je-bond-${stamp}`;
+    const transactionId = `txn-bond-${stamp}`;
+
+    const token = buildInternalToken({
+      entityId: primaryEntity.id,
+      subjectType: 'instrument',
+      subjectId: instrumentId,
+      label: 'Private Bond Execution Verification Token',
+      proofReference:
+        'Issued when a private bond execution packet is generated with register, holder-ledger, and discharge-control support.',
+    });
+
+    const complianceTag = buildComplianceTag({
+      entityId: primaryEntity.id,
+      label: `${entityLabel} bond execution and registration review`,
+      category: 'risk',
+      dueDate: nextReviewDate,
+      notes:
+        'Confirm issue terms, holder posture, reserve support, governing documents, and whether the bond should be routed into presentment, remittance, or controlled discharge workflow.',
+      linkedDocumentIds: [documentId],
+    });
+
+    const instrument: InstrumentRecord = {
+      id: instrumentId,
+      entityId: primaryEntity.id,
+      title: `Private Bond Execution ${issueDate}`,
+      instrumentType: 'private_bond',
+      legalIdentifier,
+      sourceClass: 'bond',
+      marketSector: 'private',
+      identifierCode: `${entityCode}-PBOND`,
+      issuerName: entityLabel,
+      issuerEntityId: primaryEntity.id,
+      issueDate,
+      maturityDate,
+      denominationValue: amount,
+      couponRate,
+      paymentMedium: 'mixed_contractual_tender',
+      obligationType: 'reserve_backed_claim',
+      reserveDepositEnabled: true,
+      performanceSecurityStatus: 'posted',
+      linkedTokenIds: [token.id],
+      linkedDocumentIds: [documentId],
+      notes:
+        'Studio-generated private bond execution record with registered-instrument, holder-ledger, and obligation-discharge control support.',
+    };
+
+    const obligation: ObligationRecord = {
+      id: obligationId,
+      entityId: primaryEntity.id,
+      title: `Private Bond Obligation ${issueDate}`,
+      legalIdentifier,
+      obligationType: 'reserve_backed_claim',
+      amount,
+      paymentMedium: 'mixed_contractual_tender',
+      status: 'open',
+      linkedInstrumentIds: [instrumentId],
+      linkedDocumentIds: [documentId],
+      gainOrLossOnDischarge: 0,
+      lifecycleStage: 'recognized',
+      recurringSchedule: {
+        enabled: true,
+        frequency: 'monthly',
+        interval: 1,
+        nextDueDate: nextReviewDate,
+        autoCreatePresentment: false,
+        note: 'Review coupon, remittance, or negotiated discharge posture monthly until performed or retired.',
+      },
+      enforcementMemo:
+        'Bond execution is registered internally with holder-ledger and discharge controls. External effectiveness, investor treatment, and governing-law implications still depend on the actual issue documents and review.',
+    };
+
+    const registerRecord: NegotiableInstrumentRegisterRecord = {
+      id: registerId,
+      entityId: primaryEntity.id,
+      instrumentId,
+      obligationId,
+      legalIdentifier,
+      registerLabel: `${entityLabel} Private Bond Register`,
+      instrumentForm: 'bond',
+      status: 'issued',
+      issueDate,
+      maturityDate,
+      issuerEntityId: primaryEntity.id,
+      currentHolderEntityId: primaryEntity.id,
+      currentHolderLabel: entityLabel,
+      faceAmount: amount,
+      outstandingAmount: amount,
+      currency,
+      linkedDocumentIds: [documentId],
+      linkedTokenIds: [token.id],
+      notes:
+        'Registered internally from AI Studio so the bond starts with a controlled identifier, holder, and outstanding balance.',
+    };
+
+    const holderEntry: HolderLedgerEntryRecord = {
+      id: holderEntryId,
+      entityId: primaryEntity.id,
+      registerId,
+      entryDate: issueDate,
+      entryType: 'issue',
+      holderEntityId: primaryEntity.id,
+      holderLabel: entityLabel,
+      amount,
+      currency,
+      resultingBalance: amount,
+      linkedInstrumentId: instrumentId,
+      linkedObligationId: obligationId,
+      linkedDocumentIds: [documentId],
+      linkedTokenIds: [token.id],
+      notes: 'Initial holder-ledger issue entry created from the bond execution packet.',
+    };
+
+    const instrumentSettlement: InstrumentSettlementRecord = {
+      id: settlementId,
+      entityId: primaryEntity.id,
+      title: `Bond Performance & Discharge Control ${issueDate}`,
+      legalIdentifier,
+      instrumentId,
+      obligationId,
+      linkedDocumentIds: [documentId],
+      linkedTokenIds: [token.id],
+      dischargeMethod: 'instrument_performance',
+      recognitionBasis: 'obligation_recognized_before_cash',
+      performanceStatus: 'issued',
+      faceAmount: amount,
+      performedAmount: 0,
+      currency,
+      effectiveDate: issueDate,
+      dueDate: maturityDate,
+      sourceDepositStatus: 'not_deposited',
+      notes:
+        'Use presentment, remittance, settlement, or posted performance evidence to move this bond from issued to performed and ultimately discharge the linked obligation.',
+    };
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${entityLabel} Private Bond Execution Packet`,
+      category: 'financial',
+      summary:
+        'Execution packet for a private bond with registered-instrument, holder-ledger, and obligation-discharge controls already opened.',
+      retentionClass: 'financial_evidence',
+      body: `# Private Bond Execution Packet
+
+Entity: ${entityLabel}
+Issue Date: ${issueDate}
+Maturity Date: ${maturityDate}
+Bond Identifier: ${legalIdentifier}
+
+## Bond Terms
+- Issuer: ${entityLabel}
+- Holder / Registered Owner: ${entityLabel}
+- Face Amount: ${amount.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} ${currency}
+- Coupon: ${couponRate.toFixed(2)}%
+- Form: Private bond / controlled instrument
+
+## Registered Instrument Flow
+- Instrument record opened in the ledger.
+- Negotiable-instrument register entry opened with issued status.
+- Holder ledger opened with the initial issue balance.
+- Obligation and performance / discharge control records opened together.
+
+## Directional Discharge Flow
+1. Execute and retain the bond packet with the governing terms.
+2. If value, reserve, or other performance is actually deposited or presented, record it through Accounting or Transactions.
+3. Use presentment, remittance, settlement, and holder-ledger evidence to move the linked obligation toward discharge.
+4. Do not mark the bond or obligation discharged until performance is posted and the control chain ties out.
+
+## Operator Controls
+- Confirm the holder, consideration, reserve support, and governing terms before external use.
+- If this bond will support another entity obligation, link the related remittance or presentment records before claiming performance.
+- Treat this as a controlled internal registration and evidence packet, not automatic external registration or legal approval.
+`,
+    });
+
+    const persistedDocument = await persistGeneratedDocumentRecord({
+      ...document,
+      id: documentId,
+      linkedInstrumentIds: [instrumentId],
+      linkedTokenIds: [token.id],
+      linkedComplianceTagIds: [complianceTag.id],
+    });
+
+    setData((prev) => ({
+      ...prev,
+      instruments: [instrument, ...prev.instruments],
+      obligations: [obligation, ...prev.obligations],
+      negotiableInstrumentRegisters: [registerRecord, ...prev.negotiableInstrumentRegisters],
+      holderLedgerEntries: [holderEntry, ...prev.holderLedgerEntries],
+      instrumentSettlements: [instrumentSettlement, ...prev.instrumentSettlements],
+      documents: [persistedDocument, ...prev.documents],
+      tokens: [token, ...prev.tokens],
+      complianceTags: [complianceTag, ...prev.complianceTags],
+      transactions: [
+        {
+          id: transactionId,
+          entityId: primaryEntity.id,
+          type: 'journal',
+          title: `${entityLabel} bond recognition draft`,
+          amount,
+          currency,
+          date: issueDate,
+          status: 'draft',
+          linkedDocumentIds: [documentId],
+          linkedPaymentIds: [],
+          linkedJournalEntryIds: [journalId],
+          linkedTokenIds: [token.id],
+          notes:
+            'Draft journal-side transaction created from the private bond execution packet.',
+        },
+        ...prev.transactions,
+      ],
+      journalEntries: [
+        {
+          id: journalId,
+          entityId: primaryEntity.id,
+          entryNumber: `${primaryEntity.numbering?.journalPrefix || 'JE'}-${stamp}`,
+          entryDate: issueDate,
+          memo: 'Draft recognition entry for private bond execution workflow.',
+          debitAccount: '1115 Bond Reserve Receivable',
+          creditAccount: '2320 Bond Obligation Outstanding',
+          amount,
+          status: 'draft',
+          source: 'system',
+          linkedTransactionIds: [transactionId],
+          linkedDocumentIds: [documentId],
+          verificationRequired: true,
+        },
+        ...prev.journalEntries,
+      ],
+    }));
+    focusDocument(persistedDocument.id);
+  };
+
   const launchBillExchangeAcceptanceCertificate = async () => {
     if (!primaryEntity) {
       return;
@@ -3586,6 +3851,14 @@ ${scopedCases
       lane: 'ledger',
       actionLabel: 'Draft Exchange',
       onAction: launchInternationalBillOfExchangePacket,
+    },
+    {
+      title: 'Bond Execution & Registration',
+      subtitle: 'Register, holder ledger, and discharge controls',
+      detail: 'Create a private bond execution packet that lands directly in the instrument register, holder ledger, obligation controls, and performance / discharge workflow.',
+      lane: 'ledger',
+      actionLabel: 'Execute Bond',
+      onAction: launchBondExecutionPacket,
     },
     {
       title: 'Acceptance Certificate',
