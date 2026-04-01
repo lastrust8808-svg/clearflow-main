@@ -163,63 +163,46 @@ export default function CouponPresentmentModal({
     setExtractionStatus(draft.parsedNotes ? 'complete' : 'idle');
   }, [draft, open]);
 
-  useEffect(() => {
-    if (!open || mode === 'manual' || !uploadedFile) {
+  const handleExtractUploadedData = async () => {
+    if (!uploadedFile) {
+      setExtractionSummary('Choose a coupon or utility statement file first.');
+      setExtractionStatus('failed');
       return;
     }
 
-    let cancelled = false;
     setIsExtracting(true);
-    setExtractionStatus('ready');
-    setExtractionSummary('Reading the uploaded coupon and autofilling the review fields...');
+    setExtractionSummary('Reading the uploaded coupon and extracting receiver, amount, and date data...');
 
-    void analyzeAccountingUpload('coupon', uploadedFile)
-      .then((extraction) => {
-        if (cancelled) {
-          return;
+    try {
+      const extraction = await analyzeAccountingUpload('coupon', uploadedFile);
+      setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
+      setAmount((current) => {
+        if (current) {
+          return current;
         }
-
-        setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
-        setAmount((current) => {
-          if (current) {
-            return current;
-          }
-          return typeof extraction.amount === 'number' ? String(extraction.amount) : '';
-        });
-        setDueDate((current) => current || extraction.date || '');
-        setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
-        setParsedNotes((current) =>
-          [current, extraction.summary]
-            .filter(Boolean)
-            .filter((value, index, all) => all.indexOf(value) === index)
-            .join('\n\n'),
-        );
-        setExtractionSummary(
-          extraction.status === 'failed'
-            ? 'Extraction could not confidently read the upload. You can still edit the fields manually before submit.'
-            : `${extraction.summary} Review and edit any field before presenting the coupon.`,
-        );
-        setExtractionStatus(extraction.status === 'failed' ? 'failed' : 'complete');
-      })
-      .catch((error) => {
-        console.warn('Coupon upload extraction failed.', error);
-        if (!cancelled) {
-          setExtractionSummary(
-            'Extraction failed on this upload. You can still enter or edit the coupon fields manually.',
-          );
-          setExtractionStatus('failed');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsExtracting(false);
-        }
+        return typeof extraction.amount === 'number' ? String(extraction.amount) : '';
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, open, uploadedFile]);
+      setDueDate((current) => current || extraction.date || '');
+      setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
+      setParsedNotes((current) =>
+        [current, extraction.summary].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n\n'),
+      );
+      setExtractionSummary(
+        extraction.status === 'failed'
+          ? 'Extraction could not confidently read the upload. You can still edit the fields manually before submit.'
+          : `${extraction.summary} Review and edit any field before presenting the coupon.`,
+      );
+      setExtractionStatus(extraction.status === 'failed' ? 'failed' : 'complete');
+    } catch (error) {
+      console.warn('Coupon upload extraction failed.', error);
+      setExtractionSummary(
+        'Extraction failed on this upload. You can still enter or edit the coupon fields manually.',
+      );
+      setExtractionStatus('failed');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -251,17 +234,27 @@ export default function CouponPresentmentModal({
                 setUploadedFile(file);
                 setUploadedFileName(file?.name ?? '');
                 setExtractionSummary(
-                  file ? 'File loaded. Autofilling coupon data for review...' : '',
+                  file ? 'File loaded. Run extraction to preview and review the uploaded coupon data.' : '',
                 );
                 setExtractionStatus(file ? 'ready' : 'idle');
               }}
               style={inputStyle}
             />
-            {uploadedFileName ? (
-              <div style={{ alignSelf: 'center', color: '#94a3b8', fontSize: 13 }}>
-                {uploadedFileName}
-              </div>
-            ) : null}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => void handleExtractUploadedData()}
+                style={buttonStyle}
+                disabled={!uploadedFile || isExtracting}
+              >
+                {isExtracting ? 'Extracting...' : 'Extract Uploaded Data'}
+              </button>
+              {uploadedFileName ? (
+                <div style={{ alignSelf: 'center', color: '#94a3b8', fontSize: 13 }}>
+                  {uploadedFileName}
+                </div>
+              ) : null}
+            </div>
             {extractionSummary ? (
               <div
                 style={{
@@ -281,7 +274,6 @@ export default function CouponPresentmentModal({
                   lineHeight: 1.5,
                 }}
               >
-                {isExtracting ? 'Extracting upload. ' : ''}
                 {extractionSummary}
               </div>
             ) : null}
