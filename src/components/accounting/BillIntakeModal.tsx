@@ -94,6 +94,15 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
     setExtractionStatus('idle');
   }, [open]);
 
+  const missingFields = [
+    (mode === 'upload' || mode === 'camera') && !uploadedFile ? 'source file' : '',
+    !vendorName.trim() ? 'vendor' : '',
+    !dueDate ? 'due date' : '',
+    !amount || Number(amount) <= 0 ? 'amount' : '',
+    mode === 'manual' && !description.trim() ? 'description' : '',
+  ].filter(Boolean);
+  const canSubmit = missingFields.length === 0;
+
   const handleExtractUploadedData = async () => {
     if (!uploadedFile) {
       setExtractionSummary('Choose a bill image, PDF, or statement file first.');
@@ -308,6 +317,11 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
         )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {!canSubmit ? (
+            <div style={{ color: '#fca5a5', alignSelf: 'center', fontSize: 13 }}>
+              Complete required fields before saving: {missingFields.join(', ')}.
+            </div>
+          ) : null}
           <button type="button" onClick={onClose} style={buttonStyle}>Close</button>
           <button
             type="button"
@@ -325,6 +339,7 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
               })
             }
             style={buttonStyle}
+            disabled={!canSubmit}
           >
             Save Bill
           </button>

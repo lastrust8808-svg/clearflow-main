@@ -163,6 +163,22 @@ export default function CouponPresentmentModal({
     setExtractionStatus(draft.parsedNotes ? 'complete' : 'idle');
   }, [draft, open]);
 
+  const hasFundingSource = Boolean(
+    treasuryAccountId || sourceBankAccountId || sourceLedgerAccountId,
+  );
+  const missingFields = [
+    (mode === 'upload' || mode === 'camera') && !uploadedFile ? 'source file' : '',
+    !title.trim() ? 'presentment title' : '',
+    !couponReference.trim() ? 'coupon/reference number' : '',
+    !receiverName.trim() ? 'receiver/payee' : '',
+    !receiverAccountLabel.trim() ? 'receiver account label' : '',
+    !presentmentDate ? 'presentment date' : '',
+    !dueDate ? 'due date' : '',
+    !amount || Number(amount) <= 0 ? 'amount' : '',
+    !hasFundingSource ? 'funding source' : '',
+  ].filter(Boolean);
+  const canSubmit = missingFields.length === 0;
+
   const handleExtractUploadedData = async () => {
     if (!uploadedFile) {
       setExtractionSummary('Choose a coupon or utility statement file first.');
@@ -437,6 +453,11 @@ export default function CouponPresentmentModal({
         </div>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {!canSubmit ? (
+            <div style={{ color: '#fca5a5', alignSelf: 'center', fontSize: 13 }}>
+              Complete required fields before presenting: {missingFields.join(', ')}.
+            </div>
+          ) : null}
           <button type="button" onClick={onClose} style={buttonStyle}>Close</button>
           <button
             type="button"
@@ -462,6 +483,7 @@ export default function CouponPresentmentModal({
               })
             }
             style={buttonStyle}
+            disabled={!canSubmit}
           >
             Present Coupon
           </button>
