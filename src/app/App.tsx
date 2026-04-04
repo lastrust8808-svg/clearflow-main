@@ -44,6 +44,7 @@ const ACTIVE_ENTITY_STORAGE_KEY = 'clearflow-active-entity-v1';
 const DOCUMENT_HASH_PREFIX = '#documents:';
 const ONBOARDING_INTENT_STORAGE_KEY = 'clearflow-onboarding-intent';
 const ONBOARDING_STAGE_STORAGE_KEY = 'clearflow-onboarding-stage';
+const DEMO_ENTITY_IDS = new Set(['ent-las-trust', 'ent-rhc']);
 
 type WelcomeIntent = 'existing' | 'new';
 type PostAuthOnboardingStage = 'membership' | 'profile';
@@ -259,79 +260,142 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
   };
 }
 
-function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined): CoreDataBundle {
-  const candidate = raw ?? {};
+function stripDemoSeedData(raw: Partial<CoreDataBundle>): Partial<CoreDataBundle> {
+  const entityIds = raw.entities?.map((entity) => entity.id) ?? [];
+  if (!entityIds.length || !entityIds.every((id) => DEMO_ENTITY_IDS.has(id))) {
+    return raw;
+  }
 
   return {
-    ...coreMockData,
+    ...raw,
+    entities: [],
+    entityMarkUsageRecords: [],
+    entityConnections: [],
+    creditRails: [],
+    negotiableInstrumentRegisters: [],
+    holderLedgerEntries: [],
+    dispatchRecords: [],
+    customers: [],
+    vendors: [],
+    invoices: [],
+    bills: [],
+    receipts: [],
+    expenses: [],
+    payments: [],
+    employees: [],
+    directDepositAuthorizations: [],
+    bankAccounts: [],
+    reconciliations: [],
+    accountingPeriods: [],
+    journalEntries: [],
+    settlements: [],
+    treasuryAccounts: [],
+    instrumentSettlements: [],
+    remittanceStatements: [],
+    couponPresentments: [],
+    movementIdentifiers: [],
+    returnEvents: [],
+    reclamationEvents: [],
+    taxReportingLinks: [],
+    ledgerAccounts: [],
+    assets: [],
+    wallets: [],
+    digitalAssets: [],
+    smartContractPositions: [],
+    instruments: [],
+    obligations: [],
+    authorityRecords: [],
+    onChainTransactions: [],
+    transactions: [],
+    interEntityTransfers: [],
+    complianceTags: [],
+    municipalDisclosures: [],
+    municipalEventNotices: [],
+    kybReviews: [],
+    watchlistScreenings: [],
+    amlCases: [],
+    digitalAssetCompliance: [],
+    documents: [],
+    tokens: [],
+    bankFeedRules: [],
+    bankFeedEntries: [],
+  };
+}
+
+function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined): CoreDataBundle {
+  const candidate = stripDemoSeedData(raw ?? {});
+  const base = buildBlankBundle(candidate.entities ?? []);
+
+  return {
+    ...base,
     ...candidate,
-    entities: candidate.entities ?? coreMockData.entities,
-    entityMarkUsageRecords: candidate.entityMarkUsageRecords ?? coreMockData.entityMarkUsageRecords,
-    entityConnections: candidate.entityConnections ?? coreMockData.entityConnections,
-    creditRails: candidate.creditRails ?? coreMockData.creditRails,
+    entities: candidate.entities ?? base.entities,
+    entityMarkUsageRecords: candidate.entityMarkUsageRecords ?? base.entityMarkUsageRecords,
+    entityConnections: candidate.entityConnections ?? base.entityConnections,
+    creditRails: candidate.creditRails ?? base.creditRails,
     negotiableInstrumentRegisters:
-      candidate.negotiableInstrumentRegisters ?? coreMockData.negotiableInstrumentRegisters,
-    holderLedgerEntries: candidate.holderLedgerEntries ?? coreMockData.holderLedgerEntries,
-    dispatchRecords: candidate.dispatchRecords ?? coreMockData.dispatchRecords,
-    customers: candidate.customers ?? coreMockData.customers,
-    vendors: candidate.vendors ?? coreMockData.vendors,
-    invoices: candidate.invoices ?? coreMockData.invoices,
-    bills: candidate.bills ?? coreMockData.bills,
-    receipts: candidate.receipts ?? coreMockData.receipts,
-    expenses: candidate.expenses ?? coreMockData.expenses,
-    payments: candidate.payments ?? coreMockData.payments,
-    employees: candidate.employees ?? coreMockData.employees,
+      candidate.negotiableInstrumentRegisters ?? base.negotiableInstrumentRegisters,
+    holderLedgerEntries: candidate.holderLedgerEntries ?? base.holderLedgerEntries,
+    dispatchRecords: candidate.dispatchRecords ?? base.dispatchRecords,
+    customers: candidate.customers ?? base.customers,
+    vendors: candidate.vendors ?? base.vendors,
+    invoices: candidate.invoices ?? base.invoices,
+    bills: candidate.bills ?? base.bills,
+    receipts: candidate.receipts ?? base.receipts,
+    expenses: candidate.expenses ?? base.expenses,
+    payments: candidate.payments ?? base.payments,
+    employees: candidate.employees ?? base.employees,
     directDepositAuthorizations:
-      candidate.directDepositAuthorizations ?? coreMockData.directDepositAuthorizations,
-    bankAccounts: candidate.bankAccounts ?? coreMockData.bankAccounts,
-    reconciliations: candidate.reconciliations ?? coreMockData.reconciliations,
-    accountingPeriods: candidate.accountingPeriods ?? coreMockData.accountingPeriods,
-    journalEntries: candidate.journalEntries ?? coreMockData.journalEntries,
-    settlements: candidate.settlements ?? coreMockData.settlements,
-    treasuryAccounts: candidate.treasuryAccounts ?? coreMockData.treasuryAccounts,
+      candidate.directDepositAuthorizations ?? base.directDepositAuthorizations,
+    bankAccounts: candidate.bankAccounts ?? base.bankAccounts,
+    reconciliations: candidate.reconciliations ?? base.reconciliations,
+    accountingPeriods: candidate.accountingPeriods ?? base.accountingPeriods,
+    journalEntries: candidate.journalEntries ?? base.journalEntries,
+    settlements: candidate.settlements ?? base.settlements,
+    treasuryAccounts: candidate.treasuryAccounts ?? base.treasuryAccounts,
     instrumentSettlements:
-      candidate.instrumentSettlements ?? coreMockData.instrumentSettlements,
+      candidate.instrumentSettlements ?? base.instrumentSettlements,
     remittanceStatements:
-      candidate.remittanceStatements ?? coreMockData.remittanceStatements,
+      candidate.remittanceStatements ?? base.remittanceStatements,
     couponPresentments:
-      candidate.couponPresentments ?? coreMockData.couponPresentments,
+      candidate.couponPresentments ?? base.couponPresentments,
     movementIdentifiers:
-      candidate.movementIdentifiers ?? coreMockData.movementIdentifiers,
-    returnEvents: candidate.returnEvents ?? coreMockData.returnEvents,
+      candidate.movementIdentifiers ?? base.movementIdentifiers,
+    returnEvents: candidate.returnEvents ?? base.returnEvents,
     reclamationEvents:
-      candidate.reclamationEvents ?? coreMockData.reclamationEvents,
+      candidate.reclamationEvents ?? base.reclamationEvents,
     taxReportingLinks:
-      candidate.taxReportingLinks ?? coreMockData.taxReportingLinks,
-    ledgerAccounts: candidate.ledgerAccounts ?? coreMockData.ledgerAccounts,
-    assets: candidate.assets ?? coreMockData.assets,
-    wallets: candidate.wallets ?? coreMockData.wallets,
-    digitalAssets: candidate.digitalAssets ?? coreMockData.digitalAssets,
+      candidate.taxReportingLinks ?? base.taxReportingLinks,
+    ledgerAccounts: candidate.ledgerAccounts ?? base.ledgerAccounts,
+    assets: candidate.assets ?? base.assets,
+    wallets: candidate.wallets ?? base.wallets,
+    digitalAssets: candidate.digitalAssets ?? base.digitalAssets,
     smartContractPositions:
-      candidate.smartContractPositions ?? coreMockData.smartContractPositions,
-    instruments: candidate.instruments ?? coreMockData.instruments,
-    obligations: candidate.obligations ?? coreMockData.obligations,
-    authorityRecords: candidate.authorityRecords ?? coreMockData.authorityRecords,
-    onChainTransactions: candidate.onChainTransactions ?? coreMockData.onChainTransactions,
-    transactions: candidate.transactions ?? coreMockData.transactions,
-    interEntityTransfers: candidate.interEntityTransfers ?? coreMockData.interEntityTransfers,
-    complianceTags: candidate.complianceTags ?? coreMockData.complianceTags,
+      candidate.smartContractPositions ?? base.smartContractPositions,
+    instruments: candidate.instruments ?? base.instruments,
+    obligations: candidate.obligations ?? base.obligations,
+    authorityRecords: candidate.authorityRecords ?? base.authorityRecords,
+    onChainTransactions: candidate.onChainTransactions ?? base.onChainTransactions,
+    transactions: candidate.transactions ?? base.transactions,
+    interEntityTransfers: candidate.interEntityTransfers ?? base.interEntityTransfers,
+    complianceTags: candidate.complianceTags ?? base.complianceTags,
     municipalDisclosures:
-      candidate.municipalDisclosures ?? coreMockData.municipalDisclosures,
+      candidate.municipalDisclosures ?? base.municipalDisclosures,
     municipalEventNotices:
-      candidate.municipalEventNotices ?? coreMockData.municipalEventNotices,
-    kybReviews: candidate.kybReviews ?? coreMockData.kybReviews,
+      candidate.municipalEventNotices ?? base.municipalEventNotices,
+    kybReviews: candidate.kybReviews ?? base.kybReviews,
     watchlistScreenings:
-      candidate.watchlistScreenings ?? coreMockData.watchlistScreenings,
-    amlCases: candidate.amlCases ?? coreMockData.amlCases,
+      candidate.watchlistScreenings ?? base.watchlistScreenings,
+    amlCases: candidate.amlCases ?? base.amlCases,
     digitalAssetCompliance:
-      candidate.digitalAssetCompliance ?? coreMockData.digitalAssetCompliance,
-    documents: candidate.documents ?? coreMockData.documents,
-    tokens: candidate.tokens ?? coreMockData.tokens,
-    aiWorkflows: candidate.aiWorkflows ?? coreMockData.aiWorkflows,
-    bankFeedRules: candidate.bankFeedRules ?? coreMockData.bankFeedRules,
-    bankFeedEntries: candidate.bankFeedEntries ?? coreMockData.bankFeedEntries,
+      candidate.digitalAssetCompliance ?? base.digitalAssetCompliance,
+    documents: candidate.documents ?? base.documents,
+    tokens: candidate.tokens ?? base.tokens,
+    aiWorkflows: candidate.aiWorkflows ?? base.aiWorkflows,
+    bankFeedRules: candidate.bankFeedRules ?? base.bankFeedRules,
+    bankFeedEntries: candidate.bankFeedEntries ?? base.bankFeedEntries,
     workspaceSettings: {
-      ...coreMockData.workspaceSettings,
+      ...base.workspaceSettings,
       ...(candidate.workspaceSettings ?? {}),
     },
   };
@@ -620,7 +684,7 @@ export default function App({
     useState<PostAuthOnboardingStage>(() => loadStoredOnboardingStage());
   const [activeSection, setActiveSection] = useState<AppSection>('overview');
   const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
-  const [data, setData] = useState<CoreDataBundle>(coreMockData);
+  const [data, setData] = useState<CoreDataBundle>(buildBlankBundle([]));
   const hydratedUserIdRef = useRef<string | null>(null);
   const initializedSectionUserIdRef = useRef<string | null>(null);
   const lastProofChainSignatureRef = useRef<string | null>(null);
@@ -645,7 +709,7 @@ export default function App({
     if (auth.authStatus === 'unauthenticated') {
       setActiveSection('overview');
       setActiveEntityId(null);
-      setData(coreMockData);
+      setData(buildBlankBundle([]));
       setDocumentVaultScope(null);
       hydratedUserIdRef.current = null;
       initializedSectionUserIdRef.current = null;
