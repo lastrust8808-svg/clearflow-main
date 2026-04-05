@@ -9,6 +9,7 @@ import { buildRemittanceRailControls } from '../../services/settlementRailing.se
 import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
+import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -74,6 +75,12 @@ export default function OverviewPage({
   const remittanceRailControls = buildRemittanceRailControls(data);
   const privateWealthRailSummaries = buildPrivateWealthRailSummaries(data);
   const transactionProofChains = buildTransactionProofChainViews(data);
+  const capitalSummary = buildCapitalStrategySummary({
+    borrowingFacilities: data.borrowingFacilities,
+    collateralHoldings: data.collateralHoldings,
+    futuresStrategies: data.futuresStrategies,
+    liquidationPlans: data.liquidationPlans,
+  });
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -341,6 +348,10 @@ export default function OverviewPage({
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Treasury Accounts" value={data.treasuryAccounts.length} />
         <StatCard label="Private Treasury Only" value={privateTreasuryCount} />
+        <StatCard label="Borrowing Facilities" value={data.borrowingFacilities.length} />
+        <StatCard label="Collateral Holdings" value={data.collateralHoldings.length} />
+        <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
+        <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="Instrument Discharges" value={instrumentDischargeCount} />
         <StatCard label="Liquid Cash Ready" value={liquidCashReadyCount} />
         <StatCard label="Auto Reconciled" value={autoReconciledCount} />
@@ -380,6 +391,77 @@ export default function OverviewPage({
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Capital Strategy"
+        description="Borrowing, collateral, futures overlays, and liquidation planning now sit alongside treasury and settlement in the operating view."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Borrowing & Collateral"
+            subtitle={`${data.borrowingFacilities.length} facilities | ${data.collateralHoldings.length} collateral positions`}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Borrowed / drawn: ${capitalSummary.activeBorrowingExposure.toLocaleString()}</div>
+              <div>Available capacity: ${capitalSummary.availableBorrowingCapacity.toLocaleString()}</div>
+              <div>Pledged collateral: ${capitalSummary.pledgedCollateralValue.toLocaleString()}</div>
+              <div>Coverage value: ${capitalSummary.collateralCoverageValue.toLocaleString()}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('#assets')}
+              style={{
+                marginTop: 14,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Open Capital Rails
+            </button>
+          </RecordCard>
+
+          <RecordCard
+            title="Futures & Liquidation"
+            subtitle={`${data.futuresStrategies.length} strategies | ${data.liquidationPlans.length} plans`}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Futures notional: ${capitalSummary.activeFuturesNotional.toLocaleString()}</div>
+              <div>Margin posted: ${capitalSummary.activeFuturesMargin.toLocaleString()}</div>
+              <div>Liquidation target: ${capitalSummary.liquidationTargetAmount.toLocaleString()}</div>
+              <div>Blocked plans: {capitalSummary.blockedLiquidationCount}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('#aiStudio')}
+              style={{
+                marginTop: 14,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Open Capital Studio
+            </button>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Tax & Postal Connections"

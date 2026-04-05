@@ -2860,6 +2860,149 @@ ${liquidations
     void appendDocument(document);
   };
 
+  const launchBorrowingFacilityPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Borrowing Facility Packet`,
+      category: 'financial',
+      summary:
+        'Borrowing facility setup packet for lender terms, draw logic, collateral, treasury linkage, and covenant tracking.',
+      retentionClass: 'financial_evidence',
+      body: `# Borrowing Facility Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Intake Fields
+- Facility type
+- Commitment amount and draw logic
+- Lender / internal treasury source
+- Maturity and pricing
+- Collateral requirement and margin thresholds
+- Linked treasury account and ledger account
+- Draw purpose: working capital, bond purchase, futures margin, or general liquidity
+
+## Control Goals
+- Tie the facility to obligations and treasury accounts.
+- Track collateral support and liquidation fallback before overusing operating cash.
+- Preserve evidence for lender terms, approvals, and draw decisions.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchCollateralControlPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Collateral Control Packet`,
+      category: 'financial',
+      summary:
+        'Collateral control packet for pledged holdings, lendable value, liquidation priority, and facility support.',
+      retentionClass: 'financial_evidence',
+      body: `# Collateral Control Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Intake Fields
+- Holding label and collateral type
+- Market value and lendable value
+- Advance rate and haircut
+- Margin requirement
+- Linked borrowing facility or treasury reserve
+- Liquidation priority
+
+## Control Goals
+- Separate available holdings from pledged or margin-locked holdings.
+- Tie collateral coverage back into borrowing capacity and liquidation plans.
+- Preserve support documents, valuation references, and release conditions.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchFuturesOverlayPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Futures Overlay Packet`,
+      category: 'financial',
+      summary:
+        'Futures strategy packet for hedge purpose, contract mapping, margin usage, and liquidity planning.',
+      retentionClass: 'financial_evidence',
+      body: `# Futures Overlay Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Intake Fields
+- Strategy type and objective
+- Underlying exposure
+- Contract market and code
+- Position side and notional
+- Margin posted and treasury source
+- Realized / unrealized P&L posture
+- Linked collateral sleeve and liquidation support
+
+## Control Goals
+- Keep futures overlays tied to real asset exposure and treasury liquidity.
+- Distinguish hedge and liquidity overlays from speculative positions.
+- Tie margin support back to collateral and liquidation planning.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchLiquidationPlanPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Liquidation Planning Packet`,
+      category: 'financial',
+      summary:
+        'Liquidation planning packet for working-capital, bond-purchase, debt-paydown, and futures-margin cashflow support.',
+      retentionClass: 'financial_evidence',
+      body: `# Liquidation Planning Packet
+
+Entity: ${primaryEntity.displayName || primaryEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Intake Fields
+- Objective and target amount
+- Projected net proceeds
+- Assets, collateral, and digital positions in scope
+- Settlement path preference
+- Liquidation method
+- Treasury destination
+- Blocking issues and fallback sequence
+
+## Control Goals
+- Avoid breaking operating cash when collateral draw or staged liquidation is better.
+- Tie liquidation planning into treasury, settlement, and borrowing rails.
+- Preserve operator support for approvals, sequencing, and proceeds assumptions.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchOperationsExceptionReport = () => {
     if (!reportEntity) {
       return;
@@ -3930,6 +4073,38 @@ ${scopedCases
       lane: 'operations',
       actionLabel: 'Create Banking Packet',
       onAction: launchBusinessBankingPacket,
+    },
+    {
+      title: 'Borrowing Facility Packet',
+      subtitle: 'Lender terms, draws, and treasury linkage',
+      detail: 'Create a borrowing-facility packet for commitment sizing, collateral support, treasury mapping, and covenant controls.',
+      lane: 'operations',
+      actionLabel: 'Create Facility Packet',
+      onAction: launchBorrowingFacilityPacket,
+    },
+    {
+      title: 'Collateral Control Packet',
+      subtitle: 'Pledged holdings and liquidation support',
+      detail: 'Create a collateral-control packet for lendable value, margin support, liquidation order, and facility linkage.',
+      lane: 'ledger',
+      actionLabel: 'Create Collateral Packet',
+      onAction: launchCollateralControlPacket,
+    },
+    {
+      title: 'Futures Overlay Packet',
+      subtitle: 'Hedge, carry, and liquidity overlay support',
+      detail: 'Create a futures strategy packet tied to asset exposure, margin usage, and treasury/cashflow planning.',
+      lane: 'ledger',
+      actionLabel: 'Create Futures Packet',
+      onAction: launchFuturesOverlayPacket,
+    },
+    {
+      title: 'Liquidation Planning Packet',
+      subtitle: 'Cashflow, bond purchase, and margin support',
+      detail: 'Create a liquidation-planning packet that sequences collateral draw, sale, or tokenized liquidation before operating cash is stressed.',
+      lane: 'operations',
+      actionLabel: 'Create Liquidation Packet',
+      onAction: launchLiquidationPlanPacket,
     },
     {
       title: 'Municipal Security Intake',
