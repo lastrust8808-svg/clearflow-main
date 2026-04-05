@@ -68,6 +68,50 @@ export type InstrumentType =
   | 'custody_record'
   | 'other';
 
+export type BorrowingFacilityType =
+  | 'revolving_credit'
+  | 'term_loan'
+  | 'secured_margin'
+  | 'bond_program'
+  | 'private_credit_line'
+  | 'other';
+
+export type BorrowingFacilityStatus =
+  | 'draft'
+  | 'active'
+  | 'watch'
+  | 'matured'
+  | 'closed';
+
+export type CollateralHoldingStatus =
+  | 'available'
+  | 'pledged'
+  | 'margin_locked'
+  | 'liquidating'
+  | 'released';
+
+export type FuturesStrategyType =
+  | 'hedge'
+  | 'basis_trade'
+  | 'carry'
+  | 'liquidity_overlay'
+  | 'speculative'
+  | 'other';
+
+export type FuturesStrategyStatus =
+  | 'draft'
+  | 'active'
+  | 'watch'
+  | 'closed'
+  | 'liquidated';
+
+export type LiquidationPlanStatus =
+  | 'ready'
+  | 'watch'
+  | 'blocked'
+  | 'in_progress'
+  | 'completed';
+
 export type AuthorityRecordType =
   | 'attorney_of_record'
   | 'private_representative'
@@ -1299,6 +1343,96 @@ export interface TreasuryAccountRecord {
   notes?: string;
 }
 
+export interface BorrowingFacilityRecord {
+  id: string;
+  entityId: string;
+  facilityName: string;
+  facilityType: BorrowingFacilityType;
+  status: BorrowingFacilityStatus;
+  lenderName?: string;
+  currency: string;
+  commitmentAmount: number;
+  drawnAmount: number;
+  availableAmount?: number;
+  interestRate?: number;
+  maturityDate?: string;
+  collateralRequirement?: string;
+  linkedObligationIds?: string[];
+  linkedTreasuryAccountId?: string;
+  linkedLedgerAccountId?: string;
+  linkedCollateralHoldingIds?: string[];
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
+export interface CollateralHoldingRecord {
+  id: string;
+  entityId: string;
+  holdingLabel: string;
+  status: CollateralHoldingStatus;
+  collateralType: 'cash' | 'security' | 'bond' | 'digital_asset' | 'receivable' | 'other';
+  marketValue: number;
+  advanceRate?: number;
+  lendableValue?: number;
+  marginRequirement?: number;
+  linkedAssetId?: string;
+  linkedInstrumentId?: string;
+  linkedBorrowingFacilityId?: string;
+  linkedTreasuryAccountId?: string;
+  liquidationPriority?: number;
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
+export interface FuturesStrategyRecord {
+  id: string;
+  entityId: string;
+  strategyName: string;
+  strategyType: FuturesStrategyType;
+  status: FuturesStrategyStatus;
+  underlyingExposure: string;
+  contractMarket?: string;
+  contractCode?: string;
+  positionSide: 'long' | 'short' | 'spread' | 'hedged';
+  notionalExposure: number;
+  marginPosted: number;
+  realizedPnl?: number;
+  unrealizedPnl?: number;
+  linkedAssetIds?: string[];
+  linkedBorrowingFacilityId?: string;
+  linkedCollateralHoldingIds?: string[];
+  linkedTreasuryAccountId?: string;
+  linkedLedgerAccountIds?: string[];
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
+export interface LiquidationPlanRecord {
+  id: string;
+  entityId: string;
+  planName: string;
+  status: LiquidationPlanStatus;
+  objective:
+    | 'working_capital'
+    | 'margin_support'
+    | 'debt_paydown'
+    | 'bond_purchase'
+    | 'futures_margin'
+    | 'general_cashflow';
+  targetAmount: number;
+  projectedNetProceeds?: number;
+  linkedAssetIds?: string[];
+  linkedDigitalAssetIds?: string[];
+  linkedCollateralHoldingIds?: string[];
+  linkedBorrowingFacilityIds?: string[];
+  linkedFuturesStrategyIds?: string[];
+  linkedTreasuryAccountId?: string;
+  settlementPathPreference?: SettlementPath;
+  liquidationMethod?: 'sale' | 'pledge_draw' | 'repo' | 'tokenized_liquidation' | 'manual_review';
+  linkedDocumentIds?: string[];
+  notes?: string;
+}
+
 export interface InstrumentSettlementRecord {
   id: string;
   entityId: string;
@@ -1996,6 +2130,10 @@ export interface CoreDataBundle {
   journalEntries: JournalEntryRecord[];
   settlements: SettlementRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
+  borrowingFacilities: BorrowingFacilityRecord[];
+  collateralHoldings: CollateralHoldingRecord[];
+  futuresStrategies: FuturesStrategyRecord[];
+  liquidationPlans: LiquidationPlanRecord[];
   instrumentSettlements: InstrumentSettlementRecord[];
   remittanceStatements: RemittanceStatementRecord[];
   couponPresentments: CouponPresentmentRecord[];

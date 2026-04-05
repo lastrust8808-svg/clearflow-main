@@ -1,5 +1,7 @@
 import type {
   BillRecord,
+  BorrowingFacilityRecord,
+  CollateralHoldingRecord,
   ComplianceTagRecord,
   DigitalAssetRecord,
   DirectDepositAuthorizationRecord,
@@ -15,11 +17,14 @@ import type {
   ReturnEventRecord,
   TaxReportingLinkRecord,
   TreasuryAccountRecord,
+  FuturesStrategyRecord,
+  LiquidationPlanRecord,
   WorkspaceSettingsRecord,
 } from '../../types/core';
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
 import { buildEntityMarkRailViews } from '../../services/entityMarkRail.service';
+import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import type { AccountingStats, JournalDraft } from './accountingTypes';
@@ -45,6 +50,10 @@ interface AccountingDashboardSectionProps {
   entityMarkUsageRecords: EntityMarkUsageRecord[];
   digitalAssets: DigitalAssetRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
+  borrowingFacilities: BorrowingFacilityRecord[];
+  collateralHoldings: CollateralHoldingRecord[];
+  futuresStrategies: FuturesStrategyRecord[];
+  liquidationPlans: LiquidationPlanRecord[];
   workspaceSettings: WorkspaceSettingsRecord;
   onNavigate?: (hash: string) => void;
 }
@@ -70,6 +79,10 @@ export default function AccountingDashboardSection({
   entityMarkUsageRecords,
   digitalAssets,
   treasuryAccounts,
+  borrowingFacilities,
+  collateralHoldings,
+  futuresStrategies,
+  liquidationPlans,
   workspaceSettings,
   onNavigate,
 }: AccountingDashboardSectionProps) {
@@ -208,6 +221,12 @@ export default function AccountingDashboardSection({
     (item) => item.liquidationFocus && item.liquidationFocus !== 'none',
   ).length;
   const markCurrency = entityMarkUsageRecords[0]?.currency || workspaceSettings.baseCurrency || 'USD';
+  const capitalSummary = buildCapitalStrategySummary({
+    borrowingFacilities,
+    collateralHoldings,
+    futuresStrategies,
+    liquidationPlans,
+  });
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -324,6 +343,60 @@ export default function AccountingDashboardSection({
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Capital Strategy"
+        description="Borrowing, collateral, futures overlays, and liquidation planning tied back to ERP cashflow and settlement readiness."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <StatCard label="Borrowed / Drawn" value={capitalSummary.activeBorrowingExposure.toLocaleString()} />
+            <StatCard label="Capacity" value={capitalSummary.availableBorrowingCapacity.toLocaleString()} />
+            <StatCard label="Pledged Collateral" value={capitalSummary.pledgedCollateralValue.toLocaleString()} />
+            <StatCard label="Coverage" value={capitalSummary.collateralCoverageValue.toLocaleString()} />
+            <StatCard label="Futures Notional" value={capitalSummary.activeFuturesNotional.toLocaleString()} />
+            <StatCard label="Margin Posted" value={capitalSummary.activeFuturesMargin.toLocaleString()} />
+            <StatCard label="Liquidation Target" value={capitalSummary.liquidationTargetAmount.toLocaleString()} />
+            <StatCard label="Blocked Plans" value={capitalSummary.blockedLiquidationCount} />
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {borrowingFacilities.slice(0, 2).map((facility) => (
+              <div key={facility.id} style={infoCardStyle}>
+                <div style={{ fontWeight: 700 }}>
+                  {facility.facilityName} | {facility.facilityType} | {facility.status}
+                </div>
+                <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                  Drawn {facility.currency} {facility.drawnAmount.toLocaleString()} of {facility.commitmentAmount.toLocaleString()}
+                </div>
+                <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                  {facility.collateralRequirement || facility.notes || 'Collateral and facility logic not yet documented.'}
+                </div>
+              </div>
+            ))}
+            {liquidationPlans.slice(0, 2).map((plan) => (
+              <div key={plan.id} style={infoCardStyle}>
+                <div style={{ fontWeight: 700 }}>
+                  {plan.planName} | {plan.objective} | {plan.status}
+                </div>
+                <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                  Target {workspaceSettings.baseCurrency} {plan.targetAmount.toLocaleString()} | projected {(
+                    plan.projectedNetProceeds ?? plan.targetAmount
+                  ).toLocaleString()}
+                </div>
+                <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                  {plan.notes || 'Liquidation path not yet documented.'}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </PageSection>

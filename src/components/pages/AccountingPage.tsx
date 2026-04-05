@@ -7096,6 +7096,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             entityMarkUsageRecords={data.entityMarkUsageRecords}
             digitalAssets={data.digitalAssets}
             treasuryAccounts={data.treasuryAccounts}
+            borrowingFacilities={data.borrowingFacilities}
+            collateralHoldings={data.collateralHoldings}
+            futuresStrategies={data.futuresStrategies}
+            liquidationPlans={data.liquidationPlans}
             workspaceSettings={data.workspaceSettings}
             onNavigate={navigateToHash}
           />

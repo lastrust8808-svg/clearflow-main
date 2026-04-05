@@ -2801,6 +2801,65 @@ ${data.settlements
     void appendDocument(document);
   };
 
+  const launchCapitalStrategyReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const facilities = data.borrowingFacilities.filter((item) => item.entityId === reportEntity.id);
+    const collateral = data.collateralHoldings.filter((item) => item.entityId === reportEntity.id);
+    const futures = data.futuresStrategies.filter((item) => item.entityId === reportEntity.id);
+    const liquidations = data.liquidationPlans.filter((item) => item.entityId === reportEntity.id);
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Capital Strategy Report`,
+      category: 'financial',
+      summary:
+        'Borrowing, collateral, futures overlay, and liquidation planning report for working capital and reserve-aware execution.',
+      retentionClass: 'financial_evidence',
+      body: `# Capital Strategy Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+Scope Window: ${reportWindowLabel}
+
+## Borrowing Facilities
+${facilities
+  .map(
+    (item) =>
+      `- ${item.facilityName} | ${item.facilityType} | ${item.status} | drawn ${item.currency} ${item.drawnAmount.toLocaleString()} of ${item.commitmentAmount.toLocaleString()} | available ${(item.availableAmount ?? Math.max(0, item.commitmentAmount - item.drawnAmount)).toLocaleString()}`,
+  )
+  .join('\n') || '- No borrowing facilities are currently recorded.'}
+
+## Collateral Holdings
+${collateral
+  .map(
+    (item) =>
+      `- ${item.holdingLabel} | ${item.collateralType} | ${item.status} | market ${item.marketValue.toLocaleString()} | lendable ${(item.lendableValue ?? item.marketValue).toLocaleString()} | priority ${item.liquidationPriority ?? 'not set'}`,
+  )
+  .join('\n') || '- No collateral holdings are currently recorded.'}
+
+## Futures Strategies
+${futures
+  .map(
+    (item) =>
+      `- ${item.strategyName} | ${item.strategyType} | ${item.positionSide} | notional ${item.notionalExposure.toLocaleString()} | margin ${item.marginPosted.toLocaleString()} | unrealized ${(item.unrealizedPnl ?? 0).toLocaleString()}`,
+  )
+  .join('\n') || '- No futures strategies are currently recorded.'}
+
+## Liquidation Plans
+${liquidations
+  .map(
+    (item) =>
+      `- ${item.planName} | ${item.objective} | ${item.status} | target ${item.targetAmount.toLocaleString()} | projected ${(item.projectedNetProceeds ?? item.targetAmount).toLocaleString()} | method ${item.liquidationMethod || 'manual_review'}`,
+  )
+  .join('\n') || '- No liquidation plans are currently recorded.'}
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchOperationsExceptionReport = () => {
     if (!reportEntity) {
       return;
@@ -4261,6 +4320,13 @@ ${scopedCases
       detail: 'Create a treasury report across reserve accounts, linked banks, and reserve-backed settlements.',
       actionLabel: 'Create Treasury Report',
       onAction: launchTreasuryReserveReport,
+    },
+    {
+      title: 'Capital Strategy Report',
+      subtitle: 'Borrowing, collateral, futures, and liquidation posture',
+      detail: 'Create a capital-strategy report across borrowing facilities, pledged collateral, futures overlays, and liquidation planning.',
+      actionLabel: 'Create Capital Report',
+      onAction: launchCapitalStrategyReport,
     },
     {
       title: 'Operations Exception Report',

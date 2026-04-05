@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
+import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -34,6 +35,12 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const municipalEventWatchCount = data.municipalEventNotices.filter(
     (item) => item.severity === 'watch' || item.severity === 'critical' || item.status === 'open',
   ).length;
+  const capitalSummary = buildCapitalStrategySummary({
+    borrowingFacilities: data.borrowingFacilities,
+    collateralHoldings: data.collateralHoldings,
+    futuresStrategies: data.futuresStrategies,
+    liquidationPlans: data.liquidationPlans,
+  });
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -56,13 +63,166 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Municipal / Fixed Income" value={municipalCount} />
         <StatCard label="Disclosure Reviews" value={municipalDisclosureReviews.length} />
         <StatCard label="Event Watch" value={municipalEventWatchCount} />
+        <StatCard label="Borrowing Facilities" value={data.borrowingFacilities.length} />
+        <StatCard label="Collateral Holdings" value={data.collateralHoldings.length} />
+        <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
+        <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
         <StatCard label="Assigned Tokens" value={data.tokens.length} />
       </div>
 
+      <PageSection
+        title="Capital & Liquidation Rails"
+        description="Borrowing exposure, pledged collateral, futures overlays, and liquidation planning tied back into treasury and ERP cashflow."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <StatCard label="Borrowed / Drawn" value={capitalSummary.activeBorrowingExposure.toLocaleString()} />
+          <StatCard label="Borrowing Capacity" value={capitalSummary.availableBorrowingCapacity.toLocaleString()} />
+          <StatCard label="Pledged Collateral" value={capitalSummary.pledgedCollateralValue.toLocaleString()} />
+          <StatCard label="Coverage Value" value={capitalSummary.collateralCoverageValue.toLocaleString()} />
+          <StatCard label="Futures Notional" value={capitalSummary.activeFuturesNotional.toLocaleString()} />
+          <StatCard label="Futures Margin" value={capitalSummary.activeFuturesMargin.toLocaleString()} />
+          <StatCard label="Liquidation Target" value={capitalSummary.liquidationTargetAmount.toLocaleString()} />
+          <StatCard label="Blocked Plans" value={capitalSummary.blockedLiquidationCount} />
+        </div>
+      </PageSection>
+
       <WalletConnectionWorkspace data={data} setData={setData} />
+
+      <PageSection
+        title="Borrowing & Collateral"
+        description="Facilities, collateral support, and borrowing capacity for working capital, bond purchases, and reserve-backed cashflow."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.borrowingFacilities.map((facility) => (
+            <WorkbenchRecordCard
+              key={facility.id}
+              title={facility.facilityName}
+              subtitle={`${facility.facilityType} | ${facility.status}`}
+              summaryItems={[
+                { label: 'Lender', value: facility.lenderName || 'Internal / not set' },
+                { label: 'Commitment', value: facility.commitmentAmount.toLocaleString() },
+                { label: 'Drawn', value: facility.drawnAmount.toLocaleString() },
+                {
+                  label: 'Available',
+                  value: (facility.availableAmount ?? Math.max(0, facility.commitmentAmount - facility.drawnAmount)).toLocaleString(),
+                },
+                { label: 'Rate / Maturity', value: facility.interestRate ? `${facility.interestRate}% | ${facility.maturityDate || 'no maturity'}` : facility.maturityDate || 'not set' },
+              ]}
+              record={facility}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  borrowingFacilities: prev.borrowingFacilities.map((item) =>
+                    item.id === facility.id ? nextRecord : item,
+                  ),
+                }))
+              }
+            >
+              {facility.notes || facility.collateralRequirement || 'Maintain facility, lender, and collateral support details here.'}
+            </WorkbenchRecordCard>
+          ))}
+
+          {data.collateralHoldings.map((holding) => (
+            <WorkbenchRecordCard
+              key={holding.id}
+              title={holding.holdingLabel}
+              subtitle={`${holding.collateralType} | ${holding.status}`}
+              summaryItems={[
+                { label: 'Market Value', value: holding.marketValue.toLocaleString() },
+                {
+                  label: 'Lendable Value',
+                  value: (holding.lendableValue ?? holding.marketValue).toLocaleString(),
+                },
+                { label: 'Advance Rate', value: holding.advanceRate ? `${holding.advanceRate}%` : 'not set' },
+                { label: 'Margin', value: holding.marginRequirement?.toLocaleString() || 'not set' },
+                { label: 'Priority', value: String(holding.liquidationPriority ?? 'not set') },
+              ]}
+              record={holding}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  collateralHoldings: prev.collateralHoldings.map((item) =>
+                    item.id === holding.id ? nextRecord : item,
+                  ),
+                }))
+              }
+            >
+              {holding.notes || 'Use advanced edit to maintain pledge, margin, and liquidation priority details.'}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Futures & Liquidation Planning"
+        description="Overlay strategies and liquidation paths that feed credits, purchases, and working-capital decisions."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {data.futuresStrategies.map((strategy) => (
+            <WorkbenchRecordCard
+              key={strategy.id}
+              title={strategy.strategyName}
+              subtitle={`${strategy.strategyType} | ${strategy.status} | ${strategy.positionSide}`}
+              summaryItems={[
+                { label: 'Underlying', value: strategy.underlyingExposure },
+                { label: 'Contract', value: strategy.contractCode || strategy.contractMarket || 'not set' },
+                { label: 'Notional', value: strategy.notionalExposure.toLocaleString() },
+                { label: 'Margin', value: strategy.marginPosted.toLocaleString() },
+                {
+                  label: 'P&L',
+                  value: `${(strategy.realizedPnl || 0).toLocaleString()} / ${(strategy.unrealizedPnl || 0).toLocaleString()}`,
+                },
+              ]}
+              record={strategy}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  futuresStrategies: prev.futuresStrategies.map((item) =>
+                    item.id === strategy.id ? nextRecord : item,
+                  ),
+                }))
+              }
+            >
+              {strategy.notes || 'Use advanced edit to maintain hedge purpose, margin posture, and linked treasury accounts.'}
+            </WorkbenchRecordCard>
+          ))}
+
+          {data.liquidationPlans.map((plan) => (
+            <WorkbenchRecordCard
+              key={plan.id}
+              title={plan.planName}
+              subtitle={`${plan.objective} | ${plan.status}`}
+              summaryItems={[
+                { label: 'Target', value: plan.targetAmount.toLocaleString() },
+                { label: 'Projected Proceeds', value: (plan.projectedNetProceeds ?? plan.targetAmount).toLocaleString() },
+                { label: 'Method', value: plan.liquidationMethod || 'manual review' },
+                { label: 'Settlement Path', value: plan.settlementPathPreference || 'not set' },
+                { label: 'Linked Futures', value: String(plan.linkedFuturesStrategyIds?.length || 0) },
+              ]}
+              record={plan}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  liquidationPlans: prev.liquidationPlans.map((item) =>
+                    item.id === plan.id ? nextRecord : item,
+                  ),
+                }))
+              }
+            >
+              {plan.notes || 'Use advanced edit to keep liquidation sequencing and proceeds assumptions current.'}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Marketable Securities & Muni Ledger"
