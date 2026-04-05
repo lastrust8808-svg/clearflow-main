@@ -68,6 +68,13 @@ export interface CounterpartySubmitPayload {
   phone: string;
   address: string;
   notes: string;
+  sourceProfileId?: string;
+  sourceProfileLabel?: string;
+  sourceProfileType?: 'directory_profile' | 'preset_profile' | 'manual_match';
+  sourceCanonicalName?: string;
+  sourceLocationId?: string;
+  sourceTaxId?: string;
+  sourcePublicProfileUrl?: string;
   routingNumber?: string;
   accountNumber?: string;
   bankName?: string;

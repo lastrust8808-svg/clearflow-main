@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { CounterpartySubmitPayload } from './accountingTypes';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
+import {
+  searchVendorDirectory,
+  type VendorDirectoryProfile,
+} from '../../services/vendorDirectory.service';
 
 interface CounterpartyModalProps {
   open: boolean;
@@ -110,6 +114,9 @@ export default function CounterpartyModal({
   const [contractFile, setContractFile] = useState<File | null>(null);
   const [contractExtractionStatus, setContractExtractionStatus] = useState('');
   const [isContractExtracting, setIsContractExtracting] = useState(false);
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('');
+  const [vendorSearchResults, setVendorSearchResults] = useState<VendorDirectoryProfile[]>([]);
+  const [selectedVendorProfile, setSelectedVendorProfile] = useState<VendorDirectoryProfile | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -147,7 +154,24 @@ export default function CounterpartyModal({
     setContractFile(null);
     setContractExtractionStatus('');
     setIsContractExtracting(false);
+    setVendorSearchQuery('');
+    setVendorSearchResults([]);
+    setSelectedVendorProfile(null);
   }, [open, mode]);
+
+  useEffect(() => {
+    if (!open || mode !== 'vendor') {
+      return;
+    }
+
+    const trimmed = vendorSearchQuery.trim();
+    if (trimmed.length < 2) {
+      setVendorSearchResults([]);
+      return;
+    }
+
+    setVendorSearchResults(searchVendorDirectory(trimmed).slice(0, 6));
+  }, [mode, open, vendorSearchQuery]);
 
   useEffect(() => {
     if (
@@ -237,6 +261,79 @@ export default function CounterpartyModal({
                 background: 'rgba(8,47,73,0.28)',
               }}
             >
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  padding: 14,
+                  borderRadius: 12,
+                  border: '1px solid rgba(125,211,252,0.28)',
+                  background: 'rgba(8,47,73,0.22)',
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#bae6fd' }}>
+                  Search payee source
+                </div>
+                <div style={{ color: '#cbd5f5', fontSize: 13 }}>
+                  Search a source-backed payee profile first, then save only the selected vendor connection into this workspace.
+                </div>
+                <input
+                  value={vendorSearchQuery}
+                  onChange={(e) => setVendorSearchQuery(e.target.value)}
+                  placeholder="Search payee name, alias, location id, or phone"
+                  style={inputStyle}
+                />
+                {vendorSearchResults.length > 0 ? (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {vendorSearchResults.map((profile) => (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVendorProfile(profile);
+                          setName(profile.canonicalName);
+                          setPhone(profile.phone || '');
+                          setAddress(profile.remitAddress || '');
+                          setOrganizationClass(profile.organizationClass || 'general');
+                          setNotes((current) =>
+                            current.trim()
+                              ? current
+                              : `Connected from ${profile.sourceLabel}${profile.locationId ? ` | location ${profile.locationId}` : ''}.`
+                          );
+                        }}
+                        style={{
+                          ...buttonStyle,
+                          textAlign: 'left',
+                          display: 'grid',
+                          gap: 4,
+                          background:
+                            selectedVendorProfile?.id === profile.id
+                              ? 'rgba(14,116,144,0.32)'
+                              : 'rgba(15,23,42,0.4)',
+                          borderColor:
+                            selectedVendorProfile?.id === profile.id
+                              ? 'rgba(125,211,252,0.45)'
+                              : 'rgba(148,163,184,0.25)',
+                        }}
+                      >
+                        <span style={{ fontWeight: 700 }}>{profile.canonicalName}</span>
+                        <span style={{ color: '#cbd5e1', fontSize: 13 }}>
+                          {profile.sourceLabel}
+                          {profile.locationId ? ` | ${profile.locationId}` : ''}
+                          {profile.taxId ? ` | EIN ${profile.taxId}` : ''}
+                        </span>
+                        <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                          {profile.remitAddress || profile.phone || profile.deliveryDescriptor || 'Source-backed payee profile'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : vendorSearchQuery.trim().length >= 2 ? (
+                  <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                    No source-backed payee profile matched. You can still save a manual vendor.
+                  </div>
+                ) : null}
+              </div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#99f6e4' }}>
                 Remittance instructions
               </div>
@@ -571,6 +668,13 @@ export default function CounterpartyModal({
                 phone,
                 address,
                 notes,
+                sourceProfileId: selectedVendorProfile?.id,
+                sourceProfileLabel: selectedVendorProfile?.sourceLabel,
+                sourceProfileType: selectedVendorProfile?.sourceType || 'manual_match',
+                sourceCanonicalName: selectedVendorProfile?.canonicalName,
+                sourceLocationId: selectedVendorProfile?.locationId,
+                sourceTaxId: selectedVendorProfile?.taxId,
+                sourcePublicProfileUrl: selectedVendorProfile?.publicProfileUrl,
                 routingNumber: routingNumber || undefined,
                 accountNumber: accountNumber || undefined,
                 bankName: bankName || undefined,

@@ -621,6 +621,13 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       phone?: string;
       address?: string;
       notes?: string;
+      sourceProfileId?: string;
+      sourceProfileLabel?: string;
+      sourceProfileType?: 'directory_profile' | 'preset_profile' | 'manual_match';
+      sourceCanonicalName?: string;
+      sourceLocationId?: string;
+      sourceTaxId?: string;
+      sourcePublicProfileUrl?: string;
       routingNumber?: string;
       accountNumber?: string;
       bankName?: string;
@@ -686,6 +693,19 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       ...(detectedPreset?.referenceLinks || []),
       ...(payload.referenceLinks || []),
     ].filter((value, index, all) => all.indexOf(value) === index);
+    const vendorSourceProfile =
+      payload.sourceProfileId || payload.sourceLocationId || payload.sourceTaxId
+        ? {
+            sourceId: payload.sourceProfileId || `manual-source-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            sourceLabel: payload.sourceProfileLabel || 'Manual payee match',
+            sourceType: payload.sourceProfileType || 'manual_match',
+            canonicalName: payload.sourceCanonicalName || normalizedName,
+            locationId: payload.sourceLocationId || undefined,
+            taxId: payload.sourceTaxId || undefined,
+            publicProfileUrl: payload.sourcePublicProfileUrl || undefined,
+            matchedAt: new Date().toISOString(),
+          }
+        : undefined;
     const paymentInstructions =
       payload.routingNumber || payload.accountNumber || payload.bankName || payload.beneficiaryName
         ? {
@@ -966,6 +986,12 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
                 email: payload.email || record.email,
                 phone: resolvedPhone || record.phone,
                 remitAddress: resolvedAddress || record.remitAddress,
+                vendorSourceProfile: vendorSourceProfile
+                  ? {
+                      ...record.vendorSourceProfile,
+                      ...vendorSourceProfile,
+                    }
+                  : record.vendorSourceProfile,
                 notes: mergedNotes || record.notes,
                 paymentInstructions: paymentInstructions
                   ? {
@@ -1024,6 +1050,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           email: payload.email || undefined,
           phone: resolvedPhone || undefined,
           remitAddress: resolvedAddress || undefined,
+          vendorSourceProfile,
           status: 'active' as const,
           paymentInstructions,
           counterpartyTermsProfile,
@@ -7330,12 +7357,15 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               emptyMessage="No vendor records yet."
               records={vendors}
               getTitle={(record) => record.name ?? record.id}
-              getSubtitle={(record) =>
-                [
-                  record.status ?? 'active',
-                  record.counterpartyTermsProfile?.organizationClass
-                    ? `terms ${record.counterpartyTermsProfile.organizationClass}`
-                    : 'terms pending',
+                getSubtitle={(record) =>
+                  [
+                    record.status ?? 'active',
+                    record.vendorSourceProfile?.sourceLabel
+                      ? `source ${record.vendorSourceProfile.sourceLabel}`
+                      : 'source manual',
+                    record.counterpartyTermsProfile?.organizationClass
+                      ? `terms ${record.counterpartyTermsProfile.organizationClass}`
+                      : 'terms pending',
                   record.creditLineProfile?.enabled
                     ? `credit ${formatCurrency(
                         record.creditLineProfile.currentBalance ?? 0,

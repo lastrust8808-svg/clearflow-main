@@ -1657,6 +1657,16 @@ export interface VendorRecord {
   email?: string;
   phone?: string;
   remitAddress?: string;
+  vendorSourceProfile?: {
+    sourceId: string;
+    sourceLabel: string;
+    sourceType: 'directory_profile' | 'preset_profile' | 'manual_match';
+    canonicalName?: string;
+    locationId?: string;
+    taxId?: string;
+    publicProfileUrl?: string;
+    matchedAt: string;
+  };
   defaultExpenseAccountId?: string;
   status: 'active' | 'inactive';
   paymentInstructions?: {
