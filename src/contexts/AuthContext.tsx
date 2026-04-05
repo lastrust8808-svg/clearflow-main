@@ -153,6 +153,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const GOOGLE_DRIVE_SCOPE =
     'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 
+  const hasAcceptedClearFlowTerms = useCallback(
+    (appData: AppData | null | undefined) => Boolean(appData?.user.clearflowTermsAcceptedAt),
+    []
+  );
+
+  const getGoogleWorkspaceStatus = useCallback(
+    (appData: AppData): AuthStatus =>
+      hasAcceptedClearFlowTerms(appData) ? 'authenticated' : 'pending-profile-setup',
+    [hasAcceptedClearFlowTerms]
+  );
+
   const buildProvisionalGoogleUser = useCallback(
     (identity?: { name: string; email: string } | null): User | null => {
       if (!identity?.email) {
@@ -500,10 +511,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
   
   useEffect(() => {
-    const hasCompletedGoogleWorkspace = (appData: AppData) =>
-      Boolean(appData.user.clearflowTermsAcceptedAt) &&
-      Boolean(appData.entities.length || appData.coreDataSnapshot?.entities?.length);
-
     const mergeGoogleIdentity = (appData: AppData, googleIdentity: { name: string; email: string }) => ({
       ...appData,
       user: {
@@ -526,9 +533,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const mergedAppData = mergeGoogleIdentity(loadedData, state.gsiUser);
             setState(current => ({
               ...current,
-              status: hasCompletedGoogleWorkspace(mergedAppData)
-                ? 'authenticated'
-                : 'pending-profile-setup',
+              status: getGoogleWorkspaceStatus(mergedAppData),
               appData: mergedAppData,
               gsiUser: null,
             }));
@@ -552,9 +557,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setState((current) => ({
                 ...current,
                 localAccountId: localGoogleMatch.userId,
-                status: hasCompletedGoogleWorkspace(mergedAppData)
-                  ? 'authenticated'
-                  : 'pending-profile-setup',
+                status: getGoogleWorkspaceStatus(mergedAppData),
                 appData: mergedAppData,
                 gsiUser: null,
               }));
@@ -582,11 +585,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setState((current) => ({
               ...current,
               localAccountId: localGoogleMatch.userId,
-              status:
-                Boolean(mergedAppData.user.clearflowTermsAcceptedAt) &&
-                Boolean(mergedAppData.entities.length || mergedAppData.coreDataSnapshot?.entities?.length)
-                  ? 'authenticated'
-                  : 'pending-profile-setup',
+              status: getGoogleWorkspaceStatus(mergedAppData),
               appData: mergedAppData,
               gsiUser: null,
             }));
@@ -600,7 +599,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
     checkDrive();
-  }, [state.status, state.apiAccessToken, state.gsiUser]);
+  }, [getGoogleWorkspaceStatus, state.status, state.apiAccessToken, state.gsiUser]);
 
   useEffect(() => {
     if (state.status !== 'pending-drive-check' || !state.gsiUser) {
@@ -1168,7 +1167,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
-    if (!acceptedTerms) {
+    const alreadyAcceptedTerms = Boolean(state.appData.user.clearflowTermsAcceptedAt);
+    if (!acceptedTerms && !alreadyAcceptedTerms) {
       console.error('ClearFlow terms must be accepted before profile setup can complete.');
       return;
     }
@@ -1182,7 +1182,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isVerified: Boolean(state.apiAccessToken) || state.appData.user.isVerified,
       primaryContactType: state.appData.user.primaryContactType || (state.apiAccessToken ? 'google' : state.appData.user.primaryContactType),
     };
-    const acceptedAt = new Date().toISOString();
+    const acceptedAt = state.appData.user.clearflowTermsAcceptedAt || new Date().toISOString();
     const enrichedAppData = enrichAppDataFromMembershipDraft({
       ...state.appData,
       user: updatedUser,
@@ -1190,7 +1190,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const finalAppData = applyClearFlowRetentionRecords(enrichedAppData, {
       acceptedAt,
       termsVersion: CLEARFLOW_TERMS_VERSION,
-      signerName,
+      signerName: signerName || state.appData.user.clearflowTermsSignerName || name,
     });
 
     if (state.apiAccessToken) {

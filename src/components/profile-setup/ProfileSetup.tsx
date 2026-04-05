@@ -1,18 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
 export const ProfileSetup: React.FC = () => {
   const auth = useAuth();
+  const hasAcceptedTerms = Boolean(auth.currentUser?.clearflowTermsAcceptedAt);
   const [form, setForm] = useState({
     name: auth.currentUser?.name ?? '',
     email: auth.currentUser?.email ?? '',
     phone: auth.currentUser?.phone ?? '',
-    acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt),
+    acceptedTerms: hasAcceptedTerms,
     signerName:
       auth.currentUser?.clearflowTermsSignerName ||
       auth.currentUser?.name ||
       '',
   });
+
+  useEffect(() => {
+    setForm((current) => ({
+      ...current,
+      name: auth.currentUser?.name ?? current.name,
+      email: auth.currentUser?.email ?? current.email,
+      phone: auth.currentUser?.phone ?? current.phone,
+      acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt) || current.acceptedTerms,
+      signerName:
+        auth.currentUser?.clearflowTermsSignerName ||
+        auth.currentUser?.name ||
+        current.signerName,
+    }));
+  }, [
+    auth.currentUser?.clearflowTermsAcceptedAt,
+    auth.currentUser?.clearflowTermsSignerName,
+    auth.currentUser?.email,
+    auth.currentUser?.name,
+    auth.currentUser?.phone,
+  ]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -87,6 +108,11 @@ export const ProfileSetup: React.FC = () => {
               <div className="mt-2 leading-6 text-slate-300">
                 Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, retained security support, and related compliance or custody records needed for platform operation.
               </div>
+              {hasAcceptedTerms ? (
+                <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                  Terms already accepted and retained by ClearFlow on {new Date(auth.currentUser?.clearflowTermsAcceptedAt || '').toLocaleString()}.
+                </div>
+              ) : null}
               <div className="mt-4">
                 <label htmlFor="signerName" className="block text-sm font-medium text-slate-300">
                   Signer Name
@@ -100,6 +126,7 @@ export const ProfileSetup: React.FC = () => {
                   className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
                   placeholder="Type your full name to sign"
                   required
+                  disabled={hasAcceptedTerms}
                 />
               </div>
               <label className="mt-3 flex items-start gap-3 text-sm text-slate-200">
@@ -112,9 +139,12 @@ export const ProfileSetup: React.FC = () => {
                   }
                   className="mt-1"
                   required
+                  disabled={hasAcceptedTerms}
                 />
                 <span>
-                  I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, and understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation.
+                  {hasAcceptedTerms
+                    ? 'Your ClearFlow terms acceptance is already on file. Review your profile details and continue into the workspace.'
+                    : 'I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, and understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation.'}
                 </span>
               </label>
             </div>
@@ -127,7 +157,7 @@ export const ProfileSetup: React.FC = () => {
             disabled={!form.name || (!form.email && !form.phone) || !form.acceptedTerms || !form.signerName}
             className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500"
           >
-            Sign and Submit
+            {hasAcceptedTerms ? 'Continue to Workspace' : 'Sign and Submit'}
           </button>
         </form>
       </div>
