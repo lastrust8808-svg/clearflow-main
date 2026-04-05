@@ -29,34 +29,20 @@ const buttonStyle: CSSProperties = {
 
 export default function AccountingToolbar({
   onAddInvoice,
-  onAddJournalEntry,
   onAddBill,
-  onAddReceipt,
   onAddPresentment,
-  onGenerateQuote,
-  onAddIntercompanyTransfer,
-  onAddCustomer,
   onAddVendor,
   onRecordPayment,
-  onAddEmployee,
-  onRequestDirectDeposit,
   onManageBankFeed,
 }: AccountingToolbarProps) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-      <button type="button" onClick={onAddCustomer} style={buttonStyle}>+ Add Customer</button>
       <button type="button" onClick={onAddVendor} style={buttonStyle}>+ Add Vendor</button>
-      <button type="button" onClick={onAddEmployee} style={buttonStyle}>+ Add Employee</button>
       <button type="button" onClick={onAddInvoice} style={buttonStyle}>+ Add Invoice</button>
-      <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Record Payment</button>
-      <button type="button" onClick={onRequestDirectDeposit} style={buttonStyle}>+ Direct Deposit Form</button>
-      <button type="button" onClick={onAddJournalEntry} style={buttonStyle}>+ Add Journal Entry</button>
       <button type="button" onClick={onAddBill} style={buttonStyle}>+ Add Bill</button>
-      <button type="button" onClick={onAddReceipt} style={buttonStyle}>+ Add Receipt</button>
       <button type="button" onClick={onAddPresentment} style={buttonStyle}>+ Present Coupon</button>
-      <button type="button" onClick={onGenerateQuote} style={buttonStyle}>+ Generate Quote</button>
+      <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Record Payment</button>
       <button type="button" onClick={onManageBankFeed} style={buttonStyle}>+ Live Bank Feed</button>
-      <button type="button" onClick={onAddIntercompanyTransfer} style={buttonStyle}>+ Intercompany Transfer</button>
     </div>
   );
 }

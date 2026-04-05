@@ -238,6 +238,20 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [presentmentModalDraft, setPresentmentModalDraft] =
     useState<PresentmentModalDraft | null>(null);
   const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
+
+  const replaceAccountingHash = (hash: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const nextUrl = `${window.location.pathname}${window.location.search}${hash}`;
+    window.history.replaceState(null, '', nextUrl);
+  };
+
+  const openAccountingSubsection = (subsection: AccountingSection) => {
+    setActiveSubsection(subsection);
+    replaceAccountingHash(`#accounting:${subsection}`);
+  };
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
   const [operationsNotice, setOperationsNotice] = useState('');
@@ -265,37 +279,32 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         return;
       }
 
-      const replaceHash = (hash: string) => {
-        const nextUrl = `${window.location.pathname}${window.location.search}${hash}`;
-        window.history.replaceState(null, '', nextUrl);
-      };
-
       switch (nextAction) {
         case 'new-customer':
           setCounterpartyModalMode('customer');
           setActiveSubsection('customers');
-          replaceHash('#accounting:customers');
+          replaceAccountingHash('#accounting:customers');
           break;
         case 'new-vendor':
           setCounterpartyModalMode('vendor');
           setActiveSubsection('vendors');
-          replaceHash('#accounting:vendors');
+          replaceAccountingHash('#accounting:vendors');
           break;
         case 'new-employee':
           setIsEmployeeModalOpen(true);
           setActiveSubsection('payroll');
-          replaceHash('#accounting:payroll');
+          replaceAccountingHash('#accounting:payroll');
           break;
         case 'new-invoice':
           setIsInvoiceModalOpen(true);
           setActiveSubsection('invoices');
-          replaceHash('#accounting:invoices');
+          replaceAccountingHash('#accounting:invoices');
           break;
         case 'new-payment':
           setPaymentModalDraft(consumeSessionDraft<PaymentModalDraft>(paymentDraftStorageKey));
           setIsPaymentModalOpen(true);
           setActiveSubsection('payments');
-          replaceHash('#accounting:payments');
+          replaceAccountingHash('#accounting:payments');
           break;
         case 'new-remittance':
           setPresentmentModalDraft(
@@ -303,27 +312,27 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           );
           setIsCouponPresentmentModalOpen(true);
           setActiveSubsection('presentments');
-          replaceHash('#accounting:presentments');
+          replaceAccountingHash('#accounting:presentments');
           break;
         case 'new-direct-deposit':
           setIsDirectDepositModalOpen(true);
           setActiveSubsection('payroll');
-          replaceHash('#accounting:payroll');
+          replaceAccountingHash('#accounting:payroll');
           break;
         case 'new-journal':
           setIsJournalModalOpen(true);
           setActiveSubsection('journal');
-          replaceHash('#accounting:journal');
+          replaceAccountingHash('#accounting:journal');
           break;
         case 'new-bill':
           setIsBillModalOpen(true);
           setActiveSubsection('bills');
-          replaceHash('#accounting:bills');
+          replaceAccountingHash('#accounting:bills');
           break;
         case 'new-receipt':
           setIsReceiptModalOpen(true);
           setActiveSubsection('receipts');
-          replaceHash('#accounting:receipts');
+          replaceAccountingHash('#accounting:receipts');
           break;
         case 'new-presentment':
           setPresentmentModalDraft(
@@ -331,27 +340,27 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           );
           setIsCouponPresentmentModalOpen(true);
           setActiveSubsection('presentments');
-          replaceHash('#accounting:presentments');
+          replaceAccountingHash('#accounting:presentments');
           break;
         case 'new-quote':
           setIsQuoteModalOpen(true);
           setActiveSubsection('quotes');
-          replaceHash('#accounting:quotes');
+          replaceAccountingHash('#accounting:quotes');
           break;
         case 'new-intercompany':
           setIsIntercompanyModalOpen(true);
           setActiveSubsection('intercompany');
-          replaceHash('#accounting:intercompany');
+          replaceAccountingHash('#accounting:intercompany');
           break;
         case 'new-bank-account':
           setIsManualBankAccountModalOpen(true);
           setActiveSubsection('bankFeed');
-          replaceHash('#accounting:bankFeed');
+          replaceAccountingHash('#accounting:bankFeed');
           break;
         case 'new-bank-transaction':
           setIsManualBankTransactionModalOpen(true);
           setActiveSubsection('bankFeed');
-          replaceHash('#accounting:bankFeed');
+          replaceAccountingHash('#accounting:bankFeed');
           break;
       }
     };
@@ -8021,10 +8030,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               onAddInvoice={() => setIsInvoiceModalOpen(true)}
               onRecordPayment={() => setIsPaymentModalOpen(true)}
               onRequestDirectDeposit={() => {
-                setActiveSubsection('payroll');
-                if (typeof window !== 'undefined') {
-                  window.location.hash = '#accounting:payroll';
-                }
+                openAccountingSubsection('payroll');
                 setIsDirectDepositModalOpen(true);
               }}
               onAddJournalEntry={() => setIsJournalModalOpen(true)}
@@ -8033,10 +8039,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               onAddPresentment={() => setIsCouponPresentmentModalOpen(true)}
               onGenerateQuote={() => setIsQuoteModalOpen(true)}
               onManageBankFeed={() => {
-                setActiveSubsection('bankFeed');
-                if (typeof window !== 'undefined') {
-                  window.location.hash = '#accounting:bankFeed';
-                }
+                openAccountingSubsection('bankFeed');
               }}
               onAddIntercompanyTransfer={() => setIsIntercompanyModalOpen(true)}
             />
@@ -8046,12 +8049,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    setActiveSubsection(item.id);
-                    if (typeof window !== 'undefined') {
-                      window.location.hash = `#accounting:${item.id}`;
-                    }
-                  }}
+                  onClick={() => openAccountingSubsection(item.id)}
                   style={sectionButtonStyle(item.id === activeSubsection)}
                 >
                   {item.label}

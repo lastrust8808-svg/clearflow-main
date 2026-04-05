@@ -1108,7 +1108,7 @@ export default function OverviewPage({
 
       <PageSection
         title="Operator Hotspots"
-        description="Fast routes into the desks that now have active records flowing through them."
+        description="Keep the front page focused on the main desks instead of repeating every launch path."
       >
         <div
           style={{
@@ -1126,7 +1126,7 @@ export default function OverviewPage({
             {
               title: 'Remittance Intake',
               subtitle: `${data.couponPresentments.length} presentments | ${data.bills.length} bill-backed sources`,
-              hash: '#accounting:presentments',
+              hash: '#accounting:new-remittance',
             },
             {
               title: 'Recurring',
@@ -1134,24 +1134,9 @@ export default function OverviewPage({
               hash: '#accounting:recurring',
             },
             {
-              title: 'Payroll',
-              subtitle: `${employeeCount} workers | ${directDepositCount} direct deposit returns`,
-              hash: '#accounting:payroll',
-            },
-            {
-              title: 'Documents',
-              subtitle: `${data.documents.length} vault records | ${data.tokens.length} tokens`,
-              hash: '#documents',
-            },
-            {
               title: 'Compliance',
               subtitle: `${filingQueueCount} filing items | ${reviewItems} review items | ${amlCasesOpen} AML cases`,
               hash: '#compliance',
-            },
-            {
-              title: 'Entities',
-              subtitle: `${data.entities.length} profiles | ${data.authorityRecords.length} authority records`,
-              hash: '#entities',
             },
           ].map((item) => (
             <RecordCard key={item.title} title={item.title} subtitle={item.subtitle}>
@@ -1182,7 +1167,7 @@ export default function OverviewPage({
 
       <PageSection
         title="Quick Launch"
-        description="Direct-create the highest-traffic ERP records and setup actions from the overview."
+        description="Only the highest-traffic create actions stay here. Deeper setup lives in the desks."
       >
         <div
           style={{
@@ -1192,18 +1177,13 @@ export default function OverviewPage({
           }}
         >
           {[
-            { title: 'New Invoice', subtitle: 'Launch receivable intake', hash: '#accounting:new-invoice' },
             { title: 'Start Remittance', subtitle: 'Enter the bill or upload the coupon source first', hash: '#accounting:new-remittance' },
             { title: 'Record Payment', subtitle: 'Open the release-side payment modal directly', hash: '#accounting:new-payment' },
             { title: 'New Bill', subtitle: 'Capture AP and source file intake', hash: '#accounting:new-bill' },
-            { title: 'Log Receipt', subtitle: 'Upload and extract receipt detail', hash: '#accounting:new-receipt' },
             { title: 'Present Coupon', subtitle: 'Create obligation performance presentment', hash: '#accounting:new-presentment' },
-            { title: 'Add Employee', subtitle: 'Create payroll profile', hash: '#accounting:new-employee' },
-            { title: 'Request Deposit Form', subtitle: 'Send direct-deposit authorization', hash: '#accounting:new-direct-deposit' },
-            { title: 'Manual Bank Account', subtitle: 'Add a bank account without feed connection', hash: '#accounting:new-bank-account' },
-            { title: 'Manual Bank Transaction', subtitle: 'Post a single bank movement', hash: '#accounting:new-bank-transaction' },
             { title: 'Upload Document', subtitle: 'Open vault upload flow', hash: '#documents:upload' },
             { title: 'Add Entity', subtitle: 'Create a new operating profile', hash: '#entities:new' },
+            { title: 'Payroll Setup', subtitle: 'Add employee and deposit setup inside payroll', hash: '#accounting:payroll' },
           ].map((item) => (
             <RecordCard key={item.title} title={item.title} subtitle={item.subtitle}>
               <button

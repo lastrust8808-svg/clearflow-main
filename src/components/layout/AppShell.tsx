@@ -53,19 +53,18 @@ const sectionQuickActions: Record<
   Array<{ label: string; hash: string; description: string }>
 > = {
   overview: [
-    { label: 'New Invoice', hash: '#accounting:new-invoice', description: 'Launch receivable intake' },
     { label: 'Start Remittance', hash: '#accounting:new-remittance', description: 'Enter a bill or coupon-backed remittance source' },
     { label: 'Upload Document', hash: '#documents:upload', description: 'Send a file into the vault' },
+    { label: 'Add Entity', hash: '#entities:new', description: 'Create and connect a new entity' },
   ],
   entities: [
     { label: 'Add Entity', hash: '#entities:new', description: 'Create a new profile' },
-    { label: 'Open Documents', hash: '#documents', description: 'Review packets and evidence' },
     { label: 'Open Accounting', hash: '#accounting:dashboard', description: 'Continue ERP setup' },
+    { label: 'Open Documents', hash: '#documents', description: 'Review packets and evidence' },
   ],
   accounting: [
     { label: 'Remittance Intake', hash: '#accounting:new-remittance', description: 'Start from a bill or coupon presentment' },
     { label: 'Release Queue', hash: '#accounting:payments', description: 'Open held approvals and remittance release' },
-    { label: 'Recurring', hash: '#accounting:recurring', description: 'Review scheduled flows' },
     { label: 'Bank Feed', hash: '#accounting:bankFeed', description: 'Sync or post bank activity' },
   ],
   ledger: [
@@ -80,8 +79,8 @@ const sectionQuickActions: Record<
   ],
   transactions: [
     { label: 'Remittance Intake', hash: '#accounting:new-remittance', description: 'Create a presentment-backed settlement source' },
-    { label: 'Recurring', hash: '#accounting:recurring', description: 'Review obligation cycles' },
     { label: 'Documents', hash: '#documents', description: 'Open linked packets' },
+    { label: 'Rails & Codes', hash: '#accounting:railOps', description: 'Check movement identifiers' },
   ],
   compliance: [
     { label: 'Rails & Codes', hash: '#accounting:railOps', description: 'Check movement identifiers' },
