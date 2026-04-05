@@ -1120,14 +1120,13 @@ export default function App({
   }
 
     if (auth.authStatus === 'pending-gsi' || auth.authStatus === 'pending-drive-check') {
+      const canContinueOnboarding = Boolean(auth.appData?.user || auth.lastKnownGoogleUser);
       return (
         <LoadingShell
           title="Connecting Secure Access"
           subtitle="Authorizing Google identity, requesting Drive access, and loading the user workspace in one flow."
-          actionLabel={auth.appData?.user ? 'Continue Onboarding Now' : undefined}
-          onAction={
-            auth.appData?.user ? () => auth.continueGoogleOnboardingFallback() : undefined
-        }
+          actionLabel={canContinueOnboarding ? 'Continue Onboarding Now' : undefined}
+          onAction={canContinueOnboarding ? () => auth.continueGoogleOnboardingFallback() : undefined}
         secondaryActionLabel="Need Sign-In Help?"
         onSecondaryAction={openAccessRecoveryHelp}
       />

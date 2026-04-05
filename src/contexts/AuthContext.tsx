@@ -152,6 +152,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const clearflowLedgerDepositSyncRef = useRef(false);
   const GOOGLE_DRIVE_SCOPE =
     'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
+
+  const buildProvisionalGoogleUser = useCallback(
+    (identity?: { name: string; email: string } | null): User | null => {
+      if (!identity?.email) {
+        return null;
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        name: identity.name || identity.email,
+        email: identity.email,
+        isVerified: false,
+        primaryContactType: 'google',
+      };
+    },
+    []
+  );
   
   const hydrateGoogleAccessSession = useCallback(async (
     accessToken: string,
@@ -646,26 +663,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [state.appData?.user.email, state.appData?.user.name, state.appData?.user.primaryContactType]);
 
   useEffect(() => {
-    if (state.status !== 'pending-gsi' || !state.appData?.user) {
+    if (state.status !== 'pending-gsi') {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       setState((current) => {
-        if (current.status !== 'pending-gsi' || !current.appData?.user) {
+        if (current.status !== 'pending-gsi') {
           return current;
+        }
+
+        const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
+        const fallbackUser =
+          current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
+
+        if (!fallbackUser) {
+          return {
+            ...current,
+            status: 'unauthenticated',
+            gsiUser: null,
+            token: null,
+            apiAccessToken: null,
+            appData: null,
+          };
         }
 
         return {
           ...current,
           status: 'pending-profile-setup',
+          appData: current.appData || { user: fallbackUser, entities: [] },
           gsiUser: null,
         };
       });
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [state.status, state.appData]);
+  }, [buildProvisionalGoogleUser, lastKnownGoogleUser, state.status]);
 
   useEffect(() => {
     setIsInitialized(true);
@@ -1362,17 +1395,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const continueGoogleOnboardingFallback = () => {
     setState((current) => {
-      if (
-        (current.status !== 'pending-gsi' &&
-          current.status !== 'pending-drive-check') ||
-        !current.appData?.user
-      ) {
+      if (current.status !== 'pending-gsi' && current.status !== 'pending-drive-check') {
         return current;
+      }
+
+      const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
+      const fallbackUser =
+        current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
+
+      if (!fallbackUser) {
+        return {
+          ...current,
+          status: 'unauthenticated',
+          gsiUser: null,
+          token: null,
+          apiAccessToken: null,
+          appData: null,
+        };
       }
 
       return {
         ...current,
         status: 'pending-profile-setup',
+        appData: current.appData || { user: fallbackUser, entities: [] },
         gsiUser: null,
       };
     });
