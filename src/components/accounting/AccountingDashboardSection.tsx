@@ -280,11 +280,8 @@ export default function AccountingDashboardSection({
             <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:railOps')}>
               Open Rails & Codes
             </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#compliance')}>
-              Open Compliance
-            </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#documents')}>
-              Open Vault
+            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:presentments')}>
+              Open Presentments
             </button>
           </div>
         </div>
@@ -447,16 +444,8 @@ export default function AccountingDashboardSection({
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              <button type="button" style={actionButtonStyle} onClick={() => navigate('#entities')}>
-                Open Entity Profiles
-              </button>
-              <button type="button" style={actionButtonStyle} onClick={() => navigate('#assets')}>
-                Open Assets
-              </button>
-              <button type="button" style={actionButtonStyle} onClick={() => navigate('#documents')}>
-                Open Documents
-              </button>
+            <div style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+              Cross-desk reserve, entity, and document review stays in the left sidebar so Accounting remains focused on ERP operations.
             </div>
           </div>
         </div>
@@ -500,9 +489,9 @@ export default function AccountingDashboardSection({
                   <button
                     type="button"
                     style={actionButtonStyle}
-                    onClick={() => navigate('#transactions')}
+                    onClick={() => navigate('#accounting:presentments')}
                   >
-                    Open Control Desk
+                    Open Presentments
                   </button>
                 </div>
               </div>
@@ -532,21 +521,21 @@ export default function AccountingDashboardSection({
                   <div style={{ color: '#94a3b8', marginTop: 6 }}>
                     {item.formType || 'Reporting link'} | {item.status} | TIN {item.tinMatchStatus}
                   </div>
-                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
-                    Filing channel: {item.filingChannel || 'Not set'} | Correction:{' '}
-                    {item.correctionStatus}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                  Filing channel: {item.filingChannel || 'Not set'} | Correction:{' '}
+                  {item.correctionStatus}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                  <button
+                    type="button"
+                    style={actionButtonStyle}
+                    onClick={() => navigate('#accounting:payments')}
+                  >
+                    Open Payments Desk
+                  </button>
+                  {item.linkedPaymentId ? (
                     <button
                       type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#compliance')}
-                    >
-                      Open Filing Desk
-                    </button>
-                    {item.linkedPaymentId ? (
-                      <button
-                        type="button"
                         style={actionButtonStyle}
                         onClick={() => navigate('#accounting:payments')}
                       >
@@ -586,13 +575,6 @@ export default function AccountingDashboardSection({
                       onClick={() => navigate('#accounting:recurring')}
                     >
                       Open Recurring Desk
-                    </button>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#transactions')}
-                    >
-                      Open Transactions
                     </button>
                   </div>
                 </div>
@@ -675,39 +657,8 @@ export default function AccountingDashboardSection({
                   <div style={{ color: '#d1d5db', marginTop: 6 }}>
                     {document.summary || 'Accounting-linked vault output ready for workflow follow-up.'}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate(`#documents:${document.id}`)}
-                    >
-                      Open Packet
-                    </button>
-                    {document.linkedComplianceTagIds?.length ? (
-                      <button
-                        type="button"
-                        style={actionButtonStyle}
-                        onClick={() => navigate('#compliance')}
-                      >
-                        Open Compliance
-                      </button>
-                    ) : document.linkedInstrumentIds?.length ? (
-                      <button
-                        type="button"
-                        style={actionButtonStyle}
-                        onClick={() => navigate('#transactions')}
-                      >
-                        Open Transactions
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        style={actionButtonStyle}
-                        onClick={() => navigate('#documents')}
-                      >
-                        Open Vault
-                      </button>
-                    )}
+                  <div style={{ color: '#94a3b8', marginTop: 8 }}>
+                    Use the left sidebar to open Documents, Compliance, or Transactions for the linked packet.
                   </div>
                 </div>
               ))
@@ -733,23 +684,8 @@ export default function AccountingDashboardSection({
                 <div style={{ color: '#d1d5db', marginTop: 6 }}>
                   {tag.notes || 'Linked accounting compliance control.'}
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                  <button
-                    type="button"
-                    style={actionButtonStyle}
-                    onClick={() => navigate('#compliance')}
-                  >
-                    Open Compliance
-                  </button>
-                  {tag.linkedDocumentIds?.[0] ? (
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate(`#documents:${tag.linkedDocumentIds[0]}`)}
-                    >
-                      Open Packet
-                    </button>
-                  ) : null}
+                <div style={{ color: '#94a3b8', marginTop: 8 }}>
+                  Review linked compliance packets from the sidebar when you leave the Accounting desk.
                 </div>
               </div>
             ))

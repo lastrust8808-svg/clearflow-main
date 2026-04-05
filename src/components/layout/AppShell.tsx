@@ -114,6 +114,11 @@ function goToHash(hash: string) {
     return;
   }
 
+  if (window.location.hash === hash) {
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    return;
+  }
+
   window.location.hash = hash;
 }
 

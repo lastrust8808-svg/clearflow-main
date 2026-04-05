@@ -1000,7 +1000,12 @@ export default function App({
   const handleSectionChange = (nextSection: AppSection) => {
     preloadWorkspaceSection(nextSection);
     setActiveSection((previous) => (previous === nextSection ? previous : nextSection));
-    replaceWindowHash(buildSectionHash(nextSection));
+    const existingHash = typeof window !== 'undefined' ? window.location.hash : '';
+    const nextHash =
+      parseHashSection(existingHash) === nextSection
+        ? existingHash
+        : buildSectionHash(nextSection);
+    replaceWindowHash(nextHash);
   };
 
   useEffect(() => {
