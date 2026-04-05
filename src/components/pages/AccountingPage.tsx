@@ -30,6 +30,10 @@ import {
 } from '../../services/obligationLifecycle.service';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
 import { resolveVendorProviderPreset } from '../../services/vendorProviderPreset.service';
+import {
+  deriveVendorPaymentRailProfile,
+  isVendorReceiveMethodSupported,
+} from '../../services/vendorPaymentRails.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -101,6 +105,14 @@ interface AccountingPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
+
+type VendorReceiveMethod =
+  | 'ach'
+  | 'wire'
+  | 'paper_check'
+  | 'lockbox_coupon'
+  | 'digital_wallet'
+  | 'manual_review';
 
 const shellStyle: CSSProperties = {
   display: 'grid',
@@ -680,12 +692,112 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
             digitalWalletNetwork: payload.digitalWalletNetwork || undefined,
             digitalAssetSymbol: payload.digitalAssetSymbol || undefined,
             digitalPayoutTemplate: payload.digitalPayoutTemplate || undefined,
+            acceptedReceiveMethods:
+              detectedPreset?.acceptedReceiveMethods ||
+              deriveVendorPaymentRailProfile({
+                name: normalizedName,
+                remitAddress: resolvedAddress || undefined,
+                paymentInstructions: {
+                  routingNumber: payload.routingNumber || undefined,
+                  accountMask: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+                  accountNumber: payload.accountNumber || undefined,
+                  railPreference: payload.railPreference,
+                  digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                },
+                counterpartyTermsProfile: {
+                  organizationClass: resolvedOrganizationClass,
+                },
+              }).acceptedReceiveMethods,
+            defaultReceiveMethod:
+              detectedPreset?.defaultReceiveMethod ||
+              deriveVendorPaymentRailProfile({
+                name: normalizedName,
+                remitAddress: resolvedAddress || undefined,
+                paymentInstructions: {
+                  routingNumber: payload.routingNumber || undefined,
+                  accountMask: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+                  accountNumber: payload.accountNumber || undefined,
+                  railPreference: payload.railPreference,
+                  digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                },
+                counterpartyTermsProfile: {
+                  organizationClass: resolvedOrganizationClass,
+                },
+              }).defaultReceiveMethod,
+            deliveryDescriptor:
+              detectedPreset?.deliveryDescriptor ||
+              deriveVendorPaymentRailProfile({
+                name: normalizedName,
+                remitAddress: resolvedAddress || undefined,
+                paymentInstructions: {
+                  routingNumber: payload.routingNumber || undefined,
+                  accountMask: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+                  accountNumber: payload.accountNumber || undefined,
+                  railPreference: payload.railPreference,
+                  digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                },
+                counterpartyTermsProfile: {
+                  organizationClass: resolvedOrganizationClass,
+                },
+              }).deliveryDescriptor,
             verificationStatus:
               payload.routingNumber?.length === 9 ? ('routing_valid' as const) : ('unverified' as const),
             lastValidatedAt:
               payload.routingNumber?.length === 9 ? new Date().toISOString() : undefined,
           }
-        : undefined;
+        : detectedPreset?.acceptedReceiveMethods || resolvedAddress || payload.digitalWalletAddress
+          ? {
+              beneficiaryName: payload.beneficiaryName || normalizedName || undefined,
+              bankName: payload.bankName || undefined,
+              routingNumber: payload.routingNumber || undefined,
+              accountNumber: payload.accountNumber || undefined,
+              accountMask: payload.accountNumber ? payload.accountNumber.slice(-4) : undefined,
+              accountType: payload.accountType,
+              railPreference: payload.railPreference,
+              remittanceEmail: payload.remittanceEmail || payload.email || undefined,
+              digitalWalletAddress: payload.digitalWalletAddress || undefined,
+              digitalWalletNetwork: payload.digitalWalletNetwork || undefined,
+              digitalAssetSymbol: payload.digitalAssetSymbol || undefined,
+              digitalPayoutTemplate: payload.digitalPayoutTemplate || undefined,
+              acceptedReceiveMethods:
+                detectedPreset?.acceptedReceiveMethods ||
+                deriveVendorPaymentRailProfile({
+                  name: normalizedName,
+                  remitAddress: resolvedAddress || undefined,
+                  paymentInstructions: {
+                    digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                  },
+                  counterpartyTermsProfile: {
+                    organizationClass: resolvedOrganizationClass,
+                  },
+                }).acceptedReceiveMethods,
+              defaultReceiveMethod:
+                detectedPreset?.defaultReceiveMethod ||
+                deriveVendorPaymentRailProfile({
+                  name: normalizedName,
+                  remitAddress: resolvedAddress || undefined,
+                  paymentInstructions: {
+                    digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                  },
+                  counterpartyTermsProfile: {
+                    organizationClass: resolvedOrganizationClass,
+                  },
+                }).defaultReceiveMethod,
+              deliveryDescriptor:
+                detectedPreset?.deliveryDescriptor ||
+                deriveVendorPaymentRailProfile({
+                  name: normalizedName,
+                  remitAddress: resolvedAddress || undefined,
+                  paymentInstructions: {
+                    digitalWalletAddress: payload.digitalWalletAddress || undefined,
+                  },
+                  counterpartyTermsProfile: {
+                    organizationClass: resolvedOrganizationClass,
+                  },
+                }).deliveryDescriptor,
+              verificationStatus: 'unverified' as const,
+            }
+          : undefined;
 
     const buildCounterpartyTermsProfile = () => {
       const organizationClass = resolvedOrganizationClass || 'general';
@@ -3133,6 +3245,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       payload.counterpartyType === 'vendor' && payload.counterpartyId
         ? data.vendors.find((vendor) => vendor.id === payload.counterpartyId)
         : undefined;
+    const vendorPaymentRailProfile = deriveVendorPaymentRailProfile(selectedVendor);
+    const vendorReceiveMethod: VendorReceiveMethod | undefined =
+      payload.counterpartyType === 'vendor'
+        ? (payload.vendorReceiveMethod ||
+          selectedVendor?.paymentInstructions?.defaultReceiveMethod ||
+          vendorPaymentRailProfile.defaultReceiveMethod)
+        : undefined;
     const selectedCustomer =
       payload.counterpartyType === 'customer' && payload.counterpartyId
         ? data.customers.find((customer) => customer.id === payload.counterpartyId)
@@ -3194,6 +3313,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       payload.counterpartyType === 'vendor' &&
       (payload.method === 'ach' || payload.method === 'wire');
     const policyReleaseHoldReason =
+      vendorReceiveMethod &&
+      !isVendorReceiveMethodSupported(selectedVendor, vendorReceiveMethod)
+        ? `The vendor receive method ${vendorReceiveMethod.replace('_', ' ')} is not supported by the saved vendor delivery profile.`
+        : requiresSettlementExecution &&
+          vendorReceiveMethod === 'manual_review'
+          ? 'Vendor delivery posture is still manual review. Save a supported receive method before releasing this payment.'
+        : 
       requiresSettlementExecution &&
       data.workspaceSettings.requireVerifiedVendorBankInstructions &&
       selectedVendor?.paymentInstructions?.verificationStatus !== 'verified'
@@ -3212,7 +3338,23 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 data.workspaceSettings.achReleaseReviewThreshold,
                 entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
               )}.`
-            : undefined;
+      : undefined;
+    const vendorDeliveryStatus =
+      payload.counterpartyType !== 'vendor'
+        ? ('delivery_ready' as const)
+        : !vendorReceiveMethod || vendorReceiveMethod === 'manual_review'
+          ? ('manual_review' as const)
+          : policyReleaseHoldReason
+            ? ('manual_review' as const)
+            : ('delivery_ready' as const);
+    const externalRecognitionStatus =
+      payload.counterpartyType !== 'vendor'
+        ? ('internal_only' as const)
+        : !vendorReceiveMethod || vendorReceiveMethod === 'manual_review'
+          ? ('manual_review' as const)
+          : policyReleaseHoldReason
+            ? ('manual_review' as const)
+            : ('recognized_by_saved_terms' as const);
     const requiresWalletExecution =
       payload.direction === 'outgoing' &&
       payload.counterpartyType === 'vendor' &&
@@ -3386,6 +3528,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         sourceBankAccountId: sourceBankAccount?.id,
         sourceLedgerAccountId: sourceLedgerAccount?.id,
         treasuryAccountId: selectedTreasuryAccount?.id,
+        vendorReceiveMethod,
+        deliveryStatus: vendorDeliveryStatus,
+        externalRecognitionStatus,
         dischargeMethod: resolvedDischargeMethod,
         approvalStatus:
           requiresSettlementExecution || requiresWalletExecution || Boolean(policyReleaseHoldReason)
@@ -3547,7 +3692,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         status: paymentStatus === 'settled' ? ('performed' as const) : ('issued' as const),
         notes:
           payload.notes ||
-          `Generated from ${payload.method} payment posting with ${resolvedDischargeMethod} discharge.`,
+          `Generated from ${payload.method} payment posting with ${resolvedDischargeMethod} discharge and ${
+            vendorReceiveMethod ? vendorReceiveMethod.replace('_', ' ') : 'direct'
+          } vendor delivery posture.`,
       };
       const nextInstrumentSettlement =
         resolvedDischargeMethod !== 'bank_rail_payment'
@@ -3691,6 +3838,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : undefined),
         executionReference:
           settlementExecutionResponse?.execution.executionReference || nextOnChainTransaction?.txHash,
+        vendorReceiveMethod,
+        vendorDeliveryStatus,
+        externalRecognitionStatus,
+        vendorDeliveryReference:
+          selectedVendor?.paymentInstructions?.deliveryDescriptor ||
+          vendorPaymentRailProfile.deliveryDescriptor,
         reserveBacked:
           selectedTreasuryAccount?.treasuryType === 'reserve' ||
           sourceLedgerAccount?.remittanceClassification === 'reserve',
@@ -6987,6 +7140,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         vendor.counterpartyTermsProfile?.organizationClass
           ? `terms ${vendor.counterpartyTermsProfile.organizationClass}`
           : 'terms pending',
+        vendor.paymentInstructions?.defaultReceiveMethod
+          ? `receives ${vendor.paymentInstructions.defaultReceiveMethod.replace('_', ' ')}`
+          : 'receive method pending',
         vendor.counterpartyTermsProfile?.termsIntakeMode || 'no intake mode',
         vendor.counterpartyTermsProfile?.billingErrorProcess
           ? 'admin process ready'
@@ -7007,6 +7163,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                             {vendor.counterpartyTermsProfile?.remittanceApplicationRule ||
                               'Save a counterparty terms profile to generate remittance-application notices.'}
                           </div>
+                          {vendor.paymentInstructions?.deliveryDescriptor ? (
+                            <div style={{ color: '#bfdbfe', lineHeight: 1.5, fontSize: 13 }}>
+                              {vendor.paymentInstructions.deliveryDescriptor}
+                            </div>
+                          ) : null}
                           {vendor.counterpartyTermsProfile?.contractExtractionSummary ? (
                             <div style={{ color: '#fde68a', lineHeight: 1.5, fontSize: 13 }}>
                               {vendor.counterpartyTermsProfile.contractExtractionSummary}

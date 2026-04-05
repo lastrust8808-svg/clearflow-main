@@ -30,6 +30,17 @@ export interface VendorProviderPreset {
   lineOfCreditEnabled?: boolean;
   creditLineType?: 'revolving_trade' | 'term_vendor' | 'utility_credit' | 'service_contract';
   autoAnnualizeFromBills?: boolean;
+  acceptedReceiveMethods?: Array<
+    'ach' | 'wire' | 'paper_check' | 'lockbox_coupon' | 'digital_wallet' | 'manual_review'
+  >;
+  defaultReceiveMethod?:
+    | 'ach'
+    | 'wire'
+    | 'paper_check'
+    | 'lockbox_coupon'
+    | 'digital_wallet'
+    | 'manual_review';
+  deliveryDescriptor?: string;
 }
 
 function normalizeVendorName(value: string) {
@@ -68,6 +79,10 @@ const DTE_PRESET: Omit<VendorProviderPreset, 'matchedAlias'> & { aliases: string
   lineOfCreditEnabled: true,
   creditLineType: 'utility_credit',
   autoAnnualizeFromBills: true,
+  acceptedReceiveMethods: ['lockbox_coupon', 'paper_check', 'manual_review'],
+  defaultReceiveMethod: 'lockbox_coupon',
+  deliveryDescriptor:
+    'DTE remittances are typically applied through statement coupon and remit-address workflows using the account and processing identifiers printed on the bill.',
 };
 
 const PRESETS = [DTE_PRESET];
@@ -108,6 +123,9 @@ export function resolveVendorProviderPreset(
         lineOfCreditEnabled: preset.lineOfCreditEnabled,
         creditLineType: preset.creditLineType,
         autoAnnualizeFromBills: preset.autoAnnualizeFromBills,
+        acceptedReceiveMethods: preset.acceptedReceiveMethods,
+        defaultReceiveMethod: preset.defaultReceiveMethod,
+        deliveryDescriptor: preset.deliveryDescriptor,
       };
     }
   }

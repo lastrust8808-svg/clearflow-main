@@ -12,6 +12,7 @@ import type {
   WalletRecord,
 } from '../../types/core';
 import type { PaymentSubmitPayload } from './accountingTypes';
+import { deriveVendorPaymentRailProfile } from '../../services/vendorPaymentRails.service';
 
 type PaymentMethod =
   'ach'
@@ -27,6 +28,14 @@ type DischargeMethod =
   | 'instrument_performance'
   | 'bank_rail_payment'
   | 'mixed_discharge';
+
+type VendorReceiveMethod =
+  | 'ach'
+  | 'wire'
+  | 'paper_check'
+  | 'lockbox_coupon'
+  | 'digital_wallet'
+  | 'manual_review';
 
 interface PaymentRecordModalProps {
   open: boolean;
@@ -52,6 +61,7 @@ interface PaymentRecordModalProps {
     treasuryAccountId?: string;
     linkedWalletId?: string;
     linkedDigitalAssetId?: string;
+    vendorReceiveMethod?: VendorReceiveMethod;
     dischargeMethod?: DischargeMethod;
     notes?: string;
   } | null;
@@ -132,6 +142,8 @@ export default function PaymentRecordModal({
   const [treasuryAccountId, setTreasuryAccountId] = useState('');
   const [linkedWalletId, setLinkedWalletId] = useState('');
   const [linkedDigitalAssetId, setLinkedDigitalAssetId] = useState('');
+  const [vendorReceiveMethod, setVendorReceiveMethod] =
+    useState<VendorReceiveMethod>('manual_review');
   const [dischargeMethod, setDischargeMethod] =
     useState<DischargeMethod>('bank_rail_payment');
   const [urgency, setUrgency] = useState<'instant' | 'same_day' | 'standard' | 'final'>(
@@ -159,6 +171,7 @@ export default function PaymentRecordModal({
     setTreasuryAccountId('');
     setLinkedWalletId('');
     setLinkedDigitalAssetId('');
+    setVendorReceiveMethod('manual_review');
     setDischargeMethod('bank_rail_payment');
     setUrgency('standard');
     setRecurringEnabled(false);
@@ -184,6 +197,7 @@ export default function PaymentRecordModal({
     setTreasuryAccountId(draft.treasuryAccountId ?? '');
     setLinkedWalletId(draft.linkedWalletId ?? '');
     setLinkedDigitalAssetId(draft.linkedDigitalAssetId ?? '');
+    setVendorReceiveMethod(draft.vendorReceiveMethod ?? 'manual_review');
     setDischargeMethod(draft.dischargeMethod ?? 'bank_rail_payment');
     setNotes(draft.notes ?? '');
   }, [draft, open]);
@@ -213,6 +227,10 @@ export default function PaymentRecordModal({
         ? vendors.find((record) => record.id === counterpartyId)
         : undefined,
     [counterpartyId, direction, vendors]
+  );
+  const vendorPaymentRailProfile = useMemo(
+    () => deriveVendorPaymentRailProfile(selectedVendor),
+    [selectedVendor],
   );
 
   const bankAccountOptions = useMemo(
@@ -263,7 +281,11 @@ export default function PaymentRecordModal({
   );
 
   const vendorInstructionReady =
-    method === 'digital_asset'
+    vendorReceiveMethod === 'lockbox_coupon' || vendorReceiveMethod === 'paper_check'
+      ? Boolean(selectedVendor?.remitAddress)
+      : vendorReceiveMethod === 'manual_review'
+        ? false
+      : method === 'digital_asset' || vendorReceiveMethod === 'digital_wallet'
       ? Boolean(selectedVendor?.paymentInstructions?.digitalWalletAddress)
       : Boolean(
           (selectedVendor?.paymentInstructions?.routingMask ||
@@ -280,6 +302,22 @@ export default function PaymentRecordModal({
     requiresSettlementExecution ||
     method === 'digital_asset' ||
     treasuryOptions.length > 0;
+
+  useEffect(() => {
+    if (direction !== 'outgoing') {
+      setVendorReceiveMethod('manual_review');
+      return;
+    }
+    setVendorReceiveMethod((current) => {
+      if (
+        selectedVendor &&
+        vendorPaymentRailProfile.acceptedReceiveMethods.includes(current)
+      ) {
+        return current;
+      }
+      return vendorPaymentRailProfile.defaultReceiveMethod;
+    });
+  }, [direction, selectedVendor, vendorPaymentRailProfile]);
 
   useEffect(() => {
     if (method !== 'digital_asset' || !selectedVendor) {
@@ -449,6 +487,49 @@ export default function PaymentRecordModal({
             <option value="final">Final</option>
           </select>
         </div>
+
+        {direction === 'outgoing' ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(125,211,252,0.25)',
+              background: 'rgba(8,47,73,0.2)',
+            }}
+          >
+            <select
+              value={vendorReceiveMethod}
+              onChange={(event) =>
+                setVendorReceiveMethod(event.target.value as VendorReceiveMethod)
+              }
+              style={inputStyle}
+            >
+              {vendorPaymentRailProfile.acceptedReceiveMethods.map((receiveMethod) => (
+                <option key={receiveMethod} value={receiveMethod}>
+                  {receiveMethod.replace('_', ' ')}
+                </option>
+              ))}
+            </select>
+            <div
+              style={{
+                minHeight: 44,
+                padding: '12px 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(125,211,252,0.2)',
+                background: 'rgba(15,23,42,0.35)',
+                color: '#dbeafe',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {vendorPaymentRailProfile.deliveryDescriptor}
+            </div>
+          </div>
+        ) : null}
 
         {showSettlementControls ? (
           <div
@@ -631,6 +712,10 @@ export default function PaymentRecordModal({
                           } on ${
                             selectedVendor.paymentInstructions?.digitalWalletNetwork || 'the selected network'
                           }${selectedVendor.paymentInstructions?.digitalAssetSymbol ? ` using ${selectedVendor.paymentInstructions.digitalAssetSymbol}` : ''}.`
+                        : vendorReceiveMethod === 'lockbox_coupon'
+                          ? `Ready to route by coupon or lockbox using ${selectedVendor.remitAddress || 'the remit address on file'}.`
+                        : vendorReceiveMethod === 'paper_check'
+                          ? `Ready to route by mailed check using ${selectedVendor.remitAddress || 'the remit address on file'}.`
                         : `Ready to route to ${
                             selectedVendor.paymentInstructions?.beneficiaryName || selectedVendor.name
                           } - ${selectedVendor.paymentInstructions?.bankName || 'bank on file'} - acct ${
@@ -745,6 +830,7 @@ export default function PaymentRecordModal({
                 treasuryAccountId: treasuryAccountId || undefined,
                 linkedWalletId: linkedWalletId || undefined,
                 linkedDigitalAssetId: linkedDigitalAssetId || undefined,
+                vendorReceiveMethod: vendorReceiveMethod || undefined,
                 dischargeMethod,
                 urgency,
                 recurringEnabled,

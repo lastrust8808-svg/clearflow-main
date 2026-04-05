@@ -166,6 +166,28 @@ export type DischargeMethod =
   | 'bank_rail_payment'
   | 'mixed_discharge';
 
+export type VendorReceiveMethod =
+  | 'ach'
+  | 'wire'
+  | 'paper_check'
+  | 'lockbox_coupon'
+  | 'digital_wallet'
+  | 'manual_review';
+
+export type VendorDeliveryStatus =
+  | 'draft'
+  | 'delivery_ready'
+  | 'sent'
+  | 'received'
+  | 'manual_review';
+
+export type ExternalRecognitionStatus =
+  | 'internal_only'
+  | 'delivery_ready'
+  | 'pending_vendor_acceptance'
+  | 'recognized_by_saved_terms'
+  | 'manual_review';
+
 export type SettlementStatus =
   | 'draft'
   | 'routing'
@@ -923,6 +945,10 @@ export interface SettlementRecord {
     | 'blocked';
   executionReason?: string;
   executionReference?: string;
+  vendorReceiveMethod?: VendorReceiveMethod;
+  vendorDeliveryStatus?: VendorDeliveryStatus;
+  externalRecognitionStatus?: ExternalRecognitionStatus;
+  vendorDeliveryReference?: string;
   releasedAt?: string;
   releasedBy?: string;
   reserveBacked?: boolean;
@@ -1513,6 +1539,9 @@ export interface VendorRecord {
     digitalWalletNetwork?: string;
     digitalAssetSymbol?: string;
     digitalPayoutTemplate?: 'stablecoin' | 'native_asset' | 'manual_confirmation';
+    acceptedReceiveMethods?: VendorReceiveMethod[];
+    defaultReceiveMethod?: VendorReceiveMethod;
+    deliveryDescriptor?: string;
     verificationStatus?: 'unverified' | 'routing_valid' | 'verified' | 'invalid';
     lastValidatedAt?: string;
     storedInVault?: boolean;
@@ -1782,6 +1811,9 @@ export interface PaymentRecord {
     vendorInstructionVerified?: boolean;
     simulatedProcessing?: boolean;
   };
+  vendorReceiveMethod?: VendorReceiveMethod;
+  deliveryStatus?: VendorDeliveryStatus;
+  externalRecognitionStatus?: ExternalRecognitionStatus;
   recurringSchedule?: {
     enabled: boolean;
     frequency?: RecurrenceFrequency;

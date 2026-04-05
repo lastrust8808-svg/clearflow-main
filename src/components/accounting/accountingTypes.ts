@@ -178,6 +178,13 @@ export interface PaymentSubmitPayload {
   treasuryAccountId?: string;
   linkedWalletId?: string;
   linkedDigitalAssetId?: string;
+  vendorReceiveMethod?:
+    | 'ach'
+    | 'wire'
+    | 'paper_check'
+    | 'lockbox_coupon'
+    | 'digital_wallet'
+    | 'manual_review';
   dischargeMethod?:
     | 'internal_ledger_credit'
     | 'instrument_performance'
