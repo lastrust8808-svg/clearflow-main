@@ -14,6 +14,8 @@ interface AccountingToolbarProps {
   onAddEmployee: () => void;
   onRequestDirectDeposit: () => void;
   onManageBankFeed: () => void;
+  onResumePresentmentDraft?: () => void;
+  hasSavedPresentmentDraft?: boolean;
 }
 
 const buttonStyle: CSSProperties = {
@@ -34,6 +36,8 @@ export default function AccountingToolbar({
   onAddVendor,
   onRecordPayment,
   onManageBankFeed,
+  onResumePresentmentDraft,
+  hasSavedPresentmentDraft = false,
 }: AccountingToolbarProps) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -41,6 +45,11 @@ export default function AccountingToolbar({
       <button type="button" onClick={onAddInvoice} style={buttonStyle}>+ Add Invoice</button>
       <button type="button" onClick={onAddBill} style={buttonStyle}>+ Add Bill</button>
       <button type="button" onClick={onAddPresentment} style={buttonStyle}>+ Present Coupon</button>
+      {hasSavedPresentmentDraft && onResumePresentmentDraft ? (
+        <button type="button" onClick={onResumePresentmentDraft} style={buttonStyle}>
+          Resume Draft Presentment
+        </button>
+      ) : null}
       <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Record Payment</button>
       <button type="button" onClick={onManageBankFeed} style={buttonStyle}>+ Live Bank Feed</button>
     </div>

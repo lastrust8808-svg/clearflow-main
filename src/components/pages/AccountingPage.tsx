@@ -188,6 +188,40 @@ function consumeSessionDraft<T>(key: string): T | null {
   }
 }
 
+function loadSessionDraft<T>(key: string): T | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.warn(`Failed to parse stored accounting draft for ${key}.`, error);
+    return null;
+  }
+}
+
+function saveSessionDraft<T>(key: string, value: T) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(key, JSON.stringify(value));
+}
+
+function clearSessionDraft(key: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.removeItem(key);
+}
+
 function parseAccountingActionHash(hashValue: string): AccountingHashAction | null {
   if (!hashValue.startsWith('#accounting:')) {
     return null;
@@ -237,6 +271,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [paymentModalDraft, setPaymentModalDraft] = useState<PaymentModalDraft | null>(null);
   const [presentmentModalDraft, setPresentmentModalDraft] =
     useState<PresentmentModalDraft | null>(null);
+  const [hasSavedPresentmentDraft, setHasSavedPresentmentDraft] = useState(
+    () => Boolean(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey))
+  );
   const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
 
   const replaceAccountingHash = (hash: string) => {
@@ -262,6 +299,25 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     }
 
     window.location.hash = hash;
+  };
+
+  const openPresentmentModal = (draft?: PresentmentModalDraft | null) => {
+    setPresentmentModalDraft(draft ?? null);
+    setIsCouponPresentmentModalOpen(true);
+    setActiveSubsection('presentments');
+    replaceAccountingHash('#accounting:presentments');
+  };
+
+  const resumeSavedPresentmentDraft = () => {
+    const savedDraft = loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey);
+    if (!savedDraft) {
+      setHasSavedPresentmentDraft(false);
+      setOperationsNotice('No saved presentment draft was found to resume.');
+      return;
+    }
+
+    openPresentmentModal(savedDraft);
+    setOperationsNotice('Resumed the saved presentment draft for review and final submission.');
   };
 
   useEffect(() => {
@@ -307,12 +363,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           replaceAccountingHash('#accounting:payments');
           break;
         case 'new-remittance':
-          setPresentmentModalDraft(
-            consumeSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey)
-          );
-          setIsCouponPresentmentModalOpen(true);
-          setActiveSubsection('presentments');
-          replaceAccountingHash('#accounting:presentments');
+          openPresentmentModal(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey));
           break;
         case 'new-direct-deposit':
           setIsDirectDepositModalOpen(true);
@@ -335,12 +386,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
           replaceAccountingHash('#accounting:receipts');
           break;
         case 'new-presentment':
-          setPresentmentModalDraft(
-            consumeSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey)
-          );
-          setIsCouponPresentmentModalOpen(true);
-          setActiveSubsection('presentments');
-          replaceAccountingHash('#accounting:presentments');
+          openPresentmentModal(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey));
           break;
         case 'new-quote':
           setIsQuoteModalOpen(true);
@@ -3137,6 +3183,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setActiveSubsection('presentments');
     setIsCouponPresentmentModalOpen(false);
+    setPresentmentModalDraft(null);
+    clearSessionDraft(presentmentDraftStorageKey);
+    setHasSavedPresentmentDraft(false);
+  };
+
+  const handleSavePresentmentDraft = (draft: PresentmentModalDraft) => {
+    saveSessionDraft(presentmentDraftStorageKey, draft);
+    setPresentmentModalDraft(draft);
+    setHasSavedPresentmentDraft(true);
+    setIsCouponPresentmentModalOpen(false);
+    setActiveSubsection('presentments');
+    setOperationsNotice('Saved the presentment draft. Use Resume Draft Presentment to continue later.');
   };
 
   const handleCounterpartySubmit = async (payload: CounterpartySubmitPayload) => {
@@ -7968,6 +8026,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           setIsCouponPresentmentModalOpen(false);
           setPresentmentModalDraft(null);
         }}
+        onSaveDraft={handleSavePresentmentDraft}
         onSubmit={handleCouponPresentmentSubmit}
       />
       <ReceiptIntakeModal
@@ -8110,7 +8169,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               onAddJournalEntry={() => setIsJournalModalOpen(true)}
               onAddBill={() => setIsBillModalOpen(true)}
               onAddReceipt={() => setIsReceiptModalOpen(true)}
-              onAddPresentment={() => setIsCouponPresentmentModalOpen(true)}
+              onAddPresentment={() => openPresentmentModal(null)}
+              onResumePresentmentDraft={resumeSavedPresentmentDraft}
+              hasSavedPresentmentDraft={hasSavedPresentmentDraft}
               onGenerateQuote={() => setIsQuoteModalOpen(true)}
               onManageBankFeed={() => {
                 openAccountingSubsection('bankFeed');

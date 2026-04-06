@@ -18,6 +18,7 @@ interface CouponPresentmentModalProps {
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   draft?: {
+    mode?: 'camera' | 'upload' | 'manual';
     title?: string;
     receiverName?: string;
     receiverAccountLabel?: string;
@@ -31,10 +32,12 @@ interface CouponPresentmentModalProps {
     sourceBankAccountId?: string;
     sourceLedgerAccountId?: string;
     dischargeMethod?: CouponPresentmentSubmitPayload['dischargeMethod'];
+    uploadedFileName?: string;
     parsedNotes?: string;
   } | null;
   onClose: () => void;
   onSubmit: (payload: CouponPresentmentSubmitPayload) => void;
+  onSaveDraft: (draft: NonNullable<CouponPresentmentModalProps['draft']>) => void;
 }
 
 const overlayStyle: CSSProperties = {
@@ -93,6 +96,7 @@ export default function CouponPresentmentModal({
   draft,
   onClose,
   onSubmit,
+  onSaveDraft,
 }: CouponPresentmentModalProps) {
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [title, setTitle] = useState('');
@@ -145,6 +149,7 @@ export default function CouponPresentmentModal({
   useEffect(() => {
     if (!open || !draft) return;
 
+    setMode(draft.mode ?? 'upload');
     setTitle(draft.title ?? '');
     setReceiverName(draft.receiverName ?? '');
     setReceiverAccountLabel(draft.receiverAccountLabel ?? '');
@@ -158,6 +163,7 @@ export default function CouponPresentmentModal({
     setSourceBankAccountId(draft.sourceBankAccountId ?? '');
     setSourceLedgerAccountId(draft.sourceLedgerAccountId ?? '');
     setDischargeMethod(draft.dischargeMethod ?? 'instrument_performance');
+    setUploadedFileName(draft.uploadedFileName ?? '');
     setParsedNotes(draft.parsedNotes ?? '');
     setExtractionSummary(draft.parsedNotes ? 'Draft values loaded and ready for review.' : '');
     setExtractionStatus(draft.parsedNotes ? 'complete' : 'idle');
@@ -482,6 +488,32 @@ export default function CouponPresentmentModal({
               Complete required fields before presenting: {missingFields.join(', ')}.
             </div>
           ) : null}
+          <button
+            type="button"
+            onClick={() =>
+              onSaveDraft({
+                mode,
+                title,
+                receiverName,
+                receiverAccountLabel,
+                couponReference,
+                presentmentDate,
+                dueDate,
+                amount,
+                obligationId: obligationId || undefined,
+                instrumentSettlementId: instrumentSettlementId || undefined,
+                treasuryAccountId: treasuryAccountId || undefined,
+                sourceBankAccountId: sourceBankAccountId || undefined,
+                sourceLedgerAccountId: sourceLedgerAccountId || undefined,
+                dischargeMethod,
+                uploadedFileName,
+                parsedNotes,
+              })
+            }
+            style={buttonStyle}
+          >
+            Save for Later
+          </button>
           <button type="button" onClick={onClose} style={buttonStyle}>Close</button>
           <button
             type="button"

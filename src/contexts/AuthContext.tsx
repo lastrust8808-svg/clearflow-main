@@ -829,6 +829,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [buildProvisionalGoogleUser, getGoogleWorkspaceStatus, lastKnownGoogleUser, state.status]);
 
   useEffect(() => {
+    if (state.status !== 'unauthenticated' || state.appData || !lastKnownGoogleUser?.email) {
+      return;
+    }
+
+    const localGoogleMatch = findLocalAccountByGoogleEmail(lastKnownGoogleUser.email);
+    if (!localGoogleMatch) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const restoreRememberedSession = async () => {
+      let recoveredAppData = localGoogleMatch.appData;
+
+      try {
+        const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
+        if (durableAppData) {
+          recoveredAppData = durableAppData;
+          saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
+        }
+      } catch (error) {
+        console.warn('Failed to rehydrate remembered Google session from durable storage.', error);
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      const mergedAppData = mergeStoredTermsAcceptance(
+        {
+          ...recoveredAppData,
+          user: {
+            ...recoveredAppData.user,
+            name: recoveredAppData.user.name || lastKnownGoogleUser.name,
+            email: lastKnownGoogleUser.email,
+            primaryContactType: 'google',
+          },
+        },
+        lastKnownGoogleUser
+      );
+
+      initialDataLoaded.current = false;
+      userDataService.setActiveUserEmail(lastKnownGoogleUser.email);
+      setState((current) => {
+        if (current.status !== 'unauthenticated' || current.appData) {
+          return current;
+        }
+
+        return {
+          ...current,
+          localAccountId: localGoogleMatch.userId,
+          appData: mergedAppData,
+          status: getGoogleWorkspaceStatus(mergedAppData),
+        };
+      });
+    };
+
+    void restoreRememberedSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    getGoogleWorkspaceStatus,
+    lastKnownGoogleUser,
+    mergeStoredTermsAcceptance,
+    state.appData,
+    state.status,
+  ]);
+
+  useEffect(() => {
     setIsInitialized(true);
   }, []);
 
