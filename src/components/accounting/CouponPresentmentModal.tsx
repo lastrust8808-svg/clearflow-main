@@ -35,6 +35,7 @@ interface CouponPresentmentModalProps {
     treasuryAccountId?: string;
     sourceBankAccountId?: string;
     sourceLedgerAccountId?: string;
+    useRecognizedRemittanceSource?: boolean;
     dischargeMethod?: CouponPresentmentSubmitPayload['dischargeMethod'];
     uploadedFileName?: string;
     parsedNotes?: string;
@@ -118,6 +119,7 @@ export default function CouponPresentmentModal({
   const [treasuryAccountId, setTreasuryAccountId] = useState('');
   const [sourceBankAccountId, setSourceBankAccountId] = useState('');
   const [sourceLedgerAccountId, setSourceLedgerAccountId] = useState('');
+  const [useRecognizedRemittanceSource, setUseRecognizedRemittanceSource] = useState(true);
   const [dischargeMethod, setDischargeMethod] =
     useState<CouponPresentmentSubmitPayload['dischargeMethod']>('instrument_performance');
   const [uploadedFileName, setUploadedFileName] = useState('');
@@ -186,6 +188,7 @@ export default function CouponPresentmentModal({
     setTreasuryAccountId('');
     setSourceBankAccountId('');
     setSourceLedgerAccountId('');
+    setUseRecognizedRemittanceSource(true);
     setDischargeMethod('instrument_performance');
     setUploadedFileName('');
     setUploadedFile(null);
@@ -213,6 +216,7 @@ export default function CouponPresentmentModal({
     setTreasuryAccountId(draft.treasuryAccountId ?? '');
     setSourceBankAccountId(draft.sourceBankAccountId ?? '');
     setSourceLedgerAccountId(draft.sourceLedgerAccountId ?? '');
+    setUseRecognizedRemittanceSource(draft.useRecognizedRemittanceSource ?? true);
     setDischargeMethod(draft.dischargeMethod ?? 'instrument_performance');
     setUploadedFileName(draft.uploadedFileName ?? '');
     setParsedNotes(draft.parsedNotes ?? '');
@@ -221,7 +225,8 @@ export default function CouponPresentmentModal({
   }, [draft, open]);
 
   const usesObligationBackedSource =
-    Boolean(obligationId) && dischargeMethod !== 'bank_rail_payment';
+    (Boolean(obligationId) || useRecognizedRemittanceSource) &&
+    dischargeMethod !== 'bank_rail_payment';
   const hasFundingSource = Boolean(
     treasuryAccountId || sourceBankAccountId || sourceLedgerAccountId || usesObligationBackedSource,
   );
@@ -261,6 +266,7 @@ export default function CouponPresentmentModal({
       treasuryAccountId: treasuryAccountId || undefined,
       sourceBankAccountId: sourceBankAccountId || undefined,
       sourceLedgerAccountId: sourceLedgerAccountId || undefined,
+      useRecognizedRemittanceSource,
       dischargeMethod,
       uploadedFileName,
       parsedNotes,
@@ -279,6 +285,7 @@ export default function CouponPresentmentModal({
         treasuryAccountId ||
         sourceBankAccountId ||
         sourceLedgerAccountId ||
+        useRecognizedRemittanceSource ||
         parsedNotes.trim()
     );
 
@@ -301,6 +308,7 @@ export default function CouponPresentmentModal({
     title,
     treasuryAccountId,
     uploadedFileName,
+    useRecognizedRemittanceSource,
     mode,
   ]);
 
@@ -580,6 +588,29 @@ export default function CouponPresentmentModal({
           </div>
         ) : null}
 
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.2)',
+            background: 'rgba(15,23,42,0.32)',
+            color: '#cbd5e1',
+            fontSize: 13,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={useRecognizedRemittanceSource}
+            onChange={(event) => setUseRecognizedRemittanceSource(event.target.checked)}
+            disabled={dischargeMethod === 'bank_rail_payment'}
+          />
+          Use this remittance / presentment itself as the recognized source rail when no linked
+          obligation or explicit account source has been selected.
+        </label>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!canSubmit ? (
             <div style={{ color: '#fca5a5', alignSelf: 'center', fontSize: 13 }}>
@@ -603,6 +634,7 @@ export default function CouponPresentmentModal({
                 treasuryAccountId: treasuryAccountId || undefined,
                 sourceBankAccountId: sourceBankAccountId || undefined,
                 sourceLedgerAccountId: sourceLedgerAccountId || undefined,
+                useRecognizedRemittanceSource,
                 dischargeMethod,
                 uploadedFileName,
                 parsedNotes,
@@ -630,6 +662,7 @@ export default function CouponPresentmentModal({
                 treasuryAccountId: treasuryAccountId || undefined,
                 sourceBankAccountId: sourceBankAccountId || undefined,
                 sourceLedgerAccountId: sourceLedgerAccountId || undefined,
+                useRecognizedRemittanceSource,
                 dischargeMethod,
                 uploadedFileName,
                 uploadedFile,

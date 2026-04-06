@@ -154,6 +154,7 @@ export interface CouponPresentmentSubmitPayload {
   treasuryAccountId?: string;
   sourceBankAccountId?: string;
   sourceLedgerAccountId?: string;
+  useRecognizedRemittanceSource?: boolean;
   dischargeMethod:
     | 'internal_ledger_credit'
     | 'instrument_performance'
