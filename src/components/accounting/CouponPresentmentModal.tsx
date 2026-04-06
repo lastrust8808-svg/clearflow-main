@@ -5,6 +5,7 @@ import {
   getCachedAccountingExtraction,
   type IntakeExtractionResult,
 } from '../../services/accountingIntake.service';
+import { useAuth } from '../../hooks/useAuth';
 import type {
   InstrumentSettlementRecord,
   ObligationRecord,
@@ -105,6 +106,7 @@ export default function CouponPresentmentModal({
   onSaveDraft,
   onDraftChange,
 }: CouponPresentmentModalProps) {
+  const { currentUser } = useAuth();
   const hasHydratedDraftRef = useRef(false);
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [title, setTitle] = useState('');
@@ -327,7 +329,9 @@ export default function CouponPresentmentModal({
     setExtractionSummary('Reading the uploaded coupon and extracting receiver, amount, and date data...');
 
     try {
-      const extraction = await analyzeAccountingUpload('coupon', fileToExtract);
+      const extraction = await analyzeAccountingUpload('coupon', fileToExtract, {
+        accountId: currentUser?.id,
+      });
       applyExtractionResult(extraction);
     } catch (error) {
       console.warn('Coupon upload extraction failed.', error);

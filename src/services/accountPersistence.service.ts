@@ -24,6 +24,10 @@ function buildFileUrl(accountId: string, fileId?: string) {
   return fileId ? `${base}/${encodeURIComponent(fileId)}` : base;
 }
 
+function buildExtractionUrl(accountId: string, signature: string) {
+  return `${STORAGE_API_BASE}/api/storage/accounts/${normalizeAccountId(accountId)}/extractions/${encodeURIComponent(signature)}`;
+}
+
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -143,4 +147,52 @@ export async function loadAccountDocumentFile(accountId: string, fileId: string)
     uploadedAt: payload.file.uploadedAt,
     blob: base64ToBlob(payload.file.base64Data, payload.file.mimeType),
   };
+}
+
+export async function loadAccountExtractionCache(accountId: string, signature: string) {
+  const response = await fetch(buildExtractionUrl(accountId, signature), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to load durable extraction cache.');
+  }
+
+  const payload = (await response.json()) as {
+    success: boolean;
+    result: unknown;
+    savedAt?: string;
+  };
+
+  return {
+    result: payload.result,
+    savedAt: payload.savedAt,
+  };
+}
+
+export async function saveAccountExtractionCache(
+  accountId: string,
+  signature: string,
+  result: unknown
+) {
+  const response = await fetch(buildExtractionUrl(accountId, signature), {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ result }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to save durable extraction cache.');
+  }
+
+  return response.json();
 }

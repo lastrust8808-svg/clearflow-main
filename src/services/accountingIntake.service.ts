@@ -1,5 +1,9 @@
 import { geminiService } from './gemini.service';
 import type { AnalysisResult } from '../types/app.models';
+import {
+  loadAccountExtractionCache,
+  saveAccountExtractionCache,
+} from './accountPersistence.service';
 
 type IntakeKind = 'bill' | 'receipt' | 'coupon';
 const EXTRACTION_CACHE_STORAGE_KEY = 'clearflow-accounting-extraction-cache-v1';
@@ -82,6 +86,46 @@ function buildExtractionCacheKey(kind: IntakeKind, file: File) {
   return [kind, file.name, file.size, file.lastModified, file.type].join('::');
 }
 
+async function loadDurableExtractionCache(
+  accountId: string | undefined,
+  signature: string
+): Promise<CachedExtractionLookup | null> {
+  if (!accountId) {
+    return null;
+  }
+
+  try {
+    const payload = await loadAccountExtractionCache(accountId, signature);
+    if (!payload) {
+      return null;
+    }
+
+    return {
+      savedAt: payload.savedAt,
+      result: payload.result as IntakeExtractionResult,
+    };
+  } catch (error) {
+    console.warn('Failed to load durable accounting extraction cache.', error);
+    return null;
+  }
+}
+
+async function setDurableExtractionCache(
+  accountId: string | undefined,
+  signature: string,
+  result: IntakeExtractionResult
+) {
+  if (!accountId) {
+    return;
+  }
+
+  try {
+    await saveAccountExtractionCache(accountId, signature, result);
+  } catch (error) {
+    console.warn('Failed to save durable accounting extraction cache.', error);
+  }
+}
+
 function loadExtractionCache(): Record<string, CachedExtractionRecord> {
   if (typeof window === 'undefined') {
     return {};
@@ -135,6 +179,7 @@ function setCachedExtraction(
 export async function analyzeAccountingUpload(
   kind: IntakeKind,
   file: File | null | undefined,
+  options?: { accountId?: string },
 ): Promise<IntakeExtractionResult> {
   if (!file) {
     return {
@@ -143,14 +188,23 @@ export async function analyzeAccountingUpload(
     };
   }
 
-  const cachedResult = getCachedAccountingExtraction(kind, file).result;
+  const signature = buildExtractionCacheKey(kind, file);
+  const cachedLookup = getCachedAccountingExtraction(kind, file);
+  const cachedResult = cachedLookup.result;
   if (cachedResult) {
     return cachedResult;
+  }
+
+  const durableLookup = await loadDurableExtractionCache(options?.accountId, signature);
+  if (durableLookup?.result) {
+    setCachedExtraction(kind, file, durableLookup.result);
+    return durableLookup.result;
   }
 
   if (!geminiService.isConfigured) {
     const result = fallbackExtraction(kind, file);
     setCachedExtraction(kind, file, result);
+    await setDurableExtractionCache(options?.accountId, signature, result);
     return result;
   }
 
@@ -180,6 +234,7 @@ export async function analyzeAccountingUpload(
       rawAnalysis: analysis,
     };
     setCachedExtraction(kind, file, result);
+    await setDurableExtractionCache(options?.accountId, signature, result);
     return result;
   } catch (error) {
     console.warn(`Automatic ${kind} extraction failed. Falling back to review mode.`, error);
@@ -192,6 +247,7 @@ export async function analyzeAccountingUpload(
           : `Automatic ${kind} extraction failed and needs review.`,
     };
     setCachedExtraction(kind, file, result);
+    await setDurableExtractionCache(options?.accountId, signature, result);
     return result;
   }
 }

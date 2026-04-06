@@ -27,6 +27,14 @@ function accountTransactionProofDirectory(accountId) {
   return path.join(accountDirectory(accountId), 'transaction-proof-chains');
 }
 
+function accountPlaidDirectory(accountId) {
+  return path.join(accountDirectory(accountId), 'plaid');
+}
+
+function accountExtractionDirectory(accountId) {
+  return path.join(accountDirectory(accountId), 'extractions');
+}
+
 function accountFilePath(accountId, fileId) {
   return path.join(accountFilesDirectory(accountId), `${sanitizeSegment(fileId)}.json`);
 }
@@ -37,6 +45,14 @@ function accountRemittancePath(accountId, vendorId) {
 
 function accountTransactionProofPath(accountId) {
   return path.join(accountTransactionProofDirectory(accountId), 'chains.json');
+}
+
+function accountPlaidPath(accountId) {
+  return path.join(accountPlaidDirectory(accountId), 'connections.json');
+}
+
+function accountExtractionPath(accountId, signature) {
+  return path.join(accountExtractionDirectory(accountId), `${sanitizeSegment(signature)}.json`);
 }
 
 async function ensureDirectory(targetPath) {
@@ -171,6 +187,78 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 
   return {
     accountId,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+export async function loadAccountPlaidVault(accountId) {
+  try {
+    const raw = await fs.readFile(accountPlaidPath(accountId), 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function saveAccountPlaidVault(accountId, payload) {
+  const targetDirectory = accountPlaidDirectory(accountId);
+  await ensureDirectory(targetDirectory);
+  await fs.writeFile(
+    accountPlaidPath(accountId),
+    JSON.stringify(
+      {
+        ...payload,
+        accountId,
+        savedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  return {
+    accountId,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+export async function loadAccountExtractionRecord(accountId, signature) {
+  try {
+    const raw = await fs.readFile(accountExtractionPath(accountId, signature), 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function saveAccountExtractionRecord(accountId, signature, payload) {
+  const targetDirectory = accountExtractionDirectory(accountId);
+  await ensureDirectory(targetDirectory);
+  await fs.writeFile(
+    accountExtractionPath(accountId, signature),
+    JSON.stringify(
+      {
+        ...payload,
+        accountId,
+        signature,
+        savedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  return {
+    accountId,
+    signature,
     savedAt: new Date().toISOString(),
   };
 }

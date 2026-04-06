@@ -1,11 +1,95 @@
 import express from 'express';
 import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from 'plaid';
+import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accountStorage.js';
+import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
 
 const itemStore = new Map();
 const accountIndex = new Map();
 const transactionCursorStore = new Map();
+
+async function loadPersistedConnections(userId) {
+  if (!userId) {
+    return [];
+  }
+
+  try {
+    const record = await loadAccountPlaidVault(userId);
+    if (!record?.encryptedPayload) {
+      return [];
+    }
+    const connections = decryptJson(record.encryptedPayload);
+    return Array.isArray(connections) ? connections : [];
+  } catch (error) {
+    console.warn(`Unable to load persisted Plaid connections for ${userId}.`, error);
+    return [];
+  }
+}
+
+async function savePersistedConnections(userId) {
+  if (!userId) {
+    return;
+  }
+
+  const connections = Array.from(itemStore.values()).filter((item) => item.userId === userId);
+  const encryptedPayload = encryptJson(
+    connections.map((item) => ({
+      userId: item.userId,
+      accessToken: item.accessToken,
+      itemId: item.itemId,
+      authResponse: item.authResponse,
+      identityData: item.identityData,
+      accounts: item.accounts,
+      cursor: transactionCursorStore.get(item.itemId) || null,
+    }))
+  );
+
+  await saveAccountPlaidVault(userId, { encryptedPayload });
+}
+
+async function hydrateStoredItemByItemId(itemId) {
+  if (!itemId) {
+    return null;
+  }
+
+  if (itemStore.has(itemId)) {
+    return itemStore.get(itemId);
+  }
+
+  try {
+    const { readdir } = await import('node:fs/promises');
+    const path = await import('node:path');
+    const accountsRoot = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+    const accountDirectories = await readdir(accountsRoot, { withFileTypes: true });
+
+    for (const entry of accountDirectories) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const userId = decodeURIComponent(entry.name);
+      const connections = await loadPersistedConnections(userId);
+      const matched = connections.find((connection) => connection.itemId === itemId);
+      if (!matched) {
+        continue;
+      }
+
+      itemStore.set(itemId, matched);
+      (matched.accounts || []).forEach((account) => {
+        accountIndex.set(account.account_id, itemId);
+      });
+      if (matched.cursor) {
+        transactionCursorStore.set(itemId, matched.cursor);
+      }
+      return matched;
+    }
+  } catch (error) {
+    console.warn(`Unable to hydrate Plaid item ${itemId} from persisted storage.`, error);
+  }
+
+  return null;
+}
 
 function isPlaidConfigured() {
   return Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
@@ -126,8 +210,8 @@ function buildMockTransactions(itemId) {
   ];
 }
 
-function getStoredItem(itemId) {
-  const item = itemStore.get(itemId);
+async function getStoredItem(itemId) {
+  const item = itemStore.get(itemId) || (await hydrateStoredItemByItemId(itemId));
   if (!item) {
     const error = new Error(`Plaid item ${itemId} is not connected in the current runtime.`);
     error.statusCode = 404;
@@ -215,6 +299,7 @@ router.post('/exchange_public_token', async (req, res) => {
       ],
     });
     accountIndex.set(authResponse.accounts[0].account_id, itemId);
+    await savePersistedConnections(userId);
 
     return res.json({
       authResponse,
@@ -244,6 +329,7 @@ router.post('/exchange_public_token', async (req, res) => {
     accountsResponse.data.accounts.forEach((account) => {
       accountIndex.set(account.account_id, itemId);
     });
+    await savePersistedConnections(userId);
 
     const bankOwnerName =
       identityResponse.data.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
@@ -275,7 +361,7 @@ router.post('/auth/get', async (req, res) => {
   }
 
   try {
-    const item = getStoredItem(itemId);
+    const item = await getStoredItem(itemId);
     const response = await plaidClient.authGet({ access_token: item.accessToken });
     item.authResponse = response.data;
     return res.json(response.data);
@@ -299,7 +385,7 @@ router.post('/identity/get', async (req, res) => {
   }
 
   try {
-    const item = getStoredItem(itemId);
+    const item = await getStoredItem(itemId);
     const response = await plaidClient.identityGet({ access_token: item.accessToken });
     item.identityData = response.data;
     return res.json(response.data);
@@ -350,7 +436,7 @@ router.post('/signal/evaluate', async (req, res) => {
 
   try {
     const resolvedItemId = itemId || accountIndex.get(accountId);
-    const item = getStoredItem(resolvedItemId);
+    const item = await getStoredItem(resolvedItemId);
     const response = await plaidClient.signalEvaluate({
       access_token: item.accessToken,
       account_id: accountId,
@@ -376,7 +462,7 @@ router.get('/transactions/:itemId', async (req, res) => {
   }
 
   try {
-    const item = getStoredItem(itemId);
+    const item = await getStoredItem(itemId);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 30);
     const response = await plaidClient.transactionsGet({
@@ -406,8 +492,8 @@ router.post('/transactions/sync', async (req, res) => {
   }
 
   try {
-    const item = getStoredItem(itemId);
-    let cursor = transactionCursorStore.get(itemId) || null;
+    const item = await getStoredItem(itemId);
+    let cursor = transactionCursorStore.get(itemId) || item.cursor || null;
     let hasMore = true;
     const added = [];
 
@@ -423,6 +509,8 @@ router.post('/transactions/sync', async (req, res) => {
     }
 
     transactionCursorStore.set(itemId, cursor);
+    item.cursor = cursor;
+    await savePersistedConnections(item.userId);
     return res.json(normalizePlaidTransactions(added));
   } catch (error) {
     return res.status(error.statusCode || 500).json({

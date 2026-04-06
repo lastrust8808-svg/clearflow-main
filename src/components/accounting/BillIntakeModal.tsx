@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
+import { useAuth } from '../../hooks/useAuth';
 
 interface BillIntakeModalProps {
   open: boolean;
@@ -65,6 +66,7 @@ const buttonStyle: CSSProperties = {
 };
 
 export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeModalProps) {
+  const { currentUser } = useAuth();
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [vendorName, setVendorName] = useState('');
   const [billNumber, setBillNumber] = useState('');
@@ -114,7 +116,9 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
     setExtractionSummary('Reading the uploaded bill and extracting vendor, amount, and due date...');
 
     try {
-      const extraction = await analyzeAccountingUpload('bill', uploadedFile);
+      const extraction = await analyzeAccountingUpload('bill', uploadedFile, {
+        accountId: currentUser?.id,
+      });
       setVendorName((current) => current || extraction.vendorOrMerchantName || '');
       setAmount((current) => {
         if (current) {

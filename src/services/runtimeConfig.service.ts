@@ -18,6 +18,7 @@ function hasRealValue(value?: string) {
     'YOUR_NGROK_OR_SERVER_URL_HERE',
     '%VITE_GOOGLE_CLIENT_ID%',
     '%VITE_API_BASE_URL%',
+    '%VITE_GEMINI_API_KEY%',
   ].includes(normalized);
 }
 
@@ -48,10 +49,17 @@ export function getApiBaseUrl() {
   return 'http://localhost:8000';
 }
 
+export function getGeminiApiKey() {
+  const env = getRuntimeEnv();
+  const apiKey = env.API_KEY || env.VITE_GEMINI_API_KEY;
+  return hasRealValue(apiKey) ? apiKey! : '';
+}
+
 export function getRuntimeConfigSnapshot() {
   return {
     googleClientId: getGoogleClientId(),
     googleConfigured: isGoogleConfiguredFromEnv(),
     apiBaseUrl: getApiBaseUrl(),
+    geminiConfigured: Boolean(getGeminiApiKey()),
   };
 }

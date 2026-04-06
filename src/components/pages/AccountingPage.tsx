@@ -2157,7 +2157,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const numericAmount = Number(payload.amount || 0);
     const issuedDate = new Date().toISOString().slice(0, 10);
     const billId = `bill-${Date.now()}`;
-    const extraction = await analyzeAccountingUpload('bill', payload.uploadedFile);
+    const extraction = await analyzeAccountingUpload('bill', payload.uploadedFile, {
+      accountId: auth.currentUser?.id,
+    });
     const documentRecord = await persistUploadDocument({
       entityId: bills[0]?.entityId ?? data.entities[0]?.id ?? 'entity-unknown',
       folder: 'bills',
@@ -2418,7 +2420,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
   const handleReceiptSubmit = async (payload: ReceiptSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
-    const extraction = await analyzeAccountingUpload('receipt', payload.uploadedFile);
+    const extraction = await analyzeAccountingUpload('receipt', payload.uploadedFile, {
+      accountId: auth.currentUser?.id,
+    });
     const entryDate =
       payload.receiptDate || extraction.date || new Date().toISOString().slice(0, 10);
     const receiptId = `receipt-${Date.now()}`;
@@ -2537,7 +2541,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const settlementId = `set-${stamp}`;
     const journalId = `je-${stamp}`;
     const remittanceStatementId = `remit-${stamp}`;
-    const extraction = await analyzeAccountingUpload('coupon', payload.uploadedFile);
+    const extraction = await analyzeAccountingUpload('coupon', payload.uploadedFile, {
+      accountId: auth.currentUser?.id,
+    });
     const resolvedAmount = Number(payload.amount || 0) || extraction.amount || 0;
     if (!resolvedAmount) {
       return;

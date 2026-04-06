@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
+import { useAuth } from '../../hooks/useAuth';
 
 interface ReceiptIntakeModalProps {
   open: boolean;
@@ -65,6 +66,7 @@ const buttonStyle: CSSProperties = {
 };
 
 export default function ReceiptIntakeModal({ open, onClose, onSubmit }: ReceiptIntakeModalProps) {
+  const { currentUser } = useAuth();
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [merchantName, setMerchantName] = useState('');
   const [receiptDate, setReceiptDate] = useState('');
@@ -114,7 +116,9 @@ export default function ReceiptIntakeModal({ open, onClose, onSubmit }: ReceiptI
     setExtractionSummary('Reading the uploaded receipt and extracting merchant, amount, and category...');
 
     try {
-      const extraction = await analyzeAccountingUpload('receipt', uploadedFile);
+      const extraction = await analyzeAccountingUpload('receipt', uploadedFile, {
+        accountId: currentUser?.id,
+      });
       setMerchantName((current) => current || extraction.vendorOrMerchantName || '');
       setAmount((current) => {
         if (current) {

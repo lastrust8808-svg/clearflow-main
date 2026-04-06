@@ -2,10 +2,14 @@ import express from 'express';
 import {
   loadAccountAppData,
   loadAccountDocumentFile,
+  loadAccountExtractionRecord,
+  loadAccountPlaidVault,
   loadAccountRemittanceVault,
   loadAccountTransactionProofVault,
   saveAccountAppData,
   saveAccountDocumentFile,
+  saveAccountExtractionRecord,
+  saveAccountPlaidVault,
   saveAccountRemittanceVault,
   saveAccountTransactionProofVault,
 } from '../services/accountStorage.js';
@@ -234,6 +238,119 @@ router.put('/accounts/:accountId/transaction-proof-chains', async (req, res) => 
         error instanceof Error
           ? error.message
           : 'Failed to save encrypted transaction proof chains.',
+    });
+  }
+});
+
+router.get('/accounts/:accountId/extractions/:signature', async (req, res) => {
+  try {
+    const record = await loadAccountExtractionRecord(
+      req.params.accountId,
+      req.params.signature
+    );
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Extraction cache not found.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      result: record.result,
+      savedAt: record.savedAt,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to load extraction cache.',
+    });
+  }
+});
+
+router.put('/accounts/:accountId/extractions/:signature', async (req, res) => {
+  const { result } = req.body || {};
+
+  if (!result) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing extraction result payload.',
+    });
+  }
+
+  try {
+    const saveResult = await saveAccountExtractionRecord(
+      req.params.accountId,
+      req.params.signature,
+      { result }
+    );
+
+    return res.status(200).json({
+      success: true,
+      result: saveResult,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to save extraction cache.',
+    });
+  }
+});
+
+router.get('/accounts/:accountId/plaid-connections', async (req, res) => {
+  try {
+    const record = await loadAccountPlaidVault(req.params.accountId);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Plaid connections not found.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      connections: decryptJson(record.encryptedPayload),
+      savedAt: record.savedAt,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to load Plaid connections.',
+    });
+  }
+});
+
+router.put('/accounts/:accountId/plaid-connections', async (req, res) => {
+  const { connections } = req.body || {};
+
+  if (!Array.isArray(connections)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing Plaid connections payload.',
+    });
+  }
+
+  try {
+    const encryptedPayload = encryptJson(connections);
+    const result = await saveAccountPlaidVault(req.params.accountId, {
+      encryptedPayload,
+    });
+
+    return res.status(200).json({
+      success: true,
+      result,
+      connectionCount: connections.length,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to save Plaid connections.',
     });
   }
 });

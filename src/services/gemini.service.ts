@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { AnalysisResult, IdAnalysisResult, JournalEntry } from '../types/app.models';
 import { GOVERNANCE_DOCUMENTS_RAW } from '../data/governance-docs';
+import { getGeminiApiKey } from './runtimeConfig.service';
 
 class GeminiService {
   private ai: GoogleGenAI | null = null;
@@ -8,7 +9,7 @@ class GeminiService {
   readonly configurationIssue: 'missing_api_key' | 'unresolved_placeholder' | null = null;
 
   constructor() {
-    const apiKey = ((window as any).process?.env?.API_KEY || '').trim();
+    const apiKey = getGeminiApiKey().trim();
     const looksUnresolvedPlaceholder =
       apiKey.startsWith('%') && apiKey.endsWith('%');
     if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI') {
@@ -84,7 +85,7 @@ Instructions:
       };
       
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
           responseMimeType: 'application/json',
@@ -178,7 +179,7 @@ Instructions:
       };
 
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
           responseMimeType: 'application/json',
@@ -223,7 +224,7 @@ Instructions:
       };
 
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
           responseMimeType: 'application/json',
