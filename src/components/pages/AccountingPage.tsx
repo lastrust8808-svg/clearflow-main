@@ -7252,7 +7252,6 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             futuresStrategies={data.futuresStrategies}
             liquidationPlans={data.liquidationPlans}
             workspaceSettings={data.workspaceSettings}
-            onNavigate={navigateToHash}
           />
         );
 
@@ -8170,26 +8169,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         >
           <div style={{ display: 'grid', gap: 16 }}>
             <AccountingToolbar
-              onAddCustomer={() => setCounterpartyModalMode('customer')}
-              onAddVendor={() => setCounterpartyModalMode('vendor')}
-              onAddEmployee={() => setIsEmployeeModalOpen(true)}
               onAddInvoice={() => setIsInvoiceModalOpen(true)}
               onRecordPayment={() => setIsPaymentModalOpen(true)}
-              onRequestDirectDeposit={() => {
-                openAccountingSubsection('payroll');
-                setIsDirectDepositModalOpen(true);
-              }}
               onAddJournalEntry={() => setIsJournalModalOpen(true)}
               onAddBill={() => setIsBillModalOpen(true)}
-              onAddReceipt={() => setIsReceiptModalOpen(true)}
               onAddPresentment={() => openPresentmentModal(null)}
               onResumePresentmentDraft={resumeSavedPresentmentDraft}
               hasSavedPresentmentDraft={hasSavedPresentmentDraft}
-              onGenerateQuote={() => setIsQuoteModalOpen(true)}
-              onManageBankFeed={() => {
-                openAccountingSubsection('bankFeed');
-              }}
-              onAddIntercompanyTransfer={() => setIsIntercompanyModalOpen(true)}
             />
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>

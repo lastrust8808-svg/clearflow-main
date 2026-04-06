@@ -4,16 +4,8 @@ interface AccountingToolbarProps {
   onAddInvoice: () => void;
   onAddJournalEntry: () => void;
   onAddBill: () => void;
-  onAddReceipt: () => void;
   onAddPresentment: () => void;
-  onGenerateQuote: () => void;
-  onAddIntercompanyTransfer: () => void;
-  onAddCustomer: () => void;
-  onAddVendor: () => void;
   onRecordPayment: () => void;
-  onAddEmployee: () => void;
-  onRequestDirectDeposit: () => void;
-  onManageBankFeed: () => void;
   onResumePresentmentDraft?: () => void;
   hasSavedPresentmentDraft?: boolean;
 }
@@ -33,25 +25,23 @@ export default function AccountingToolbar({
   onAddInvoice,
   onAddBill,
   onAddPresentment,
-  onAddVendor,
   onRecordPayment,
-  onManageBankFeed,
+  onAddJournalEntry,
   onResumePresentmentDraft,
   hasSavedPresentmentDraft = false,
 }: AccountingToolbarProps) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-      <button type="button" onClick={onAddVendor} style={buttonStyle}>+ Add Vendor</button>
       <button type="button" onClick={onAddInvoice} style={buttonStyle}>+ Add Invoice</button>
       <button type="button" onClick={onAddBill} style={buttonStyle}>+ Add Bill</button>
-      <button type="button" onClick={onAddPresentment} style={buttonStyle}>+ Present Coupon</button>
+      <button type="button" onClick={onAddPresentment} style={buttonStyle}>+ Add Remittance</button>
+      <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Send Funds</button>
+      <button type="button" onClick={onAddJournalEntry} style={buttonStyle}>+ Manual Journal</button>
       {hasSavedPresentmentDraft && onResumePresentmentDraft ? (
         <button type="button" onClick={onResumePresentmentDraft} style={buttonStyle}>
           Resume Draft Presentment
         </button>
       ) : null}
-      <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Record Payment</button>
-      <button type="button" onClick={onManageBankFeed} style={buttonStyle}>+ Live Bank Feed</button>
     </div>
   );
 }

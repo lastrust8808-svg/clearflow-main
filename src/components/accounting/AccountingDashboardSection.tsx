@@ -55,7 +55,6 @@ interface AccountingDashboardSectionProps {
   futuresStrategies: FuturesStrategyRecord[];
   liquidationPlans: LiquidationPlanRecord[];
   workspaceSettings: WorkspaceSettingsRecord;
-  onNavigate?: (hash: string) => void;
 }
 
 export default function AccountingDashboardSection({
@@ -84,7 +83,6 @@ export default function AccountingDashboardSection({
   futuresStrategies,
   liquidationPlans,
   workspaceSettings,
-  onNavigate,
 }: AccountingDashboardSectionProps) {
   const incomingReceiptsTotal = payments
     .filter((payment) => payment.direction === 'incoming')
@@ -115,15 +113,6 @@ export default function AccountingDashboardSection({
     (item) => item.status === 'returned' || item.status === 'verified'
   ).length;
   const formatDate = (value?: string) => (value ? value : 'No date');
-  const actionButtonStyle = {
-    padding: '9px 12px',
-    borderRadius: 10,
-    border: '1px solid rgba(96,165,250,0.4)',
-    background: 'rgba(8,47,73,0.72)',
-    color: '#e0f2fe',
-    cursor: 'pointer',
-    fontWeight: 600,
-  } as const;
   const infoCardStyle = {
     border: '1px solid rgba(148,163,184,0.2)',
     borderRadius: 12,
@@ -131,16 +120,6 @@ export default function AccountingDashboardSection({
     background: 'rgba(15,23,42,0.45)',
     color: '#e5e7eb',
   } as const;
-  const navigate = (hash: string) => {
-    if (onNavigate) {
-      onNavigate(hash);
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      window.location.hash = hash;
-    }
-  };
   const filingQueue = taxReportingLinks.filter(
     (link) =>
       link.status !== 'accepted' ||
@@ -267,22 +246,8 @@ export default function AccountingDashboardSection({
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:payments')}>
-              Open Payments Desk
-            </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:recurring')}>
-              Open Recurring Desk
-            </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:payroll')}>
-              Open Payroll
-            </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:railOps')}>
-              Open Rails & Codes
-            </button>
-            <button type="button" style={actionButtonStyle} onClick={() => navigate('#accounting:presentments')}>
-              Open Presentments
-            </button>
+          <div style={{ color: '#94a3b8', lineHeight: 1.7 }}>
+            Use the accounting action strip above for new work, and use the accounting section row to move between invoices, remittance, journal, payroll, bank feed, and reconciliation.
           </div>
         </div>
       </PageSection>
@@ -320,22 +285,6 @@ export default function AccountingDashboardSection({
                   </div>
                   <div style={{ color: '#d1d5db', marginTop: 6 }}>
                     {control.recommendedAction}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#accounting:payments')}
-                    >
-                      Open Payments Desk
-                    </button>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#accounting:railOps')}
-                    >
-                      Open Rails & Codes
-                    </button>
                   </div>
                 </div>
               ))
@@ -478,22 +427,6 @@ export default function AccountingDashboardSection({
                     {summary.watchItems.join(' | ')}
                   </div>
                 ) : null}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                  <button
-                    type="button"
-                    style={actionButtonStyle}
-                    onClick={() => navigate('#accounting:payments')}
-                  >
-                    Open Payments Desk
-                  </button>
-                  <button
-                    type="button"
-                    style={actionButtonStyle}
-                    onClick={() => navigate('#accounting:presentments')}
-                  >
-                    Open Presentments
-                  </button>
-                </div>
               </div>
             ))
           )}
@@ -525,24 +458,6 @@ export default function AccountingDashboardSection({
                   Filing channel: {item.filingChannel || 'Not set'} | Correction:{' '}
                   {item.correctionStatus}
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                  <button
-                    type="button"
-                    style={actionButtonStyle}
-                    onClick={() => navigate('#accounting:payments')}
-                  >
-                    Open Payments Desk
-                  </button>
-                  {item.linkedPaymentId ? (
-                    <button
-                      type="button"
-                        style={actionButtonStyle}
-                        onClick={() => navigate('#accounting:payments')}
-                      >
-                        Open Payment
-                      </button>
-                    ) : null}
-                  </div>
                 </div>
               ))
             )}
@@ -567,15 +482,6 @@ export default function AccountingDashboardSection({
                   <div style={{ color: '#d1d5db', marginTop: 6 }}>
                     Auto presentment:{' '}
                     {obligation.recurringSchedule?.autoCreatePresentment ? 'enabled' : 'off'}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#accounting:recurring')}
-                    >
-                      Open Recurring Desk
-                    </button>
                   </div>
                 </div>
               ))
@@ -618,22 +524,6 @@ export default function AccountingDashboardSection({
                       </div>
                     </>
                   )}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#accounting:railOps')}
-                    >
-                      Open Rails & Codes
-                    </button>
-                    <button
-                      type="button"
-                      style={actionButtonStyle}
-                      onClick={() => navigate('#accounting:reconciliation')}
-                    >
-                      Open Reconciliation
-                    </button>
-                  </div>
                 </div>
               ))
             )}
