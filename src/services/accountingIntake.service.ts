@@ -24,6 +24,11 @@ interface CachedExtractionRecord {
   result: IntakeExtractionResult;
 }
 
+export interface CachedExtractionLookup {
+  savedAt?: string;
+  result: IntakeExtractionResult | null;
+}
+
 function parseCurrencyValue(value: string | undefined) {
   if (!value) return undefined;
   const numeric = Number(value.replace(/[^0-9.-]/g, ''));
@@ -102,10 +107,16 @@ function saveExtractionCache(cache: Record<string, CachedExtractionRecord>) {
   }
 }
 
-function getCachedExtraction(kind: IntakeKind, file: File): IntakeExtractionResult | null {
+export function getCachedAccountingExtraction(
+  kind: IntakeKind,
+  file: File
+): CachedExtractionLookup {
   const cache = loadExtractionCache();
   const cached = cache[buildExtractionCacheKey(kind, file)];
-  return cached?.result || null;
+  return {
+    savedAt: cached?.savedAt,
+    result: cached?.result || null,
+  };
 }
 
 function setCachedExtraction(
@@ -132,7 +143,7 @@ export async function analyzeAccountingUpload(
     };
   }
 
-  const cachedResult = getCachedExtraction(kind, file);
+  const cachedResult = getCachedAccountingExtraction(kind, file).result;
   if (cachedResult) {
     return cachedResult;
   }

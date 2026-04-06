@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
+import {
+  analyzeAccountingUpload,
+  getCachedAccountingExtraction,
+  type IntakeExtractionResult,
+} from '../../services/accountingIntake.service';
 import type {
   InstrumentSettlementRecord,
   ObligationRecord,
@@ -123,6 +127,47 @@ export default function CouponPresentmentModal({
   const [extractionStatus, setExtractionStatus] = useState<
     'idle' | 'ready' | 'complete' | 'failed'
   >('idle');
+
+  const applyExtractionResult = (
+    extraction: IntakeExtractionResult,
+    options?: { fromCache?: boolean; cachedAt?: string }
+  ) => {
+    setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
+    setReceiverAccountLabel((current) => current || extraction.accountReference || '');
+    setCouponReference((current) => current || extraction.processingReference || '');
+    setAmount((current) => {
+      if (current) {
+        return current;
+      }
+      return typeof extraction.amount === 'number' ? String(extraction.amount) : '';
+    });
+    setDueDate((current) => current || extraction.date || '');
+    setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
+    setParsedNotes((current) =>
+      [
+        current,
+        extraction.summary,
+        extraction.paymentInstructionSummary,
+        extraction.remitAddress ? `Remit address: ${extraction.remitAddress}` : '',
+        extraction.contactPhone ? `Contact phone: ${extraction.contactPhone}` : '',
+        extraction.accountReference ? `Account reference: ${extraction.accountReference}` : '',
+        extraction.processingReference
+          ? `Processing reference: ${extraction.processingReference}`
+          : '',
+      ]
+        .filter(Boolean)
+        .filter((value, index, all) => all.indexOf(value) === index)
+        .join('\n\n'),
+    );
+    setExtractionSummary(
+      options?.fromCache
+        ? `Saved extraction restored${options.cachedAt ? ` from ${new Date(options.cachedAt).toLocaleString()}` : ''}. Review and edit any field before presenting the coupon.`
+        : extraction.status === 'failed'
+          ? 'Extraction could not confidently read the upload. You can still edit the fields manually before submit.'
+          : `${extraction.summary} Review and edit any field before presenting the coupon.`,
+    );
+    setExtractionStatus(extraction.status === 'failed' ? 'failed' : 'complete');
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -267,39 +312,7 @@ export default function CouponPresentmentModal({
 
     try {
       const extraction = await analyzeAccountingUpload('coupon', uploadedFile);
-      setReceiverName((current) => current || extraction.vendorOrMerchantName || '');
-      setReceiverAccountLabel((current) => current || extraction.accountReference || '');
-      setCouponReference((current) => current || extraction.processingReference || '');
-      setAmount((current) => {
-        if (current) {
-          return current;
-        }
-        return typeof extraction.amount === 'number' ? String(extraction.amount) : '';
-      });
-      setDueDate((current) => current || extraction.date || '');
-      setTitle((current) => current || extraction.categoryHint || 'Coupon Presentment');
-      setParsedNotes((current) =>
-        [
-          current,
-          extraction.summary,
-          extraction.paymentInstructionSummary,
-          extraction.remitAddress ? `Remit address: ${extraction.remitAddress}` : '',
-          extraction.contactPhone ? `Contact phone: ${extraction.contactPhone}` : '',
-          extraction.accountReference ? `Account reference: ${extraction.accountReference}` : '',
-          extraction.processingReference
-            ? `Processing reference: ${extraction.processingReference}`
-            : '',
-        ]
-          .filter(Boolean)
-          .filter((value, index, all) => all.indexOf(value) === index)
-          .join('\n\n'),
-      );
-      setExtractionSummary(
-        extraction.status === 'failed'
-          ? 'Extraction could not confidently read the upload. You can still edit the fields manually before submit.'
-          : `${extraction.summary} Review and edit any field before presenting the coupon.`,
-      );
-      setExtractionStatus(extraction.status === 'failed' ? 'failed' : 'complete');
+      applyExtractionResult(extraction);
     } catch (error) {
       console.warn('Coupon upload extraction failed.', error);
       setExtractionSummary(
@@ -340,10 +353,24 @@ export default function CouponPresentmentModal({
                 const file = event.target.files?.[0] ?? null;
                 setUploadedFile(file);
                 setUploadedFileName(file?.name ?? '');
-                setExtractionSummary(
-                  file ? 'File loaded. Run extraction to preview and review the uploaded coupon data.' : '',
-                );
-                setExtractionStatus(file ? 'ready' : 'idle');
+                if (!file) {
+                  setExtractionSummary('');
+                  setExtractionStatus('idle');
+                  return;
+                }
+
+                const cachedExtraction = getCachedAccountingExtraction('coupon', file);
+                if (cachedExtraction.result) {
+                  applyExtractionResult(cachedExtraction.result, {
+                    fromCache: true,
+                    cachedAt: cachedExtraction.savedAt,
+                  });
+                } else {
+                  setExtractionSummary(
+                    'File loaded. Run extraction to preview and review the uploaded coupon data.',
+                  );
+                  setExtractionStatus('ready');
+                }
               }}
               style={inputStyle}
             />
