@@ -1322,6 +1322,21 @@ export const coreMockData: CoreDataBundle = {
       paymentMedium: 'fiat',
       linkedDocumentIds: ['doc-title-001'],
       complianceTagIds: ['cmp-entity-mi'],
+      realEstateSecurityProfile: {
+        offeringStructure: 'tenant_in_common',
+        rentalPoolEnabled: true,
+        exclusiveManagerEnabled: true,
+        guaranteedReturnOffered: false,
+        passiveProfitMarketing: true,
+        privatePlacementTargeted: true,
+        accreditedInvestorOnly: true,
+        occupancyRestrictionDaysPerYear: 14,
+        securitiesRiskLevel: 'high',
+        securitiesRiskNotes:
+          'Tenant-in-common storage property marketed with pooled rental income and manager-led performance support.',
+      },
+      notes:
+        'TIC real estate deal with pooled rental income, exclusive manager posture, and occupancy restrictions that should stay under securities review.',
     },
     {
       id: 'ast-metal-001',

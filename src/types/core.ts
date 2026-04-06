@@ -68,6 +68,15 @@ export type InstrumentType =
   | 'custody_record'
   | 'other';
 
+export type RealEstateOfferingStructure =
+  | 'direct_title'
+  | 'tenant_in_common'
+  | 'condo_hotel'
+  | 'limited_partnership'
+  | 'joint_venture'
+  | 'syndication'
+  | 'other';
+
 export type BorrowingFacilityType =
   | 'revolving_credit'
   | 'term_loan'
@@ -590,6 +599,19 @@ export interface AssetRecord {
   linkedLedgerAccountId?: string;
   linkedDocumentIds?: string[];
   complianceTagIds?: string[];
+  realEstateSecurityProfile?: {
+    offeringStructure?: RealEstateOfferingStructure;
+    rentalPoolEnabled?: boolean;
+    exclusiveManagerEnabled?: boolean;
+    guaranteedReturnOffered?: boolean;
+    passiveProfitMarketing?: boolean;
+    privatePlacementTargeted?: boolean;
+    accreditedInvestorOnly?: boolean;
+    occupancyRestrictionDaysPerYear?: number;
+    securitiesRiskLevel?: 'low' | 'watch' | 'high';
+    securitiesRiskNotes?: string;
+    linkedComplianceTagIds?: string[];
+  };
   notes?: string;
 }
 
@@ -692,6 +714,19 @@ export interface InstrumentRecord {
   linkedTokenIds?: string[];
   linkedAssetIds?: string[];
   linkedDocumentIds?: string[];
+  realEstateSecurityProfile?: {
+    offeringStructure?: RealEstateOfferingStructure;
+    rentalPoolEnabled?: boolean;
+    exclusiveManagerEnabled?: boolean;
+    guaranteedReturnOffered?: boolean;
+    passiveProfitMarketing?: boolean;
+    privatePlacementTargeted?: boolean;
+    accreditedInvestorOnly?: boolean;
+    occupancyRestrictionDaysPerYear?: number;
+    securitiesRiskLevel?: 'low' | 'watch' | 'high';
+    securitiesRiskNotes?: string;
+    linkedComplianceTagIds?: string[];
+  };
   notes?: string;
 }
 

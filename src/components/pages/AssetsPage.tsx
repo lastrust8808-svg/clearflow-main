@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
+import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -41,6 +42,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
     futuresStrategies: data.futuresStrategies,
     liquidationPlans: data.liquidationPlans,
   });
+  const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -67,11 +69,65 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Collateral Holdings" value={data.collateralHoldings.length} />
         <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
         <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
+        <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
+        <StatCard label="High Howey Risk" value={realEstateSecuritySummary.highRiskCount} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
         <StatCard label="Assigned Tokens" value={data.tokens.length} />
       </div>
+
+      <PageSection
+        title="Real Estate Securities Review"
+        description="Issue-spot pooled-income, manager-control, guaranteed-return, occupancy-restriction, and private-placement posture before a real-estate deal is treated like ordinary title paper."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 16,
+            marginBottom: 16,
+          }}
+        >
+          <StatCard label="Deals In Review" value={realEstateSecuritySummary.reviews.length} />
+          <StatCard label="High Risk" value={realEstateSecuritySummary.highRiskCount} />
+          <StatCard label="Watch" value={realEstateSecuritySummary.watchCount} />
+          <StatCard label="Private Placement Files" value={realEstateSecuritySummary.privatePlacementCount} />
+          <StatCard label="Rental Pool Deals" value={realEstateSecuritySummary.pooledIncomeCount} />
+        </div>
+
+        <div style={{ display: 'grid', gap: 16 }}>
+          {realEstateSecuritySummary.reviews.length === 0 ? (
+            <WorkbenchRecordCard
+              title="No real-estate securities reviews yet"
+              subtitle="Capture pooling, manager, and offering posture when title paper starts to behave like a security"
+            >
+              Use advanced edit on real-estate assets or instruments to record rental pools, guaranteed returns, occupancy restrictions, exclusive management, and private-placement posture.
+            </WorkbenchRecordCard>
+          ) : null}
+
+          {realEstateSecuritySummary.reviews.map((review) => (
+            <WorkbenchRecordCard
+              key={review.id}
+              title={review.label}
+              subtitle={`${review.sourceType} | ${review.offeringStructure} | ${review.securitiesRiskLevel}`}
+              summaryItems={[
+                { label: 'Flags', value: review.flags.join(' | ') || 'Manager / offering review only' },
+                { label: 'Private Placement', value: review.privatePlacementSupportNeeded ? 'Needed' : 'Not flagged' },
+                { label: 'Accredited Investor', value: review.accreditedInvestorSupportNeeded ? 'Required / watch' : 'Not flagged' },
+                {
+                  label: 'Occupancy Restriction',
+                  value: review.occupancyRestrictionDaysPerYear
+                    ? `${review.occupancyRestrictionDaysPerYear} days`
+                    : 'Not tracked',
+                },
+              ]}
+            >
+              {review.summary}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Capital & Liquidation Rails"

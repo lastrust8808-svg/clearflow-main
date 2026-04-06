@@ -20,6 +20,7 @@ import type {
 import { useAuth } from '../../hooks/useAuth';
 import { saveDocumentFile } from '../../services/documentVault.service';
 import { buildDispatchFooter } from '../../services/dispatchIdentity.service';
+import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import PageSection from '../ui/PageSection';
@@ -3764,6 +3765,60 @@ Use this intake packet when adding municipal or other marketable reserve paper i
     void appendDocument(document);
   };
 
+  const launchRealEstateSecuritiesReviewPacket = () => {
+    const targetEntity = reportEntity || primaryEntity;
+    if (!targetEntity) {
+      return;
+    }
+
+    const reviewSummary = buildRealEstateSecuritizationSummary({
+      assets: data.assets.filter((item) => item.entityId === targetEntity.id),
+      instruments: data.instruments.filter((item) => item.entityId === targetEntity.id),
+    });
+
+    const document = buildGeneratedDocument({
+      entityId: targetEntity.id,
+      title: `${targetEntity.displayName || targetEntity.name} Real Estate Securities Review Packet`,
+      category: 'compliance',
+      summary:
+        'Issue-spot real-estate offerings for pooled-income, manager-control, guaranteed-return, occupancy, and private-placement securities posture.',
+      retentionClass: 'compliance',
+      body: `# Real Estate Securities Review Packet
+
+Entity: ${targetEntity.displayName || targetEntity.name}
+Date: ${new Date().toISOString().slice(0, 10)}
+
+## Review Snapshot
+- Deals in review: ${reviewSummary.reviews.length}
+- High risk: ${reviewSummary.highRiskCount}
+- Watch: ${reviewSummary.watchCount}
+- Private placement support needed: ${reviewSummary.privatePlacementCount}
+- Rental pool / pooled-income deals: ${reviewSummary.pooledIncomeCount}
+
+## Deal Reviews
+${reviewSummary.reviews
+  .map(
+    (item) =>
+      `- ${item.label} | ${item.offeringStructure} | risk ${item.securitiesRiskLevel} | flags ${item.flags.join(', ') || 'manager / offering review only'} | ${item.summary}`,
+  )
+  .join('\n') || '- No real-estate securities reviews are currently in scope.'}
+
+## Procedural Focus
+- Check whether rental pools, pooled returns, or guaranteed yield language create a common-enterprise posture.
+- Review exclusive rental manager and occupancy restrictions before treating the deal like ordinary title-only paper.
+- Where passive profit expectations are being marketed, keep private-placement and accredited-investor support with the file.
+- Keep marketing, offering, and servicing language aligned with the actual control and management posture.
+
+## Structuring Notes
+- Prefer clear title / use rights without pooled rental income when avoiding securities treatment matters.
+- Avoid overstating profit expectations that depend mainly on manager or operator efforts.
+- Maintain disclosure, offering, and investor qualification support when the structure crosses into syndication, TIC, condo-hotel, or limited-partnership posture.
+`,
+    });
+
+    void appendDocument(document);
+  };
+
   const launchCusipEmmaIntakeWorkflow = async () => {
     const targetEntity = reportEntity || primaryEntity;
     if (!targetEntity) {
@@ -4113,6 +4168,14 @@ ${scopedCases
       lane: 'ledger',
       actionLabel: 'Create Intake Packet',
       onAction: launchMunicipalSecurityIntakePacket,
+    },
+    {
+      title: 'Real Estate Securities Review',
+      subtitle: 'Howey, pooling, manager-control, and placement posture',
+      detail: 'Create a review packet for real-estate deals that may cross into securities treatment through rental pools, guaranteed returns, manager-control, occupancy restrictions, or private-placement structure.',
+      lane: 'compliance',
+      actionLabel: 'Create Review Packet',
+      onAction: launchRealEstateSecuritiesReviewPacket,
     },
     {
       title: 'Payroll Onboarding Packet',
