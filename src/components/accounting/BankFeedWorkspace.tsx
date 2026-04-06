@@ -8,6 +8,7 @@ import type {
 import type { BankFeedRuleSubmitPayload } from './accountingTypes';
 import { getFinancialConnectionProviders } from '../../services/financialConnectionCatalog.service';
 import { getTreasuryRailCatalog } from '../../services/treasuryRailCatalog.service';
+import { getSettlementExecutionCapabilities } from '../../services/settlementExecution.service';
 
 interface BankFeedWorkspaceProps {
   bankAccounts: BankAccountRecord[];
@@ -55,6 +56,17 @@ export default function BankFeedWorkspace({
   onAddRule,
   onToggleRule,
 }: BankFeedWorkspaceProps) {
+  const [executionCapabilities, setExecutionCapabilities] = useState<{
+    provider: string;
+    executionMode: string;
+    plaidEnvironment: string;
+    liveBankExecutionReady: boolean;
+    achOriginationReady: boolean;
+    wireOriginationReady: boolean;
+    billerDirectReady: boolean;
+    supportedMethods: string[];
+    notes: string[];
+  } | null>(null);
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>(
     bankAccounts[0]?.id ?? ''
   );
@@ -90,6 +102,26 @@ export default function BankFeedWorkspace({
       bankAccountId: selectedBankAccountId,
     }));
   }, [selectedBankAccountId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getSettlementExecutionCapabilities()
+      .then((response) => {
+        if (!cancelled) {
+          setExecutionCapabilities(response.capabilities);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExecutionCapabilities(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredRules = useMemo(
     () =>
@@ -179,6 +211,49 @@ export default function BankFeedWorkspace({
           Enter Bank Transaction
         </button>
       </div>
+
+      {executionCapabilities ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            borderRadius: 18,
+            padding: 18,
+            background:
+              executionCapabilities.executionMode === 'live'
+                ? 'linear-gradient(135deg, rgba(20,184,166,0.16), rgba(15,23,42,0.55))'
+                : 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(15,23,42,0.55))',
+            border:
+              executionCapabilities.executionMode === 'live'
+                ? '1px solid rgba(45,212,191,0.28)'
+                : '1px solid rgba(245,158,11,0.28)',
+            color: '#e5e7eb',
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Live Execution Readiness</div>
+          <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+            Provider: <strong>{executionCapabilities.provider}</strong> | Mode:{' '}
+            <strong>{executionCapabilities.executionMode}</strong> | Plaid env:{' '}
+            <strong>{executionCapabilities.plaidEnvironment}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', color: '#cbd5e1' }}>
+            <span>ACH: <strong>{executionCapabilities.achOriginationReady ? 'ready' : 'not ready'}</strong></span>
+            <span>Wire: <strong>{executionCapabilities.wireOriginationReady ? 'ready' : 'not ready'}</strong></span>
+            <span>Live bank execution: <strong>{executionCapabilities.liveBankExecutionReady ? 'yes' : 'no'}</strong></span>
+            <span>Biller-direct: <strong>{executionCapabilities.billerDirectReady ? 'ready' : 'not ready'}</strong></span>
+          </div>
+          {executionCapabilities.supportedMethods.length > 0 ? (
+            <div style={{ color: '#93c5fd' }}>
+              Supported execution methods: {executionCapabilities.supportedMethods.join(', ')}
+            </div>
+          ) : null}
+          <div style={{ display: 'grid', gap: 4, color: '#d1d5db' }}>
+            {executionCapabilities.notes.map((note) => (
+              <div key={note}>{note}</div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {selectedBankAccount ? (
         <div
