@@ -178,9 +178,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 
   const getGoogleWorkspaceStatus = useCallback(
-    (appData: AppData): AuthStatus =>
-      hasAcceptedClearFlowTerms(appData) ? 'authenticated' : 'pending-profile-setup',
-    [hasAcceptedClearFlowTerms]
+    (
+      appData: AppData,
+      identity?: { email?: string | null; name?: string | null }
+    ): AuthStatus => {
+      if (hasAcceptedClearFlowTerms(appData)) {
+        return 'authenticated';
+      }
+
+      const normalizedEmail =
+        normalizeIdentityEmail(identity?.email) ||
+        normalizeIdentityEmail(appData.user.email);
+      const storedAcceptance = normalizedEmail
+        ? storedTermsAcceptanceIndex[normalizedEmail]
+        : null;
+
+      return storedAcceptance?.acceptedAt ? 'authenticated' : 'pending-profile-setup';
+    },
+    [hasAcceptedClearFlowTerms, normalizeIdentityEmail, storedTermsAcceptanceIndex]
   );
 
   const persistStoredTermsAcceptance = useCallback(
@@ -652,7 +667,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             );
             setState(current => ({
               ...current,
-              status: getGoogleWorkspaceStatus(mergedAppData),
+              status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
               appData: mergedAppData,
               gsiUser: null,
             }));
@@ -679,7 +694,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setState((current) => ({
                 ...current,
                 localAccountId: localGoogleMatch.userId,
-                status: getGoogleWorkspaceStatus(mergedAppData),
+                status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
                 appData: mergedAppData,
                 gsiUser: null,
               }));
@@ -688,7 +703,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
             const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
-            setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData), appData: newAppData, gsiUser: null }));
+            setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
           }
         } catch (error) {
           console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
@@ -710,7 +725,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setState((current) => ({
               ...current,
               localAccountId: localGoogleMatch.userId,
-              status: getGoogleWorkspaceStatus(mergedAppData),
+              status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
               appData: mergedAppData,
               gsiUser: null,
             }));
@@ -719,7 +734,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
           const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
-          setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData), appData: newAppData, gsiUser: null }));
+          setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
         }
       }
     };
@@ -750,7 +765,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         return {
           ...current,
-          status: getGoogleWorkspaceStatus(nextAppData),
+          status: getGoogleWorkspaceStatus(nextAppData, current.gsiUser),
           appData: nextAppData,
           gsiUser: null,
         };
@@ -818,7 +833,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         return {
           ...current,
-          status: getGoogleWorkspaceStatus(nextAppData),
+          status: getGoogleWorkspaceStatus(nextAppData, current.gsiUser || lastKnownGoogleUser),
           appData: nextAppData,
           gsiUser: null,
         };
@@ -881,7 +896,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ...current,
           localAccountId: localGoogleMatch.userId,
           appData: mergedAppData,
-          status: getGoogleWorkspaceStatus(mergedAppData),
+          status: getGoogleWorkspaceStatus(mergedAppData, lastKnownGoogleUser),
         };
       });
     };
@@ -1618,7 +1633,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return {
         ...current,
-        status: getGoogleWorkspaceStatus(nextAppData),
+        status: getGoogleWorkspaceStatus(nextAppData, fallbackIdentity),
         appData: nextAppData,
         gsiUser: null,
       };
