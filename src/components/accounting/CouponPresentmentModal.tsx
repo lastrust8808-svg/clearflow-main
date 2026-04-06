@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   analyzeAccountingUpload,
@@ -104,6 +104,7 @@ export default function CouponPresentmentModal({
   onSaveDraft,
   onDraftChange,
 }: CouponPresentmentModalProps) {
+  const hasHydratedDraftRef = useRef(false);
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [title, setTitle] = useState('');
   const [receiverName, setReceiverName] = useState('');
@@ -171,6 +172,7 @@ export default function CouponPresentmentModal({
 
   useEffect(() => {
     if (!open) return;
+    hasHydratedDraftRef.current = false;
     setMode('upload');
     setTitle('');
     setReceiverName('');
@@ -194,7 +196,9 @@ export default function CouponPresentmentModal({
   }, [open]);
 
   useEffect(() => {
-    if (!open || !draft) return;
+    if (!open || !draft || hasHydratedDraftRef.current) return;
+
+    hasHydratedDraftRef.current = true;
 
     setMode(draft.mode ?? 'upload');
     setTitle(draft.title ?? '');
