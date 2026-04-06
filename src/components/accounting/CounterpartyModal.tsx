@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { CounterpartySubmitPayload } from './accountingTypes';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
 import {
+  getFeaturedVendorDirectoryProfiles,
   searchVendorDirectory,
   type VendorDirectoryProfile,
 } from '../../services/vendorDirectory.service';
@@ -117,6 +118,7 @@ export default function CounterpartyModal({
   const [vendorSearchQuery, setVendorSearchQuery] = useState('');
   const [vendorSearchResults, setVendorSearchResults] = useState<VendorDirectoryProfile[]>([]);
   const [selectedVendorProfile, setSelectedVendorProfile] = useState<VendorDirectoryProfile | null>(null);
+  const featuredVendorProfiles = getFeaturedVendorDirectoryProfiles();
 
   useEffect(() => {
     if (!open) return;
@@ -277,6 +279,49 @@ export default function CounterpartyModal({
                 <div style={{ color: '#cbd5f5', fontSize: 13 }}>
                   Search a source-backed payee profile first, then save only the selected vendor connection into this workspace.
                 </div>
+                {vendorSearchQuery.trim().length < 2 ? (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ color: '#93c5fd', fontSize: 12, fontWeight: 700 }}>
+                      Common payees
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {featuredVendorProfiles.map((profile) => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => {
+                            setVendorSearchQuery(profile.canonicalName);
+                            setSelectedVendorProfile(profile);
+                            setName(profile.canonicalName);
+                            setPhone(profile.phone || '');
+                            setAddress(profile.remitAddress || '');
+                            setOrganizationClass(profile.organizationClass || 'general');
+                            setNotes((current) =>
+                              current.trim()
+                                ? current
+                                : `Connected from ${profile.sourceLabel}${profile.locationId ? ` | location ${profile.locationId}` : ''}.`
+                            );
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 999,
+                            border: '1px solid rgba(125,211,252,0.28)',
+                            background:
+                              selectedVendorProfile?.id === profile.id
+                                ? 'rgba(14,116,144,0.32)'
+                                : 'rgba(15,23,42,0.38)',
+                            color: '#e5e7eb',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {profile.canonicalName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <input
                   value={vendorSearchQuery}
                   onChange={(e) => setVendorSearchQuery(e.target.value)}
@@ -330,7 +375,7 @@ export default function CounterpartyModal({
                   </div>
                 ) : vendorSearchQuery.trim().length >= 2 ? (
                   <div style={{ color: '#94a3b8', fontSize: 13 }}>
-                    No source-backed payee profile matched. You can still save a manual vendor.
+                    No source-backed payee profile matched. Continue with manual entry and save this vendor anyway.
                   </div>
                 ) : null}
               </div>
