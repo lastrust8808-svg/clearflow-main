@@ -163,8 +163,10 @@ export default function CouponPresentmentModal({
     setExtractionStatus(draft.parsedNotes ? 'complete' : 'idle');
   }, [draft, open]);
 
+  const usesObligationBackedSource =
+    Boolean(obligationId) && dischargeMethod !== 'bank_rail_payment';
   const hasFundingSource = Boolean(
-    treasuryAccountId || sourceBankAccountId || sourceLedgerAccountId,
+    treasuryAccountId || sourceBankAccountId || sourceLedgerAccountId || usesObligationBackedSource,
   );
   const missingFields = [
     (mode === 'upload' || mode === 'camera') && !uploadedFile ? 'source file' : '',
@@ -175,7 +177,11 @@ export default function CouponPresentmentModal({
     !presentmentDate ? 'presentment date' : '',
     !dueDate ? 'due date' : '',
     !amount || Number(amount) <= 0 ? 'amount' : '',
-    !hasFundingSource ? 'funding source' : '',
+    !hasFundingSource
+      ? dischargeMethod === 'bank_rail_payment'
+        ? 'bank, treasury, or ledger funding source'
+        : 'funding source or linked obligation'
+      : '',
   ].filter(Boolean);
   const canSubmit = missingFields.length === 0;
 
@@ -451,6 +457,24 @@ export default function CouponPresentmentModal({
             ))}
           </select>
         </div>
+
+        {usesObligationBackedSource ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid rgba(96,165,250,0.24)',
+              background: 'rgba(30,41,59,0.4)',
+              color: '#bfdbfe',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            Linked obligation selected. ClearFlow can use the recognized remittance / obligation
+            rail as the source for this presentment unless you explicitly choose a treasury, bank,
+            or ledger source.
+          </div>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!canSubmit ? (
