@@ -18,59 +18,9 @@ interface SignalEvaluatePayload {
 const RUNTIME_API_BASE = getApiBaseUrl();
 
 const PLAID_API_BASE = `${RUNTIME_API_BASE.replace(/\/$/, '')}/api/plaid`;
-const PLAID_LINK_TOKEN_CACHE_KEY = 'clearflow-plaid-link-token-cache-v1';
-
-interface CachedPlaidLinkToken {
-  token: string;
-  createdAt: string;
-}
-
 class PlaidService {
-  
   private isBackendConfigured(): boolean {
     return !!RUNTIME_API_BASE && !RUNTIME_API_BASE.includes('YOUR_NGROK');
-  }
-
-  private loadCachedLinkToken(userId: string): string | null {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    try {
-      const raw = window.sessionStorage.getItem(`${PLAID_LINK_TOKEN_CACHE_KEY}:${userId}`);
-      if (!raw) {
-        return null;
-      }
-
-      const cached = JSON.parse(raw) as CachedPlaidLinkToken;
-      const ageMs = Date.now() - new Date(cached.createdAt).getTime();
-      if (!cached.token || ageMs > 1000 * 60 * 25) {
-        window.sessionStorage.removeItem(`${PLAID_LINK_TOKEN_CACHE_KEY}:${userId}`);
-        return null;
-      }
-
-      return cached.token;
-    } catch {
-      return null;
-    }
-  }
-
-  private cacheLinkToken(userId: string, token: string) {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      window.sessionStorage.setItem(
-        `${PLAID_LINK_TOKEN_CACHE_KEY}:${userId}`,
-        JSON.stringify({
-          token,
-          createdAt: new Date().toISOString(),
-        } satisfies CachedPlaidLinkToken)
-      );
-    } catch {
-      // ignore session cache failures
-    }
   }
 
   // ============== REAL API IMPLEMENTATIONS ==============
@@ -80,21 +30,13 @@ class PlaidService {
       console.warn('Backend not configured, using mock link token.');
       return Promise.resolve({ link_token: `link-sandbox-mock-${Date.now()}`});
     }
-    const cachedToken = this.loadCachedLinkToken(userId);
-    if (cachedToken) {
-      return { link_token: cachedToken };
-    }
     const response = await fetch(`${PLAID_API_BASE}/link_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     });
     if (!response.ok) throw new Error('Failed to create link token');
-    const payload = await response.json();
-    if (payload?.link_token) {
-      this.cacheLinkToken(userId, payload.link_token);
-    }
-    return payload;
+    return response.json();
   }
 
   async exchangePublicToken(publicToken: string, userId: string, userName: string): Promise<PlaidConnectionPayload> {
