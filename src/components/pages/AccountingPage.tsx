@@ -2516,6 +2516,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (!currentEntity) {
         return prev;
       }
+      const resolvedVendorName =
+        payload.receiverName || extraction.vendorOrMerchantName || 'Receiver';
+      const { vendorId, vendors: nextVendors } = ensureVendorRecord(prev, currentEntity.id, {
+        name: resolvedVendorName,
+        phone: extraction.contactPhone,
+        address: extraction.remitAddress,
+        notes:
+          payload.parsedNotes ||
+          extraction.paymentInstructionSummary ||
+          extraction.summary,
+      });
 
       const selectedTreasuryAccount = payload.treasuryAccountId
         ? prev.treasuryAccounts.find((account) => account.id === payload.treasuryAccountId)
@@ -2663,7 +2674,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           } Remittance Statement`,
         statementDate: presentmentDate,
         payerName: currentEntity.displayName || currentEntity.name,
-        payeeName: payload.receiverName || extraction.vendorOrMerchantName || 'Receiver',
+        payeeName: resolvedVendorName,
+        linkedVendorId: vendorId,
         amount: resolvedAmount,
         currency: 'USD',
         dischargeMethod: payload.dischargeMethod,
@@ -2698,7 +2710,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         id: paymentId,
         entityId: currentEntity.id,
         direction: 'outgoing' as const,
-        counterpartyType: 'other' as const,
+        counterpartyType: 'vendor' as const,
+        counterpartyId: vendorId,
         paymentDate: presentmentDate,
         amount: resolvedAmount,
         currency: 'USD',
@@ -2786,7 +2799,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : ('verified' as const),
         verificationReference:
           payload.receiverAccountLabel ||
-          `Coupon presentment issued to ${payload.receiverName || extraction.vendorOrMerchantName || 'receiver'}.`,
+          `Coupon presentment issued to ${resolvedVendorName}.`,
         tokenizedProofId: token?.id,
         linkedTokenIds: token ? [token.id] : undefined,
         grossAmount: resolvedAmount,
@@ -2842,7 +2855,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         type: 'withdrawal' as const,
         title:
           payload.title ||
-          `${payload.couponReference || 'Coupon'} Presentment to ${payload.receiverName || extraction.vendorOrMerchantName || 'receiver'}`,
+          `${payload.couponReference || 'Coupon'} Presentment to ${resolvedVendorName}`,
         amount: resolvedAmount,
         currency: 'USD',
         date: presentmentDate,
@@ -2945,13 +2958,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               : payload.couponReference || 'Coupon'
           } Presentment`,
         couponReference: payload.couponReference || undefined,
+        linkedVendorId: vendorId,
         instrumentId: linkedInstrument?.id,
         obligationId: linkedObligation?.id,
         instrumentSettlementId: nextInstrumentSettlement.id,
         treasuryAccountId: selectedTreasuryAccount?.id,
         sourceBankAccountId: sourceBankAccount?.id,
         sourceLedgerAccountId: sourceLedgerAccount?.id,
-        receiverName: payload.receiverName || extraction.vendorOrMerchantName || 'Receiver',
+        receiverName: resolvedVendorName,
         receiverAccountLabel: payload.receiverAccountLabel || undefined,
         presentmentDate,
         dueDate: payload.dueDate || extraction.date,
@@ -3052,6 +3066,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         entities: prev.entities.map((item) =>
           item.id === currentEntity.id ? incrementEntitySequence(item, 'journal') : item
         ),
+        vendors: nextVendors,
         payments: [paymentRecord, ...(prev.payments ?? [])],
         settlements: [settlementRecord, ...(prev.settlements ?? [])],
         reconciliations: couponOperationalReconciliation.reconciliations,
@@ -3277,9 +3292,15 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const linkedBill = payload.linkedBillId
       ? data.bills.find((bill) => bill.id === payload.linkedBillId)
       : undefined;
+    const linkedBillVendor =
+      linkedBill?.vendorId
+        ? data.vendors.find((vendor) => vendor.id === linkedBill.vendorId)
+        : undefined;
     const selectedVendor =
-      payload.counterpartyType === 'vendor' && payload.counterpartyId
-        ? data.vendors.find((vendor) => vendor.id === payload.counterpartyId)
+      payload.counterpartyType === 'vendor'
+        ? payload.counterpartyId
+          ? data.vendors.find((vendor) => vendor.id === payload.counterpartyId)
+          : linkedBillVendor
         : undefined;
     const vendorPaymentRailProfile = deriveVendorPaymentRailProfile(selectedVendor);
     const vendorReceiveMethod: VendorReceiveMethod | undefined =
@@ -3447,6 +3468,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       : null;
 
     setData((prev) => {
+      const resolvedVendorSeed =
+        payload.counterpartyType === 'vendor'
+          ? selectedVendor ||
+            (linkedBill?.vendorId
+              ? prev.vendors.find((vendor) => vendor.id === linkedBill.vendorId)
+              : undefined)
+          : undefined;
+      const resolvedVendorName = resolvedVendorSeed?.name;
+      const vendorResolution =
+        payload.counterpartyType === 'vendor' && resolvedVendorName
+          ? ensureVendorRecord(prev, entity.id, {
+              name: resolvedVendorName,
+              email: resolvedVendorSeed?.email,
+              phone: resolvedVendorSeed?.phone,
+              address: resolvedVendorSeed?.remitAddress,
+              notes: resolvedVendorSeed?.notes,
+            })
+          : null;
+      const resolvedVendorId =
+        payload.counterpartyType === 'vendor'
+          ? payload.counterpartyId || linkedBill?.vendorId || vendorResolution?.vendorId
+          : undefined;
       const onChainTransactionId =
         payload.method === 'digital_asset' && selectedWallet ? `oct-${stamp}` : undefined;
       const digitalAssetUnitPrice =
@@ -3537,6 +3580,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ? ('settled' as const)
               : ('settled' as const);
       const remittanceCounterpartyName =
+        resolvedVendorName ||
         selectedVendor?.name ||
         selectedCustomer?.name ||
         (payload.direction === 'outgoing' ? 'Payee' : 'Payer');
@@ -3548,7 +3592,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         entityId: entity.id,
         direction: payload.direction,
         counterpartyType: payload.counterpartyType,
-        counterpartyId: payload.counterpartyId,
+        counterpartyId: resolvedVendorId || payload.counterpartyId,
         paymentDate: payload.paymentDate || new Date().toISOString().slice(0, 10),
         amount,
         currency: entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
@@ -3878,7 +3922,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         vendorDeliveryStatus,
         externalRecognitionStatus,
         vendorDeliveryReference:
-          selectedVendor?.paymentInstructions?.deliveryDescriptor ||
+          resolvedVendorSeed?.paymentInstructions?.deliveryDescriptor ||
           vendorPaymentRailProfile.deliveryDescriptor,
         reserveBacked:
           selectedTreasuryAccount?.treasuryType === 'reserve' ||
@@ -4036,13 +4080,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
         amount >= 600 &&
-        selectedVendor
+        resolvedVendorSeed
           ? {
               id: `tax-${stamp}`,
               entityId: entity.id,
               railNamespace: 'irs_reporting' as const,
               linkedPaymentId: paymentId,
-              counterpartyName: selectedVendor.name,
+              counterpartyName: resolvedVendorSeed.name,
               tinLast4: undefined,
               tinMatchStatus: 'not_checked' as const,
               formType: '1099-NEC' as const,
@@ -4122,9 +4166,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       const nextVendors =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
-        selectedVendor?.creditLineProfile?.enabled
-          ? prev.vendors.map((vendor) => {
-              if (vendor.id !== selectedVendor.id) {
+        resolvedVendorSeed?.creditLineProfile?.enabled
+          ? (vendorResolution?.vendors ?? prev.vendors).map((vendor) => {
+              if (vendor.id !== resolvedVendorId) {
                 return vendor;
               }
               const nextLimit = vendor.creditLineProfile?.creditLimit;
@@ -4156,13 +4200,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 creditLineEntries: [creditPaydownEntry, ...(vendor.creditLineEntries ?? [])],
               };
             })
-          : prev.vendors;
+          : vendorResolution?.vendors ?? prev.vendors;
       const nextObligations =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
-        selectedVendor?.creditLineProfile?.linkedObligationId
+        resolvedVendorSeed?.creditLineProfile?.linkedObligationId
           ? prev.obligations.map((obligation) =>
-              obligation.id === selectedVendor.creditLineProfile?.linkedObligationId
+              obligation.id === resolvedVendorSeed.creditLineProfile?.linkedObligationId
                 ? {
                     ...obligation,
                     amount: nextVendorCreditBalance ?? obligation.amount,

@@ -1465,6 +1465,7 @@ export interface RemittanceStatementRecord {
   statementDate: string;
   payerName: string;
   payeeName: string;
+  linkedVendorId?: string;
   amount: number;
   currency: string;
   dischargeMethod: DischargeMethod;
@@ -1488,6 +1489,7 @@ export interface CouponPresentmentRecord {
   entityId: string;
   title: string;
   couponReference?: string;
+  linkedVendorId?: string;
   instrumentId?: string;
   obligationId?: string;
   instrumentSettlementId?: string;
