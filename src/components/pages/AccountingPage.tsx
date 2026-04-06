@@ -3197,6 +3197,19 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setOperationsNotice('Saved the presentment draft. Use Resume Draft Presentment to continue later.');
   };
 
+  const handlePresentmentDraftChange = (draft: PresentmentModalDraft | null) => {
+    if (!draft) {
+      clearSessionDraft(presentmentDraftStorageKey);
+      setPresentmentModalDraft(null);
+      setHasSavedPresentmentDraft(false);
+      return;
+    }
+
+    saveSessionDraft(presentmentDraftStorageKey, draft);
+    setPresentmentModalDraft(draft);
+    setHasSavedPresentmentDraft(true);
+  };
+
   const handleCounterpartySubmit = async (payload: CounterpartySubmitPayload) => {
     if (!counterpartyModalMode) {
       return;
@@ -8024,9 +8037,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         draft={presentmentModalDraft}
         onClose={() => {
           setIsCouponPresentmentModalOpen(false);
-          setPresentmentModalDraft(null);
         }}
         onSaveDraft={handleSavePresentmentDraft}
+        onDraftChange={handlePresentmentDraftChange}
         onSubmit={handleCouponPresentmentSubmit}
       />
       <ReceiptIntakeModal

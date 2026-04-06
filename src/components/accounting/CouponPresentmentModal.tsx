@@ -38,6 +38,7 @@ interface CouponPresentmentModalProps {
   onClose: () => void;
   onSubmit: (payload: CouponPresentmentSubmitPayload) => void;
   onSaveDraft: (draft: NonNullable<CouponPresentmentModalProps['draft']>) => void;
+  onDraftChange: (draft: NonNullable<CouponPresentmentModalProps['draft']> | null) => void;
 }
 
 const overlayStyle: CSSProperties = {
@@ -97,6 +98,7 @@ export default function CouponPresentmentModal({
   onClose,
   onSubmit,
   onSaveDraft,
+  onDraftChange,
 }: CouponPresentmentModalProps) {
   const [mode, setMode] = useState<'camera' | 'upload' | 'manual'>('upload');
   const [title, setTitle] = useState('');
@@ -190,6 +192,68 @@ export default function CouponPresentmentModal({
       : '',
   ].filter(Boolean);
   const canSubmit = missingFields.length === 0;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const nextDraft = {
+      mode,
+      title,
+      receiverName,
+      receiverAccountLabel,
+      couponReference,
+      presentmentDate,
+      dueDate,
+      amount,
+      obligationId: obligationId || undefined,
+      instrumentSettlementId: instrumentSettlementId || undefined,
+      treasuryAccountId: treasuryAccountId || undefined,
+      sourceBankAccountId: sourceBankAccountId || undefined,
+      sourceLedgerAccountId: sourceLedgerAccountId || undefined,
+      dischargeMethod,
+      uploadedFileName,
+      parsedNotes,
+    } satisfies NonNullable<CouponPresentmentModalProps['draft']>;
+
+    const hasMeaningfulProgress = Boolean(
+      uploadedFileName ||
+        title.trim() ||
+        receiverName.trim() ||
+        receiverAccountLabel.trim() ||
+        couponReference.trim() ||
+        dueDate ||
+        amount ||
+        obligationId ||
+        instrumentSettlementId ||
+        treasuryAccountId ||
+        sourceBankAccountId ||
+        sourceLedgerAccountId ||
+        parsedNotes.trim()
+    );
+
+    onDraftChange(hasMeaningfulProgress ? nextDraft : null);
+  }, [
+    amount,
+    couponReference,
+    dischargeMethod,
+    dueDate,
+    instrumentSettlementId,
+    obligationId,
+    onDraftChange,
+    open,
+    parsedNotes,
+    presentmentDate,
+    receiverAccountLabel,
+    receiverName,
+    sourceBankAccountId,
+    sourceLedgerAccountId,
+    title,
+    treasuryAccountId,
+    uploadedFileName,
+    mode,
+  ]);
 
   const handleExtractUploadedData = async () => {
     if (!uploadedFile) {
