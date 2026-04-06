@@ -16,6 +16,21 @@ type ProcessorStatus =
   | 'requires_review'
   | 'blocked';
 
+type ExecutionProvider = 'plaid' | 'manual';
+type ExecutionMode = 'live' | 'staged';
+type ExecutionPayeeType = 'bank_payee' | 'biller_direct' | 'manual_payee';
+type ExternalExecutionStatus =
+  | 'draft'
+  | 'submitted'
+  | 'accepted'
+  | 'processing'
+  | 'settled'
+  | 'failed'
+  | 'returned'
+  | 'applied'
+  | 'manual_review'
+  | 'staged';
+
 interface ExecuteSettlementPayload {
   entityId: string;
   paymentId: string;
@@ -48,6 +63,7 @@ interface ExecuteSettlementPayload {
     railPreference?: 'ach' | 'eft' | 'wire';
     verificationStatus?: 'unverified' | 'routing_valid' | 'verified' | 'invalid';
   } | null;
+  vendorReceiveMethod?: 'ach' | 'wire' | 'paper_check' | 'lockbox_coupon' | 'digital_wallet' | 'manual_review';
 }
 
 interface ExecuteSettlementResponse {
@@ -68,6 +84,27 @@ interface ExecuteSettlementResponse {
     sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
     vendorInstructionVerified: boolean;
     simulatedProcessing: boolean;
+    liveExecution: boolean;
+    executionMode: ExecutionMode;
+    executionProvider: ExecutionProvider;
+    payeeType: ExecutionPayeeType;
+    externalStatus: ExternalExecutionStatus;
+  };
+}
+
+export interface SettlementExecutionCapabilitiesResponse {
+  success: boolean;
+  capabilities: {
+    provider: ExecutionProvider;
+    executionMode: ExecutionMode;
+    plaidEnvironment: string;
+    liveBankExecutionReady: boolean;
+    achOriginationReady: boolean;
+    wireOriginationReady: boolean;
+    billerDirectReady: boolean;
+    supportedPayeeTypes: ExecutionPayeeType[];
+    supportedMethods: string[];
+    notes: string[];
   };
 }
 
@@ -124,6 +161,41 @@ export async function executeSettlementProcessing(payload: ExecuteSettlementPayl
         sourceType,
         vendorInstructionVerified,
         simulatedProcessing: true,
+        liveExecution: false,
+        executionMode: 'staged',
+        executionProvider: 'manual',
+        payeeType: payload.vendorReceiveMethod === 'lockbox_coupon' ? 'biller_direct' : 'manual_payee',
+        externalStatus: vendorInstructionVerified ? 'staged' : 'manual_review',
+      },
+    };
+  }
+}
+
+export async function getSettlementExecutionCapabilities() {
+  try {
+    const response = await fetch(`${ERP_API_BASE}/api/erp/settlements/execution-capabilities`);
+    if (!response.ok) {
+      throw new Error('Failed to load execution capabilities.');
+    }
+
+    return (await response.json()) as SettlementExecutionCapabilitiesResponse;
+  } catch {
+    return {
+      success: true,
+      capabilities: {
+        provider: 'manual',
+        executionMode: 'staged',
+        plaidEnvironment: 'sandbox',
+        liveBankExecutionReady: false,
+        achOriginationReady: false,
+        wireOriginationReady: false,
+        billerDirectReady: false,
+        supportedPayeeTypes: ['manual_payee', 'bank_payee', 'biller_direct'],
+        supportedMethods: [],
+        notes: [
+          'Live settlement execution capabilities could not be loaded.',
+          'Treat external execution as staged until a provider confirms submission.',
+        ],
       },
     };
   }

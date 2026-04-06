@@ -288,3 +288,7 @@ ClearFlow should be the only software a user needs because it combines:
 - reporting
 
 But it only earns that claim when the app visibly proves every action from start to finish, including the external side when applicable.
+
+Related execution design:
+
+- `docs/CLEARFLOW_EXECUTION_MODE_V1.md`

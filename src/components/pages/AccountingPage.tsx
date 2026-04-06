@@ -3578,6 +3578,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 verificationStatus: selectedVendor.paymentInstructions.verificationStatus,
               }
             : null,
+          vendorReceiveMethod,
         })
       : null;
 
@@ -3744,6 +3745,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         settlementExecution: settlementExecutionResponse
           ? {
               sourceType: settlementExecutionResponse.execution.sourceType,
+              executionMode: settlementExecutionResponse.execution.executionMode,
+              executionProvider: settlementExecutionResponse.execution.executionProvider,
+              payeeType: settlementExecutionResponse.execution.payeeType,
+              liveExecution: settlementExecutionResponse.execution.liveExecution,
+              externalStatus: settlementExecutionResponse.execution.externalStatus,
               executionRail: settlementExecutionResponse.execution.rail,
               processorStatus: settlementExecutionResponse.execution.processorStatus,
               executionReason: settlementExecutionResponse.execution.executionReason,
@@ -3759,6 +3765,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                   sourceLedgerAccountId: sourceLedgerAccount?.id,
                   treasuryAccountId: selectedTreasuryAccount?.id,
                 }),
+                executionMode: 'staged',
+                executionProvider: 'manual',
+                payeeType: vendorReceiveMethod === 'lockbox_coupon' ? 'biller_direct' : 'manual_payee',
+                liveExecution: false,
+                externalStatus: 'manual_review',
                 executionRail: resolveSettlementExecutionRail(payload.method, payload.urgency),
                 processorStatus: 'requires_review',
                 executionReason: policyReleaseHoldReason,
@@ -3770,6 +3781,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           : requiresWalletExecution
             ? {
                 sourceType: selectedTreasuryAccount || sourceLedgerAccount ? 'ledger_account' : 'manual_remittance',
+                executionMode: 'live',
+                executionProvider: 'manual',
+                payeeType: 'manual_payee',
+                liveExecution: true,
+                externalStatus: 'submitted',
                 executionRail: 'None',
                 processorStatus: 'queued',
                 executionReason: 'Wallet settlement is waiting for release and on-chain confirmation.',
@@ -4011,6 +4027,25 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           sourceLedgerAccount?.id ||
           selectedTreasuryAccount?.id ||
           selectedWallet?.id,
+        executionMode:
+          settlementExecutionResponse?.execution.executionMode ||
+          (requiresWalletExecution ? ('live' as const) : ('staged' as const)),
+        executionProvider:
+          settlementExecutionResponse?.execution.executionProvider || ('manual' as const),
+        payeeType:
+          settlementExecutionResponse?.execution.payeeType ||
+          (vendorReceiveMethod === 'lockbox_coupon'
+            ? ('biller_direct' as const)
+            : ('manual_payee' as const)),
+        liveExecution:
+          settlementExecutionResponse?.execution.liveExecution || Boolean(requiresWalletExecution),
+        externalStatus:
+          settlementExecutionResponse?.execution.externalStatus ||
+          (requiresWalletExecution
+            ? ('submitted' as const)
+            : policyReleaseHoldReason
+              ? ('manual_review' as const)
+              : ('staged' as const)),
         executionRail:
           settlementExecutionResponse?.execution.rail ||
           (payload.method === 'digital_asset' ? ('None' as const) : undefined),

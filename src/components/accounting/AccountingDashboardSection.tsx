@@ -228,6 +228,28 @@ export default function AccountingDashboardSection({
       )
     )
     .slice(0, 3);
+  const liveExecutionCount = settlements.filter((settlement) => settlement.liveExecution).length;
+  const stagedExecutionCount = settlements.filter(
+    (settlement) => settlement.externalStatus === 'staged' || settlement.executionMode === 'staged',
+  ).length;
+  const manualReviewExecutionCount = settlements.filter(
+    (settlement) => settlement.externalStatus === 'manual_review' || settlement.processorStatus === 'requires_review',
+  ).length;
+  const billerDirectCount = settlements.filter((settlement) => settlement.payeeType === 'biller_direct').length;
+  const executionHighlights = [...settlements]
+    .filter(
+      (settlement) =>
+        settlement.liveExecution ||
+        settlement.externalStatus === 'manual_review' ||
+        settlement.externalStatus === 'staged' ||
+        settlement.payeeType === 'biller_direct',
+    )
+    .sort((left, right) =>
+      (right.actualSettlementDate || right.initiatedAt || '').localeCompare(
+        left.actualSettlementDate || left.initiatedAt || '',
+      ),
+    )
+    .slice(0, 4);
   const entityTypeSet = new Set(entities.map((entity) => entity.type));
   const trustView = entityTypeSet.has('trust');
   const treasuryValue = treasuryAccounts.reduce(
@@ -410,6 +432,49 @@ export default function AccountingDashboardSection({
 
           <div style={{ color: '#94a3b8', lineHeight: 1.7 }}>
             Use the accounting action strip above for new work, and use the accounting section row to move between invoices, remittance, journal, payroll, bank feed, and reconciliation.
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Execution Control"
+        description="Truthful live-vs-staged settlement posture so outbound payments do not masquerade as externally executed when they are only retained internally."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <StatCard label="Live Executions" value={liveExecutionCount} />
+            <StatCard label="Staged Rails" value={stagedExecutionCount} />
+            <StatCard label="Manual Review" value={manualReviewExecutionCount} />
+            <StatCard label="Biller-Direct" value={billerDirectCount} />
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {executionHighlights.length === 0 ? (
+              <div style={{ color: '#d1d5db' }}>
+                No execution records are open yet. New outgoing settlements will show whether they are live, staged, or biller-direct.
+              </div>
+            ) : (
+              executionHighlights.map((settlement) => (
+                <div key={settlement.id} style={infoCardStyle}>
+                  <div style={{ fontWeight: 700 }}>
+                    {settlement.executionReference || settlement.id} | {settlement.executionProvider || 'manual'} |{' '}
+                    {settlement.executionMode || 'staged'}
+                  </div>
+                  <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                    {settlement.payeeType || 'manual_payee'} | external {settlement.externalStatus || 'draft'} | processor{' '}
+                    {settlement.processorStatus || 'n/a'}
+                  </div>
+                  <div style={{ color: '#d1d5db', marginTop: 6 }}>
+                    {settlement.executionReason || 'Execution record retained without a processor narrative.'}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </PageSection>

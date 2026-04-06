@@ -1017,6 +1017,21 @@ export interface SettlementRecord {
   actualSettlementDate?: string;
   originSourceType?: 'bank_account' | 'ledger_account' | 'manual_remittance';
   originSourceId?: string;
+  executionMode?: 'live' | 'staged';
+  executionProvider?: 'plaid' | 'manual';
+  payeeType?: 'bank_payee' | 'biller_direct' | 'manual_payee';
+  liveExecution?: boolean;
+  externalStatus?:
+    | 'draft'
+    | 'submitted'
+    | 'accepted'
+    | 'processing'
+    | 'settled'
+    | 'failed'
+    | 'returned'
+    | 'applied'
+    | 'manual_review'
+    | 'staged';
   executionRail?:
     | 'FedNow'
     | 'RTP'
@@ -1982,6 +1997,21 @@ export interface PaymentRecord {
   releaseTokenId?: string;
   settlementExecution?: {
     sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
+    executionMode?: 'live' | 'staged';
+    executionProvider?: 'plaid' | 'manual';
+    payeeType?: 'bank_payee' | 'biller_direct' | 'manual_payee';
+    liveExecution?: boolean;
+    externalStatus?:
+      | 'draft'
+      | 'submitted'
+      | 'accepted'
+      | 'processing'
+      | 'settled'
+      | 'failed'
+      | 'returned'
+      | 'applied'
+      | 'manual_review'
+      | 'staged';
     executionRail:
       | 'FedNow'
       | 'RTP'
