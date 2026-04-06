@@ -63,8 +63,8 @@ const sectionQuickActions: Record<
     { label: 'Open Documents', hash: '#documents', description: 'Review packets and evidence' },
   ],
   accounting: [
+    { label: 'Accounting Home', hash: '#accounting:dashboard', description: 'Open the ERP overview and work sections' },
     { label: 'Remittance Intake', hash: '#accounting:new-remittance', description: 'Start from a bill or coupon presentment' },
-    { label: 'Release Queue', hash: '#accounting:payments', description: 'Open held approvals and remittance release' },
     { label: 'Bank Feed', hash: '#accounting:bankFeed', description: 'Sync or post bank activity' },
   ],
   ledger: [

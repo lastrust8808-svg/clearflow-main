@@ -119,6 +119,24 @@ const shellStyle: CSSProperties = {
   gap: 20,
 };
 
+const subnavGroups: Array<{
+  title: string;
+  items: AccountingSection[];
+}> = [
+  {
+    title: 'ERP Core',
+    items: ['dashboard', 'customers', 'vendors', 'invoices', 'bills', 'presentments', 'payments', 'journal'],
+  },
+  {
+    title: 'Operations',
+    items: ['receipts', 'expenses', 'recurring', 'payroll', 'bankFeed', 'reconciliation', 'railOps'],
+  },
+  {
+    title: 'Extended',
+    items: ['quotes', 'intercompany'],
+  },
+];
+
 const sectionButtonStyle = (isActive: boolean): CSSProperties => ({
   padding: '10px 14px',
   minHeight: 44,
@@ -292,6 +310,9 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
   const [operationsNotice, setOperationsNotice] = useState('');
+
+  const activeSubnavLabel =
+    subnavItems.find((item) => item.id === activeSubsection)?.label || 'Accounting';
 
   const navigateToHash = (hash: string) => {
     if (typeof window === 'undefined') {
@@ -2545,6 +2566,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       accountId: auth.currentUser?.id,
     });
     const resolvedAmount = Number(payload.amount || 0) || extraction.amount || 0;
+    const submittedReceiverName =
+      payload.receiverName || extraction.vendorOrMerchantName || 'Receiver';
     if (!resolvedAmount) {
       return;
     }
@@ -3192,6 +3215,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setPresentmentModalDraft(null);
     clearSessionDraft(presentmentDraftStorageKey);
     setHasSavedPresentmentDraft(false);
+    setOperationsNotice(
+      `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
+        resolvedAmount,
+        'USD'
+      )}. Review it below in Presentments and the linked remittance records in Remittance Desk.`
+    );
   };
 
   const handleSavePresentmentDraft = (draft: PresentmentModalDraft) => {
@@ -8206,16 +8235,73 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               hasSavedPresentmentDraft={hasSavedPresentmentDraft}
             />
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {subnavItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => openAccountingSubsection(item.id)}
-                  style={sectionButtonStyle(item.id === activeSubsection)}
-                >
-                  {item.label}
-                </button>
+            {operationsNotice ? (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(45,212,191,0.25)',
+                  background: 'rgba(15,118,110,0.16)',
+                  color: '#d1fae5',
+                  fontSize: 13,
+                }}
+              >
+                {operationsNotice}
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                padding: '14px 16px',
+                borderRadius: 14,
+                border: '1px solid rgba(148,163,184,0.2)',
+                background: 'rgba(15,23,42,0.35)',
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                Current Accounting View
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+                Stay inside Accounting here for invoices, bills, remittances, journals, bank feed, and reconciliation. Use the left sidebar only when you want to leave Accounting for another desk.
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              {subnavGroups.map((group) => (
+                <div key={group.title} style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {group.title}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {group.items.map((subnavId) => {
+                      const item = subnavItems.find((candidate) => candidate.id === subnavId);
+                      if (!item) {
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => openAccountingSubsection(item.id)}
+                          style={sectionButtonStyle(item.id === activeSubsection)}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
