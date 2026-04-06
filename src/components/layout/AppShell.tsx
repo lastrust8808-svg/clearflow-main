@@ -177,9 +177,7 @@ export default function AppShell({
   const [launcherQuery, setLauncherQuery] = useState('');
   const [recentRoutes, setRecentRoutes] = useState<Array<{ hash: string; label: string }>>([]);
   const [pinnedRoutes, setPinnedRoutes] = useState<Array<{ hash: string; label: string }>>([]);
-  const [showUtilityPanels, setShowUtilityPanels] = useState(() =>
-    typeof window === 'undefined' ? true : window.innerWidth >= 1180
-  );
+  const [showUtilityPanels] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
   const themePaletteByMode: Record<
@@ -392,7 +390,6 @@ export default function AppShell({
       setCurrentHash(window.location.hash);
       const nextCompactLayout = window.innerWidth < 1180;
       setIsCompactLayout(nextCompactLayout);
-      setShowUtilityPanels((previous) => (nextCompactLayout ? previous : true));
     };
 
     try {
@@ -904,22 +901,6 @@ export default function AppShell({
                   {sectionSummaryById[activeSection]}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowUtilityPanels((previous) => !previous)}
-                    style={{
-                      minHeight: 42,
-                      padding: '0 14px',
-                      borderRadius: 14,
-                      border: '1px solid var(--cf-border)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'var(--cf-text)',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {showUtilityPanels ? 'Hide Workspace Utilities' : 'Show Workspace Utilities'}
-                  </button>
                   {resumeRoutes[0] ? (
                     <button
                       type="button"
@@ -972,6 +953,25 @@ export default function AppShell({
                   >
                     Quick Open
                   </button>
+                  {quickActions.slice(0, 3).map((action) => (
+                    <button
+                      key={action.hash}
+                      type="button"
+                      onClick={() => handleLaunchRoute(action.hash)}
+                      style={{
+                        minHeight: 42,
+                        padding: '0 14px',
+                        borderRadius: 14,
+                        border: '1px solid rgba(126, 242, 255, 0.18)',
+                        background: 'rgba(54, 215, 255, 0.08)',
+                        color: 'var(--cf-accent-soft)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               {showUtilityPanels ? (
