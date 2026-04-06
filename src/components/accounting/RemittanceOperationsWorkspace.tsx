@@ -11,6 +11,7 @@ import type {
 } from '../../types/core';
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
+import type { SettlementFlowView } from '../../services/settlementAnalytics.service';
 import PageSection from '../ui/PageSection';
 
 interface RemittanceOperationsWorkspaceProps {
@@ -18,6 +19,7 @@ interface RemittanceOperationsWorkspaceProps {
   customers: CustomerRecord[];
   vendors: VendorRecord[];
   railControls: SettlementRailControlView[];
+  settlementFlows: SettlementFlowView[];
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
@@ -89,6 +91,40 @@ const buttonStyle = (disabled?: boolean): CSSProperties => ({
   fontWeight: 600,
 });
 
+function formatErpCashflowStage(stage: SettlementFlowView['erpCashflowStage']) {
+  switch (stage) {
+    case 'recognized':
+      return 'Recognized';
+    case 'payment_sent':
+      return 'Payment Sent';
+    case 'clearing':
+      return 'Clearing';
+    case 'matched':
+      return 'Matched';
+    case 'applied':
+      return 'Applied';
+    case 'closed':
+      return 'Closed';
+    default:
+      return stage;
+  }
+}
+
+function erpCashflowTone(stage: SettlementFlowView['erpCashflowStage']): 'neutral' | 'good' | 'warn' | 'info' {
+  switch (stage) {
+    case 'closed':
+      return 'good';
+    case 'applied':
+    case 'matched':
+      return 'info';
+    case 'clearing':
+    case 'payment_sent':
+      return 'warn';
+    default:
+      return 'neutral';
+  }
+}
+
 function isOutgoingRemittance(payment: PaymentRecord) {
   return (
     payment.direction === 'outgoing' &&
@@ -102,6 +138,7 @@ export default function RemittanceOperationsWorkspace({
   customers,
   vendors,
   railControls,
+  settlementFlows,
   bankAccounts,
   ledgerAccounts,
   treasuryAccounts,
@@ -118,6 +155,9 @@ export default function RemittanceOperationsWorkspace({
   operationsNotice,
 }: RemittanceOperationsWorkspaceProps) {
   const railControlByPaymentId = new Map(railControls.map((control) => [control.paymentId, control]));
+  const settlementFlowByPaymentId = new Map(
+    settlementFlows.flatMap((flow) => (flow.payment?.id ? [[flow.payment.id, flow] as const] : []))
+  );
 
   const resolveCounterpartyName = (payment: PaymentRecord) => {
     if (payment.counterpartyType === 'customer') {
@@ -347,6 +387,7 @@ export default function RemittanceOperationsWorkspace({
           ) : (
             remittancePayments.map((payment) => {
               const railControl = railControlByPaymentId.get(payment.id);
+              const settlementFlow = settlementFlowByPaymentId.get(payment.id);
               const needsComplianceConfirmation =
                 payment.complianceConfirmationStatus === 'pending';
               const needsReview =
@@ -443,6 +484,11 @@ export default function RemittanceOperationsWorkspace({
                       >
                         release: {payment.releaseStatus || 'not_applicable'}
                       </span>
+                      {settlementFlow ? (
+                        <span style={badgeStyle(erpCashflowTone(settlementFlow.erpCashflowStage))}>
+                          ERP: {formatErpCashflowStage(settlementFlow.erpCashflowStage)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -492,6 +538,24 @@ export default function RemittanceOperationsWorkspace({
                           : 'Pending control profile'}
                       </div>
                     </div>
+                    {settlementFlow ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>ERP Cashflow</strong>
+                        <div>{formatErpCashflowStage(settlementFlow.erpCashflowStage)}</div>
+                      </div>
+                    ) : null}
+                    {settlementFlow ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Settlement Close</strong>
+                        <div>
+                          {settlementFlow.clearedInReconciliation
+                            ? 'Cleared in reconciliation'
+                            : settlementFlow.derivedAutoReconcileStatus === 'matched'
+                              ? 'Matched and awaiting close'
+                              : settlementFlow.derivedAutoReconcileStatus}
+                        </div>
+                      </div>
+                    ) : null}
                     <div>
                       <strong style={{ color: '#e5e7eb' }}>Proof Posture</strong>
                       <div>
@@ -557,7 +621,8 @@ export default function RemittanceOperationsWorkspace({
                       lineHeight: 1.6,
                     }}
                   >
-                    {payment.complianceConfirmationNote ||
+                    {settlementFlow?.erpCashflowSummary ||
+                      payment.complianceConfirmationNote ||
                       railControl?.recommendedAction ||
                       payment.settlementExecution?.executionReason ||
                       payment.notes ||

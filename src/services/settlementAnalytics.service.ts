@@ -25,6 +25,14 @@ export interface SettlementFlowView {
   verificationReady: boolean;
   clearedInReconciliation: boolean;
   hasCoverageGap: boolean;
+  erpCashflowStage:
+    | 'recognized'
+    | 'payment_sent'
+    | 'clearing'
+    | 'matched'
+    | 'applied'
+    | 'closed';
+  erpCashflowSummary: string;
 }
 
 function approximatelyEqual(left: number, right: number, tolerance = 0.005) {
@@ -39,7 +47,12 @@ function isLiquidCashStageReady(stage?: SettlementRecord['liquidCashStage']) {
   );
 }
 
-function deriveAutoReconcileStatus(flow: Omit<SettlementFlowView, 'derivedAutoReconcileStatus'>) {
+function deriveAutoReconcileStatus(
+  flow: Omit<
+    SettlementFlowView,
+    'derivedAutoReconcileStatus' | 'erpCashflowStage' | 'erpCashflowSummary'
+  >
+) {
   if (!flow.settlement) {
     return 'pending';
   }
@@ -89,6 +102,62 @@ function deriveAutoReconcileStatus(flow: Omit<SettlementFlowView, 'derivedAutoRe
   }
 
   return 'pending';
+}
+
+function deriveErpCashflowStage(
+  flow: Omit<SettlementFlowView, 'erpCashflowStage' | 'erpCashflowSummary'>
+) {
+  if (!flow.payment && !flow.settlement) {
+    return {
+      stage: 'recognized' as const,
+      summary: 'Obligation recognized in ERP, but no settlement or payment leg has been entered yet.',
+    };
+  }
+
+  if (flow.payment && flow.payment.status === 'initiated' && flow.settlement?.processorStatus === 'processing') {
+    return {
+      stage: 'payment_sent' as const,
+      summary: 'Payment has been sent into the settlement rail and is waiting for clearing evidence.',
+    };
+  }
+
+  if (
+    flow.settlement &&
+    (flow.settlement.processorStatus === 'processing' ||
+      flow.settlement.verificationStatus === 'pending' ||
+      flow.derivedAutoReconcileStatus === 'pending')
+  ) {
+    return {
+      stage: 'clearing' as const,
+      summary: 'Settlement is in clearing and still needs bank, treasury, or counterparty confirmation.',
+    };
+  }
+
+  if (flow.derivedAutoReconcileStatus === 'partial') {
+    return {
+      stage: 'matched' as const,
+      summary: 'Payment and settlement have been posted, but final tie-out or external application is still incomplete.',
+    };
+  }
+
+  if (flow.derivedAutoReconcileStatus === 'matched' && !flow.clearedInReconciliation) {
+    return {
+      stage: 'applied' as const,
+      summary: 'The remittance appears applied and verified, but final reconciliation close is still pending.',
+    };
+  }
+
+  if (flow.derivedAutoReconcileStatus === 'matched' && flow.clearedInReconciliation) {
+    return {
+      stage: 'closed' as const,
+      summary: 'The payable has been cash-flowed through settlement, matched, and closed in reconciliation.',
+    };
+  }
+
+  return {
+    stage: 'recognized' as const,
+    summary: 'The remittance is recognized, but its cashflow and settlement proof still need follow-through.',
+  };
 }
 
 export function buildSettlementFlowViews(data: CoreDataBundle): SettlementFlowView[] {
@@ -158,9 +227,17 @@ export function buildSettlementFlowViews(data: CoreDataBundle): SettlementFlowVi
       hasCoverageGap: !settlement,
     };
 
+    const derivedAutoReconcileStatus = deriveAutoReconcileStatus(baseFlow);
+    const erpCashflow = deriveErpCashflowStage({
+      ...baseFlow,
+      derivedAutoReconcileStatus,
+    });
+
     return {
       ...baseFlow,
-      derivedAutoReconcileStatus: deriveAutoReconcileStatus(baseFlow),
+      derivedAutoReconcileStatus,
+      erpCashflowStage: erpCashflow.stage,
+      erpCashflowSummary: erpCashflow.summary,
     };
   });
 }

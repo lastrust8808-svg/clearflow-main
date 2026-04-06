@@ -28,6 +28,7 @@ import {
   buildObligationLifecycleSummaries,
   type ObligationLifecycleSummary,
 } from '../../services/obligationLifecycle.service';
+import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
 import { resolveVendorProviderPreset } from '../../services/vendorProviderPreset.service';
 import {
@@ -469,6 +470,7 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const standardInvoices = invoices.filter((record) => !isQuoteRecord(record));
   const stats = useMemo(() => buildAccountingStats(data, journalEntries), [data, journalEntries]);
   const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
+  const settlementFlows = useMemo(() => buildSettlementFlowViews(data), [data]);
   const defaultEntity = getPrimaryEntity(data);
   const defaultPayrollEntity =
     data.entities.find((entity) =>
@@ -7848,6 +7850,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             customers={customers}
             vendors={vendors}
             railControls={remittanceRailControls}
+            settlementFlows={
+              defaultEntity
+                ? settlementFlows.filter((item) => item.transaction.entityId === defaultEntity.id)
+                : settlementFlows
+            }
             bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
             ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}
             treasuryAccounts={
