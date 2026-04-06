@@ -18,6 +18,16 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
   );
   const remittanceEligible = visibleLedgerAccounts.filter((item) => item.remittanceEligible).length;
   const postedJournals = data.journalEntries.filter((item) => item.status === 'posted').length;
+  const recentPresentments = [...data.couponPresentments]
+    .sort((left, right) => (right.presentmentDate || '').localeCompare(left.presentmentDate || ''))
+    .slice(0, 5);
+  const recentSettlementPosts = [...data.settlements]
+    .sort((left, right) =>
+      (right.actualSettlementDate || right.initiatedAt || '').localeCompare(
+        left.actualSettlementDate || left.initiatedAt || ''
+      )
+    )
+    .slice(0, 5);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -40,6 +50,86 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
         <StatCard label="Remittance-Eligible" value={remittanceEligible} />
         <StatCard label="Posted Journals" value={postedJournals} />
       </div>
+
+      <PageSection
+        title="Recent Posting Validation"
+        description="Use this as a ledger-side confirmation that remittance and settlement submissions actually posted into books and treasury records."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="Recent Presentments"
+            subtitle={`${data.couponPresentments.length} total`}
+            summaryItems={[
+              { label: 'Latest count', value: recentPresentments.length },
+              { label: 'Posted journals', value: postedJournals },
+              { label: 'Settlements', value: data.settlements.length },
+              { label: 'Payments', value: data.payments.length },
+            ]}
+            record={{
+              id: 'ledger-presentment-validation',
+              notes: recentPresentments
+                .map(
+                  (presentment) =>
+                    `${presentment.presentmentDate} | ${presentment.receiverName} | ${presentment.status} | ${presentment.amount}`
+                )
+                .join('\n'),
+            }}
+            onSave={() => {}}
+          >
+            {recentPresentments.length === 0
+              ? 'No presentments have posted yet.'
+              : recentPresentments.map((presentment) => (
+                  <div key={presentment.id} style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                    <strong>{presentment.receiverName}</strong> | {presentment.status} | $
+                    {presentment.amount.toLocaleString()}
+                    <div style={{ color: 'var(--cf-muted)' }}>
+                      {presentment.presentmentDate} | {presentment.couponReference || 'No coupon ref'}
+                    </div>
+                  </div>
+                ))}
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Recent Settlement Posts"
+            subtitle="Settlement and release trace"
+            summaryItems={[
+              { label: 'Recent posts', value: recentSettlementPosts.length },
+              { label: 'Treasury accounts', value: visibleTreasuryAccounts.length },
+              { label: 'Ledger accounts', value: visibleLedgerAccounts.length },
+              { label: 'Remittance eligible', value: remittanceEligible },
+            ]}
+            record={{
+              id: 'ledger-settlement-validation',
+              notes: recentSettlementPosts
+                .map(
+                  (settlement) =>
+                    `${settlement.actualSettlementDate || settlement.initiatedAt} | ${settlement.executionReference || settlement.id} | ${settlement.status} | ${settlement.settledAmount}`
+                )
+                .join('\n'),
+            }}
+            onSave={() => {}}
+          >
+            {recentSettlementPosts.length === 0
+              ? 'No settlement records have posted yet.'
+              : recentSettlementPosts.map((settlement) => (
+                  <div key={settlement.id} style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                    <strong>{settlement.executionReference || settlement.id}</strong> | {settlement.status} | $
+                    {settlement.settledAmount.toLocaleString()}
+                    <div style={{ color: 'var(--cf-muted)' }}>
+                      {settlement.actualSettlementDate || settlement.initiatedAt || 'No date'} |{' '}
+                      {settlement.executionRail || settlement.path}
+                    </div>
+                  </div>
+                ))}
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Treasury Accounts"

@@ -175,6 +175,16 @@ export default function OverviewPage({
     )
     .sort((left, right) => (right.date || '').localeCompare(left.date || ''))
     .slice(0, 6);
+  const recentPresentments = [...data.couponPresentments]
+    .sort((left, right) => (right.presentmentDate || '').localeCompare(left.presentmentDate || ''))
+    .slice(0, 5);
+  const recentSettlementPosts = [...data.settlements]
+    .sort((left, right) =>
+      (right.actualSettlementDate || right.initiatedAt || '').localeCompare(
+        left.actualSettlementDate || left.initiatedAt || ''
+      )
+    )
+    .slice(0, 5);
   const reviewItems =
     [
       ...data.complianceTags.filter((item) => item.status === 'review'),
@@ -687,6 +697,63 @@ export default function OverviewPage({
               </div>
             </RecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Recent Remittance Activity"
+        description="Latest presentments and settlement postings so a newly submitted remittance becomes visible across the workspace right away."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Recent Presentments"
+            subtitle={`${data.couponPresentments.length} total presentments`}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.6 }}>
+              {recentPresentments.length === 0 ? (
+                <div>No remittance presentments recorded yet.</div>
+              ) : (
+                recentPresentments.map((presentment) => (
+                  <div key={presentment.id}>
+                    <strong>{presentment.receiverName}</strong> | {presentment.status} | $
+                    {presentment.amount.toLocaleString()}
+                    <div style={{ color: '#94a3b8' }}>
+                      {presentment.presentmentDate} | {presentment.couponReference || 'No coupon ref'} |{' '}
+                      {presentment.receiverAccountLabel || 'No account label'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Recent Settlement Posts"
+            subtitle={`${data.payments.length} payments | ${data.settlements.length} settlements`}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.6 }}>
+              {recentSettlementPosts.length === 0 ? (
+                <div>No remittance-linked settlements posted yet.</div>
+              ) : (
+                recentSettlementPosts.map((settlement) => (
+                  <div key={settlement.id}>
+                    <strong>{settlement.executionReference || settlement.id}</strong> | {settlement.status} | $
+                    {settlement.settledAmount.toLocaleString()}
+                    <div style={{ color: '#94a3b8' }}>
+                      {settlement.actualSettlementDate || settlement.initiatedAt || 'No date'} |{' '}
+                      {settlement.executionRail || settlement.path} | verify {settlement.verificationStatus}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </RecordCard>
         </div>
       </PageSection>
 
