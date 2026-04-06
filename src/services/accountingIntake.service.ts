@@ -2,6 +2,7 @@ import { geminiService } from './gemini.service';
 import type { AnalysisResult } from '../types/app.models';
 
 type IntakeKind = 'bill' | 'receipt' | 'coupon';
+const EXTRACTION_CACHE_STORAGE_KEY = 'clearflow-accounting-extraction-cache-v1';
 
 export interface IntakeExtractionResult {
   status: 'manual' | 'extracted' | 'needs_review' | 'failed';
@@ -16,6 +17,11 @@ export interface IntakeExtractionResult {
   processingReference?: string;
   paymentInstructionSummary?: string;
   rawAnalysis?: AnalysisResult;
+}
+
+interface CachedExtractionRecord {
+  savedAt: string;
+  result: IntakeExtractionResult;
 }
 
 function parseCurrencyValue(value: string | undefined) {
@@ -67,6 +73,54 @@ function fallbackExtraction(kind: IntakeKind, file: File): IntakeExtractionResul
   };
 }
 
+function buildExtractionCacheKey(kind: IntakeKind, file: File) {
+  return [kind, file.name, file.size, file.lastModified, file.type].join('::');
+}
+
+function loadExtractionCache(): Record<string, CachedExtractionRecord> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(EXTRACTION_CACHE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, CachedExtractionRecord>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveExtractionCache(cache: Record<string, CachedExtractionRecord>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(EXTRACTION_CACHE_STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore storage write failures
+  }
+}
+
+function getCachedExtraction(kind: IntakeKind, file: File): IntakeExtractionResult | null {
+  const cache = loadExtractionCache();
+  const cached = cache[buildExtractionCacheKey(kind, file)];
+  return cached?.result || null;
+}
+
+function setCachedExtraction(
+  kind: IntakeKind,
+  file: File,
+  result: IntakeExtractionResult
+) {
+  const cache = loadExtractionCache();
+  cache[buildExtractionCacheKey(kind, file)] = {
+    savedAt: new Date().toISOString(),
+    result,
+  };
+  saveExtractionCache(cache);
+}
+
 export async function analyzeAccountingUpload(
   kind: IntakeKind,
   file: File | null | undefined,
@@ -78,8 +132,15 @@ export async function analyzeAccountingUpload(
     };
   }
 
+  const cachedResult = getCachedExtraction(kind, file);
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   if (!geminiService.isConfigured) {
-    return fallbackExtraction(kind, file);
+    const result = fallbackExtraction(kind, file);
+    setCachedExtraction(kind, file, result);
+    return result;
   }
 
   try {
@@ -93,7 +154,7 @@ export async function analyzeAccountingUpload(
         ?.map((item) => extractDateFromText(item.date))
         .find((value) => value !== undefined) ?? undefined;
 
-    return {
+    const result: IntakeExtractionResult = {
       status: 'extracted',
       summary: analysis.summary || `Automatic ${kind} extraction completed.`,
       vendorOrMerchantName: analysis.entityName || undefined,
@@ -107,9 +168,11 @@ export async function analyzeAccountingUpload(
       paymentInstructionSummary: analysis.paymentInstructionSummary || undefined,
       rawAnalysis: analysis,
     };
+    setCachedExtraction(kind, file, result);
+    return result;
   } catch (error) {
     console.warn(`Automatic ${kind} extraction failed. Falling back to review mode.`, error);
-    return {
+    const result: IntakeExtractionResult = {
       ...fallbackExtraction(kind, file),
       status: 'failed',
       summary:
@@ -117,5 +180,7 @@ export async function analyzeAccountingUpload(
           ? `Automatic ${kind} extraction failed: ${error.message}`
           : `Automatic ${kind} extraction failed and needs review.`,
     };
+    setCachedExtraction(kind, file, result);
+    return result;
   }
 }
