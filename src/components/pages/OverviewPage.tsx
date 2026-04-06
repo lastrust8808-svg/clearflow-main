@@ -285,6 +285,60 @@ export default function OverviewPage({
             </button>
           </RecordCard>
         </div>
+        {data.entities.length === 0 ? (
+          <div
+            style={{
+              marginTop: 16,
+              padding: 18,
+              borderRadius: 16,
+              border: '1px dashed rgba(126,242,255,0.26)',
+              background: 'rgba(15,23,42,0.35)',
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 17 }}>Finish Your Workspace Setup</div>
+            <div style={{ color: 'var(--cf-muted)', lineHeight: 1.65 }}>
+              Add your first entity to establish its own board, storage mapping, accounting
+              defaults, and record routing. After that, ClearFlow can keep vendors, obligations,
+              bank feeds, and remittances tied to the right profile automatically.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => navigate('#entities:new')}
+                style={{
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Add First Entity
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('#accounting:bankFeed')}
+                style={{
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.5)',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Connect Accounts
+              </button>
+            </div>
+          </div>
+        ) : null}
       </PageSection>
 
       <PageSection

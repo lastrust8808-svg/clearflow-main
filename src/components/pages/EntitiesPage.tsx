@@ -767,6 +767,64 @@ export default function EntitiesPage({
         </div>
       </div>
 
+      {data.entities.length === 0 ? (
+        <PageSection
+          title="Start Your Entity Boards"
+          description="Set up each legal profile once, then ClearFlow can keep records, storage, accounting, and remittance routing organized by entity."
+        >
+          <div
+            style={{
+              display: 'grid',
+              gap: 14,
+              padding: 18,
+              borderRadius: 18,
+              border: '1px dashed rgba(126,242,255,0.26)',
+              background: 'rgba(15,23,42,0.34)',
+              color: '#d1d5db',
+            }}
+          >
+            <div style={{ lineHeight: 1.7 }}>
+              Add your first entity to create its own board, authority records, Google storage
+              routing, seal and dispatch identity, and accounting defaults.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setIsEntityModalOpen(true)}
+                style={{
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Add First Entity
+              </button>
+              <button
+                type="button"
+                onClick={() => goToHash('#accounting:bankFeed')}
+                style={{
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.5)',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Connect Financial Accounts
+              </button>
+            </div>
+          </div>
+        </PageSection>
+      ) : null}
+
       <div
         style={{
           display: 'grid',

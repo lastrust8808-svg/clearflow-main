@@ -106,9 +106,6 @@ const sectionQuickActions: Record<
 
 const RECENT_ROUTE_STORAGE_KEY = 'clearflow-shell-recent-routes-v1';
 const PINNED_ROUTE_STORAGE_KEY = 'clearflow-shell-pinned-routes-v1';
-const PINNED_ICON = '[pin]';
-const UNPINNED_ICON = '[+]';
-
 function goToHash(hash: string) {
   if (typeof window === 'undefined') {
     return;
@@ -177,7 +174,7 @@ export default function AppShell({
   const [launcherQuery, setLauncherQuery] = useState('');
   const [recentRoutes, setRecentRoutes] = useState<Array<{ hash: string; label: string }>>([]);
   const [pinnedRoutes, setPinnedRoutes] = useState<Array<{ hash: string; label: string }>>([]);
-  const [showUtilityPanels] = useState(false);
+  const showUtilityPanels = false;
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
   const themePaletteByMode: Record<
@@ -889,7 +886,7 @@ export default function AppShell({
                         cursor: 'pointer',
                       }}
                     >
-                      {isCurrentRoutePinned ? PINNED_ICON : UNPINNED_ICON}
+                      {isCurrentRoutePinned ? '[pin]' : '[+]'}
                       {isCurrentRoutePinned ? 'Unpin This View' : 'Pin This View'}
                     </button>
                   ) : null}
