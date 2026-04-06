@@ -267,6 +267,15 @@ export type BankFeedConnectionStatus =
   | 'connected'
   | 'syncing'
   | 'attention_needed';
+export type FinancialConnectionProvider =
+  | 'plaid'
+  | 'stripe'
+  | 'cash_app'
+  | 'paypal'
+  | 'square'
+  | 'issuer_portal'
+  | 'manual';
+export type FinancialConnectionRail = 'plaid_link' | 'oauth' | 'manual_profile';
 
 export type WalletConnectionProvider =
   | 'metamask'
@@ -2025,10 +2034,14 @@ export interface BankAccountRecord {
   linkedDocumentIds?: string[];
   onboardingStatus?: 'draft' | 'collecting' | 'ready' | 'submitted' | 'connected';
   onboardingChecklist?: BankOnboardingChecklistItem[];
-  connectionType?: 'plaid_connected' | 'manual_bank' | 'ledger_proxy';
+  connectionType?:
+    | 'plaid_connected'
+    | 'manual_bank'
+    | 'ledger_proxy'
+    | 'external_provider_connected';
   liveFeedEnabled?: boolean;
   liveFeedStatus?: BankFeedConnectionStatus;
-  liveConnectionProvider?: 'plaid' | 'manual';
+  liveConnectionProvider?: FinancialConnectionProvider;
   plaidItemId?: string;
   lastFeedSyncAt?: string;
   autoReconcileEnabled?: boolean;
@@ -2042,6 +2055,23 @@ export interface BankAccountRecord {
   accountNumber?: string;
   achOriginationEnabled?: boolean;
   wireEnabled?: boolean;
+  connectedProfile?: {
+    providerKey: FinancialConnectionProvider;
+    providerLabel: string;
+    connectionRail: FinancialConnectionRail;
+    sourceInstitutionName?: string;
+    externalAccountId?: string;
+    externalCustomerId?: string;
+    accountSubtypeLabel?: string;
+    loginLabel?: string;
+    persistentConnectionKey: string;
+    supportsLiveSync: boolean;
+    supportsTransactionImport: boolean;
+    supportsSettlementInitiation: boolean;
+    availabilityStatus: 'live' | 'profile_only';
+    connectedAt: string;
+    lastProviderSyncAt?: string;
+  };
 }
 
 export interface ReconciliationStatementLineRecord {

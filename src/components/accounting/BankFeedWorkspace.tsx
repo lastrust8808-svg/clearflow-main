@@ -12,6 +12,8 @@ interface BankFeedWorkspaceProps {
   ledgerAccounts: LedgerAccountRecord[];
   rules: BankFeedRuleRecord[];
   entries: BankFeedEntryRecord[];
+  onConnectNewInstitution: () => void;
+  onAddConnectedAccount: () => void;
   onAddManualBankAccount: () => void;
   onAddManualTransaction: () => void;
   onUpdateImportPolicy: (
@@ -41,6 +43,8 @@ export default function BankFeedWorkspace({
   ledgerAccounts,
   rules,
   entries,
+  onConnectNewInstitution,
+  onAddConnectedAccount,
   onAddManualBankAccount,
   onAddManualTransaction,
   onUpdateImportPolicy,
@@ -108,6 +112,37 @@ export default function BankFeedWorkspace({
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onConnectNewInstitution}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(45,212,191,0.28)',
+            background:
+              'linear-gradient(135deg, rgba(20, 184, 166, 0.9), rgba(37, 99, 235, 0.82))',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Connect Institution Login
+        </button>
+        <button
+          type="button"
+          onClick={onAddConnectedAccount}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(249,115,22,0.28)',
+            background: 'rgba(124,45,18,0.32)',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Add Connected Provider
+        </button>
         <button
           type="button"
           onClick={onAddManualBankAccount}
@@ -261,6 +296,12 @@ export default function BankFeedWorkspace({
               Feed status: <strong>{account.liveFeedStatus ?? 'disconnected'}</strong>
               <br />
               Connection: <strong>{account.liveConnectionProvider ?? account.connectionType ?? 'manual'}</strong>
+              {account.connectedProfile?.providerLabel ? (
+                <>
+                  <br />
+                  Provider: <strong>{account.connectedProfile.providerLabel}</strong>
+                </>
+              ) : null}
               <br />
               Auto reconcile: <strong>{account.autoReconcileEnabled === false ? 'off' : 'on'}</strong>
               <br />

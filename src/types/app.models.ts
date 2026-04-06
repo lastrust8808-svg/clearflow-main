@@ -149,6 +149,14 @@ export interface PlaidConnectionPayload {
   identityData: PlaidIdentityData;
   identityMatchScores: PlaidIdentityMatchScores;
   itemId: string;
+  institutionName?: string;
+  linkedAccounts?: Array<{
+    accountId: string;
+    name: string;
+    mask?: string;
+    type?: string;
+    subtype?: string;
+  }>;
 }
 
 export interface PlaidTransaction {

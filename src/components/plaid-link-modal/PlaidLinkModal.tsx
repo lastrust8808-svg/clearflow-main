@@ -33,12 +33,23 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
     createToken();
   }, [currentUser]);
 
-  const onSuccess = useCallback(async (public_token: string) => {
+  const onSuccess = useCallback(async (public_token: string, metadata?: any) => {
     if (!currentUser) return;
     setIsProcessing(true);
     try {
       const payload = await plaidService.exchangePublicToken(public_token, currentUser.id, currentUser.name);
-      onConnected(payload);
+      onConnected({
+        ...payload,
+        institutionName: metadata?.institution?.name || payload.institutionName,
+        linkedAccounts:
+          metadata?.accounts?.map((account: any) => ({
+            accountId: account.id || account.account_id || '',
+            name: account.name || account.official_name || 'Connected account',
+            mask: account.mask || '',
+            type: account.type || '',
+            subtype: account.subtype || '',
+          })) || payload.linkedAccounts,
+      });
     } catch (err) {
       setError("Failed to connect your bank account. Please try again.");
       console.error(err);
@@ -47,7 +58,18 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
   }, [currentUser, onConnected]);
 
   const handleMockConnect = useCallback(async () => {
-    await onSuccess(`public-sandbox-mock-${Date.now()}`);
+    await onSuccess(`public-sandbox-mock-${Date.now()}`, {
+      institution: { name: 'Demo Institution' },
+      accounts: [
+        {
+          id: `demo-acct-${Date.now()}`,
+          name: 'Demo Operating',
+          mask: '0001',
+          type: 'depository',
+          subtype: 'checking',
+        },
+      ],
+    });
   }, [onSuccess]);
 
   const { open, ready } = usePlaidLink({

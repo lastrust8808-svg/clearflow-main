@@ -30,6 +30,7 @@ import {
 } from '../../services/obligationLifecycle.service';
 import { buildSettlementFlowViews } from '../../services/settlementAnalytics.service';
 import { extractVendorContractClauses } from '../../services/vendorContractExtraction.service';
+import { getFinancialConnectionProvider } from '../../services/financialConnectionCatalog.service';
 import { resolveVendorProviderPreset } from '../../services/vendorProviderPreset.service';
 import {
   deriveVendorPaymentRailProfile,
@@ -49,6 +50,9 @@ import AccountingToolbar from '../accounting/AccountingToolbar';
 import BankAccountManualModal from '../accounting/BankAccountManualModal';
 import BankFeedWorkspace from '../accounting/BankFeedWorkspace';
 import BillIntakeModal from '../accounting/BillIntakeModal';
+import ConnectedFinancialAccountModal, {
+  type ConnectedFinancialAccountSubmitPayload,
+} from '../accounting/ConnectedFinancialAccountModal';
 import CouponPresentmentModal from '../accounting/CouponPresentmentModal';
 import CounterpartyModal from '../accounting/CounterpartyModal';
 import DirectDepositRequestModal from '../accounting/DirectDepositRequestModal';
@@ -283,6 +287,8 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
   const [isIntercompanyModalOpen, setIsIntercompanyModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(false);
+  const [isConnectedFinancialAccountModalOpen, setIsConnectedFinancialAccountModalOpen] =
+    useState(false);
   const [isManualBankAccountModalOpen, setIsManualBankAccountModalOpen] = useState(false);
   const [isManualBankTransactionModalOpen, setIsManualBankTransactionModalOpen] = useState(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -5227,41 +5233,327 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setIsPlaidModalOpen(true);
   };
 
+  const handleOpenNewInstitutionConnection = () => {
+    setSelectedBankFeedAccountId(null);
+    setIsPlaidModalOpen(true);
+  };
+
+  const mapPlaidSubtypeToAccountType = (
+    subtype?: string,
+  ): CoreDataBundle['bankAccounts'][number]['accountType'] => {
+    const normalized = (subtype || '').toLowerCase();
+    if (normalized.includes('savings')) {
+      return 'savings';
+    }
+    if (normalized.includes('credit')) {
+      return 'credit_card';
+    }
+    if (normalized.includes('custod')) {
+      return 'custodial';
+    }
+    if (normalized.includes('checking') || normalized.includes('depository')) {
+      return 'checking';
+    }
+    return 'other';
+  };
+
+  const buildConnectedLedgerAccount = ({
+    entityId,
+    code,
+    name,
+    currency,
+    openingBalance,
+    accountType,
+  }: {
+    entityId: string;
+    code: string;
+    name: string;
+    currency: string;
+    openingBalance: number;
+    accountType: CoreDataBundle['bankAccounts'][number]['accountType'];
+  }) => ({
+    id: `led-bank-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    entityId,
+    code,
+    name,
+    accountType: 'asset' as const,
+    currency,
+    balance: accountType === 'credit_card' ? openingBalance * -1 : openingBalance,
+    remittanceEligible: accountType !== 'credit_card',
+    remittanceClassification:
+      accountType === 'credit_card' ? ('other' as const) : ('cash' as const),
+  });
+
   const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
-    if (!selectedBankFeedAccountId) {
+    if (!defaultEntity) {
       setIsPlaidModalOpen(false);
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      bankAccounts: prev.bankAccounts.map((account) =>
-        account.id === selectedBankFeedAccountId
-          ? {
-              ...account,
+    setData((prev) => {
+      const linkedAccounts = payload.linkedAccounts?.length
+        ? payload.linkedAccounts
+        : [
+            {
+              accountId: payload.authResponse.accounts[0]?.account_id || `plaid-${Date.now()}`,
+              name: payload.institutionName || 'Connected account',
+              mask: payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || '',
+              subtype: payload.authResponse.accounts[0]?.verification_status || '',
+              type: 'depository',
+            },
+          ];
+
+      if (selectedBankFeedAccountId) {
+        return {
+          ...prev,
+          bankAccounts: prev.bankAccounts.map((account) =>
+            account.id === selectedBankFeedAccountId
+              ? {
+                  ...account,
+                  institutionName: payload.institutionName || account.institutionName,
+                  connectionType: 'plaid_connected',
+                  liveFeedEnabled: true,
+                  liveFeedStatus: 'connected',
+                  liveConnectionProvider: 'plaid',
+                  plaidItemId: payload.itemId,
+                  last4:
+                    linkedAccounts[0]?.mask ||
+                    payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) ||
+                    account.last4,
+                  achOriginationEnabled: account.achOriginationEnabled ?? true,
+                  autoReconcileEnabled: account.autoReconcileEnabled ?? true,
+                  statementImportPolicy: account.statementImportPolicy ?? 'auto_post_under_threshold',
+                  statementAutoPostThreshold: account.statementAutoPostThreshold ?? 5000,
+                  onboardingStatus: 'connected',
+                  connectedProfile: {
+                    providerKey: 'plaid',
+                    providerLabel: 'Plaid Institution Login',
+                    connectionRail: 'plaid_link',
+                    sourceInstitutionName: payload.institutionName || account.institutionName,
+                    externalAccountId: linkedAccounts[0]?.accountId,
+                    accountSubtypeLabel: linkedAccounts[0]?.subtype,
+                    persistentConnectionKey: `plaid:${payload.itemId}:${linkedAccounts[0]?.accountId || account.id}`,
+                    supportsLiveSync: true,
+                    supportsTransactionImport: true,
+                    supportsSettlementInitiation: true,
+                    availabilityStatus: 'live',
+                    connectedAt: new Date().toISOString(),
+                    lastProviderSyncAt: new Date().toISOString(),
+                  },
+                }
+              : account
+          ),
+        };
+      }
+
+      const nextLedgerAccounts = [...prev.ledgerAccounts];
+      const existingProviderEntries: Array<[string, CoreDataBundle['bankAccounts'][number]]> = [];
+      prev.bankAccounts.forEach((account) => {
+        const providerKey =
+          account.connectedProfile?.persistentConnectionKey ||
+          (account.plaidItemId
+            ? `plaid:${account.plaidItemId}:${account.connectedProfile?.externalAccountId || ''}`
+            : '');
+
+        if (providerKey) {
+          existingProviderEntries.push([providerKey, account]);
+        }
+      });
+      const existingByProviderKey = new Map<
+        string,
+        CoreDataBundle['bankAccounts'][number]
+      >(existingProviderEntries);
+
+      const nextBankAccounts = [...prev.bankAccounts];
+      linkedAccounts.forEach((linkedAccount, index) => {
+        const persistentConnectionKey = `plaid:${payload.itemId}:${linkedAccount.accountId}`;
+        const matchedExisting = existingByProviderKey.get(persistentConnectionKey);
+        const accountType = mapPlaidSubtypeToAccountType(linkedAccount.subtype || linkedAccount.type);
+
+        if (matchedExisting) {
+          const nextIndex = nextBankAccounts.findIndex((item) => item.id === matchedExisting.id);
+          if (nextIndex >= 0) {
+            nextBankAccounts[nextIndex] = {
+              ...nextBankAccounts[nextIndex],
+              institutionName: payload.institutionName || nextBankAccounts[nextIndex].institutionName,
+              accountName: linkedAccount.name || nextBankAccounts[nextIndex].accountName,
+              last4: linkedAccount.mask || nextBankAccounts[nextIndex].last4,
+              accountType,
               connectionType: 'plaid_connected',
               liveFeedEnabled: true,
               liveFeedStatus: 'connected',
               liveConnectionProvider: 'plaid',
               plaidItemId: payload.itemId,
-              last4:
-                payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || account.last4,
-              achOriginationEnabled: account.achOriginationEnabled ?? true,
-              autoReconcileEnabled: account.autoReconcileEnabled ?? true,
-              statementImportPolicy: account.statementImportPolicy ?? 'auto_post_under_threshold',
-              statementAutoPostThreshold: account.statementAutoPostThreshold ?? 5000,
-              onboardingStatus:
-                account.onboardingStatus === 'connected'
-                  ? 'connected'
-                  : ('connected' as const),
-            }
-          : account
-      ),
-    }));
+              onboardingStatus: 'connected',
+              connectedProfile: {
+                providerKey: 'plaid',
+                providerLabel: 'Plaid Institution Login',
+                connectionRail: 'plaid_link',
+                sourceInstitutionName: payload.institutionName || nextBankAccounts[nextIndex].institutionName,
+                externalAccountId: linkedAccount.accountId,
+                accountSubtypeLabel: linkedAccount.subtype,
+                persistentConnectionKey,
+                supportsLiveSync: true,
+                supportsTransactionImport: true,
+                supportsSettlementInitiation: true,
+                availabilityStatus: 'live',
+                connectedAt:
+                  nextBankAccounts[nextIndex].connectedProfile?.connectedAt || new Date().toISOString(),
+                lastProviderSyncAt: new Date().toISOString(),
+              },
+            };
+          }
+          return;
+        }
+
+        const ledgerAccount = buildConnectedLedgerAccount({
+          entityId: defaultEntity.id,
+          code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
+          name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
+          currency: prev.workspaceSettings.baseCurrency,
+          openingBalance: 0,
+          accountType,
+        });
+        nextLedgerAccounts.unshift(ledgerAccount);
+
+        nextBankAccounts.unshift({
+          id: `bank-${Date.now()}-${index}`,
+          entityId: defaultEntity.id,
+          institutionName: payload.institutionName || 'Connected institution',
+          accountName: linkedAccount.name || `${payload.institutionName || 'Connected'} Account`,
+          last4: linkedAccount.mask || undefined,
+          accountType,
+          currency: prev.workspaceSettings.baseCurrency,
+          status: 'active',
+          currentBalance: 0,
+          linkedLedgerAccountId: ledgerAccount.id,
+          onboardingStatus: 'connected',
+          connectionType: 'plaid_connected',
+          liveFeedEnabled: true,
+          liveFeedStatus: 'connected',
+          liveConnectionProvider: 'plaid',
+          plaidItemId: payload.itemId,
+          lastFeedSyncAt: new Date().toISOString(),
+          autoReconcileEnabled: true,
+          statementImportPolicy: 'auto_post_under_threshold',
+          statementAutoPostThreshold: 5000,
+          achOriginationEnabled: accountType !== 'credit_card',
+          wireEnabled: accountType !== 'credit_card',
+          connectedProfile: {
+            providerKey: 'plaid',
+            providerLabel: 'Plaid Institution Login',
+            connectionRail: 'plaid_link',
+            sourceInstitutionName: payload.institutionName || 'Connected institution',
+            externalAccountId: linkedAccount.accountId,
+            accountSubtypeLabel: linkedAccount.subtype,
+            persistentConnectionKey,
+            supportsLiveSync: true,
+            supportsTransactionImport: true,
+            supportsSettlementInitiation: true,
+            availabilityStatus: 'live',
+            connectedAt: new Date().toISOString(),
+            lastProviderSyncAt: new Date().toISOString(),
+          },
+        });
+      });
+
+      return {
+        ...prev,
+        bankAccounts: nextBankAccounts,
+        ledgerAccounts: nextLedgerAccounts,
+      };
+    });
 
     setIsPlaidModalOpen(false);
     setSelectedBankFeedAccountId(null);
     setActiveSubsection('bankFeed');
+    setOperationsNotice(
+      selectedBankFeedAccountId
+        ? 'Reconnected the selected financial account and refreshed its live provider profile.'
+        : 'Connected live institution accounts and saved them as permanent workspace accounts in the chart of accounts.'
+    );
+  };
+
+  const handleAddConnectedFinancialAccount = (
+    payload: ConnectedFinancialAccountSubmitPayload,
+  ) => {
+    const entity = defaultEntity;
+    const provider = getFinancialConnectionProvider(payload.providerKey);
+    if (!entity || !provider || !payload.institutionName.trim() || !payload.accountName.trim()) {
+      return;
+    }
+
+    setData((prev) => {
+      const stamp = Date.now();
+      const openingBalance = Number(payload.openingBalance || 0);
+      const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
+      const existingLedgerAccount = linkedLedgerAccountId
+        ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
+        : undefined;
+      const generatedLedgerAccount = existingLedgerAccount
+        ? undefined
+        : buildConnectedLedgerAccount({
+            entityId: entity.id,
+            code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
+            name: `${payload.accountName.trim()} ${payload.accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
+            currency: payload.currency || prev.workspaceSettings.baseCurrency,
+            openingBalance,
+            accountType: payload.accountType,
+          });
+
+      return {
+        ...prev,
+        bankAccounts: [
+          {
+            id: `bank-provider-${stamp}`,
+            entityId: entity.id,
+            institutionName: payload.institutionName.trim(),
+            accountName: payload.accountName.trim(),
+            last4: payload.last4?.trim() || undefined,
+            accountType: payload.accountType,
+            currency: payload.currency || prev.workspaceSettings.baseCurrency,
+            status: 'active',
+            currentBalance: openingBalance,
+            linkedLedgerAccountId: existingLedgerAccount?.id || generatedLedgerAccount?.id,
+            onboardingStatus: 'connected',
+            connectionType: 'external_provider_connected',
+            liveFeedEnabled: provider.supportsLiveSync,
+            liveFeedStatus: provider.supportsLiveSync ? 'connected' : 'attention_needed',
+            liveConnectionProvider: provider.providerKey,
+            autoReconcileEnabled: true,
+            statementImportPolicy: 'review_all',
+            statementAutoPostThreshold: 1000,
+            achOriginationEnabled: provider.supportsSettlementInitiation,
+            wireEnabled: provider.supportsSettlementInitiation,
+            connectedProfile: {
+              providerKey: provider.providerKey,
+              providerLabel: provider.label,
+              connectionRail: provider.connectionRail,
+              sourceInstitutionName: payload.institutionName.trim(),
+              externalAccountId: payload.externalAccountId?.trim() || undefined,
+              externalCustomerId: payload.externalCustomerId?.trim() || undefined,
+              loginLabel: payload.loginLabel?.trim() || undefined,
+              persistentConnectionKey: `${provider.providerKey}:${payload.externalAccountId?.trim() || payload.accountName.trim().toLowerCase().replace(/\s+/g, '-')}`,
+              supportsLiveSync: provider.supportsLiveSync,
+              supportsTransactionImport: provider.supportsTransactionImport,
+              supportsSettlementInitiation: provider.supportsSettlementInitiation,
+              availabilityStatus: provider.availabilityStatus,
+              connectedAt: new Date().toISOString(),
+            },
+          },
+          ...(prev.bankAccounts ?? []),
+        ],
+        ledgerAccounts: generatedLedgerAccount
+          ? [generatedLedgerAccount, ...(prev.ledgerAccounts ?? [])]
+          : prev.ledgerAccounts,
+      };
+    });
+
+    setIsConnectedFinancialAccountModalOpen(false);
+    setActiveSubsection('bankFeed');
+    setOperationsNotice(
+      `Saved ${payload.accountName.trim()} as a permanent ${provider.label} account inside the workspace chart of accounts.`,
+    );
   };
 
   const handleAddManualBankAccount = (payload: ManualBankAccountSubmitPayload) => {
@@ -7980,6 +8272,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                   ? bankFeedEntries.filter((entry) => entry.entityId === defaultEntity.id)
                   : bankFeedEntries
               }
+              onConnectNewInstitution={handleOpenNewInstitutionConnection}
+              onAddConnectedAccount={() => setIsConnectedFinancialAccountModalOpen(true)}
               onConnectBank={handleOpenBankConnection}
               onSyncBank={handleSyncBankFeed}
               onAddManualBankAccount={() => setIsManualBankAccountModalOpen(true)}
@@ -8193,6 +8487,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         defaultCurrency={data.workspaceSettings.baseCurrency}
         onClose={() => setIsManualBankAccountModalOpen(false)}
         onSubmit={handleAddManualBankAccount}
+      />
+
+      <ConnectedFinancialAccountModal
+        isOpen={isConnectedFinancialAccountModalOpen}
+        ledgerAccounts={
+          defaultEntity
+            ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id)
+            : ledgerAccounts
+        }
+        defaultCurrency={data.workspaceSettings.baseCurrency}
+        onClose={() => setIsConnectedFinancialAccountModalOpen(false)}
+        onSubmit={handleAddConnectedFinancialAccount}
       />
 
       <ManualBankTransactionModal
