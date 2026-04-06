@@ -300,8 +300,10 @@ export default function CouponPresentmentModal({
     mode,
   ]);
 
-  const handleExtractUploadedData = async () => {
-    if (!uploadedFile) {
+  const handleExtractUploadedData = async (fileOverride?: File | null) => {
+    const fileToExtract = fileOverride ?? uploadedFile;
+
+    if (!fileToExtract) {
       setExtractionSummary('Choose a coupon or utility statement file first.');
       setExtractionStatus('failed');
       return;
@@ -311,7 +313,7 @@ export default function CouponPresentmentModal({
     setExtractionSummary('Reading the uploaded coupon and extracting receiver, amount, and date data...');
 
     try {
-      const extraction = await analyzeAccountingUpload('coupon', uploadedFile);
+      const extraction = await analyzeAccountingUpload('coupon', fileToExtract);
       applyExtractionResult(extraction);
     } catch (error) {
       console.warn('Coupon upload extraction failed.', error);
@@ -367,9 +369,10 @@ export default function CouponPresentmentModal({
                   });
                 } else {
                   setExtractionSummary(
-                    'File loaded. Run extraction to preview and review the uploaded coupon data.',
+                    'File loaded. Extracting receiver, amount, and reference data now...',
                   );
                   setExtractionStatus('ready');
+                  void handleExtractUploadedData(file);
                 }
               }}
               style={inputStyle}
