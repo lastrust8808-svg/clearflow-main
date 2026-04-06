@@ -231,7 +231,9 @@ export default function CouponPresentmentModal({
     treasuryAccountId || sourceBankAccountId || sourceLedgerAccountId || usesObligationBackedSource,
   );
   const missingFields = [
-    (mode === 'upload' || mode === 'camera') && !uploadedFile ? 'source file' : '',
+    (mode === 'upload' || mode === 'camera') && !uploadedFile && !uploadedFileName
+      ? 'source file'
+      : '',
     !title.trim() ? 'presentment title' : '',
     !couponReference.trim() ? 'coupon/reference number' : '',
     !receiverName.trim() ? 'receiver/payee' : '',
