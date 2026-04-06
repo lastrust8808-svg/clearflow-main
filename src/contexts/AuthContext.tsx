@@ -116,6 +116,13 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LAST_GOOGLE_USER_STORAGE_KEY = 'clearflow-last-google-user-v1';
+const TERMS_ACCEPTANCE_INDEX_STORAGE_KEY = 'clearflow-terms-acceptance-index-v1';
+
+interface StoredTermsAcceptance {
+  acceptedAt: string;
+  signerName?: string;
+  termsVersion?: string;
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
@@ -145,6 +152,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return null;
     }
   });
+  const [storedTermsAcceptanceIndex, setStoredTermsAcceptanceIndex] = useState<
+    Record<string, StoredTermsAcceptance>
+  >(() => {
+    try {
+      const raw = window.localStorage.getItem(TERMS_ACCEPTANCE_INDEX_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, StoredTermsAcceptance>) : {};
+    } catch {
+      return {};
+    }
+  });
   const initialDataLoaded = useRef(false);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const googleClientsInitializedRef = useRef(false);
@@ -152,6 +169,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const clearflowLedgerDepositSyncRef = useRef(false);
   const GOOGLE_DRIVE_SCOPE =
     'openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
+
+  const normalizeIdentityEmail = useCallback((email?: string | null) => email?.trim().toLowerCase() || '', []);
 
   const hasAcceptedClearFlowTerms = useCallback(
     (appData: AppData | null | undefined) => Boolean(appData?.user.clearflowTermsAcceptedAt),
@@ -162,6 +181,85 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     (appData: AppData): AuthStatus =>
       hasAcceptedClearFlowTerms(appData) ? 'authenticated' : 'pending-profile-setup',
     [hasAcceptedClearFlowTerms]
+  );
+
+  const persistStoredTermsAcceptance = useCallback(
+    (email: string | undefined, acceptance: StoredTermsAcceptance) => {
+      const normalizedEmail = normalizeIdentityEmail(email);
+      if (!normalizedEmail || !acceptance.acceptedAt) {
+        return;
+      }
+
+      setStoredTermsAcceptanceIndex((current) => {
+        const existing = current[normalizedEmail];
+        if (
+          existing?.acceptedAt === acceptance.acceptedAt &&
+          existing?.signerName === acceptance.signerName &&
+          existing?.termsVersion === acceptance.termsVersion
+        ) {
+          return current;
+        }
+
+        const next = {
+          ...current,
+          [normalizedEmail]: acceptance,
+        };
+
+        try {
+          window.localStorage.setItem(
+            TERMS_ACCEPTANCE_INDEX_STORAGE_KEY,
+            JSON.stringify(next)
+          );
+        } catch {
+          // ignore local storage errors
+        }
+
+        return next;
+      });
+    },
+    [normalizeIdentityEmail]
+  );
+
+  const mergeStoredTermsAcceptance = useCallback(
+    (
+      appData: AppData,
+      identity?: { email?: string | null; name?: string | null }
+    ): AppData => {
+      if (appData.user.clearflowTermsAcceptedAt) {
+        return appData;
+      }
+
+      const normalizedEmail =
+        normalizeIdentityEmail(identity?.email) ||
+        normalizeIdentityEmail(appData.user.email);
+      const storedAcceptance = normalizedEmail
+        ? storedTermsAcceptanceIndex[normalizedEmail]
+        : null;
+
+      if (!storedAcceptance?.acceptedAt) {
+        return appData;
+      }
+
+      return {
+        ...appData,
+        user: {
+          ...appData.user,
+          email: appData.user.email || identity?.email || undefined,
+          name: appData.user.name || identity?.name || appData.user.name,
+          clearflowTermsAcceptedAt: storedAcceptance.acceptedAt,
+          clearflowTermsSignerName:
+            appData.user.clearflowTermsSignerName ||
+            storedAcceptance.signerName ||
+            identity?.name ||
+            appData.user.name,
+          clearflowTermsVersion:
+            appData.user.clearflowTermsVersion ||
+            storedAcceptance.termsVersion ||
+            CLEARFLOW_TERMS_VERSION,
+        },
+      };
+    },
+    [normalizeIdentityEmail, storedTermsAcceptanceIndex]
   );
 
   const buildProvisionalGoogleUser = useCallback(
@@ -511,6 +609,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
   
   useEffect(() => {
+    if (!state.appData?.user.clearflowTermsAcceptedAt) {
+      return;
+    }
+
+    persistStoredTermsAcceptance(state.appData.user.email, {
+      acceptedAt: state.appData.user.clearflowTermsAcceptedAt,
+      signerName: state.appData.user.clearflowTermsSignerName,
+      termsVersion: state.appData.user.clearflowTermsVersion || CLEARFLOW_TERMS_VERSION,
+    });
+  }, [
+    persistStoredTermsAcceptance,
+    state.appData?.user.clearflowTermsAcceptedAt,
+    state.appData?.user.clearflowTermsSignerName,
+    state.appData?.user.clearflowTermsVersion,
+    state.appData?.user.email,
+  ]);
+
+  useEffect(() => {
     const mergeGoogleIdentity = (appData: AppData, googleIdentity: { name: string; email: string }) => ({
       ...appData,
       user: {
@@ -530,7 +646,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             state.gsiUser.email
           );
           if (loadedData) { // Existing user
-            const mergedAppData = mergeGoogleIdentity(loadedData, state.gsiUser);
+            const mergedAppData = mergeStoredTermsAcceptance(
+              mergeGoogleIdentity(loadedData, state.gsiUser),
+              state.gsiUser
+            );
             setState(current => ({
               ...current,
               status: getGoogleWorkspaceStatus(mergedAppData),
@@ -552,7 +671,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 console.warn('Unable to load durable Google-linked workspace. Falling back to local recovery.', error);
               }
 
-              const mergedAppData = mergeGoogleIdentity(recoveredAppData, state.gsiUser);
+              const mergedAppData = mergeStoredTermsAcceptance(
+                mergeGoogleIdentity(recoveredAppData, state.gsiUser),
+                state.gsiUser
+              );
               needsDriveCatchUpRef.current = true;
               setState((current) => ({
                 ...current,
@@ -565,22 +687,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
-            const newAppData: AppData = { user: newUser, entities: [] };
-            setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
+            const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
+            setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData), appData: newAppData, gsiUser: null }));
           }
         } catch (error) {
           console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
           const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
           if (localGoogleMatch) {
-            const mergedAppData = {
-              ...localGoogleMatch.appData,
-              user: {
-                ...localGoogleMatch.appData.user,
-                name: localGoogleMatch.appData.user.name || state.gsiUser.name,
-                email: state.gsiUser.email,
-                primaryContactType: 'google' as const,
+            const mergedAppData = mergeStoredTermsAcceptance(
+              {
+                ...localGoogleMatch.appData,
+                user: {
+                  ...localGoogleMatch.appData.user,
+                  name: localGoogleMatch.appData.user.name || state.gsiUser.name,
+                  email: state.gsiUser.email,
+                  primaryContactType: 'google' as const,
+                },
               },
-            };
+              state.gsiUser
+            );
             needsDriveCatchUpRef.current = true;
             setState((current) => ({
               ...current,
@@ -593,13 +718,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
-          const newAppData: AppData = { user: newUser, entities: [] };
-          setState(current => ({ ...current, status: 'pending-profile-setup', appData: newAppData, gsiUser: null }));
+          const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
+          setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData), appData: newAppData, gsiUser: null }));
         }
       }
     };
     checkDrive();
-  }, [getGoogleWorkspaceStatus, state.status, state.apiAccessToken, state.gsiUser]);
+  }, [getGoogleWorkspaceStatus, mergeStoredTermsAcceptance, state.status, state.apiAccessToken, state.gsiUser]);
 
   useEffect(() => {
     if (state.status !== 'pending-drive-check' || !state.gsiUser) {
@@ -621,17 +746,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }),
         };
 
+        const nextAppData = current.appData || { user: newUser, entities: [] };
+
         return {
           ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: newUser, entities: [] },
+          status: getGoogleWorkspaceStatus(nextAppData),
+          appData: nextAppData,
           gsiUser: null,
         };
       });
     }, 8000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [state.status, state.gsiUser]);
+  }, [getGoogleWorkspaceStatus, state.status, state.gsiUser]);
 
   useEffect(() => {
     if (!state.appData?.user.email || state.appData.user.primaryContactType !== 'google') {
@@ -687,17 +814,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         }
 
+        const nextAppData = current.appData || { user: fallbackUser, entities: [] };
+
         return {
           ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: fallbackUser, entities: [] },
+          status: getGoogleWorkspaceStatus(nextAppData),
+          appData: nextAppData,
           gsiUser: null,
         };
       });
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [buildProvisionalGoogleUser, lastKnownGoogleUser, state.status]);
+  }, [buildProvisionalGoogleUser, getGoogleWorkspaceStatus, lastKnownGoogleUser, state.status]);
 
   useEffect(() => {
     setIsInitialized(true);
@@ -1414,10 +1543,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
+      const nextAppData = current.appData || { user: fallbackUser, entities: [] };
+
       return {
         ...current,
-        status: 'pending-profile-setup',
-        appData: current.appData || { user: fallbackUser, entities: [] },
+        status: getGoogleWorkspaceStatus(nextAppData),
+        appData: nextAppData,
         gsiUser: null,
       };
     });
