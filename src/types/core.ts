@@ -278,13 +278,21 @@ export type BankFeedConnectionStatus =
   | 'attention_needed';
 export type FinancialConnectionProvider =
   | 'plaid'
+  | 'dwolla'
+  | 'treasury_prime'
+  | 'modern_treasury'
   | 'stripe'
   | 'cash_app'
   | 'paypal'
   | 'square'
   | 'issuer_portal'
   | 'manual';
-export type FinancialConnectionRail = 'plaid_link' | 'oauth' | 'manual_profile';
+export type FinancialConnectionRail =
+  | 'plaid_link'
+  | 'api'
+  | 'oauth'
+  | 'manual_profile'
+  | 'bank_channel';
 
 export type WalletConnectionProvider =
   | 'metamask'

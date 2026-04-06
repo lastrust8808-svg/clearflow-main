@@ -6,6 +6,8 @@ import type {
   LedgerAccountRecord,
 } from '../../types/core';
 import type { BankFeedRuleSubmitPayload } from './accountingTypes';
+import { getFinancialConnectionProviders } from '../../services/financialConnectionCatalog.service';
+import { getTreasuryRailCatalog } from '../../services/treasuryRailCatalog.service';
 
 interface BankFeedWorkspaceProps {
   bankAccounts: BankAccountRecord[];
@@ -108,6 +110,8 @@ export default function BankFeedWorkspace({
     () => bankAccounts.find((account) => account.id === selectedBankAccountId),
     [bankAccounts, selectedBankAccountId],
   );
+  const providerCatalog = useMemo(() => getFinancialConnectionProviders(), []);
+  const treasuryRails = useMemo(() => getTreasuryRailCatalog(), []);
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -388,6 +392,91 @@ export default function BankFeedWorkspace({
             </div>
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gap: 14,
+          borderRadius: 18,
+          padding: 18,
+          background: 'rgba(15,23,42,0.45)',
+          border: '1px solid rgba(148,163,184,0.2)',
+          color: '#e5e7eb',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Execution & Treasury Rails</div>
+          <div style={{ color: '#94a3b8', marginTop: 6 }}>
+            ClearFlow can now distinguish live sync, treasury execution posture, and biller-direct limits instead of treating every connected account like the same bank rail.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {providerCatalog
+            .filter((provider) => provider.supportsLiveSync || provider.supportsSettlementInitiation)
+            .map((provider) => (
+              <div
+                key={provider.providerKey}
+                style={{
+                  borderRadius: 14,
+                  padding: 14,
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(255,255,255,0.03)',
+                  display: 'grid',
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{provider.label}</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                  {provider.executionReadiness.replace('_', ' ')} | {provider.availabilityStatus.replace('_', ' ')}
+                </div>
+                <div style={{ color: '#d1d5db', fontSize: 13, lineHeight: 1.6 }}>
+                  {provider.description}
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                  Rails: {provider.supportedRails.join(', ')}
+                </div>
+              </div>
+            ))}
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {treasuryRails.map((rail) => (
+            <div
+              key={rail.railKey}
+              style={{
+                borderRadius: 14,
+                padding: 14,
+                border: '1px solid rgba(148,163,184,0.18)',
+                background: 'rgba(255,255,255,0.03)',
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>{rail.label}</div>
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                {rail.readiness.replace('_', ' ')} | {rail.settlementWindow}
+              </div>
+              <div style={{ color: '#d1d5db', fontSize: 13, lineHeight: 1.6 }}>
+                Best use: {rail.bestUse}
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: 13 }}>{rail.notes}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div
