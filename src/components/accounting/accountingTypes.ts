@@ -9,6 +9,7 @@ export type AccountingSection =
   | 'presentments'
   | 'payments'
   | 'journal'
+  | 'coa'
   | 'receipts'
   | 'expenses'
   | 'recurring'

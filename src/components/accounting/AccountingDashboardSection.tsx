@@ -11,9 +11,11 @@ import type {
   EntityMarkUsageRecord,
   EmployeeRecord,
   ExpenseRecord,
+  LedgerAccountRecord,
   MovementIdentifierRecord,
   ObligationRecord,
   PaymentRecord,
+  ReconciliationRecord,
   ReceiptRecord,
   ReturnEventRecord,
   SettlementRecord,
@@ -49,6 +51,8 @@ interface AccountingDashboardSectionProps {
   complianceTags: ComplianceTagRecord[];
   movementIdentifiers: MovementIdentifierRecord[];
   returnEvents: ReturnEventRecord[];
+  ledgerAccounts: LedgerAccountRecord[];
+  reconciliations: ReconciliationRecord[];
   railControls: SettlementRailControlView[];
   obligationLifecycleSummaries: ObligationLifecycleSummary[];
   entityMarkUsageRecords: EntityMarkUsageRecord[];
@@ -79,6 +83,8 @@ export default function AccountingDashboardSection({
   complianceTags,
   movementIdentifiers,
   returnEvents,
+  ledgerAccounts,
+  reconciliations,
   railControls,
   obligationLifecycleSummaries,
   entityMarkUsageRecords,
@@ -222,6 +228,71 @@ export default function AccountingDashboardSection({
       )
     )
     .slice(0, 3);
+  const entityTypeSet = new Set(entities.map((entity) => entity.type));
+  const trustView = entityTypeSet.has('trust');
+  const treasuryValue = treasuryAccounts.reduce(
+    (sum, account) => sum + Number(account.availableBalance ?? 0),
+    0,
+  );
+  const digitalValue = digitalAssets.reduce(
+    (sum, asset) => sum + Number(asset.estimatedValue ?? 0),
+    0,
+  );
+  const openObligationValue = obligations.reduce(
+    (sum, obligation) =>
+      obligation.status === 'open' ? sum + Number(obligation.amount ?? 0) : sum,
+    0,
+  );
+  const estimatedNetWorth = treasuryValue + digitalValue - openObligationValue;
+  const reserveHoldings = treasuryAccounts
+    .filter((account) => account.treasuryType === 'reserve')
+    .reduce((sum, account) => sum + Number(account.availableBalance ?? 0), 0);
+  const materialCostKeywords = /(material|lumber|concrete|steel|framing|subcontract|supply)/i;
+  const materialBillTotal = bills.reduce((sum, bill) => {
+    const matches =
+      materialCostKeywords.test(bill.notes || '') ||
+      bill.linkedLineItems.some((item) => materialCostKeywords.test(item.description || ''));
+    return matches ? sum + Number(bill.totalAmount ?? 0) : sum;
+  }, 0);
+  const materialExpenseTotal = expenses.reduce((sum, expense) => {
+    return materialCostKeywords.test(expense.description || '')
+      ? sum + Number(expense.amount ?? 0)
+      : sum;
+  }, 0);
+  const materialCostTotal = materialBillTotal + materialExpenseTotal;
+  const workingBudgetBase = Math.max(stats.totalMonthlyOut || 0, 1);
+  const materialBudgetVariance = materialCostTotal - workingBudgetBase * 0.35;
+  const unreconciledCount = reconciliations.filter(
+    (item) => item.status !== 'completed' || item.statementReviewStatus !== 'completed',
+  ).length;
+  const postedMoveCards = journalDrafts.slice(0, 4);
+  const summaryTiles = [
+    {
+      label: 'Receivables',
+      value: `USD ${stats.openInvoiceAmount.toLocaleString()}`,
+      helper: `${stats.openInvoiceCount} invoices due`,
+    },
+    {
+      label: 'Payables',
+      value: `USD ${stats.openBillAmount.toLocaleString()}`,
+      helper: `${stats.openBillCount} open bills`,
+    },
+    {
+      label: 'Bank & Treasury',
+      value: `USD ${treasuryValue.toLocaleString()}`,
+      helper: `${treasuryAccounts.length} treasury accounts`,
+    },
+    {
+      label: 'Journals',
+      value: `${journalDrafts.length}`,
+      helper: `${unreconciledCount} reconciliations open`,
+    },
+    {
+      label: 'COA',
+      value: `${ledgerAccounts.length}`,
+      helper: 'account rules and mappings',
+    },
+  ];
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -247,6 +318,81 @@ export default function AccountingDashboardSection({
       </div>
 
       <PageSection
+        title="ERP Snapshot"
+        description="A more familiar ERP-style accounting home with receivables, payables, treasury, journals, and account controls up front."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.8fr) minmax(320px, 1fr)',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {summaryTiles.map((tile) => (
+                <div key={tile.label} style={infoCardStyle}>
+                  <div
+                    style={{
+                      color: '#94a3b8',
+                      fontSize: 12,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {tile.label}
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>{tile.value}</div>
+                  <div style={{ color: '#cbd5e1', marginTop: 6 }}>{tile.helper}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={infoCardStyle}>
+              <div style={{ fontWeight: 700 }}>Accounting Actions Overview</div>
+              <div style={{ color: '#d1d5db', marginTop: 8, lineHeight: 1.7 }}>
+                Invoices feed receivables, bills and expenses feed payables, remittances flow into settlement and reconciliation, and the journal ties each move back to its document and control trail. Use the section row above to work those areas without leaving Accounting.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div style={infoCardStyle}>
+              <div style={{ fontWeight: 700 }}>
+                {trustView ? 'Trust & Reserve View' : 'Operating Business View'}
+              </div>
+              <div style={{ display: 'grid', gap: 10, marginTop: 12, color: '#d1d5db' }}>
+                {trustView ? (
+                  <>
+                    <div>Estimated net worth: USD {estimatedNetWorth.toLocaleString()}</div>
+                    <div>Reserve holdings: USD {reserveHoldings.toLocaleString()}</div>
+                    <div>Futures notional: USD {capitalSummary.activeFuturesNotional.toLocaleString()}</div>
+                    <div>Treasury and digital holdings: USD {(treasuryValue + digitalValue).toLocaleString()}</div>
+                  </>
+                ) : (
+                  <>
+                    <div>Current inflow view: USD {stats.totalMonthlyIn.toLocaleString()}</div>
+                    <div>Current payables / outflow: USD {stats.totalMonthlyOut.toLocaleString()}</div>
+                    <div>Material cost tracked: USD {materialCostTotal.toLocaleString()}</div>
+                    <div>
+                      Material cost {materialBudgetVariance > 0 ? 'over' : 'under'} working budget by USD{' '}
+                      {Math.abs(materialBudgetVariance).toLocaleString()}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
         title="Accounting Overview"
         description="Top-level ERP accounting status, intake actions, and workflow routing."
       >
@@ -265,6 +411,32 @@ export default function AccountingDashboardSection({
           <div style={{ color: '#94a3b8', lineHeight: 1.7 }}>
             Use the accounting action strip above for new work, and use the accounting section row to move between invoices, remittance, journal, payroll, bank feed, and reconciliation.
           </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Recent Posted Moves"
+        description="Journal-led move cards with linked settlement, transaction, and document counts so reconciled chains are easier to inspect."
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          {postedMoveCards.length === 0 ? (
+            <div style={{ color: '#d1d5db' }}>No posted moves recorded yet.</div>
+          ) : (
+            postedMoveCards.map((entry) => (
+              <div key={entry.id} style={infoCardStyle}>
+                <div style={{ fontWeight: 700 }}>
+                  {entry.entryNumber} | {entry.debitAccount} / {entry.creditAccount}
+                </div>
+                <div style={{ color: '#94a3b8', marginTop: 6 }}>
+                  {entry.entryDate} | {entry.status} | auto-reconcile {entry.autoReconcileStatus || 'pending'}
+                </div>
+                <div style={{ color: '#d1d5db', marginTop: 8 }}>{entry.memo}</div>
+                <div style={{ color: '#cbd5e1', marginTop: 8, lineHeight: 1.6 }}>
+                  Linked: {entry.linkedTransactionIds?.length || 0} transactions | {entry.linkedSettlementIds?.length || 0} settlements | {entry.linkedDocumentIds?.length || 0} docs
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </PageSection>
 

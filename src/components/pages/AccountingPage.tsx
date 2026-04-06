@@ -130,7 +130,7 @@ const subnavGroups: Array<{
 }> = [
   {
     title: 'ERP Core',
-    items: ['dashboard', 'customers', 'vendors', 'invoices', 'bills', 'presentments', 'payments', 'journal'],
+    items: ['dashboard', 'customers', 'vendors', 'invoices', 'bills', 'presentments', 'payments', 'journal', 'coa'],
   },
   {
     title: 'Operations',
@@ -7570,10 +7570,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             taxReportingLinks={taxReportingLinks}
             documents={data.documents}
             obligations={obligations}
-            complianceTags={complianceTags}
-            movementIdentifiers={movementIdentifiers}
-            returnEvents={returnEvents}
-            railControls={remittanceRailControls}
+              complianceTags={complianceTags}
+              movementIdentifiers={movementIdentifiers}
+              returnEvents={returnEvents}
+              ledgerAccounts={ledgerAccounts}
+              reconciliations={reconciliations}
+              railControls={remittanceRailControls}
             obligationLifecycleSummaries={obligationLifecycleSummaries}
             entityMarkUsageRecords={data.entityMarkUsageRecords}
             digitalAssets={data.digitalAssets}
@@ -8187,10 +8189,59 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 record.creditAccount || 'Credit'
               } | ${formatCurrency(record.amount, data.workspaceSettings.baseCurrency)}`
             }
+            renderDetails={(record) => (
+              <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                <div>
+                  Source: {record.source} | reconcile {record.autoReconcileStatus || 'pending'} | verification{' '}
+                  {record.verificationRequired ? 'required' : 'not required'}
+                </div>
+                <div>
+                  Linked moves: {record.linkedTransactionIds?.length || 0} transactions |{' '}
+                  {record.linkedSettlementIds?.length || 0} settlements | {record.linkedDocumentIds?.length || 0}{' '}
+                  docs
+                </div>
+                <div>{record.memo}</div>
+              </div>
+            )}
             onSave={(nextRecord) =>
               setData((prev) => ({
                 ...prev,
                 journalEntries: updateCollectionRecord(prev.journalEntries, nextRecord),
+              }))
+            }
+          />
+        );
+
+      case 'coa':
+        return (
+          <EditableRecordSection
+            title="Chart of Accounts"
+            description="Account structure, remittance rules, and automation-linked account posture."
+            emptyMessage="No chart of accounts records yet."
+            records={ledgerAccounts}
+            getTitle={(record) => `${record.code} ${record.name}`}
+            getSubtitle={(record) =>
+              `${record.accountType} | ${record.currency} | balance ${formatCurrency(
+                record.balance,
+                record.currency,
+              )}`
+            }
+            renderDetails={(record) => (
+              <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                <div>
+                  Remittance posture: {record.remittanceEligible ? 'eligible' : 'manual'} | classification{' '}
+                  {record.remittanceClassification || 'not set'}
+                </div>
+                <div>
+                  Links: {record.linkedAssetIds?.length || 0} assets | {record.linkedWalletIds?.length || 0}{' '}
+                  wallets
+                </div>
+              </div>
+            )}
+            onSave={(nextRecord) =>
+              setData((prev) => ({
+                ...prev,
+                ledgerAccounts: updateCollectionRecord(prev.ledgerAccounts, nextRecord),
               }))
             }
           />

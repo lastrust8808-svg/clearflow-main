@@ -16,6 +16,7 @@ export const subnavItems = [
   { id: 'presentments', label: 'Presentments' },
   { id: 'payments', label: 'Remittance Desk' },
   { id: 'journal', label: 'Journal' },
+  { id: 'coa', label: 'Chart of Accounts' },
   { id: 'receipts', label: 'Receipts' },
   { id: 'expenses', label: 'Expenses' },
   { id: 'recurring', label: 'Recurring' },
