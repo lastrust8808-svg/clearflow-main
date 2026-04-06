@@ -124,6 +124,11 @@ interface StoredTermsAcceptance {
   termsVersion?: string;
 }
 
+function buildGoogleDurableAccountId(email?: string | null) {
+  const normalized = email?.trim().toLowerCase();
+  return normalized ? `google:${normalized}` : null;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
     status: 'unauthenticated',
@@ -284,7 +289,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       return {
-        id: crypto.randomUUID(),
+        id: buildGoogleDurableAccountId(identity.email) || crypto.randomUUID(),
         name: identity.name || identity.email,
         email: identity.email,
         isVerified: false,
@@ -429,6 +434,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!token || !data) return;
     try {
       await userDataService.saveUserData(token, data);
+      const googleDurableAccountId = buildGoogleDurableAccountId(data.user.email);
+      if (googleDurableAccountId) {
+        void saveAccountAppData(googleDurableAccountId, data).catch((error) => {
+          console.warn('Failed to mirror Google workspace to durable storage.', error);
+        });
+      }
       setSavingStatus('saved');
       setTimeout(() => setSavingStatus('idle'), 2500); // Show 'saved' for 2.5s
     } catch (err) {
@@ -491,6 +502,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     void userDataService
       .saveUserData(state.apiAccessToken, state.appData)
       .then(() => {
+        const googleDurableAccountId = buildGoogleDurableAccountId(state.appData?.user.email);
+        if (googleDurableAccountId && state.appData) {
+          void saveAccountAppData(googleDurableAccountId, state.appData).catch((error) => {
+            console.warn('Failed to mirror Google Drive catch-up to durable storage.', error);
+          });
+        }
         initialDataLoaded.current = true;
         setSavingStatus('saved');
         window.setTimeout(() => setSavingStatus('idle'), 2500);
@@ -660,15 +677,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             state.apiAccessToken,
             state.gsiUser.email
           );
-          if (loadedData) { // Existing user
+          const googleDurableAccountId = buildGoogleDurableAccountId(state.gsiUser.email);
+          let durableGoogleData: AppData | null = null;
+          if (googleDurableAccountId) {
+            try {
+              durableGoogleData = await loadAccountAppData(googleDurableAccountId);
+            } catch (error) {
+              console.warn('Unable to load durable Google workspace.', error);
+            }
+          }
+
+          const recoveredData = loadedData || durableGoogleData;
+
+          if (recoveredData) { // Existing user
             const mergedAppData = mergeStoredTermsAcceptance(
-              mergeGoogleIdentity(loadedData, state.gsiUser),
+              mergeGoogleIdentity(recoveredData, state.gsiUser),
               state.gsiUser
             );
             setState(current => ({
               ...current,
               status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
               appData: mergedAppData,
+              localAccountId: current.localAccountId || googleDurableAccountId || current.localAccountId,
               gsiUser: null,
             }));
           } else { // New user
@@ -701,7 +731,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               return;
             }
 
-            const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
+            const newUser: User = {
+              id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
+              ...state.gsiUser,
+              isVerified: false,
+              primaryContactType: 'google',
+            };
             const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
             setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
           }
@@ -732,7 +767,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
           }
 
-          const newUser: User = { id: crypto.randomUUID(), ...state.gsiUser, isVerified: false, primaryContactType: 'google' };
+          const newUser: User = {
+            id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
+            ...state.gsiUser,
+            isVerified: false,
+            primaryContactType: 'google',
+          };
           const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
           setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
         }
@@ -754,7 +794,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const newUser: User = {
           ...(current.appData?.user || {
-            id: crypto.randomUUID(),
+            id: buildGoogleDurableAccountId(current.gsiUser.email) || crypto.randomUUID(),
             ...current.gsiUser,
             isVerified: false,
             primaryContactType: 'google' as const,
@@ -1007,14 +1047,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       pendingCredentialAuth: null,
     }));
 
-    activeTokenClient.requestCode({
-      prompt:
-        mode === 'new'
-          ? 'consent select_account'
-          : mode === 'existing'
-            ? 'select_account'
+      activeTokenClient.requestCode({
+        prompt:
+          mode === 'new'
+            ? 'consent select_account'
             : '',
-    });
+      });
 
     return { success: true };
   }, [ensureGoogleClients, isConfigured, tokenClient]);
@@ -1425,6 +1463,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           userDataService.saveUserData(state.apiAccessToken!, finalAppData).then(() => backupAccountId)
         )
         .then((backupAccountId) => {
+          const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
+          if (googleDurableAccountId) {
+            return saveAccountAppData(googleDurableAccountId, finalAppData)
+              .catch((error) => {
+                console.warn('Failed to persist Google workspace to durable storage.', error);
+              })
+              .then(() => backupAccountId);
+          }
+
+          return backupAccountId;
+        })
+        .then((backupAccountId) => {
           setState((s) => ({
             ...s,
             appData: finalAppData,
@@ -1449,6 +1499,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 saveLocalAuthAppData(backupAccountId, finalAppData);
                 void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
                   console.warn('Failed to persist Google onboarding fallback after Drive save error.', error);
+                });
+              }
+
+              const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
+              if (googleDurableAccountId) {
+                void saveAccountAppData(googleDurableAccountId, finalAppData).catch((error) => {
+                  console.warn('Failed to persist Google onboarding durable fallback.', error);
                 });
               }
 
@@ -1601,10 +1658,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ...current,
         status:
           current.appData?.user && current.status !== 'unauthenticated'
-            ? 'pending-gsi'
-            : current.status,
+              ? 'pending-gsi'
+              : current.status,
       }));
-      activeTokenClient.requestCode({ prompt: 'consent select_account' });
+      activeTokenClient.requestCode({ prompt: '' });
     }
   };
 

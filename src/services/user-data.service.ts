@@ -9,18 +9,30 @@ function normalizeEmail(email?: string | null) {
     return email?.trim().toLowerCase() || '';
 }
 
+function getPersistentStorage() {
+    return window.localStorage;
+}
+
+function getSessionStorageSafe() {
+    return window.sessionStorage;
+}
+
 class UserDataService {
     private fileIdIndex: Record<string, string> = this.loadIndex();
     private activeEmail: string | null = null;
 
     private loadIndex() {
         try {
-            const raw = sessionStorage.getItem(FILE_ID_INDEX_KEY);
+            const raw =
+                getPersistentStorage().getItem(FILE_ID_INDEX_KEY) ||
+                getSessionStorageSafe().getItem(FILE_ID_INDEX_KEY);
             if (raw) {
                 return JSON.parse(raw) as Record<string, string>;
             }
 
-            const legacy = sessionStorage.getItem(LEGACY_FILE_ID_KEY);
+            const legacy =
+                getPersistentStorage().getItem(LEGACY_FILE_ID_KEY) ||
+                getSessionStorageSafe().getItem(LEGACY_FILE_ID_KEY);
             if (legacy) {
                 return { __legacy__: legacy };
             }
@@ -32,7 +44,9 @@ class UserDataService {
     }
 
     private saveIndex() {
-        sessionStorage.setItem(FILE_ID_INDEX_KEY, JSON.stringify(this.fileIdIndex));
+        const serialized = JSON.stringify(this.fileIdIndex);
+        getPersistentStorage().setItem(FILE_ID_INDEX_KEY, serialized);
+        getSessionStorageSafe().setItem(FILE_ID_INDEX_KEY, serialized);
     }
 
     private getScopedFileId(email?: string | null) {
@@ -100,7 +114,10 @@ class UserDataService {
         } else {
             this.fileIdIndex = {};
         }
-        sessionStorage.removeItem(LEGACY_FILE_ID_KEY);
+        getPersistentStorage().removeItem(LEGACY_FILE_ID_KEY);
+        getPersistentStorage().removeItem(FILE_ID_INDEX_KEY);
+        getSessionStorageSafe().removeItem(LEGACY_FILE_ID_KEY);
+        getSessionStorageSafe().removeItem(FILE_ID_INDEX_KEY);
         this.saveIndex();
     }
 }

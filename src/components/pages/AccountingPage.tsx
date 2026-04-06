@@ -7556,14 +7556,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       case 'dashboard':
         return (
           <AccountingDashboardSection
-            stats={stats}
-            entities={data.entities}
-            journalDrafts={journalEntries}
-            bills={bills}
-            payments={payments}
-            expenses={expenses}
-            receipts={receipts}
-            employees={employees}
+              stats={stats}
+              entities={data.entities}
+              journalDrafts={journalEntries}
+              bills={bills}
+              couponPresentments={couponPresentments}
+              payments={payments}
+              settlements={data.settlements}
+              expenses={expenses}
+              receipts={receipts}
+              employees={employees}
             directDepositAuthorizations={directDepositAuthorizations}
             taxReportingLinks={taxReportingLinks}
             documents={data.documents}

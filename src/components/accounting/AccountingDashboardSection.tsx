@@ -3,6 +3,7 @@ import type {
   BorrowingFacilityRecord,
   CollateralHoldingRecord,
   ComplianceTagRecord,
+  CouponPresentmentRecord,
   DigitalAssetRecord,
   DirectDepositAuthorizationRecord,
   DocumentRecord,
@@ -15,6 +16,7 @@ import type {
   PaymentRecord,
   ReceiptRecord,
   ReturnEventRecord,
+  SettlementRecord,
   TaxReportingLinkRecord,
   TreasuryAccountRecord,
   FuturesStrategyRecord,
@@ -34,7 +36,9 @@ interface AccountingDashboardSectionProps {
   entities: EntityRecord[];
   journalDrafts: JournalDraft[];
   bills: BillRecord[];
+  couponPresentments: CouponPresentmentRecord[];
   payments: PaymentRecord[];
+  settlements: SettlementRecord[];
   expenses: ExpenseRecord[];
   receipts: ReceiptRecord[];
   employees: EmployeeRecord[];
@@ -62,7 +66,9 @@ export default function AccountingDashboardSection({
   entities,
   journalDrafts,
   bills,
+  couponPresentments,
   payments,
+  settlements,
   expenses,
   receipts,
   employees,
@@ -206,6 +212,16 @@ export default function AccountingDashboardSection({
     futuresStrategies,
     liquidationPlans,
   });
+  const recentPresentments = [...couponPresentments]
+    .sort((left, right) => (right.presentmentDate || '').localeCompare(left.presentmentDate || ''))
+    .slice(0, 3);
+  const recentSettlementPosts = [...settlements]
+    .sort((left, right) =>
+      (right.actualSettlementDate || right.initiatedAt || '').localeCompare(
+        left.actualSettlementDate || left.initiatedAt || ''
+      )
+    )
+    .slice(0, 3);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -248,6 +264,71 @@ export default function AccountingDashboardSection({
 
           <div style={{ color: '#94a3b8', lineHeight: 1.7 }}>
             Use the accounting action strip above for new work, and use the accounting section row to move between invoices, remittance, journal, payroll, bank feed, and reconciliation.
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Recent Remittance Validation"
+        description="Newest presentments and settlement posts retained inside Accounting so payment-entry results are visible without leaving the ERP desk."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <div style={infoCardStyle}>
+            <div style={{ fontWeight: 700 }}>Recent Presentments</div>
+            <div style={{ color: '#94a3b8', marginTop: 6 }}>
+              {couponPresentments.length} total presentments
+            </div>
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {recentPresentments.length === 0 ? (
+                <div style={{ color: '#d1d5db' }}>No remittance presentments recorded yet.</div>
+              ) : (
+                recentPresentments.map((presentment) => (
+                  <div key={presentment.id}>
+                    <div style={{ fontWeight: 600 }}>{presentment.receiverName}</div>
+                    <div style={{ color: '#d1d5db', marginTop: 4 }}>
+                      {presentment.status} | ${presentment.amount.toLocaleString()}
+                    </div>
+                    <div style={{ color: '#94a3b8', marginTop: 4 }}>
+                      {presentment.presentmentDate} | {presentment.couponReference || 'No coupon ref'} |{' '}
+                      {presentment.receiverAccountLabel || 'No account label'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={infoCardStyle}>
+            <div style={{ fontWeight: 700 }}>Recent Settlement Posts</div>
+            <div style={{ color: '#94a3b8', marginTop: 6 }}>
+              {payments.length} payments | {settlements.length} settlements
+            </div>
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {recentSettlementPosts.length === 0 ? (
+                <div style={{ color: '#d1d5db' }}>No remittance-linked settlements posted yet.</div>
+              ) : (
+                recentSettlementPosts.map((settlement) => (
+                  <div key={settlement.id}>
+                    <div style={{ fontWeight: 600 }}>
+                      {settlement.executionReference || settlement.id}
+                    </div>
+                    <div style={{ color: '#d1d5db', marginTop: 4 }}>
+                      {settlement.status} | ${settlement.settledAmount.toLocaleString()}
+                    </div>
+                    <div style={{ color: '#94a3b8', marginTop: 4 }}>
+                      {settlement.actualSettlementDate || settlement.initiatedAt || 'No date'} |{' '}
+                      {settlement.executionRail || settlement.path} | verify {settlement.verificationStatus}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </PageSection>
