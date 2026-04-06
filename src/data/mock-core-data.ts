@@ -1,1 +1,0 @@
-export { coreMockData } from './mockData';
