@@ -9,21 +9,22 @@ import type { AccountingStats, JournalDraft } from './accountingTypes';
 
 export const subnavItems = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'invoices', label: 'Invoices' },
-  { id: 'quotes', label: 'Quotes' },
-  { id: 'bills', label: 'Bills' },
-  { id: 'expenses', label: 'Expenses' },
-  { id: 'receipts', label: 'Receipts' },
-  { id: 'presentments', label: 'Presentments' },
-  { id: 'railOps', label: 'Rails & Codes' },
   { id: 'customers', label: 'Customers' },
   { id: 'vendors', label: 'Vendors' },
+  { id: 'invoices', label: 'Invoices' },
+  { id: 'bills', label: 'Bills' },
+  { id: 'presentments', label: 'Presentments' },
   { id: 'payments', label: 'Remittance Desk' },
+  { id: 'journal', label: 'Journal' },
+  { id: 'receipts', label: 'Receipts' },
+  { id: 'expenses', label: 'Expenses' },
   { id: 'recurring', label: 'Recurring' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'bankFeed', label: 'Bank Feed' },
-  { id: 'intercompany', label: 'Intercompany' },
   { id: 'reconciliation', label: 'Reconciliation' },
+  { id: 'railOps', label: 'Rails & Codes' },
+  { id: 'quotes', label: 'Quotes' },
+  { id: 'intercompany', label: 'Intercompany' },
 ] as const;
 
 export const buildAutoNumber = (prefix: string, startingNumber: string) => {

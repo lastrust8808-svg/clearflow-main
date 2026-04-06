@@ -7838,6 +7838,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           />
         );
 
+      case 'journal':
+        return (
+          <EditableRecordSection
+            title="Journal Entries"
+            description="Manual and system-generated journal entries for the accounting ledger."
+            emptyMessage="No journal entries recorded yet."
+            records={journalEntries}
+            getTitle={(record) => record.entryNumber || record.id}
+            getSubtitle={(record) =>
+              `${record.entryDate || 'No date'} | ${record.debitAccount || 'Debit'} / ${
+                record.creditAccount || 'Credit'
+              } | ${formatCurrency(record.amount, data.workspaceSettings.baseCurrency)}`
+            }
+            onSave={(nextRecord) =>
+              setData((prev) => ({
+                ...prev,
+                journalEntries: updateCollectionRecord(prev.journalEntries, nextRecord),
+              }))
+            }
+          />
+        );
+
       case 'recurring':
         return (
           <RecurringCommitmentsWorkspace

@@ -2,21 +2,22 @@ import type { JournalEntryRecord } from '../../types/core';
 
 export type AccountingSection =
   | 'dashboard'
-  | 'invoices'
-  | 'quotes'
-  | 'bills'
-  | 'expenses'
-  | 'receipts'
-  | 'presentments'
-  | 'railOps'
   | 'customers'
   | 'vendors'
+  | 'invoices'
+  | 'bills'
+  | 'presentments'
   | 'payments'
+  | 'journal'
+  | 'receipts'
+  | 'expenses'
   | 'recurring'
   | 'payroll'
   | 'bankFeed'
-  | 'intercompany'
-  | 'reconciliation';
+  | 'reconciliation'
+  | 'railOps'
+  | 'quotes'
+  | 'intercompany';
 
 export type JournalDraft = JournalEntryRecord;
 
