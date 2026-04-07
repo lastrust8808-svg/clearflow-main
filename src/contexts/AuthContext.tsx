@@ -801,7 +801,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }),
         };
 
-        const nextAppData = current.appData || { user: newUser, entities: [] };
+        const nextAppData = mergeStoredTermsAcceptance(
+          current.appData || { user: newUser, entities: [] },
+          current.gsiUser
+        );
 
         return {
           ...current,
@@ -869,7 +872,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         }
 
-        const nextAppData = current.appData || { user: fallbackUser, entities: [] };
+        const nextAppData = mergeStoredTermsAcceptance(
+          current.appData || { user: fallbackUser, entities: [] },
+          current.gsiUser || lastKnownGoogleUser
+        );
 
         return {
           ...current,
@@ -881,7 +887,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [buildProvisionalGoogleUser, getGoogleWorkspaceStatus, lastKnownGoogleUser, state.status]);
+  }, [
+    buildProvisionalGoogleUser,
+    getGoogleWorkspaceStatus,
+    lastKnownGoogleUser,
+    mergeStoredTermsAcceptance,
+    state.status,
+  ]);
 
   useEffect(() => {
     if (state.status !== 'unauthenticated' || state.appData || !lastKnownGoogleUser?.email) {
@@ -1445,6 +1457,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       termsVersion: CLEARFLOW_TERMS_VERSION,
       signerName: signerName || state.appData.user.clearflowTermsSignerName || name,
     });
+    persistStoredTermsAcceptance(finalAppData.user.email, {
+      acceptedAt,
+      signerName:
+        finalAppData.user.clearflowTermsSignerName ||
+        signerName ||
+        state.appData.user.clearflowTermsSignerName ||
+        name,
+      termsVersion:
+        finalAppData.user.clearflowTermsVersion || CLEARFLOW_TERMS_VERSION,
+    });
 
     if (state.apiAccessToken) {
       // Real Google flow with Drive persistence and durable email-linked recovery.
@@ -1686,7 +1708,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const nextAppData = current.appData || { user: fallbackUser, entities: [] };
+      const nextAppData = mergeStoredTermsAcceptance(
+        current.appData || { user: fallbackUser, entities: [] },
+        fallbackIdentity
+      );
 
       return {
         ...current,
