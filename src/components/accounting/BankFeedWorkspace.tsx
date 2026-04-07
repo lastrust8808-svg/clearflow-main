@@ -64,6 +64,8 @@ export default function BankFeedWorkspace({
     achOriginationReady: boolean;
     wireOriginationReady: boolean;
     billerDirectReady: boolean;
+    printableCheckReady: boolean;
+    positivePayReady: boolean;
     supportedMethods: string[];
     notes: string[];
   } | null>(null);
@@ -241,6 +243,8 @@ export default function BankFeedWorkspace({
             <span>Wire: <strong>{executionCapabilities.wireOriginationReady ? 'ready' : 'not ready'}</strong></span>
             <span>Live bank execution: <strong>{executionCapabilities.liveBankExecutionReady ? 'yes' : 'no'}</strong></span>
             <span>Biller-direct: <strong>{executionCapabilities.billerDirectReady ? 'ready' : 'not ready'}</strong></span>
+            <span>Printable check: <strong>{executionCapabilities.printableCheckReady ? 'ready' : 'not ready'}</strong></span>
+            <span>Positive Pay: <strong>{executionCapabilities.positivePayReady ? 'ready' : 'not ready'}</strong></span>
           </div>
           {executionCapabilities.supportedMethods.length > 0 ? (
             <div style={{ color: '#93c5fd' }}>

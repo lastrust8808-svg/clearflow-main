@@ -55,9 +55,14 @@ export function buildPaymentExecutionRoutingDecision(
       return {
         method: receiveMethod,
         enabled: true,
-        reason: capabilities?.billerDirectReady
-          ? 'Dedicated biller-direct execution is configured.'
-          : 'This biller-direct path can be retained and staged now, but true biller-direct execution still needs a dedicated biller or bank-bill-pay rail.',
+        reason:
+          receiveMethod === 'paper_check' && capabilities?.printableCheckReady
+            ? capabilities?.positivePayReady
+              ? 'Printable check issue is available and can be paired with a Positive Pay support record before delivery.'
+              : 'Printable check issue is available, but Positive Pay is not enabled in the current posture.'
+            : capabilities?.billerDirectReady
+              ? 'Dedicated biller-direct execution is configured.'
+              : 'This biller-direct path can be retained and staged now, but true biller-direct execution still needs a dedicated biller or bank-bill-pay rail.',
       };
     }
 

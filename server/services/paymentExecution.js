@@ -54,17 +54,21 @@ export function buildExecutionCapabilities() {
     achOriginationReady: plaidLiveReady,
     wireOriginationReady: false,
     billerDirectReady: false,
+    printableCheckReady: true,
+    positivePayReady: true,
     supportedPayeeTypes: ['bank_payee', 'manual_payee', 'biller_direct'],
-    supportedMethods: plaidLiveReady ? ['ach'] : [],
+    supportedMethods: plaidLiveReady ? ['ach', 'check'] : ['check'],
     notes: plaidLiveReady
       ? [
           'Live bank aggregation is configured.',
           'True bank-originated execution should still be treated as provider-scoped and trace-driven.',
+          'Printable check and Positive Pay support records can be generated as staged execution artifacts when the source account permits check issue.',
           'Biller-direct utility execution still requires a dedicated biller or bank-bill-pay rail.',
         ]
       : [
           'Execution is not in a fully live provider-backed mode.',
           'Bank feeds may be connected while outbound execution remains staged.',
+          'Printable check and Positive Pay support records can still be generated as staged execution artifacts when the source account permits check issue.',
           'Biller-direct utility execution still requires a dedicated biller or bank-bill-pay rail.',
         ],
   };
@@ -117,13 +121,41 @@ export function buildSettlementExecution({
     processorStatus = 'requires_review';
     externalStatus = 'manual_review';
   } else if (direction === 'outgoing' && payeeType === 'biller_direct') {
-    rail = method === 'wire' ? 'Fedwire' : method === 'ach' ? 'StandardACH' : 'None';
+    rail =
+      method === 'wire'
+        ? 'Fedwire'
+        : method === 'ach'
+          ? 'StandardACH'
+          : method === 'check'
+            ? 'CheckIssue'
+            : 'None';
     processorStatus = 'requires_review';
     verificationStatus = 'pending';
     verificationMethod = sourceType === 'ledger_account' ? 'internal_control_token' : 'bank_confirmation';
     externalStatus = 'manual_review';
     executionReason =
       'Payee is operating as a biller-direct or lockbox counterparty. ClearFlow retained the remittance and settlement controls, but this payee still needs a dedicated biller-direct or bank-bill-pay execution rail.';
+  } else if (direction === 'outgoing' && method === 'check' && sourceBankAccount) {
+    rail = 'CheckIssue';
+    processorStatus = sourceBankAccount.checkDraftEnabled === false ? 'requires_review' : 'queued';
+    verificationStatus = 'pending';
+    verificationMethod =
+      sourceBankAccount.positivePayEnabled === false ? 'manual_override' : 'bank_confirmation';
+    externalStatus = 'staged';
+    executionReason =
+      sourceBankAccount.checkDraftEnabled === false
+        ? 'Source bank account is not approved for printable check issue yet.'
+        : `Printable check issue can be generated against ${sourceBankAccount.accountName}. ${
+            sourceBankAccount.positivePayEnabled === false
+              ? 'Positive Pay is not enabled on this account, so the check should stay in manual review before release.'
+              : 'Positive Pay support can be prepared so the issued-check record can be matched when the item is presented.'
+          }${
+            sourceBankAccount.overdraftPolicy === 'bank_authorized'
+              ? ' This source account is marked as bank-authorized for overdraft-backed fulfillment.'
+              : sourceBankAccount.overdraftPolicy === 'controlled_sweep'
+                ? ' This source account is marked for controlled sweep / liquidity support before return risk.'
+                : ''
+          } Delivery and presentment still require mail or a dedicated check processor.`;
   } else if (direction === 'outgoing' && (method === 'ach' || method === 'wire') && vendorInstructionVerified) {
     const policyDecision = decideRail({
       payee: {

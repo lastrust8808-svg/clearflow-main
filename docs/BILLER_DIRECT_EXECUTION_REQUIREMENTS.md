@@ -41,3 +41,4 @@ Recommended connector classes:
 Current ClearFlow truth:
 - live bank ACH execution can be ready through the bank execution provider posture
 - biller-direct is still staged unless a dedicated biller-direct or bank-bill-pay rail is added
+- printable check plus Positive Pay support records can be staged now as a bridge rail for billers that accept mailed checks

@@ -6,6 +6,7 @@ type SettlementExecutionRail =
   | 'Fedwire'
   | 'SameDayACH'
   | 'StandardACH'
+  | 'CheckIssue'
   | 'LedgerRemittance'
   | 'None';
 
@@ -47,6 +48,9 @@ interface ExecuteSettlementPayload {
     accountNumber?: string;
     achOriginationEnabled?: boolean;
     wireEnabled?: boolean;
+    checkDraftEnabled?: boolean;
+    positivePayEnabled?: boolean;
+    overdraftPolicy?: 'none' | 'bank_authorized' | 'controlled_sweep' | 'manual_review';
     connectionType?: string;
   } | null;
   sourceLedgerAccount?: {
@@ -102,6 +106,8 @@ export interface SettlementExecutionCapabilitiesResponse {
     achOriginationReady: boolean;
     wireOriginationReady: boolean;
     billerDirectReady: boolean;
+    printableCheckReady: boolean;
+    positivePayReady: boolean;
     supportedPayeeTypes: ExecutionPayeeType[];
     supportedMethods: string[];
     notes: string[];
@@ -190,10 +196,13 @@ export async function getSettlementExecutionCapabilities() {
         achOriginationReady: false,
         wireOriginationReady: false,
         billerDirectReady: false,
+        printableCheckReady: true,
+        positivePayReady: true,
         supportedPayeeTypes: ['manual_payee', 'bank_payee', 'biller_direct'],
-        supportedMethods: [],
+        supportedMethods: ['check'],
         notes: [
           'Live settlement execution capabilities could not be loaded.',
+          'Printable check and Positive Pay support records can still be staged locally.',
           'Treat external execution as staged until a provider confirms submission.',
         ],
       },

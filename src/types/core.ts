@@ -2141,11 +2141,14 @@ export interface BankAccountRecord {
     supportsLiveSync: boolean;
     supportsTransactionImport: boolean;
     supportsSettlementInitiation: boolean;
-    availabilityStatus: 'live' | 'profile_only';
-    connectedAt: string;
-    lastProviderSyncAt?: string;
-  };
-}
+      availabilityStatus: 'live' | 'profile_only';
+      connectedAt: string;
+      lastProviderSyncAt?: string;
+    };
+  checkDraftEnabled?: boolean;
+  positivePayEnabled?: boolean;
+  overdraftPolicy?: 'none' | 'bank_authorized' | 'controlled_sweep' | 'manual_review';
+  }
 
 export interface ReconciliationStatementLineRecord {
   id: string;
