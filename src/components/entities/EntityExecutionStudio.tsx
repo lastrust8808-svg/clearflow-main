@@ -125,6 +125,16 @@ export default function EntityExecutionStudio({
     () => data.entities.find((entity) => entity.id === selectedEntityId),
     [data.entities, selectedEntityId]
   );
+  const selectedEntityAuthorityReviews = useMemo(
+    () =>
+      data.complianceTags.filter(
+        (tag) =>
+          tag.entityId === selectedEntityId &&
+          tag.category === 'authority' &&
+          tag.status === 'review',
+      ),
+    [data.complianceTags, selectedEntityId],
+  );
 
   const recentExecutionOutputs = useMemo(() => {
     if (!selectedEntity) {
@@ -162,6 +172,10 @@ export default function EntityExecutionStudio({
 
   const updateField = (key: string, value: string) =>
     setFormState((prev) => ({ ...prev, [key]: value }));
+  const authoritySensitiveExecution =
+    executionType === 'signer_assignment' || executionType === 'banking_setup';
+  const executionBlockedForAuthorityReview =
+    authoritySensitiveExecution && selectedEntityAuthorityReviews.length > 0;
 
   const createDocument = (
     entityId: string,
@@ -534,6 +548,20 @@ export default function EntityExecutionStudio({
       >
         {executionOptions.find((option) => option.value === executionType)?.description}
       </div>
+      {selectedEntityAuthorityReviews.length ? (
+        <div
+          style={{
+            borderRadius: 16,
+            border: '1px solid rgba(251,191,36,0.28)',
+            background: 'rgba(120,53,15,0.22)',
+            color: '#fde68a',
+            padding: 14,
+            lineHeight: 1.65,
+          }}
+        >
+          Authority review is open for this entity. Formation and compliance bundles can still be drafted, but signer-assignment and banking setup bundles stay blocked until the authority review queue is resolved.
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -686,22 +714,28 @@ export default function EntityExecutionStudio({
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button
           onClick={handleExecute}
+          disabled={executionBlockedForAuthorityReview}
           style={{
             padding: '10px 14px',
             borderRadius: 12,
-            border: '1px solid rgba(126, 242, 255, 0.28)',
-            background:
-              'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+            border: executionBlockedForAuthorityReview
+              ? '1px solid rgba(148,163,184,0.18)'
+              : '1px solid rgba(126, 242, 255, 0.28)',
+            background: executionBlockedForAuthorityReview
+              ? 'rgba(71,85,105,0.6)'
+              : 'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
             color: '#fff',
-            cursor: 'pointer',
+            cursor: executionBlockedForAuthorityReview ? 'not-allowed' : 'pointer',
             fontWeight: 700,
+            opacity: executionBlockedForAuthorityReview ? 0.75 : 1,
           }}
         >
           Launch Bundle
         </button>
         <div style={{ color: 'var(--cf-muted)', alignSelf: 'center' }}>
-          These bundles create linked records so the entity has actionable next steps, not just a
-          profile card.
+          {executionBlockedForAuthorityReview
+            ? 'Resolve the authority review before launching signer-assignment or banking-setup bundles for this entity.'
+            : 'These bundles create linked records so the entity has actionable next steps, not just a profile card.'}
         </div>
       </div>
 

@@ -173,6 +173,16 @@ export default function EntityResourceStudio({
     () => data.entities.find((entity) => entity.id === selectedEntityId),
     [data.entities, selectedEntityId]
   );
+  const selectedEntityAuthorityReviews = useMemo(
+    () =>
+      data.complianceTags.filter(
+        (tag) =>
+          tag.entityId === selectedEntityId &&
+          tag.category === 'authority' &&
+          tag.status === 'review',
+      ),
+    [data.complianceTags, selectedEntityId],
+  );
   const selectedEntityTreasuryAccounts = useMemo(
     () => data.treasuryAccounts.filter((account) => account.entityId === selectedEntityId),
     [data.treasuryAccounts, selectedEntityId],
@@ -195,6 +205,9 @@ export default function EntityResourceStudio({
     }
 
     const entityId = selectedEntity.id;
+    const authorityReviews = data.complianceTags.filter(
+      (tag) => tag.entityId === entityId && tag.category === 'authority' && tag.status === 'review',
+    ).length;
     const bankPackagesInFlight = data.bankAccounts.filter(
       (item) =>
         item.entityId === entityId &&
@@ -215,6 +228,15 @@ export default function EntityResourceStudio({
     ).length;
 
     return [
+      {
+        label: 'Authority reviews',
+        value: authorityReviews,
+        hint: authorityReviews
+          ? 'Resolve authority review before using this entity for bank or outside onboarding.'
+          : 'Authority posture is clean for onboarding work.',
+        actionLabel: 'Open Entities',
+        actionHash: '#entities',
+      },
       {
         label: 'Bank onboarding in flight',
         value: bankPackagesInFlight,
@@ -375,6 +397,8 @@ export default function EntityResourceStudio({
   const shouldIssueVerificationToken =
     selectedEntity?.operationalDefaults?.autoIssueVerificationTokens ??
     data.workspaceSettings.autoIssueVerificationTokens;
+  const authorityReviewBlocksBankResource =
+    resourceType === 'bankAccount' && selectedEntityAuthorityReviews.length > 0;
 
   const buildStorageReadyDocument = (
     entityId: string,
@@ -1108,6 +1132,20 @@ export default function EntityResourceStudio({
           ))}
         </div>
       </div>
+      {selectedEntityAuthorityReviews.length ? (
+        <div
+          style={{
+            borderRadius: 16,
+            border: '1px solid rgba(251,191,36,0.28)',
+            background: 'rgba(120,53,15,0.22)',
+            color: '#fde68a',
+            padding: 14,
+            lineHeight: 1.65,
+          }}
+        >
+          Authority review is open for this entity. Resource creation can continue, but bank-account setup remains blocked until representative authority is resolved in the entity desk.
+        </div>
+      ) : null}
 
       {resourceType === 'bankAccount' && (
         <div
@@ -1511,21 +1549,28 @@ export default function EntityResourceStudio({
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button
           onClick={handleCreateResource}
+          disabled={authorityReviewBlocksBankResource}
           style={{
             padding: '10px 14px',
             borderRadius: 12,
-            border: '1px solid rgba(126, 242, 255, 0.28)',
-            background:
-              'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
+            border: authorityReviewBlocksBankResource
+              ? '1px solid rgba(148,163,184,0.18)'
+              : '1px solid rgba(126, 242, 255, 0.28)',
+            background: authorityReviewBlocksBankResource
+              ? 'rgba(71,85,105,0.6)'
+              : 'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
             color: '#fff',
-            cursor: 'pointer',
+            cursor: authorityReviewBlocksBankResource ? 'not-allowed' : 'pointer',
             fontWeight: 700,
+            opacity: authorityReviewBlocksBankResource ? 0.75 : 1,
           }}
         >
           Create Resource
         </button>
         <div style={{ color: 'var(--cf-muted)', alignSelf: 'center' }}>
-          New resources inherit the entity’s currency and operating context where available.
+          {authorityReviewBlocksBankResource
+            ? 'Resolve the authority review before creating a bank-account resource for this entity.'
+            : 'New resources inherit the entity’s currency and operating context where available.'}
         </div>
       </div>
 

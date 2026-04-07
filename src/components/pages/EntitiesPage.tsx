@@ -1369,6 +1369,20 @@ export default function EntitiesPage({
                 gap: 10,
               }}
             >
+              {authorityReviewTags.some((tag) => tag.entityId === account.entityId) ? (
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: '1px solid rgba(251,191,36,0.28)',
+                    background: 'rgba(120,53,15,0.18)',
+                    color: '#fde68a',
+                    padding: '10px 12px',
+                    lineHeight: 1.55,
+                  }}
+                >
+                  Authority review is still open for this entity. Keep this banking rail in review until representative authority is confirmed.
+                </div>
+              ) : null}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>{account.accountName}</div>
