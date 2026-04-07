@@ -8285,6 +8285,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 ? settlementFlows.filter((item) => item.transaction.entityId === defaultEntity.id)
                 : settlementFlows
             }
+            documents={
+              defaultEntity
+                ? data.documents.filter((item) => item.entityId === defaultEntity.id)
+                : data.documents
+            }
             bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
             ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}
             treasuryAccounts={

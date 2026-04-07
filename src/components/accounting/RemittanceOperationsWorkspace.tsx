@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type {
   BankAccountRecord,
   CustomerRecord,
+  DocumentRecord,
   LedgerAccountRecord,
   PaymentRecord,
   TreasuryAccountRecord,
@@ -21,6 +22,7 @@ interface RemittanceOperationsWorkspaceProps {
   vendors: VendorRecord[];
   railControls: SettlementRailControlView[];
   settlementFlows: SettlementFlowView[];
+  documents: DocumentRecord[];
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
@@ -130,7 +132,10 @@ function isOutgoingRemittance(payment: PaymentRecord) {
   return (
     payment.direction === 'outgoing' &&
     payment.counterpartyType === 'vendor' &&
-    (payment.method === 'ach' || payment.method === 'wire' || payment.method === 'digital_asset')
+    (payment.method === 'ach' ||
+      payment.method === 'wire' ||
+      payment.method === 'check' ||
+      payment.method === 'digital_asset')
   );
 }
 
@@ -140,6 +145,7 @@ export default function RemittanceOperationsWorkspace({
   vendors,
   railControls,
   settlementFlows,
+  documents,
   bankAccounts,
   ledgerAccounts,
   treasuryAccounts,
@@ -219,6 +225,10 @@ export default function RemittanceOperationsWorkspace({
           item.watchItems.length > 0)
     )
     .slice(0, 4);
+  const resolveLinkedDocuments = (payment: PaymentRecord) =>
+    (payment.linkedDocumentIds ?? [])
+      .map((documentId) => documents.find((item) => item.id === documentId))
+      .filter((item): item is DocumentRecord => Boolean(item));
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -378,7 +388,7 @@ export default function RemittanceOperationsWorkspace({
       </PageSection>
       <PageSection
         title="Remittance Control Desk"
-        description="Approve, release, and confirm vendor ACH, EFT, wire, and digital-asset disbursements from connected banks, treasury, ledger, or wallet positions."
+        description="Approve, release, and confirm vendor ACH, check, wire, and digital-asset disbursements from connected banks, treasury, ledger, or wallet positions."
       >
         <div style={{ display: 'grid', gap: 16 }}>
           {remittancePayments.length === 0 ? (
@@ -389,6 +399,13 @@ export default function RemittanceOperationsWorkspace({
             remittancePayments.map((payment) => {
               const railControl = railControlByPaymentId.get(payment.id);
               const settlementFlow = settlementFlowByPaymentId.get(payment.id);
+              const linkedDocuments = resolveLinkedDocuments(payment);
+              const printableCheckPacket = linkedDocuments.find((item) =>
+                item.title.startsWith('Printable Check Packet'),
+              );
+              const positivePayRecord = linkedDocuments.find((item) =>
+                item.title.startsWith('Positive Pay Support Record'),
+              );
               const needsComplianceConfirmation =
                 payment.complianceConfirmationStatus === 'pending';
               const needsReview =
@@ -428,6 +445,20 @@ export default function RemittanceOperationsWorkspace({
                 payment.vendorReceiveMethod === 'paper_check'
                   ? `Account target: ${settlement?.vendorDeliveryReference || 'billing account workflow on file'} | external ${settlement?.externalStatus || 'manual_review'}`
                   : `Bank target: ${payment.settlementExecution?.executionReference || payment.linkedSettlementId || 'execution reference pending'} | external ${settlement?.externalStatus || 'staged'}`;
+              const checkExecutionDetail =
+                payment.method === 'check'
+                  ? printableCheckPacket
+                    ? `Issued check packet retained${positivePayRecord ? ' with Positive Pay support' : ''}.`
+                    : 'Check execution is staged until the printable check packet is generated.'
+                  : null;
+              const postalDeliveryDetail =
+                payment.method === 'check' ||
+                payment.vendorReceiveMethod === 'paper_check' ||
+                payment.vendorReceiveMethod === 'lockbox_coupon'
+                  ? positivePayRecord
+                    ? 'Postal / lockbox delivery should retain mailing proof and account-application evidence after dispatch.'
+                    : 'Postal / lockbox delivery is still waiting on issued-check or mailing support records.'
+                  : null;
 
               return (
                 <div key={payment.id} style={cardStyle}>
@@ -533,6 +564,8 @@ export default function RemittanceOperationsWorkspace({
                       <div>
                         {payment.method === 'digital_asset'
                           ? linkedOnChainRecord?.network || 'Wallet execution'
+                          : payment.method === 'check'
+                            ? 'CheckIssue'
                           : payment.settlementExecution?.executionRail || 'Not assigned'}
                       </div>
                     </div>
@@ -548,6 +581,7 @@ export default function RemittanceOperationsWorkspace({
                       <strong style={{ color: '#e5e7eb' }}>Execution Ref</strong>
                       <div>
                         {linkedOnChainRecord?.txHash ||
+                          printableCheckPacket?.id ||
                           payment.settlementExecution?.executionReference ||
                           payment.linkedSettlementId ||
                           'Pending'}
@@ -595,6 +629,28 @@ export default function RemittanceOperationsWorkspace({
                       <strong style={{ color: '#e5e7eb' }}>Communication / Validation</strong>
                       <div>{communicationValidationDetail}</div>
                     </div>
+                    {payment.method === 'check' ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Issued Check Packet</strong>
+                        <div>{printableCheckPacket?.title || 'Pending generation'}</div>
+                      </div>
+                    ) : null}
+                    {payment.method === 'check' ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Positive Pay Support</strong>
+                        <div>{positivePayRecord?.title || 'Pending support record'}</div>
+                      </div>
+                    ) : null}
+                    {payment.method === 'check' ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Mail / Application Posture</strong>
+                        <div>
+                          {payment.vendorReceiveMethod === 'lockbox_coupon'
+                            ? 'Lockbox / biller-direct application after dispatch'
+                            : 'Issued check ready for dispatch and payee deposit'}
+                        </div>
+                      </div>
+                    ) : null}
                     {payment.method === 'digital_asset' ? (
                       <div>
                         <strong style={{ color: '#e5e7eb' }}>Wallet Destination</strong>
@@ -652,7 +708,10 @@ export default function RemittanceOperationsWorkspace({
                       lineHeight: 1.6,
                     }}
                   >
-                    {executionClassification.detail} {settlementFlow?.erpCashflowSummary ||
+                    {executionClassification.detail}{' '}
+                    {checkExecutionDetail ? `${checkExecutionDetail} ` : ''}
+                    {postalDeliveryDetail ? `${postalDeliveryDetail} ` : ''}
+                    {settlementFlow?.erpCashflowSummary ||
                       payment.complianceConfirmationNote ||
                       railControl?.recommendedAction ||
                       payment.settlementExecution?.executionReason ||

@@ -205,6 +205,7 @@ export type TransactionType =
 export type SettlementPath =
   | 'ach'
   | 'wire'
+  | 'check'
   | 'internal_ledger'
   | 'card'
   | 'cash'
