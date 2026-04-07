@@ -898,15 +898,79 @@ export default function EntitiesPage({
             title="Authority Review Queue"
             subtitle={`${authorityReviewTags.length} authority review item(s)`}
           >
-            {authorityReviewTags.length
-              ? authorityReviewTags
-                  .slice(0, 4)
-                  .map((tag) => {
-                    const entityLabel = tag.entityId ? entityNameById.get(tag.entityId) || tag.entityId : 'Workspace';
-                    return `${entityLabel}: ${tag.notes || tag.label}`;
+            <div style={{ display: 'grid', gap: 10 }}>
+              {authorityReviewTags.length
+                ? authorityReviewTags.slice(0, 4).map((tag) => {
+                    const entityLabel = tag.entityId
+                      ? entityNameById.get(tag.entityId) || tag.entityId
+                      : 'Workspace';
+                    return (
+                      <div
+                        key={tag.id}
+                        style={{
+                          display: 'grid',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          background: 'rgba(8, 13, 27, 0.56)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>{entityLabel}</div>
+                        <div style={{ color: 'var(--cf-muted)', lineHeight: 1.55 }}>
+                          {tag.notes || tag.label}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setData((prev) => ({
+                                ...prev,
+                                complianceTags: prev.complianceTags.map((item) =>
+                                  item.id === tag.id
+                                    ? {
+                                        ...item,
+                                        status: 'ok',
+                                        notes: `${item.notes || item.label} Resolved in authority control on ${new Date().toISOString().slice(0, 10)}.`,
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 10,
+                              border: '1px solid rgba(74,222,128,0.24)',
+                              background: 'rgba(34,197,94,0.12)',
+                              color: '#dcfce7',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                            }}
+                          >
+                            Mark Cleared
+                          </button>
+                          {tag.entityId ? (
+                            <button
+                              type="button"
+                              onClick={() => onSetActiveEntity?.(tag.entityId || null)}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: 10,
+                                border: '1px solid rgba(126,242,255,0.24)',
+                                background: 'rgba(54, 215, 255, 0.1)',
+                                color: '#effcff',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Focus Entity
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
                   })
-                  .join(' ')
-              : 'No authority review items are open right now.'}
+                : 'No authority review items are open right now.'}
+            </div>
           </WorkbenchRecordCard>
           <WorkbenchRecordCard
             title="Onboarding Use"
@@ -1329,6 +1393,20 @@ export default function EntitiesPage({
                               }
                             : item
                         ),
+                        complianceTags:
+                          status === 'accepted'
+                            ? prev.complianceTags.map((tag) =>
+                                tag.category === 'authority' &&
+                                tag.entityId === record.entityId &&
+                                tag.status === 'review'
+                                  ? {
+                                      ...tag,
+                                      status: 'ok',
+                                      notes: `${tag.notes || tag.label} Cleared automatically after signer acceptance on ${new Date().toISOString().slice(0, 10)}.`,
+                                    }
+                                  : tag,
+                              )
+                            : prev.complianceTags,
                       }))
                     }
                     style={{
