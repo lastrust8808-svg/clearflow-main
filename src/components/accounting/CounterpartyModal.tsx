@@ -11,6 +11,10 @@ import {
 interface CounterpartyModalProps {
   open: boolean;
   mode: 'customer' | 'vendor';
+  entityLabel?: string;
+  authorityReviewOpen?: boolean;
+  authorityReviewCount?: number;
+  authorityReviewSummary?: string;
   onClose: () => void;
   onSubmit: (payload: CounterpartySubmitPayload) => void;
 }
@@ -64,6 +68,10 @@ const buttonStyle: CSSProperties = {
 export default function CounterpartyModal({
   open,
   mode,
+  entityLabel,
+  authorityReviewOpen = false,
+  authorityReviewCount = 0,
+  authorityReviewSummary,
   onClose,
   onSubmit,
 }: CounterpartyModalProps) {
@@ -244,6 +252,32 @@ export default function CounterpartyModal({
             Create a reusable ERP counterparty record for billing, payments, and settlement tracking.
           </div>
         </div>
+
+        {mode === 'vendor' && authorityReviewOpen ? (
+          <div
+            style={{
+              display: 'grid',
+              gap: 8,
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(120,53,15,0.2)',
+              color: '#fde68a',
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              Authority review is still open for {entityLabel || 'this entity'}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              Save is still allowed so you do not lose the vendor profile, but live banking, signer,
+              or outside counterparty execution should stay staged until authority is cleared.
+              {authorityReviewCount ? ` Open authority items: ${authorityReviewCount}.` : ''}
+            </div>
+            {authorityReviewSummary ? (
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}>{authorityReviewSummary}</div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div style={{ display: 'grid', gap: 12 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={`${mode === 'customer' ? 'Customer' : 'Vendor'} name`} style={inputStyle} />
@@ -713,6 +747,9 @@ export default function CounterpartyModal({
                 phone,
                 address,
                 notes,
+                authorityReviewOpen,
+                authorityReviewCount: authorityReviewOpen ? authorityReviewCount : undefined,
+                authorityReviewSummary: authorityReviewOpen ? authorityReviewSummary : undefined,
                 sourceProfileId: selectedVendorProfile?.id,
                 sourceProfileLabel: selectedVendorProfile?.sourceLabel,
                 sourceProfileType: selectedVendorProfile?.sourceType || 'manual_match',

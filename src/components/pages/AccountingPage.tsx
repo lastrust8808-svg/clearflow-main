@@ -496,6 +496,22 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
       ),
     [data, defaultEntity]
   );
+  const activeEntityAuthorityReviewTags = useMemo(
+    () =>
+      defaultEntity
+        ? complianceTags.filter(
+            (tag) =>
+              tag.entityId === defaultEntity.id &&
+              tag.category === 'authority' &&
+              tag.status === 'review',
+          )
+        : [],
+    [complianceTags, defaultEntity],
+  );
+  const activeEntityAuthorityReviewSummary = useMemo(
+    () => activeEntityAuthorityReviewTags.map((tag) => tag.notes || tag.label).join(' '),
+    [activeEntityAuthorityReviewTags],
+  );
 
   const mapSettlementPathToPaymentRail = (
     path: SettlementPath,
@@ -3262,10 +3278,27 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    const entity = data.entities[0];
+    const entity = defaultEntity;
     if (!entity) {
       return;
     }
+
+    const authorityReviewOpen =
+      payload.authorityReviewOpen ??
+      activeEntityAuthorityReviewTags.some((tag) => tag.entityId === entity.id);
+    const authorityReviewSummary =
+      payload.authorityReviewSummary || activeEntityAuthorityReviewSummary;
+    const authorityNotice =
+      counterpartyModalMode === 'vendor' && authorityReviewOpen
+        ? [
+            payload.notes,
+            `Authority review remains open for ${entity.displayName || entity.name}. Keep this counterparty in staged onboarding until representative authority is confirmed.`,
+            authorityReviewSummary || undefined,
+          ]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .filter((value, index, all) => all.indexOf(value) === index)
+            .join('\n\n')
+        : payload.notes;
 
     let linkedTermsDocumentId: string | undefined;
     let linkedAdminProcessDocumentId: string | undefined;
@@ -3333,6 +3366,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       const { vendors: nextVendors } = ensureVendorRecord(prev, entity.id, {
         ...payload,
+        notes: authorityNotice,
         linkedTermsDocumentId,
         linkedAdminProcessDocumentId,
         organizationClass: payload.organizationClass || extractedTermsProfile?.organizationClass,
@@ -3376,11 +3410,15 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setActiveSubsection(counterpartyModalMode === 'customer' ? 'customers' : 'vendors');
     if (counterpartyModalMode === 'vendor') {
       setOperationsNotice(
-        linkedTermsDocumentId || linkedAdminProcessDocumentId
-          ? extractedTermsProfile?.summary
-            ? `Vendor terms were attached and contract clauses were autofilled for ${payload.name || 'the vendor'}.`
-            : 'Vendor terms and admin process controls were attached to the counterparty profile.'
-          : 'Vendor profile saved.'
+        authorityReviewOpen
+          ? `Vendor profile saved for ${payload.name || 'the vendor'} under ${
+              entity.displayName || entity.name
+            }, but external onboarding should stay staged until authority review is cleared.`
+          : linkedTermsDocumentId || linkedAdminProcessDocumentId
+            ? extractedTermsProfile?.summary
+              ? `Vendor terms were attached and contract clauses were autofilled for ${payload.name || 'the vendor'}.`
+              : 'Vendor terms and admin process controls were attached to the counterparty profile.'
+            : 'Vendor profile saved.'
       );
     }
     setCounterpartyModalMode(null);
@@ -8626,6 +8664,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       <CounterpartyModal
         open={counterpartyModalMode !== null}
         mode={counterpartyModalMode ?? 'customer'}
+        entityLabel={defaultEntity?.displayName || defaultEntity?.name}
+        authorityReviewOpen={activeEntityAuthorityReviewTags.length > 0}
+        authorityReviewCount={activeEntityAuthorityReviewTags.length}
+        authorityReviewSummary={activeEntityAuthorityReviewSummary}
         onClose={() => setCounterpartyModalMode(null)}
         onSubmit={handleCounterpartySubmit}
       />

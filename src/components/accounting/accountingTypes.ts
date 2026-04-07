@@ -70,6 +70,9 @@ export interface CounterpartySubmitPayload {
   phone: string;
   address: string;
   notes: string;
+  authorityReviewOpen?: boolean;
+  authorityReviewCount?: number;
+  authorityReviewSummary?: string;
   sourceProfileId?: string;
   sourceProfileLabel?: string;
   sourceProfileType?: 'directory_profile' | 'preset_profile' | 'manual_match';
