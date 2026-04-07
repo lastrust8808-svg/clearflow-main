@@ -4303,6 +4303,43 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               },
             ]
           : [];
+      const nextCheckDispatchRecord =
+        payload.method === 'check' && payload.direction === 'outgoing'
+          ? {
+              id: `dispatch-check-${stamp}`,
+              entityId: entity.id,
+              title: `Check Dispatch - ${remittanceCounterpartyName}`,
+              subjectType: 'remittance_statement' as const,
+              subjectId: nextRemittanceStatement.id,
+              linkedSettlementId: settlementId,
+              linkedRemittanceStatementId: nextRemittanceStatement.id,
+              recipientLabel: remittanceCounterpartyName,
+              method: 'postal_mail' as const,
+              status: 'prepared' as const,
+              acceptanceStatus: 'pending' as const,
+              originalControlStatus: 'issuer_controlled_original' as const,
+              serviceEvidenceStatus: 'mailing_prepared' as const,
+              counselReviewStatus: 'not_started' as const,
+              dispatchDate: nextPayment.paymentDate,
+              externalReference:
+                nextMovementIdentifier?.secondaryIdentifier ||
+                nextMovementIdentifier?.primaryIdentifier,
+              mailingLine: resolvedVendorSeed?.remitAddress || payload.counterpartyId || 'Remit address pending',
+              linkedDocumentIds: [
+                ...[checkIssueDocumentId, positivePayDocumentId].filter(
+                  (value): value is string => Boolean(value),
+                ),
+              ],
+              enforceabilityNotes:
+                payload.vendorReceiveMethod === 'lockbox_coupon'
+                  ? 'Mailing and account-application evidence should be retained for biller-direct coupon presentment.'
+                  : 'Issued business check is ready for mailing, deposit, and Positive Pay support.',
+              notes:
+                payload.vendorReceiveMethod === 'lockbox_coupon'
+                  ? 'Dispatch prepared for lockbox / biller-direct application using the retained check packet.'
+                  : 'Dispatch prepared for standard mailed vendor check.',
+            }
+          : undefined;
       const nextTaxReportingLink =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
@@ -4603,6 +4640,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         digitalAssets: nextDigitalAssets,
         transactions: [nextTransaction, ...(prev.transactions ?? [])],
         settlements: [nextSettlement, ...(prev.settlements ?? [])],
+        dispatchRecords: nextCheckDispatchRecord
+          ? [nextCheckDispatchRecord, ...(prev.dispatchRecords ?? [])]
+          : prev.dispatchRecords,
         remittanceStatements: [nextRemittanceStatement, ...(prev.remittanceStatements ?? [])],
         instrumentSettlements: nextInstrumentSettlement
           ? [nextInstrumentSettlement, ...(prev.instrumentSettlements ?? [])]
@@ -8289,6 +8329,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               defaultEntity
                 ? data.documents.filter((item) => item.entityId === defaultEntity.id)
                 : data.documents
+            }
+            dispatchRecords={
+              defaultEntity
+                ? data.dispatchRecords.filter((item) => item.entityId === defaultEntity.id)
+                : data.dispatchRecords
+            }
+            movementIdentifiers={
+              defaultEntity
+                ? movementIdentifiers.filter((item) => item.entityId === defaultEntity.id)
+                : movementIdentifiers
             }
             bankAccounts={defaultEntity ? bankAccounts.filter((item) => item.entityId === defaultEntity.id) : bankAccounts}
             ledgerAccounts={defaultEntity ? ledgerAccounts.filter((item) => item.entityId === defaultEntity.id) : ledgerAccounts}

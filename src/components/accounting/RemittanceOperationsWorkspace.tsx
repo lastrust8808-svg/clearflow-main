@@ -2,8 +2,10 @@ import type { CSSProperties } from 'react';
 import type {
   BankAccountRecord,
   CustomerRecord,
+  DispatchRecord,
   DocumentRecord,
   LedgerAccountRecord,
+  MovementIdentifierRecord,
   PaymentRecord,
   TreasuryAccountRecord,
   VendorRecord,
@@ -23,6 +25,8 @@ interface RemittanceOperationsWorkspaceProps {
   railControls: SettlementRailControlView[];
   settlementFlows: SettlementFlowView[];
   documents: DocumentRecord[];
+  dispatchRecords: DispatchRecord[];
+  movementIdentifiers: MovementIdentifierRecord[];
   bankAccounts: BankAccountRecord[];
   ledgerAccounts: LedgerAccountRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
@@ -146,6 +150,8 @@ export default function RemittanceOperationsWorkspace({
   railControls,
   settlementFlows,
   documents,
+  dispatchRecords,
+  movementIdentifiers,
   bankAccounts,
   ledgerAccounts,
   treasuryAccounts,
@@ -229,6 +235,29 @@ export default function RemittanceOperationsWorkspace({
     (payment.linkedDocumentIds ?? [])
       .map((documentId) => documents.find((item) => item.id === documentId))
       .filter((item): item is DocumentRecord => Boolean(item));
+  const checkRegisterItems = remittancePayments
+    .filter((payment) => payment.method === 'check')
+    .map((payment) => {
+      const linkedDocuments = resolveLinkedDocuments(payment);
+      const printableCheckPacket = linkedDocuments.find((item) =>
+        item.title.startsWith('Printable Check Packet'),
+      );
+      const positivePayRecord = linkedDocuments.find((item) =>
+        item.title.startsWith('Positive Pay Support Record'),
+      );
+      const dispatchRecord = dispatchRecords.find((item) => item.linkedSettlementId === payment.linkedSettlementId);
+      const movementIdentifier = movementIdentifiers.find((item) => item.linkedPaymentId === payment.id);
+      const vendor = vendors.find((item) => item.id === payment.counterpartyId);
+
+      return {
+        payment,
+        printableCheckPacket,
+        positivePayRecord,
+        dispatchRecord,
+        movementIdentifier,
+        vendor,
+      };
+    });
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -815,6 +844,119 @@ export default function RemittanceOperationsWorkspace({
                 </div>
               );
             })
+          )}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Issued Check Register"
+        description="Issued-check operations, Positive Pay support, and postal/application follow-through for staged or released check disbursements."
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          {checkRegisterItems.length === 0 ? (
+            <div style={{ color: '#d1d5db' }}>
+              No issued checks are in the register yet.
+            </div>
+          ) : (
+            checkRegisterItems.map(
+              ({
+                payment,
+                printableCheckPacket,
+                positivePayRecord,
+                dispatchRecord,
+                movementIdentifier,
+                vendor,
+              }) => (
+                <div key={payment.id} style={cardStyle}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      <div style={{ fontWeight: 700, fontSize: 18 }}>
+                        {resolveCounterpartyName(payment)}
+                      </div>
+                      <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                        CHECK | {payment.currency} {payment.amount.toLocaleString()} |{' '}
+                        {payment.paymentDate}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={badgeStyle(printableCheckPacket ? 'good' : 'warn')}>
+                        packet: {printableCheckPacket ? 'ready' : 'pending'}
+                      </span>
+                      <span style={badgeStyle(positivePayRecord ? 'good' : 'warn')}>
+                        positive pay: {positivePayRecord ? 'ready' : 'pending'}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          dispatchRecord?.status === 'delivered' || dispatchRecord?.status === 'accepted'
+                            ? 'good'
+                            : dispatchRecord?.status === 'sent'
+                              ? 'info'
+                              : 'warn',
+                        )}
+                      >
+                        dispatch: {dispatchRecord?.status || 'prepared'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: 10,
+                      color: '#d1d5db',
+                      fontSize: 13,
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Check Identifier</strong>
+                      <div>{movementIdentifier?.primaryIdentifier || 'Pending issue id'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Positive Pay Ref</strong>
+                      <div>{movementIdentifier?.secondaryIdentifier || 'Pending support ref'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Dispatch Method</strong>
+                      <div>{dispatchRecord?.method || 'postal_mail'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Application Target</strong>
+                      <div>
+                        {payment.vendorReceiveMethod === 'lockbox_coupon'
+                          ? 'Lockbox / biller account application'
+                          : vendor?.paymentInstructions?.deliveryDescriptor ||
+                            'Payee deposit and bank presentment'}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Printable Packet</strong>
+                      <div>{printableCheckPacket?.title || 'Pending generation'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Positive Pay Record</strong>
+                      <div>{positivePayRecord?.title || 'Pending generation'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Mailing Line</strong>
+                      <div>{dispatchRecord?.mailingLine || vendor?.remitAddress || 'Pending remit address'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>External Reference</strong>
+                      <div>{dispatchRecord?.externalReference || 'Pending postal / processing reference'}</div>
+                    </div>
+                  </div>
+                </div>
+              ),
+            )
           )}
         </div>
       </PageSection>
