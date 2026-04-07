@@ -3482,7 +3482,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const requiresSettlementExecution =
       payload.direction === 'outgoing' &&
       payload.counterpartyType === 'vendor' &&
-      (payload.method === 'ach' || payload.method === 'wire');
+      (payload.method === 'ach' || payload.method === 'wire' || payload.method === 'check');
     const policyReleaseHoldReason =
       vendorReceiveMethod &&
       !isVendorReceiveMethodSupported(selectedVendor, vendorReceiveMethod)
@@ -3549,6 +3549,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 accountNumber: sourceBankAccount.accountNumber,
                 achOriginationEnabled: sourceBankAccount.achOriginationEnabled,
                 wireEnabled: sourceBankAccount.wireEnabled,
+                checkDraftEnabled: sourceBankAccount.checkDraftEnabled,
+                positivePayEnabled: sourceBankAccount.positivePayEnabled,
+                overdraftPolicy: sourceBankAccount.overdraftPolicy,
                 connectionType: sourceBankAccount.connectionType,
               }
             : null,
@@ -3642,6 +3645,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         Boolean(selectedTreasuryAccount) ||
         requiresSettlementExecution ||
         Boolean(policyReleaseHoldReason);
+      const issuedCheckNumber =
+        payload.method === 'check' && payload.direction === 'outgoing'
+          ? `10${String(stamp).slice(-6)}`
+          : undefined;
+      const checkIssueDocumentId =
+        payload.method === 'check' && payload.direction === 'outgoing'
+          ? `doc-check-${stamp}`
+          : undefined;
+      const positivePayDocumentId =
+        payload.method === 'check' && payload.direction === 'outgoing'
+          ? `doc-positive-pay-${stamp}`
+          : undefined;
       const settlementToken = shouldIssueSettlementToken
         ? {
             id: `tok-${settlementId}`,
@@ -3720,6 +3735,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         linkedWalletId: selectedWallet?.id,
         linkedDigitalAssetId: selectedDigitalAsset?.id,
         linkedOnChainTransactionId: onChainTransactionId,
+        linkedDocumentIds:
+          checkIssueDocumentId || positivePayDocumentId
+            ? [checkIssueDocumentId, positivePayDocumentId].filter(
+                (value): value is string => Boolean(value),
+              )
+            : undefined,
         sourceBankAccountId: sourceBankAccount?.id,
         sourceLedgerAccountId: sourceLedgerAccount?.id,
         treasuryAccountId: selectedTreasuryAccount?.id,
@@ -3896,7 +3917,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           accountNumberMask: sourceBankAccount?.accountNumber
             ? sourceBankAccount.accountNumber.slice(-4)
             : undefined,
-          serialNumber: String(stamp).slice(-6),
+          serialNumber: issuedCheckNumber || String(stamp).slice(-6),
           mode: remittanceMode,
         },
         status: paymentStatus === 'settled' ? ('performed' as const) : ('issued' as const),
@@ -3962,6 +3983,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         linkedOnChainRecordId: onChainTransactionId,
         linkedInstrumentSettlementId: nextInstrumentSettlement?.id,
         linkedRemittanceStatementId: nextRemittanceStatement.id,
+        linkedDocumentIds:
+          checkIssueDocumentId || positivePayDocumentId
+            ? [checkIssueDocumentId, positivePayDocumentId].filter(
+                (value): value is string => Boolean(value),
+              )
+            : undefined,
         path: settlementPath,
         dischargeMethod: resolvedDischargeMethod,
         direction: payload.direction,
@@ -4171,6 +4198,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? (sourceBankAccount?.institutionName?.toLowerCase().includes('treasury')
                 ? ('federal_ach_green_book' as const)
                 : ('commercial_ach' as const))
+            : payload.method === 'check'
+              ? ('treasury_check_gold_book' as const)
             : undefined;
       const nextMovementIdentifier = paymentRailNamespace
         ? {
@@ -4184,10 +4213,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             primaryIdentifier:
               payload.method === 'wire'
                 ? `IMAD-${buildNumericReference(stamp, 20)}`
+                : payload.method === 'check'
+                  ? `CHECK-${issuedCheckNumber || String(stamp).slice(-6)}`
                 : `ACH-${paymentId.toUpperCase()}`,
             secondaryIdentifier:
               payload.method === 'wire'
                 ? `OMAD-${buildNumericReference(stamp + 47, 20)}`
+                : payload.method === 'check'
+                  ? `POSPAY-${sourceBankAccount?.last4 || 'BANK'}-${nextPayment.paymentDate.replaceAll('-', '')}`
                 : `BATCH-${(entity.displayName || entity.name).replace(/[^A-Z0-9]/gi, '').slice(0, 8).toUpperCase()}-${nextPayment.paymentDate.replaceAll('-', '')}`,
             secCode:
               payload.method === 'ach'
@@ -4222,9 +4255,54 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             notes:
               payload.method === 'wire'
                 ? 'Fedwire identifiers generated automatically from ERP payment posting.'
+                : payload.method === 'check'
+                  ? 'Treasury check issue identifiers generated automatically for printable check and Positive Pay support.'
                 : `ACH movement identifiers generated automatically for ${paymentRailNamespace === 'federal_ach_green_book' ? 'federal' : 'commercial'} rail tracking.`,
           }
         : undefined;
+      const nextCheckIssueDocuments: DocumentRecord[] =
+        payload.method === 'check' && payload.direction === 'outgoing' && sourceBankAccount
+          ? [
+              {
+                id: checkIssueDocumentId!,
+                entityId: entity.id,
+                title: `Printable Check Packet - ${remittanceCounterpartyName}`,
+                category: 'financial',
+                date: nextPayment.paymentDate,
+                status: 'final',
+                outputStatus: 'ready',
+                sourceRecordType: 'document',
+                sourceRecordId: paymentId,
+                linkedTransactionIds: [transactionId],
+                summary:
+                  'Printable business check packet generated from ERP payment posting with MICR-ready bank data and payee references.',
+                generatedBody: `PRINTABLE CHECK ISSUE\n\nPayee: ${remittanceCounterpartyName}\nAmount: ${nextPayment.currency} ${amount.toFixed(2)}\nCheck Number: ${issuedCheckNumber}\nIssue Date: ${nextPayment.paymentDate}\nBank: ${sourceBankAccount.institutionName}\nAccount Name: ${sourceBankAccount.accountName}\nMICR Routing: ${sourceBankAccount.routingNumber || 'Missing routing number'}\nMICR Account: ${sourceBankAccount.accountNumber || 'Missing account number'}\nMemo: ${payload.notes || linkedBill?.billNumber || paymentId}\nVendor Receive Method: ${vendorReceiveMethod || 'paper_check'}\nRemittance Statement: ${nextRemittanceStatement.id}\n\nThis packet is intended for printable check generation, mailing, and retained issue evidence inside ClearFlow.`,
+                vaultPath: buildVaultPath(entity.id, 'documents', `${paymentId}-printable-check.txt`),
+                storageOwner: 'clearflow_retained',
+                retentionClass: 'security_support',
+                externalStorageStatus: 'not_applicable',
+              },
+              {
+                id: positivePayDocumentId!,
+                entityId: entity.id,
+                title: `Positive Pay Support Record - ${remittanceCounterpartyName}`,
+                category: 'compliance',
+                date: nextPayment.paymentDate,
+                status: 'final',
+                outputStatus: 'ready',
+                sourceRecordType: 'document',
+                sourceRecordId: paymentId,
+                linkedTransactionIds: [transactionId],
+                summary:
+                  'Positive Pay support record generated from ERP payment posting for issued-check controls and bank-side exception review.',
+                generatedBody: `POSITIVE PAY SUPPORT RECORD\n\nCheck Number: ${issuedCheckNumber}\nIssue Date: ${nextPayment.paymentDate}\nAmount: ${amount.toFixed(2)}\nPayee: ${remittanceCounterpartyName}\nRouting Number: ${sourceBankAccount.routingNumber || 'Missing'}\nAccount Number: ${sourceBankAccount.accountNumber || 'Missing'}\nAccount Name: ${sourceBankAccount.accountName}\nBank: ${sourceBankAccount.institutionName}\nOverdraft Policy: ${sourceBankAccount.overdraftPolicy || 'manual_review'}\nPositive Pay Enabled: ${sourceBankAccount.positivePayEnabled === false ? 'No' : 'Yes'}\nPayment Id: ${paymentId}\nSettlement Id: ${settlementId}\n\nUse this retained support record to mirror issued-check controls, transmit issue data to the bank when supported, and review exceptions or returns if the item is presented.`,
+                vaultPath: buildVaultPath(entity.id, 'documents', `${paymentId}-positive-pay.txt`),
+                storageOwner: 'clearflow_retained',
+                retentionClass: 'security_support',
+                externalStorageStatus: 'not_applicable',
+              },
+            ]
+          : [];
       const nextTaxReportingLink =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
@@ -4388,6 +4466,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             account.id === sourceBankAccount.id
               ? {
                   ...account,
+                  linkedDocumentIds:
+                    checkIssueDocumentId || positivePayDocumentId
+                      ? Array.from(
+                          new Set([
+                            ...(account.linkedDocumentIds ?? []),
+                            ...[checkIssueDocumentId, positivePayDocumentId].filter(
+                              (value): value is string => Boolean(value),
+                            ),
+                          ]),
+                        )
+                      : account.linkedDocumentIds,
                   currentBalance: resolveLedgerBalance(
                     account.currentBalance ?? 0,
                     payload.direction,
@@ -4497,6 +4586,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       return {
         ...prev,
+        documents: [...nextCheckIssueDocuments, ...(prev.documents ?? [])],
         entities: prev.entities.map((item) =>
           item.id === entity.id ? incrementEntitySequence(item, 'journal') : item
         ),
@@ -4559,7 +4649,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (
         payment.direction !== 'outgoing' ||
         payment.counterpartyType !== 'vendor' ||
-        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
+        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'check' && payment.method !== 'digital_asset') ||
         payment.complianceConfirmationStatus === 'pending' ||
         settlement?.processorStatus === 'requires_review' ||
         settlement?.processorStatus === 'blocked'
@@ -4668,7 +4758,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (
         payment.direction !== 'outgoing' ||
         payment.counterpartyType !== 'vendor' ||
-        (payment.method !== 'ach' && payment.method !== 'wire') ||
+        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'check') ||
         payment.complianceConfirmationStatus !== 'pending'
       ) {
         return prev;
@@ -4845,7 +4935,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       if (
         payment.direction !== 'outgoing' ||
         payment.counterpartyType !== 'vendor' ||
-        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'digital_asset') ||
+        (payment.method !== 'ach' && payment.method !== 'wire' && payment.method !== 'check' && payment.method !== 'digital_asset') ||
         payment.releaseStatus === 'released' ||
         payment.complianceConfirmationStatus === 'pending' ||
         (payment.approvalStatus !== 'approved' && payment.approvalStatus !== 'not_required') ||
@@ -5471,11 +5561,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           lastFeedSyncAt: new Date().toISOString(),
           autoReconcileEnabled: true,
           statementImportPolicy: 'auto_post_under_threshold',
-          statementAutoPostThreshold: 5000,
-          achOriginationEnabled: accountType !== 'credit_card',
-          wireEnabled: accountType !== 'credit_card',
-          connectedProfile: {
-            providerKey: 'plaid',
+            statementAutoPostThreshold: 5000,
+            achOriginationEnabled: accountType !== 'credit_card',
+            wireEnabled: accountType !== 'credit_card',
+            checkDraftEnabled: accountType !== 'credit_card',
+            positivePayEnabled: accountType !== 'credit_card',
+            overdraftPolicy: 'manual_review',
+            connectedProfile: {
+              providerKey: 'plaid',
             providerLabel: 'Plaid Institution Login',
             connectionRail: 'plaid_link',
             sourceInstitutionName: payload.institutionName || 'Connected institution',
@@ -5560,6 +5653,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             statementAutoPostThreshold: 1000,
             achOriginationEnabled: provider.supportsSettlementInitiation,
             wireEnabled: provider.supportsSettlementInitiation,
+            checkDraftEnabled: provider.accountTypeHint !== 'credit_card',
+            positivePayEnabled: provider.accountTypeHint !== 'credit_card',
+            overdraftPolicy: 'manual_review',
             connectedProfile: {
               providerKey: provider.providerKey,
               providerLabel: provider.label,
@@ -5645,6 +5741,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             accountNumber: payload.accountNumber || undefined,
             achOriginationEnabled: payload.achOriginationEnabled,
             wireEnabled: payload.wireEnabled,
+            checkDraftEnabled: payload.accountType !== 'credit_card',
+            positivePayEnabled: payload.accountType !== 'credit_card',
+            overdraftPolicy: 'manual_review',
           },
           ...(prev.bankAccounts ?? []),
         ],
