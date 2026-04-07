@@ -40,6 +40,34 @@ function detectPayeeType({ vendorInstruction, vendorReceiveMethod }) {
   return 'manual_payee';
 }
 
+function resolveFundsApplicationClass({
+  method,
+  payeeType,
+  fundsRightsClassification,
+}) {
+  if (method === 'check') {
+    return 'check_issue';
+  }
+
+  if (payeeType === 'biller_direct') {
+    return 'biller_direct_review';
+  }
+
+  if (fundsRightsClassification === 'consumer_household') {
+    return 'consumer_ppd';
+  }
+
+  if (fundsRightsClassification === 'commercial_business') {
+    return 'commercial_ccd';
+  }
+
+  if (fundsRightsClassification === 'fiduciary_administrative') {
+    return 'fiduciary_admin';
+  }
+
+  return 'manual_review';
+}
+
 export function buildExecutionCapabilities() {
   const provider = detectProvider();
   const plaidEnvironment = getPlaidEnvironment();
@@ -87,11 +115,17 @@ export function buildSettlementExecution({
   sourceLedgerAccount,
   vendorInstruction,
   vendorReceiveMethod,
+  fundsRightsClassification,
 }) {
   const capabilities = buildExecutionCapabilities();
   const provider = capabilities.provider;
   const executionMode = capabilities.executionMode;
   const payeeType = detectPayeeType({ vendorInstruction, vendorReceiveMethod });
+  const fundsApplicationClass = resolveFundsApplicationClass({
+    method,
+    payeeType,
+    fundsRightsClassification,
+  });
   const routingNumber = vendorInstruction?.routingNumber || '';
   const accountNumber = vendorInstruction?.accountNumber || '';
   const vendorInstructionVerified =
@@ -268,6 +302,8 @@ export function buildSettlementExecution({
     verificationMethod,
     executionReason,
     executionReference: `SET-${Date.now()}`,
+    fundsRightsClassification,
+    fundsApplicationClass,
     sourceType,
     vendorInstructionVerified,
     simulatedProcessing: !liveExecution,

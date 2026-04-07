@@ -16,6 +16,10 @@ import type { SettlementRailControlView } from '../../services/settlementRailing
 import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
 import type { SettlementFlowView } from '../../services/settlementAnalytics.service';
 import { classifyVendorExecutionPath } from '../../services/vendorPaymentRails.service';
+import {
+  formatFundsApplicationClass,
+  formatFundsRightsClassification,
+} from '../../services/paymentRightsClassification.service';
 import PageSection from '../ui/PageSection';
 
 interface RemittanceOperationsWorkspaceProps {
@@ -601,6 +605,24 @@ export default function RemittanceOperationsWorkspace({
                     <div>
                       <strong style={{ color: '#e5e7eb' }}>Execution Class</strong>
                       <div>{executionClassification.label}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Rights Posture</strong>
+                      <div>
+                        {formatFundsRightsClassification(
+                          payment.fundsRightsClassification ||
+                            payment.settlementExecution?.fundsRightsClassification,
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Application Class</strong>
+                      <div>
+                        {formatFundsApplicationClass(
+                          payment.fundsApplicationClass ||
+                            payment.settlementExecution?.fundsApplicationClass,
+                        )}
+                      </div>
                     </div>
                     <div>
                       <strong style={{ color: '#e5e7eb' }}>Rail Namespace</strong>

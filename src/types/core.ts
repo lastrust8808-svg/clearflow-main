@@ -271,6 +271,23 @@ export type VerificationStatus =
   | 'verified'
   | 'exception';
 
+export type FundsRightsClassification =
+  | 'consumer_household'
+  | 'commercial_business'
+  | 'fiduciary_administrative'
+  | 'mixed_review';
+
+export type FundsApplicationClass =
+  | 'consumer_ppd'
+  | 'consumer_web'
+  | 'consumer_tel'
+  | 'commercial_ccd'
+  | 'commercial_ctx'
+  | 'fiduciary_admin'
+  | 'check_issue'
+  | 'biller_direct_review'
+  | 'manual_review';
+
 export type AutoReconcileStatus = 'pending' | 'matched' | 'partial' | 'exception';
 export type BankFeedConnectionStatus =
   | 'disconnected'
@@ -1059,6 +1076,8 @@ export interface SettlementRecord {
     | 'blocked';
   executionReason?: string;
   executionReference?: string;
+  fundsRightsClassification?: FundsRightsClassification;
+  fundsApplicationClass?: FundsApplicationClass;
   vendorReceiveMethod?: VendorReceiveMethod;
   vendorDeliveryStatus?: VendorDeliveryStatus;
   externalRecognitionStatus?: ExternalRecognitionStatus;
@@ -2006,6 +2025,8 @@ export interface PaymentRecord {
   releasedBy?: string;
   releasedAt?: string;
   releaseTokenId?: string;
+  fundsRightsClassification?: FundsRightsClassification;
+  fundsApplicationClass?: FundsApplicationClass;
   settlementExecution?: {
     sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
     executionMode?: 'live' | 'staged';
@@ -2039,6 +2060,8 @@ export interface PaymentRecord {
       | 'blocked';
     executionReason: string;
     executionReference?: string;
+    fundsRightsClassification?: FundsRightsClassification;
+    fundsApplicationClass?: FundsApplicationClass;
     vendorInstructionVerified?: boolean;
     simulatedProcessing?: boolean;
   };
@@ -2131,6 +2154,7 @@ export interface BankAccountRecord {
   accountNumber?: string;
   achOriginationEnabled?: boolean;
   wireEnabled?: boolean;
+  fundsRightsClassification?: FundsRightsClassification;
   connectedProfile?: {
     providerKey: FinancialConnectionProvider;
     providerLabel: string;

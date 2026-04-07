@@ -31,6 +31,21 @@ type ExternalExecutionStatus =
   | 'applied'
   | 'manual_review'
   | 'staged';
+type FundsRightsClassification =
+  | 'consumer_household'
+  | 'commercial_business'
+  | 'fiduciary_administrative'
+  | 'mixed_review';
+type FundsApplicationClass =
+  | 'consumer_ppd'
+  | 'consumer_web'
+  | 'consumer_tel'
+  | 'commercial_ccd'
+  | 'commercial_ctx'
+  | 'fiduciary_admin'
+  | 'check_issue'
+  | 'biller_direct_review'
+  | 'manual_review';
 
 interface ExecuteSettlementPayload {
   entityId: string;
@@ -40,6 +55,7 @@ interface ExecuteSettlementPayload {
   currency: string;
   direction: 'incoming' | 'outgoing';
   method: 'ach' | 'wire' | 'check' | 'card' | 'cash' | 'digital_asset' | 'other';
+  fundsRightsClassification?: FundsRightsClassification;
   urgency?: 'instant' | 'same_day' | 'standard' | 'final';
   sourceBankAccount?: {
     id: string;
@@ -85,6 +101,8 @@ interface ExecuteSettlementResponse {
       | 'manual_override';
     executionReason: string;
     executionReference: string;
+    fundsRightsClassification?: FundsRightsClassification;
+    fundsApplicationClass?: FundsApplicationClass;
     sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
     vendorInstructionVerified: boolean;
     simulatedProcessing: boolean;
@@ -164,6 +182,19 @@ export async function executeSettlementProcessing(payload: ExecuteSettlementPayl
           ? 'Local fallback execution path prepared from stored vendor payment instructions.'
           : 'Vendor bank instructions are incomplete or unavailable.',
         executionReference: buildLocalId('exec-ref'),
+        fundsRightsClassification: payload.fundsRightsClassification,
+        fundsApplicationClass:
+          payload.method === 'check'
+            ? 'check_issue'
+            : payload.vendorReceiveMethod === 'lockbox_coupon'
+              ? 'biller_direct_review'
+              : payload.fundsRightsClassification === 'consumer_household'
+                ? 'consumer_ppd'
+                : payload.fundsRightsClassification === 'commercial_business'
+                  ? 'commercial_ccd'
+                  : payload.fundsRightsClassification === 'fiduciary_administrative'
+                    ? 'fiduciary_admin'
+                    : 'manual_review',
         sourceType,
         vendorInstructionVerified,
         simulatedProcessing: true,

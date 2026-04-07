@@ -36,6 +36,10 @@ import {
   deriveVendorPaymentRailProfile,
   isVendorReceiveMethodSupported,
 } from '../../services/vendorPaymentRails.service';
+import {
+  resolveDefaultFundsRightsClassification,
+  resolvePaymentRightsClassification,
+} from '../../services/paymentRightsClassification.service';
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
@@ -3540,6 +3544,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           currency: entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
           direction: payload.direction,
           method: payload.method,
+          fundsRightsClassification: payload.fundsRightsClassification,
           urgency: payload.urgency,
           sourceBankAccount: sourceBankAccount
             ? {
@@ -3586,6 +3591,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       : null;
 
     setData((prev) => {
+      const paymentRightsResolution = resolvePaymentRightsClassification({
+        entity,
+        sourceBankAccount,
+        method: payload.method,
+        vendorReceiveMethod,
+        direction: payload.direction,
+        counterpartyType: payload.counterpartyType,
+        vendor: selectedVendor,
+        requestedClassification: payload.fundsRightsClassification,
+      });
       const resolvedVendorSeed =
         payload.counterpartyType === 'vendor'
           ? selectedVendor ||
@@ -3763,6 +3778,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? ('queued' as const)
             : ('not_applicable' as const),
         releaseTokenId: settlementToken?.id,
+        fundsRightsClassification: paymentRightsResolution.rightsClassification,
+        fundsApplicationClass: paymentRightsResolution.applicationClass,
         settlementExecution: settlementExecutionResponse
           ? {
               sourceType: settlementExecutionResponse.execution.sourceType,
@@ -3775,6 +3792,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               processorStatus: settlementExecutionResponse.execution.processorStatus,
               executionReason: settlementExecutionResponse.execution.executionReason,
               executionReference: settlementExecutionResponse.execution.executionReference,
+              fundsRightsClassification:
+                settlementExecutionResponse.execution.fundsRightsClassification ||
+                paymentRightsResolution.rightsClassification,
+              fundsApplicationClass:
+                settlementExecutionResponse.execution.fundsApplicationClass ||
+                paymentRightsResolution.applicationClass,
                 vendorInstructionVerified:
                   settlementExecutionResponse.execution.vendorInstructionVerified,
                 simulatedProcessing: settlementExecutionResponse.execution.simulatedProcessing,
@@ -3795,6 +3818,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 processorStatus: 'requires_review',
                 executionReason: policyReleaseHoldReason,
                 executionReference: `HOLD-${stamp}`,
+                fundsRightsClassification: paymentRightsResolution.rightsClassification,
+                fundsApplicationClass: paymentRightsResolution.applicationClass,
                 vendorInstructionVerified:
                   selectedVendor?.paymentInstructions?.verificationStatus === 'verified',
                 simulatedProcessing: true,
@@ -3811,6 +3836,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 processorStatus: 'queued',
                 executionReason: 'Wallet settlement is waiting for release and on-chain confirmation.',
                 executionReference: onChainTransactionId,
+                fundsRightsClassification: paymentRightsResolution.rightsClassification,
+                fundsApplicationClass: paymentRightsResolution.applicationClass,
                 vendorInstructionVerified: true,
                 simulatedProcessing: true,
               }
@@ -4094,6 +4121,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : undefined),
         executionReference:
           settlementExecutionResponse?.execution.executionReference || nextOnChainTransaction?.txHash,
+        fundsRightsClassification:
+          settlementExecutionResponse?.execution.fundsRightsClassification ||
+          paymentRightsResolution.rightsClassification,
+        fundsApplicationClass:
+          settlementExecutionResponse?.execution.fundsApplicationClass ||
+          paymentRightsResolution.applicationClass,
         vendorReceiveMethod,
         vendorDeliveryStatus,
         externalRecognitionStatus,
@@ -5467,6 +5500,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               type: 'depository',
             },
           ];
+      const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
+        entity: defaultEntity,
+      });
 
       if (selectedBankFeedAccountId) {
         return {
@@ -5601,8 +5637,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           lastFeedSyncAt: new Date().toISOString(),
           autoReconcileEnabled: true,
           statementImportPolicy: 'auto_post_under_threshold',
-            statementAutoPostThreshold: 5000,
-            achOriginationEnabled: accountType !== 'credit_card',
+                  statementAutoPostThreshold: 5000,
+                  fundsRightsClassification: defaultFundsRightsClassification,
+                  achOriginationEnabled: accountType !== 'credit_card',
             wireEnabled: accountType !== 'credit_card',
             checkDraftEnabled: accountType !== 'credit_card',
             positivePayEnabled: accountType !== 'credit_card',
@@ -5654,6 +5691,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setData((prev) => {
       const stamp = Date.now();
       const openingBalance = Number(payload.openingBalance || 0);
+      const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
+        entity,
+      });
       const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
       const existingLedgerAccount = linkedLedgerAccountId
         ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
@@ -5691,6 +5731,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             autoReconcileEnabled: true,
             statementImportPolicy: 'review_all',
             statementAutoPostThreshold: 1000,
+            fundsRightsClassification: defaultFundsRightsClassification,
             achOriginationEnabled: provider.supportsSettlementInitiation,
             wireEnabled: provider.supportsSettlementInitiation,
             checkDraftEnabled: provider.accountTypeHint !== 'credit_card',
@@ -5736,6 +5777,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setData((prev) => {
       const stamp = Date.now();
       const openingBalance = Number(payload.openingBalance || 0);
+      const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
+        entity,
+      });
       const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
       const existingLedgerAccount = linkedLedgerAccountId
         ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
@@ -5777,6 +5821,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             autoReconcileEnabled: true,
             statementImportPolicy: 'review_all',
             statementAutoPostThreshold: 1000,
+            fundsRightsClassification: defaultFundsRightsClassification,
             routingNumber: payload.routingNumber || undefined,
             accountNumber: payload.accountNumber || undefined,
             achOriginationEnabled: payload.achOriginationEnabled,
@@ -8648,6 +8693,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       />
       <PaymentRecordModal
         open={isPaymentModalOpen}
+        entityType={defaultEntity?.type}
+        entityLabel={defaultEntity?.displayName || defaultEntity?.name}
         customers={customers}
         vendors={vendors}
         invoices={standardInvoices}

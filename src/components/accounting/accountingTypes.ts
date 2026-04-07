@@ -180,6 +180,11 @@ export interface PaymentSubmitPayload {
   direction: 'incoming' | 'outgoing';
   counterpartyType: 'customer' | 'vendor' | 'other';
   counterpartyId?: string;
+  fundsRightsClassification?:
+    | 'consumer_household'
+    | 'commercial_business'
+    | 'fiduciary_administrative'
+    | 'mixed_review';
   paymentDate: string;
   amount: string;
   method: 'ach' | 'wire' | 'check' | 'card' | 'cash' | 'digital_asset' | 'other';

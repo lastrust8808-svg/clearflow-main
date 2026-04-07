@@ -5,6 +5,8 @@ import type {
   BillRecord,
   CustomerRecord,
   DigitalAssetRecord,
+  EntityRecord,
+  EntityType,
   InvoiceRecord,
   LedgerAccountRecord,
   TreasuryAccountRecord,
@@ -15,6 +17,11 @@ import type { PaymentSubmitPayload } from './accountingTypes';
 import { deriveVendorPaymentRailProfile } from '../../services/vendorPaymentRails.service';
 import { getSettlementExecutionCapabilities } from '../../services/settlementExecution.service';
 import { buildPaymentExecutionRoutingDecision } from '../../services/paymentExecutionRouting.service';
+import {
+  formatFundsApplicationClass,
+  formatFundsRightsClassification,
+  resolvePaymentRightsClassification,
+} from '../../services/paymentRightsClassification.service';
 
 type PaymentMethod =
   'ach'
@@ -41,6 +48,8 @@ type VendorReceiveMethod =
 
 interface PaymentRecordModalProps {
   open: boolean;
+  entityType?: EntityType;
+  entityLabel?: string;
   customers: CustomerRecord[];
   vendors: VendorRecord[];
   invoices: InvoiceRecord[];
@@ -63,6 +72,7 @@ interface PaymentRecordModalProps {
     treasuryAccountId?: string;
     linkedWalletId?: string;
     linkedDigitalAssetId?: string;
+    fundsRightsClassification?: NonNullable<PaymentSubmitPayload['fundsRightsClassification']>;
     vendorReceiveMethod?: VendorReceiveMethod;
     dischargeMethod?: DischargeMethod;
     notes?: string;
@@ -119,6 +129,8 @@ const buttonStyle: CSSProperties = {
 
 export default function PaymentRecordModal({
   open,
+  entityType,
+  entityLabel,
   customers,
   vendors,
   invoices,
@@ -144,6 +156,8 @@ export default function PaymentRecordModal({
   const [treasuryAccountId, setTreasuryAccountId] = useState('');
   const [linkedWalletId, setLinkedWalletId] = useState('');
   const [linkedDigitalAssetId, setLinkedDigitalAssetId] = useState('');
+  const [fundsRightsClassification, setFundsRightsClassification] =
+    useState<NonNullable<PaymentSubmitPayload['fundsRightsClassification']>>('commercial_business');
   const [vendorReceiveMethod, setVendorReceiveMethod] =
     useState<VendorReceiveMethod>('manual_review');
   const [dischargeMethod, setDischargeMethod] =
@@ -194,6 +208,11 @@ export default function PaymentRecordModal({
     setTreasuryAccountId('');
     setLinkedWalletId('');
     setLinkedDigitalAssetId('');
+    setFundsRightsClassification(entityType === 'individual'
+      ? 'consumer_household'
+      : entityType === 'trust'
+        ? 'fiduciary_administrative'
+        : 'commercial_business');
     setVendorReceiveMethod('manual_review');
     setDischargeMethod('bank_rail_payment');
     setUrgency('standard');
@@ -220,10 +239,15 @@ export default function PaymentRecordModal({
     setTreasuryAccountId(draft.treasuryAccountId ?? '');
     setLinkedWalletId(draft.linkedWalletId ?? '');
     setLinkedDigitalAssetId(draft.linkedDigitalAssetId ?? '');
+    setFundsRightsClassification(draft.fundsRightsClassification ?? (entityType === 'individual'
+      ? 'consumer_household'
+      : entityType === 'trust'
+        ? 'fiduciary_administrative'
+        : 'commercial_business'));
     setVendorReceiveMethod(draft.vendorReceiveMethod ?? 'manual_review');
     setDischargeMethod(draft.dischargeMethod ?? 'bank_rail_payment');
     setNotes(draft.notes ?? '');
-  }, [draft, open]);
+  }, [draft, entityType, open]);
 
   useEffect(() => {
     if (method === 'digital_asset' && dischargeMethod === 'bank_rail_payment') {
@@ -305,6 +329,47 @@ export default function PaymentRecordModal({
   const selectedDigitalAsset = useMemo(
     () => digitalAssets.find((record) => record.id === linkedDigitalAssetId),
     [digitalAssets, linkedDigitalAssetId]
+  );
+  const selectedSourceBankAccount = useMemo(
+    () => bankAccounts.find((record) => record.id === sourceBankAccountId),
+    [bankAccounts, sourceBankAccountId],
+  );
+
+  useEffect(() => {
+    if (selectedSourceBankAccount?.fundsRightsClassification) {
+      setFundsRightsClassification(selectedSourceBankAccount.fundsRightsClassification);
+    }
+  }, [selectedSourceBankAccount]);
+
+  const paymentRightsResolution = useMemo(
+    () =>
+      resolvePaymentRightsClassification({
+        entity: entityType
+          ? ({
+              id: 'active-entity',
+              name: entityLabel || 'Active Entity',
+              type: entityType,
+              status: 'active',
+            } as EntityRecord)
+          : null,
+        sourceBankAccount: selectedSourceBankAccount,
+        method,
+        vendorReceiveMethod,
+        direction,
+        counterpartyType: direction === 'incoming' ? 'customer' : 'vendor',
+        vendor: selectedVendor,
+        requestedClassification: fundsRightsClassification,
+      }),
+    [
+      direction,
+      entityLabel,
+      entityType,
+      fundsRightsClassification,
+      method,
+      selectedSourceBankAccount,
+      selectedVendor,
+      vendorReceiveMethod,
+    ],
   );
 
   const vendorInstructionReady =
@@ -489,6 +554,20 @@ export default function PaymentRecordModal({
             </select>
           )}
           <select
+            value={fundsRightsClassification}
+            onChange={(event) =>
+              setFundsRightsClassification(
+                event.target.value as NonNullable<PaymentSubmitPayload['fundsRightsClassification']>,
+              )
+            }
+            style={inputStyle}
+          >
+            <option value="consumer_household">Consumer / household</option>
+            <option value="commercial_business">Commercial / business</option>
+            <option value="fiduciary_administrative">Fiduciary / administrative</option>
+            <option value="mixed_review">Mixed / review</option>
+          </select>
+          <select
             value={dischargeMethod}
             onChange={(event) =>
               setDischargeMethod(event.target.value as DischargeMethod)
@@ -510,6 +589,22 @@ export default function PaymentRecordModal({
             <option value="instant">Instant</option>
             <option value="final">Final</option>
           </select>
+        </div>
+
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid rgba(148,163,184,0.2)',
+            background: 'rgba(15,23,42,0.36)',
+            color: '#dbeafe',
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          Rights posture: {formatFundsRightsClassification(paymentRightsResolution.rightsClassification)} | Application class: {formatFundsApplicationClass(paymentRightsResolution.applicationClass)}
+          <br />
+          {paymentRightsResolution.summary}
         </div>
 
         {direction === 'outgoing' ? (
@@ -865,6 +960,7 @@ export default function PaymentRecordModal({
                 direction,
                 counterpartyType: direction === 'incoming' ? 'customer' : 'vendor',
                 counterpartyId: counterpartyId || undefined,
+                fundsRightsClassification,
                 paymentDate,
                 amount,
                 method,
