@@ -12,6 +12,7 @@ import type {
 import type { SettlementRailControlView } from '../../services/settlementRailing.service';
 import type { ObligationLifecycleSummary } from '../../services/obligationLifecycle.service';
 import type { SettlementFlowView } from '../../services/settlementAnalytics.service';
+import { classifyVendorExecutionPath } from '../../services/vendorPaymentRails.service';
 import PageSection from '../ui/PageSection';
 
 interface RemittanceOperationsWorkspaceProps {
@@ -416,6 +417,17 @@ export default function RemittanceOperationsWorkspace({
                 payment.releaseStatus === 'released' &&
                 payment.status !== 'settled' &&
                 linkedOnChainRecord?.status !== 'confirmed';
+              const settlement = settlementFlow?.settlement;
+              const executionClassification = classifyVendorExecutionPath(
+                vendor,
+                payment.vendorReceiveMethod,
+              );
+              const communicationValidationDetail =
+                settlement?.payeeType === 'biller_direct' ||
+                payment.vendorReceiveMethod === 'lockbox_coupon' ||
+                payment.vendorReceiveMethod === 'paper_check'
+                  ? `Account target: ${settlement?.vendorDeliveryReference || 'billing account workflow on file'} | external ${settlement?.externalStatus || 'manual_review'}`
+                  : `Bank target: ${payment.settlementExecution?.executionReference || payment.linkedSettlementId || 'execution reference pending'} | external ${settlement?.externalStatus || 'staged'}`;
 
               return (
                 <div key={payment.id} style={cardStyle}>
@@ -484,6 +496,17 @@ export default function RemittanceOperationsWorkspace({
                       >
                         release: {payment.releaseStatus || 'not_applicable'}
                       </span>
+                      <span
+                        style={badgeStyle(
+                          executionClassification.executionClass === 'bank_funds_transfer'
+                            ? 'good'
+                            : executionClassification.executionClass === 'account_application'
+                              ? 'info'
+                              : 'warn'
+                        )}
+                      >
+                        {executionClassification.label}
+                      </span>
                       {settlementFlow ? (
                         <span style={badgeStyle(erpCashflowTone(settlementFlow.erpCashflowStage))}>
                           ERP: {formatErpCashflowStage(settlementFlow.erpCashflowStage)}
@@ -512,6 +535,10 @@ export default function RemittanceOperationsWorkspace({
                           ? linkedOnChainRecord?.network || 'Wallet execution'
                           : payment.settlementExecution?.executionRail || 'Not assigned'}
                       </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Execution Class</strong>
+                      <div>{executionClassification.label}</div>
                     </div>
                     <div>
                       <strong style={{ color: '#e5e7eb' }}>Rail Namespace</strong>
@@ -563,6 +590,10 @@ export default function RemittanceOperationsWorkspace({
                           ? `${railControl.passCount}/${railControl.checks.length} controls passing`
                           : 'Pending control profile'}
                       </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#e5e7eb' }}>Communication / Validation</strong>
+                      <div>{communicationValidationDetail}</div>
                     </div>
                     {payment.method === 'digital_asset' ? (
                       <div>
@@ -621,7 +652,7 @@ export default function RemittanceOperationsWorkspace({
                       lineHeight: 1.6,
                     }}
                   >
-                    {settlementFlow?.erpCashflowSummary ||
+                    {executionClassification.detail} {settlementFlow?.erpCashflowSummary ||
                       payment.complianceConfirmationNote ||
                       railControl?.recommendedAction ||
                       payment.settlementExecution?.executionReason ||

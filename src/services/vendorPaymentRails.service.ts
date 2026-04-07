@@ -6,6 +6,12 @@ export interface VendorPaymentRailProfile {
   deliveryDescriptor: string;
 }
 
+export interface VendorExecutionClassification {
+  executionClass: 'bank_funds_transfer' | 'account_application' | 'manual_review';
+  label: string;
+  detail: string;
+}
+
 export function deriveVendorPaymentRailProfile(
   vendor?: Pick<VendorRecord, 'name' | 'remitAddress' | 'paymentInstructions' | 'counterpartyTermsProfile'>,
 ): VendorPaymentRailProfile {
@@ -92,4 +98,36 @@ export function isVendorReceiveMethodSupported(
   method: VendorReceiveMethod,
 ) {
   return deriveVendorPaymentRailProfile(vendor).acceptedReceiveMethods.includes(method);
+}
+
+export function classifyVendorExecutionPath(
+  vendor: Pick<VendorRecord, 'name' | 'remitAddress' | 'paymentInstructions' | 'counterpartyTermsProfile'> | undefined,
+  method: VendorReceiveMethod | undefined,
+): VendorExecutionClassification {
+  const resolvedMethod = method || deriveVendorPaymentRailProfile(vendor).defaultReceiveMethod;
+
+  switch (resolvedMethod) {
+    case 'ach':
+    case 'wire':
+      return {
+        executionClass: 'bank_funds_transfer',
+        label: 'Bank funds transfer',
+        detail: 'Direct bank or processor settlement to the payee’s receiving account.',
+      };
+    case 'lockbox_coupon':
+    case 'paper_check':
+      return {
+        executionClass: 'account_application',
+        label: 'Account application / biller-direct',
+        detail:
+          'Remittance is aimed at a billing account, coupon, lockbox, or posted account application workflow rather than a generic vendor bank payout.',
+      };
+    default:
+      return {
+        executionClass: 'manual_review',
+        label: 'Manual review',
+        detail:
+          'The payee does not yet have a fully classified receive path, so communication and settlement should be reviewed before release.',
+      };
+  }
 }
