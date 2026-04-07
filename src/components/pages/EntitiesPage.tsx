@@ -62,6 +62,18 @@ export default function EntitiesPage({
   ).length;
   const activeCreditRails = data.creditRails.filter((rail) => rail.status === 'active').length;
   const watchCreditRails = data.creditRails.filter((rail) => rail.status === 'watch').length;
+  const authorityReviewTags = data.complianceTags.filter(
+    (tag) => tag.category === 'authority' && tag.status === 'review',
+  );
+  const authorityReadyEntities = data.entities.filter((entity) => {
+    const hasRepresentative = Boolean(entity.representativeName && entity.representativeRole);
+    const hasAttestation = Boolean(entity.authorityAttestedAt);
+    const hasAuthorityReview = authorityReviewTags.some((tag) => tag.entityId === entity.id);
+    return hasRepresentative && hasAttestation && !hasAuthorityReview;
+  }).length;
+  const authorityWatchEntities = data.entities.filter((entity) =>
+    authorityReviewTags.some((tag) => tag.entityId === entity.id),
+  ).length;
 
   const entityNameById = new Map(
     data.entities.map((entity) => [entity.id, entity.displayName || entity.name]),
@@ -867,7 +879,43 @@ export default function EntitiesPage({
         <StatCard label="External User Links" value={String(externalConnections)} />
         <StatCard label="Active Credit Rails" value={String(activeCreditRails)} />
         <StatCard label="Watch Rails" value={String(watchCreditRails)} />
+        <StatCard label="Authority Ready" value={String(authorityReadyEntities)} />
+        <StatCard label="Authority Review" value={String(authorityWatchEntities)} />
       </div>
+
+      <PageSection
+        title="Authority Control"
+        description="Keep representative authority, attestation posture, and onboarding readiness visible before banks, vendors, and counterparties depend on the entity."
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+          <WorkbenchRecordCard
+            title="Authority Ready"
+            subtitle={`${authorityReadyEntities} entities with representative attestation and no open authority review`}
+          >
+            These entities have a representative name, representative role, retained attestation timestamp, and no open authority review tag.
+          </WorkbenchRecordCard>
+          <WorkbenchRecordCard
+            title="Authority Review Queue"
+            subtitle={`${authorityReviewTags.length} authority review item(s)`}
+          >
+            {authorityReviewTags.length
+              ? authorityReviewTags
+                  .slice(0, 4)
+                  .map((tag) => {
+                    const entityLabel = tag.entityId ? entityNameById.get(tag.entityId) || tag.entityId : 'Workspace';
+                    return `${entityLabel}: ${tag.notes || tag.label}`;
+                  })
+                  .join(' ')
+              : 'No authority review items are open right now.'}
+          </WorkbenchRecordCard>
+          <WorkbenchRecordCard
+            title="Onboarding Use"
+            subtitle="Authority should be aligned before bank packaging and external execution"
+          >
+            Use the authority desk as the control point before moving an entity into bank onboarding, counterparty routing, or outside settlement work.
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Entity Records"

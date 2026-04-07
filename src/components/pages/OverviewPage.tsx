@@ -129,6 +129,9 @@ export default function OverviewPage({
   const partnerBankRequiredCount = privateWealthRailSummaries.filter(
     (item) => item.legalUsePosture === 'partner_bank_required_external_presentment',
   ).length;
+  const authorityReviewItems = data.complianceTags.filter(
+    (item) => item.category === 'authority' && item.status === 'review',
+  );
   const recurringPaymentCount = data.payments.filter(
     (item) => item.recurringSchedule?.enabled,
   ).length;
@@ -431,6 +434,7 @@ export default function OverviewPage({
         <StatCard label="Active Credit Rails" value={activeCreditRails} />
         <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
         <StatCard label="Partner-Bank Required" value={partnerBankRequiredCount} />
+        <StatCard label="Authority Reviews" value={authorityReviewItems.length} />
         <StatCard
           label="EFTPS Profile"
           value={
@@ -455,6 +459,67 @@ export default function OverviewPage({
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Authority Watch"
+        description="Representative authority posture now feeds the operating overview so entity setup quality is visible before execution work starts."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Authority Review Queue"
+            subtitle={`${authorityReviewItems.length} open authority review item(s)`}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              {authorityReviewItems.slice(0, 4).map((item) => {
+                const entityLabel =
+                  data.entities.find((entity) => entity.id === item.entityId)?.displayName ||
+                  data.entities.find((entity) => entity.id === item.entityId)?.name ||
+                  'Workspace';
+                return (
+                  <div key={item.id} style={{ color: '#d1d5db', lineHeight: 1.6 }}>
+                    <strong style={{ color: '#effcff' }}>{entityLabel}</strong>
+                    <div>{item.notes || item.label}</div>
+                  </div>
+                );
+              })}
+              {authorityReviewItems.length === 0 ? (
+                <div style={{ color: '#d1d5db' }}>No authority review items are open right now.</div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => navigate('#entities')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Entities
+              </button>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Authority Readiness"
+            subtitle="Entity setup now carries retained representative posture"
+          >
+            <div style={{ color: '#d1d5db', lineHeight: 1.7 }}>
+              ClearFlow now retains representative role, attestation timestamp, and review posture so operators can distinguish clean authority setup from entities that still need follow-up before bank or counterparty onboarding.
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Capital Strategy"
