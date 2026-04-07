@@ -125,7 +125,14 @@ export default function EntitiesPage({
           const authorityId = `auth-${stamp}`;
           const documentId = `doc-${stamp}`;
           const tokenId = `tok-${stamp}`;
+          const authorityReviewTagId = `cmp-${stamp}`;
           const entityDisplayName = payload.displayName.trim() || payload.name.trim();
+          const normalizedRole = payload.representativeRole.trim().toLowerCase();
+          const requiresAuthorityReview =
+            payload.type === 'other' ||
+            normalizedRole.includes('agent') ||
+            normalizedRole.includes('attorney') ||
+            normalizedRole.includes('authorized representative');
           const dispatchIdentity = payload.generateDispatchIdentity
             ? buildEntityDispatchIdentity({
                 entityId,
@@ -286,6 +293,20 @@ export default function EntitiesPage({
               },
               ...prev.documents,
             ],
+            complianceTags: requiresAuthorityReview
+              ? [
+                  {
+                    id: authorityReviewTagId,
+                    entityId,
+                    label: 'Authority representation review',
+                    category: 'authority',
+                    status: 'review',
+                    linkedDocumentIds: [documentId],
+                    notes: `Entity was added using representative capacity "${payload.representativeRole.trim()}". Review underlying authority if bank, counterparty, or compliance onboarding requires stronger evidence.`,
+                  },
+                  ...prev.complianceTags,
+                ]
+              : prev.complianceTags,
             tokens: [
               {
                 id: tokenId,

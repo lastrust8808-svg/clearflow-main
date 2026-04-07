@@ -1,6 +1,16 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { EntityType } from '../../types/core';
 
+const REPRESENTATIVE_ROLE_PRESETS: Record<EntityType, string[]> = {
+  trust: ['Trustee', 'Co-Trustee', 'Authorized fiduciary', 'Trust protector'],
+  llc: ['Managing member', 'Manager', 'Authorized officer', 'Authorized signatory'],
+  corporation: ['President', 'Secretary', 'Treasurer', 'Authorized officer'],
+  partnership: ['General partner', 'Managing partner', 'Authorized partner', 'Authorized signatory'],
+  individual: ['Owner', 'Authorized agent', 'Attorney-in-fact', 'Personal representative'],
+  nonprofit: ['Executive director', 'President', 'Treasurer', 'Authorized officer'],
+  other: ['Authorized representative', 'Administrator', 'Authorized officer', 'Authorized signatory'],
+};
+
 interface EntityQuickAddModalProps {
   open: boolean;
   currentUserEmail?: string;
@@ -111,6 +121,7 @@ export default function EntityQuickAddModal({
   const trimmedRepresentativeName = representativeName.trim();
   const trimmedRepresentativeRole = representativeRole.trim();
   const entityLabel = trimmedDisplayName || trimmedName || 'this entity';
+  const rolePresets = REPRESENTATIVE_ROLE_PRESETS[type];
   const authorityStatement = `I am ${trimmedRepresentativeRole || 'an authorized representative'} of ${entityLabel} and have the legal authority to establish, administer, connect, and operate this entity in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.`;
   const canSubmit =
     Boolean(trimmedName) &&
@@ -151,6 +162,38 @@ export default function EntityQuickAddModal({
           <input value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Representative name" style={inputStyle} />
           <input value={representativeRole} onChange={(e) => setRepresentativeRole(e.target.value)} placeholder="Representative role" style={inputStyle} />
         </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#cbd5e1' }}>
+            Suggested representative capacities for this entity type
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {rolePresets.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setRepresentativeRole(role)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 999,
+                  border:
+                    trimmedRepresentativeRole === role
+                      ? '1px solid rgba(126,242,255,0.34)'
+                      : '1px solid rgba(148,163,184,0.22)',
+                  background:
+                    trimmedRepresentativeRole === role
+                      ? 'rgba(54,215,255,0.12)'
+                      : 'rgba(15,23,42,0.46)',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
+        </div>
         <label style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#cbd5e1' }}>
           <input
             type="checkbox"
@@ -174,6 +217,11 @@ export default function EntityQuickAddModal({
             ClearFlow relies on the user adding an entity to represent that they are the lawful
             owner, officer, manager, trustee, administrator, fiduciary, or otherwise authorized
             representative for that entity. Do not add an entity you are not authorized to operate.
+          </div>
+          <div style={{ color: '#94a3b8', lineHeight: 1.6, fontSize: 13 }}>
+            Recommended for {type === 'trust' ? 'trust' : type === 'individual' ? 'personal' : 'business'} records:
+            {' '}
+            {rolePresets.join(', ')}.
           </div>
           <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', color: '#e2e8f0', lineHeight: 1.6 }}>
             <input
