@@ -13,6 +13,8 @@ import type {
 } from '../../types/core';
 import type { PaymentSubmitPayload } from './accountingTypes';
 import { deriveVendorPaymentRailProfile } from '../../services/vendorPaymentRails.service';
+import { getSettlementExecutionCapabilities } from '../../services/settlementExecution.service';
+import { buildPaymentExecutionRoutingDecision } from '../../services/paymentExecutionRouting.service';
 
 type PaymentMethod =
   'ach'
@@ -156,6 +158,27 @@ export default function PaymentRecordModal({
   const [recurringNextRunDate, setRecurringNextRunDate] = useState('');
   const [recurringAutoPost, setRecurringAutoPost] = useState(false);
   const [notes, setNotes] = useState('');
+  const [executionCapabilities, setExecutionCapabilities] =
+    useState<Awaited<ReturnType<typeof getSettlementExecutionCapabilities>>['capabilities'] | null>(
+      null,
+    );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    void getSettlementExecutionCapabilities().then((response) => {
+      if (!cancelled) {
+        setExecutionCapabilities(response.capabilities);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -231,6 +254,10 @@ export default function PaymentRecordModal({
   const vendorPaymentRailProfile = useMemo(
     () => deriveVendorPaymentRailProfile(selectedVendor),
     [selectedVendor],
+  );
+  const routingDecision = useMemo(
+    () => buildPaymentExecutionRoutingDecision(selectedVendor, executionCapabilities),
+    [executionCapabilities, selectedVendor],
   );
 
   const bankAccountOptions = useMemo(
@@ -309,15 +336,12 @@ export default function PaymentRecordModal({
       return;
     }
     setVendorReceiveMethod((current) => {
-      if (
-        selectedVendor &&
-        vendorPaymentRailProfile.acceptedReceiveMethods.includes(current)
-      ) {
+      if (routingDecision.allowedMethods.some((option) => option.method === current && option.enabled)) {
         return current;
       }
-      return vendorPaymentRailProfile.defaultReceiveMethod;
+      return routingDecision.defaultReceiveMethod;
     });
-  }, [direction, selectedVendor, vendorPaymentRailProfile]);
+  }, [direction, routingDecision]);
 
   useEffect(() => {
     if (method !== 'digital_asset' || !selectedVendor) {
@@ -507,9 +531,9 @@ export default function PaymentRecordModal({
               }
               style={inputStyle}
             >
-              {vendorPaymentRailProfile.acceptedReceiveMethods.map((receiveMethod) => (
-                <option key={receiveMethod} value={receiveMethod}>
-                  {receiveMethod.replace('_', ' ')}
+              {routingDecision.allowedMethods.map((option) => (
+                <option key={option.method} value={option.method} disabled={!option.enabled}>
+                  {option.method.replace('_', ' ')}
                 </option>
               ))}
             </select>
@@ -527,6 +551,25 @@ export default function PaymentRecordModal({
               }}
             >
               {vendorPaymentRailProfile.deliveryDescriptor}
+            </div>
+            <div
+              style={{
+                minHeight: 44,
+                padding: '12px 14px',
+                borderRadius: 10,
+                border: routingDecision.stagedOnly
+                  ? '1px solid rgba(251,191,36,0.25)'
+                  : '1px solid rgba(45,212,191,0.25)',
+                background: routingDecision.stagedOnly
+                  ? 'rgba(120,53,15,0.18)'
+                  : 'rgba(15,118,110,0.18)',
+                color: routingDecision.stagedOnly ? '#fde68a' : '#d1fae5',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {routingDecision.guidance}
             </div>
           </div>
         ) : null}

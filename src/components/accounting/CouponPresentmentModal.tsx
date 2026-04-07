@@ -5,6 +5,7 @@ import {
   getCachedAccountingExtraction,
   type IntakeExtractionResult,
 } from '../../services/accountingIntake.service';
+import { getSettlementExecutionCapabilities } from '../../services/settlementExecution.service';
 import { useAuth } from '../../hooks/useAuth';
 import type {
   InstrumentSettlementRecord,
@@ -132,6 +133,27 @@ export default function CouponPresentmentModal({
   const [extractionStatus, setExtractionStatus] = useState<
     'idle' | 'ready' | 'complete' | 'failed'
   >('idle');
+  const [executionCapabilities, setExecutionCapabilities] =
+    useState<Awaited<ReturnType<typeof getSettlementExecutionCapabilities>>['capabilities'] | null>(
+      null,
+    );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    void getSettlementExecutionCapabilities().then((response) => {
+      if (!cancelled) {
+        setExecutionCapabilities(response.capabilities);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const applyExtractionResult = (
     extraction: IntakeExtractionResult,
@@ -616,6 +638,24 @@ export default function CouponPresentmentModal({
           Use this remittance / presentment itself as the recognized source rail when no linked
           obligation or explicit account source has been selected.
         </label>
+
+        {!executionCapabilities?.billerDirectReady ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(120,53,15,0.2)',
+              color: '#fde68a',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            This coupon is being handled as a biller-direct / account-application remittance.
+            ClearFlow will retain the presentment, references, and proof chain, but true
+            biller-direct execution still requires a dedicated biller or bank-bill-pay rail.
+          </div>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!canSubmit ? (
