@@ -50,6 +50,9 @@ interface PaymentRecordModalProps {
   open: boolean;
   entityType?: EntityType;
   entityLabel?: string;
+  authorityReviewOpen?: boolean;
+  authorityReviewCount?: number;
+  authorityReviewSummary?: string;
   customers: CustomerRecord[];
   vendors: VendorRecord[];
   invoices: InvoiceRecord[];
@@ -131,6 +134,9 @@ export default function PaymentRecordModal({
   open,
   entityType,
   entityLabel,
+  authorityReviewOpen = false,
+  authorityReviewCount = 0,
+  authorityReviewSummary,
   customers,
   vendors,
   invoices,
@@ -389,6 +395,10 @@ export default function PaymentRecordModal({
     direction === 'outgoing' &&
     (method === 'ach' || method === 'wire') &&
     Boolean(counterpartyId);
+  const requiresExternalReleaseReview =
+    direction === 'outgoing' &&
+    Boolean(counterpartyId) &&
+    (method === 'ach' || method === 'wire' || method === 'check' || method === 'digital_asset');
 
   const showSettlementControls =
     requiresSettlementExecution ||
@@ -459,6 +469,25 @@ export default function PaymentRecordModal({
             treasury, or wallet settlement controls.
           </div>
         </div>
+
+        {authorityReviewOpen && requiresExternalReleaseReview ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(120,53,15,0.2)',
+              color: '#fde68a',
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            Authority review remains open for {entityLabel || 'this entity'}, so this payment can be
+            saved and staged but should not be treated as ready for external release yet.
+            {authorityReviewCount ? ` Open authority items: ${authorityReviewCount}.` : ''}
+            {authorityReviewSummary ? ` ${authorityReviewSummary}` : ''}
+          </div>
+        ) : null}
 
         <div
           style={{

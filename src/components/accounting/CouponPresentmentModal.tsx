@@ -18,6 +18,10 @@ import type { CouponPresentmentSubmitPayload } from './accountingTypes';
 
 interface CouponPresentmentModalProps {
   open: boolean;
+  entityLabel?: string;
+  authorityReviewOpen?: boolean;
+  authorityReviewCount?: number;
+  authorityReviewSummary?: string;
   obligations: ObligationRecord[];
   instrumentSettlements: InstrumentSettlementRecord[];
   treasuryAccounts: TreasuryAccountRecord[];
@@ -96,6 +100,10 @@ const buttonStyle: CSSProperties = {
 
 export default function CouponPresentmentModal({
   open,
+  entityLabel,
+  authorityReviewOpen = false,
+  authorityReviewCount = 0,
+  authorityReviewSummary,
   obligations,
   instrumentSettlements,
   treasuryAccounts,
@@ -378,6 +386,26 @@ export default function CouponPresentmentModal({
             remittance, and settlement control.
           </div>
         </div>
+
+        {authorityReviewOpen ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(120,53,15,0.2)',
+              color: '#fde68a',
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            Authority review remains open for {entityLabel || 'this entity'}, so this remittance can
+            be retained and staged, but any outward bank, check, or account-application release
+            should remain on hold until authority is cleared.
+            {authorityReviewCount ? ` Open authority items: ${authorityReviewCount}.` : ''}
+            {authorityReviewSummary ? ` ${authorityReviewSummary}` : ''}
+          </div>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={() => setMode('camera')} style={buttonStyle}>Camera</button>

@@ -512,6 +512,15 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
     () => activeEntityAuthorityReviewTags.map((tag) => tag.notes || tag.label).join(' '),
     [activeEntityAuthorityReviewTags],
   );
+  const activeEntityAuthorityReleaseHoldReason = useMemo(
+    () =>
+      activeEntityAuthorityReviewTags.length
+        ? `Representative authority review remains open for ${
+            defaultEntity?.displayName || defaultEntity?.name || 'this entity'
+          }. Keep external release in staged review until authority is cleared.`
+        : undefined,
+    [activeEntityAuthorityReviewTags.length, defaultEntity],
+  );
 
   const mapSettlementPathToPaymentRail = (
     path: SettlementPath,
@@ -2577,7 +2586,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
   };
 
   const handleCouponPresentmentSubmit = async (payload: CouponPresentmentSubmitPayload) => {
-    const entity = data.entities[0];
+    const entity = defaultEntity;
     if (!entity) {
       return;
     }
@@ -2615,7 +2624,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     });
 
     setData((prev) => {
-      const currentEntity = prev.entities[0];
+      const currentEntity = prev.entities.find((item) => item.id === entity.id);
       if (!currentEntity) {
         return prev;
       }
@@ -2694,6 +2703,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       const dischargeCompletesPerformance =
         payload.dischargeMethod === 'instrument_performance' ||
         payload.dischargeMethod === 'internal_ledger_credit';
+      const authorityReleaseHoldReason =
+        payload.dischargeMethod === 'bank_rail_payment' ||
+        payload.dischargeMethod === 'mixed_discharge'
+          ? activeEntityAuthorityReleaseHoldReason
+          : undefined;
       const settlementPath: SettlementPath =
         payload.dischargeMethod === 'bank_rail_payment'
           ? sourceBankAccount?.wireEnabled
@@ -2823,7 +2837,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? (sourceBankAccount?.wireEnabled ? 'wire' : 'check')
             : ('other' as const),
         status:
-          payload.dischargeMethod === 'bank_rail_payment'
+          authorityReleaseHoldReason
+            ? ('pending' as const)
+            : payload.dischargeMethod === 'bank_rail_payment'
             ? ('initiated' as const)
             : ('settled' as const),
         linkedTransactionIds: [transactionId],
@@ -2837,7 +2853,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         approvedBy: currentEntity.representativeName || 'ClearFlow Operator',
         approvedAt: new Date().toISOString(),
         releaseStatus:
-          payload.dischargeMethod === 'bank_rail_payment'
+          authorityReleaseHoldReason
+            ? ('held' as const)
+            : payload.dischargeMethod === 'bank_rail_payment'
             ? ('ready_to_release' as const)
             : ('released' as const),
         releasedBy:
@@ -2850,10 +2868,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : new Date().toISOString(),
         releaseTokenId: token?.id,
         notes:
-          payload.receiverAccountLabel ||
-          payload.parsedNotes ||
-          extraction.summary ||
-          undefined,
+          [
+            payload.receiverAccountLabel,
+            payload.parsedNotes,
+            extraction.summary,
+            authorityReleaseHoldReason,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join('\n\n') || undefined,
       };
       const couponOperationalReconciliation = applyOperationalReconciliationStatus({
         prev,
@@ -2883,7 +2905,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         dischargeMethod: payload.dischargeMethod,
         direction: 'outgoing' as const,
         status:
-          payload.dischargeMethod === 'bank_rail_payment'
+          authorityReleaseHoldReason
+            ? ('exception' as const)
+            : payload.dischargeMethod === 'bank_rail_payment'
             ? ('routing' as const)
             : payload.dischargeMethod === 'mixed_discharge'
               ? ('verifying' as const)
@@ -2925,11 +2949,15 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ? 'LedgerRemittance'
               : 'None',
         processorStatus:
-          payload.dischargeMethod === 'bank_rail_payment'
+          authorityReleaseHoldReason
+            ? 'requires_review'
+            : payload.dischargeMethod === 'bank_rail_payment'
             ? 'processing'
             : 'settled',
         executionReason:
-          payload.dischargeMethod === 'instrument_performance'
+          authorityReleaseHoldReason
+            ? authorityReleaseHoldReason
+            : payload.dischargeMethod === 'instrument_performance'
             ? 'Coupon performance posted against the linked obligation and instrument.'
             : payload.dischargeMethod === 'internal_ledger_credit'
               ? 'Coupon discharged internally through ledger and treasury remittance controls.'
@@ -2947,9 +2975,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         autoReconcileStatus:
           payload.dischargeMethod === 'bank_rail_payment' ? 'pending' : 'matched',
         notes:
-          payload.parsedNotes ||
-          extraction.summary ||
-          'Posted from coupon presentment workflow.',
+          [
+            payload.parsedNotes,
+            extraction.summary,
+            authorityReleaseHoldReason,
+            'Posted from coupon presentment workflow.',
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join('\n\n'),
       };
 
       const transactionRecord = {
@@ -3244,10 +3277,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     clearSessionDraft(presentmentDraftStorageKey);
     setHasSavedPresentmentDraft(false);
     setOperationsNotice(
-      `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
-        resolvedAmount,
-        'USD'
-      )}. Review it below in Presentments and the linked remittance records in Remittance Desk.`
+      activeEntityAuthorityReleaseHoldReason
+        ? `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
+            resolvedAmount,
+            'USD'
+          )}. It was retained and staged under an authority-release hold for ${
+            entity.displayName || entity.name
+          }.`
+        : `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
+            resolvedAmount,
+            'USD'
+          )}. Review it below in Presentments and the linked remittance records in Remittance Desk.`
     );
   };
 
@@ -3430,7 +3470,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    const entity = data.entities[0];
+    const entity = defaultEntity;
     if (!entity) {
       return;
     }
@@ -3525,7 +3565,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       payload.direction === 'outgoing' &&
       payload.counterpartyType === 'vendor' &&
       (payload.method === 'ach' || payload.method === 'wire' || payload.method === 'check');
+    const authorityReleaseHoldReason =
+      payload.direction === 'outgoing' && payload.counterpartyType === 'vendor'
+        ? activeEntityAuthorityReleaseHoldReason
+        : undefined;
     const policyReleaseHoldReason =
+      authorityReleaseHoldReason ||
       vendorReceiveMethod &&
       !isVendorReceiveMethodSupported(selectedVendor, vendorReceiveMethod)
         ? `The vendor receive method ${vendorReceiveMethod.replace('_', ' ')} is not supported by the saved vendor delivery profile.`
@@ -8703,6 +8748,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       />
       <CouponPresentmentModal
         open={isCouponPresentmentModalOpen}
+        entityLabel={defaultEntity?.displayName || defaultEntity?.name}
+        authorityReviewOpen={activeEntityAuthorityReviewTags.length > 0}
+        authorityReviewCount={activeEntityAuthorityReviewTags.length}
+        authorityReviewSummary={activeEntityAuthorityReviewSummary}
         obligations={defaultEntity ? obligations.filter((item) => item.entityId === defaultEntity.id) : obligations}
         instrumentSettlements={
           defaultEntity
@@ -8737,6 +8786,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         open={isPaymentModalOpen}
         entityType={defaultEntity?.type}
         entityLabel={defaultEntity?.displayName || defaultEntity?.name}
+        authorityReviewOpen={activeEntityAuthorityReviewTags.length > 0}
+        authorityReviewCount={activeEntityAuthorityReviewTags.length}
+        authorityReviewSummary={activeEntityAuthorityReviewSummary}
         customers={customers}
         vendors={vendors}
         invoices={standardInvoices}
