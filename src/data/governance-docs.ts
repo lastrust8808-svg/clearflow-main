@@ -4,6 +4,35 @@ export interface GovernanceDocument {
   content: string;
 }
 
+const userAuthorityNotice = {
+  title: 'User Authority and Entity Representation Notice',
+  content: `Effective Date: April 7, 2026
+
+Clear-Flow Integrated Financial Management, LLC ("Clear-Flow") relies on the user establishing or operating an entity in the Clear.Flow platform to represent that they are duly authorized to act for that entity.
+
+1. User Representation of Authority
+By creating, connecting, administering, or operating an entity profile in Clear.Flow, the user represents and warrants that they are the lawful owner, officer, manager, trustee, administrator, fiduciary, authorized signer, or other legally authorized representative of that entity.
+
+2. Scope of Authority Representation
+This representation applies to the user’s authority to:
+- establish the entity profile in the platform
+- connect data sources, storage, financial institutions, and service providers
+- create, upload, store, and route records, notices, invoices, remittances, and supporting documents
+- authorize workflow, settlement, compliance, and record-retention actions within the platform
+
+3. No Independent Verification by Default
+Clear-Flow may rely on the user’s representation of authority unless and until the platform separately requests or requires additional verification. Clear-Flow does not undertake a default duty to independently verify every user’s authority for each entity.
+
+4. User Responsibility
+Users must not establish, connect, or operate an entity in Clear.Flow if they lack legal authority to do so. Users remain responsible for the truth, completeness, and legal sufficiency of their authority representations.
+
+5. Allocation of Responsibility
+The user accepts responsibility for claims, disputes, losses, or liabilities arising from false, incomplete, unauthorized, or misleading representations of authority relating to an entity operated through the platform.
+
+6. Platform Reliance
+Clear-Flow may retain attestation records, signer data, authority records, and related operational logs showing when and how a user represented that they had authority for an entity.`,
+};
+
 const iamPolicy = {
   title: 'Identity and Access Management (IAM) Policy',
   content: `Effective Date: February 1, 2026
@@ -408,6 +437,9 @@ This policy is enforced through access controls, system design, and operational 
 6. Compliance
 This policy is designed to support compliance with applicable data privacy and protection laws and contractual obligations. Failure to adhere to this policy may result in corrective action.
 
+7. User Authority Data
+When a user establishes or operates an entity profile, Clear-Flow may retain the user’s attested representative capacity, signer name, and authority acknowledgement as part of the operational record needed to support platform integrity, auditability, and dispute review.
+
 Approved by: Governing Managers
 Organization: Clear-Flow Integrated Financial Management, LLC`
 };
@@ -540,9 +572,9 @@ export const SECURITY_DOCUMENTS: GovernanceDocument[] = [
   encryptionPolicy
 ];
 
-export const PRIVACY_DOCUMENTS: GovernanceDocument[] = [dataRetentionPolicy, encryptionPolicy];
+export const PRIVACY_DOCUMENTS: GovernanceDocument[] = [dataRetentionPolicy, userAuthorityNotice, encryptionPolicy];
 
-export const TERMS_DOCUMENTS: GovernanceDocument[] = [operatingAgreement, foundationalCharter];
+export const TERMS_DOCUMENTS: GovernanceDocument[] = [userAuthorityNotice, operatingAgreement, foundationalCharter];
 
 // Combine all documents into a single string for the Gemini API context
 const allDocuments = [...GOVERNANCE_DOCUMENTS, ...SECURITY_DOCUMENTS];

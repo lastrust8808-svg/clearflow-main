@@ -117,6 +117,9 @@ export default function EntitiesPage({
         currentUserEmail={currentUser?.email}
         onClose={() => setIsEntityModalOpen(false)}
         onSubmit={(payload) => {
+          if (!payload.authorityAttested) {
+            return;
+          }
           const stamp = Date.now();
           const entityId = `ent-${stamp}`;
           const authorityId = `auth-${stamp}`;
@@ -151,6 +154,8 @@ export default function EntitiesPage({
                 status: 'active',
                 representativeName: payload.representativeName.trim() || undefined,
                 representativeRole: payload.representativeRole.trim() || undefined,
+                authorityAttestedAt: new Date().toISOString(),
+                authorityAttestationStatement: `${payload.representativeName.trim() || 'Authorized representative'} acting as ${payload.representativeRole.trim() || 'authorized representative'} affirmed legal authority to establish and operate ${entityDisplayName} in ClearFlow.`,
                 entityAccess: {
                   googleStorageEmail:
                     payload.googleStorageEmail.trim() ||
@@ -244,7 +249,7 @@ export default function EntitiesPage({
                 clientAuthorizationStatus: 'active',
                 linkedTokenIds: [tokenId],
                 linkedDocumentIds: [documentId],
-                notes: 'Created automatically during entity setup.',
+                notes: `Created automatically during entity setup. Operator attested that ${payload.representativeName.trim() || 'the representative'} is authorized to establish and operate ${entityDisplayName} in ClearFlow as ${payload.representativeRole.trim() || 'an authorized representative'}.`,
               },
               ...prev.authorityRecords,
             ],
@@ -268,7 +273,7 @@ export default function EntitiesPage({
                 storageNotes:
                   'Entity setup packet is workspace-owned and ready to route into the user-controlled Google Drive archive.',
                 generatedBody: dispatchIdentity
-                  ? `# ${entityDisplayName} Setup Packet\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
+                  ? `# ${entityDisplayName} Setup Packet\n\n## Authority Attestation\n- Representative: ${payload.representativeName.trim() || entityDisplayName}\n- Capacity: ${payload.representativeRole.trim() || 'Authorized representative'}\n- Attestation: I affirm that I have the legal authority to establish, administer, connect, and operate ${entityDisplayName} in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
                       entityName: entityDisplayName,
                       jurisdiction: payload.jurisdiction.trim() || payload.country.trim() || undefined,
                       template: 'round',

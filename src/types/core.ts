@@ -522,6 +522,8 @@ export interface EntityRecord {
   ownerDisplay?: string;
   representativeName?: string;
   representativeRole?: string;
+  authorityAttestedAt?: string;
+  authorityAttestationStatement?: string;
   entityAccess?: {
     googleStorageEmail?: string;
     storageMode?: 'operator_google' | 'entity_google' | 'internal_only';

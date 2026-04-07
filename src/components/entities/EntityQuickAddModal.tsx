@@ -17,6 +17,7 @@ interface EntityQuickAddModalProps {
     representativeName: string;
     representativeRole: string;
     generateDispatchIdentity: boolean;
+    authorityAttested: boolean;
   }) => void;
 }
 
@@ -85,6 +86,7 @@ export default function EntityQuickAddModal({
   const [representativeName, setRepresentativeName] = useState('');
   const [representativeRole, setRepresentativeRole] = useState('');
   const [generateDispatchIdentity, setGenerateDispatchIdentity] = useState(true);
+  const [authorityAttested, setAuthorityAttested] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -99,9 +101,22 @@ export default function EntityQuickAddModal({
     setRepresentativeName('');
     setRepresentativeRole('');
     setGenerateDispatchIdentity(true);
+    setAuthorityAttested(false);
   }, [currentUserEmail, open]);
 
   if (!open) return null;
+
+  const trimmedName = name.trim();
+  const trimmedDisplayName = displayName.trim();
+  const trimmedRepresentativeName = representativeName.trim();
+  const trimmedRepresentativeRole = representativeRole.trim();
+  const entityLabel = trimmedDisplayName || trimmedName || 'this entity';
+  const authorityStatement = `I am ${trimmedRepresentativeRole || 'an authorized representative'} of ${entityLabel} and have the legal authority to establish, administer, connect, and operate this entity in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.`;
+  const canSubmit =
+    Boolean(trimmedName) &&
+    Boolean(trimmedRepresentativeName) &&
+    Boolean(trimmedRepresentativeRole) &&
+    authorityAttested;
 
   return (
     <div style={overlayStyle}>
@@ -144,10 +159,37 @@ export default function EntityQuickAddModal({
           />
           Generate entity mailing line and proof QR for outgoing records
         </label>
+        <div
+          style={{
+            borderRadius: 14,
+            border: '1px solid rgba(248,250,252,0.12)',
+            background: 'rgba(15,23,42,0.55)',
+            padding: 14,
+            display: 'grid',
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Authority Attestation</div>
+          <div style={{ color: '#cbd5e1', lineHeight: 1.65 }}>
+            ClearFlow relies on the user adding an entity to represent that they are the lawful
+            owner, officer, manager, trustee, administrator, fiduciary, or otherwise authorized
+            representative for that entity. Do not add an entity you are not authorized to operate.
+          </div>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', color: '#e2e8f0', lineHeight: 1.6 }}>
+            <input
+              type="checkbox"
+              checked={authorityAttested}
+              onChange={(event) => setAuthorityAttested(event.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>{authorityStatement}</span>
+          </label>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} style={buttonStyle}>Cancel</button>
           <button
             type="button"
+            disabled={!canSubmit}
             onClick={() =>
               onSubmit({
                 name,
@@ -161,9 +203,18 @@ export default function EntityQuickAddModal({
                 representativeName,
                 representativeRole,
                 generateDispatchIdentity,
+                authorityAttested,
               })
             }
-            style={{ ...buttonStyle, background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))', borderColor: 'rgba(126,242,255,0.28)' }}
+            style={{
+              ...buttonStyle,
+              background: canSubmit
+                ? 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))'
+                : 'rgba(71,85,105,0.6)',
+              borderColor: canSubmit ? 'rgba(126,242,255,0.28)' : 'rgba(148,163,184,0.2)',
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
+              opacity: canSubmit ? 1 : 0.75,
+            }}
           >
             Create Entity
           </button>

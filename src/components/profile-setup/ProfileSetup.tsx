@@ -106,7 +106,7 @@ export const ProfileSetup: React.FC = () => {
             <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
               <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>
               <div className="mt-2 leading-6 text-slate-300">
-                Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, retained security support, and related compliance or custody records needed for platform operation.
+                Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, retained security support, and related compliance or custody records needed for platform operation. By continuing, you represent that you will only establish or operate entities in ClearFlow when you are their lawful owner, officer, manager, trustee, administrator, fiduciary, or otherwise authorized representative.
               </div>
               {hasAcceptedTerms ? (
                 <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
@@ -144,7 +144,7 @@ export const ProfileSetup: React.FC = () => {
                 <span>
                   {hasAcceptedTerms
                     ? 'Your ClearFlow terms acceptance is already on file. Review your profile details and continue into the workspace.'
-                    : 'I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, and understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation.'}
+                    : 'I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation, and represent that I will only add or operate entities for which I have the legal authority to act.'}
                 </span>
               </label>
             </div>
