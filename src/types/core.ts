@@ -281,6 +281,8 @@ export type FinancialConnectionProvider =
   | 'dwolla'
   | 'treasury_prime'
   | 'modern_treasury'
+  | 'usps_bcg'
+  | 'upu_addressing'
   | 'stripe'
   | 'cash_app'
   | 'paypal'

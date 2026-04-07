@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { useAuth } from '../../hooks/useAuth';
+import { getFinancialConnectionProviders } from '../../services/financialConnectionCatalog.service';
 import { downloadDocumentFile, saveDocumentFile } from '../../services/documentVault.service';
 import {
   getDocumentStorageProfile,
@@ -42,6 +43,18 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
   const finalCount = data.documents.filter((item) => item.status === 'final').length;
   const draftCount = data.documents.filter((item) => item.status === 'draft').length;
   const verifiedTokenCount = data.tokens.filter((item) => item.status === 'verified').length;
+  const postalProviders = getFinancialConnectionProviders().filter(
+    (provider) => provider.category === 'postal',
+  );
+  const postalDispatchCount = data.dispatchRecords.filter(
+    (record) => record.method === 'postal_mail' || record.method === 'external_courier',
+  ).length;
+  const postalEvidenceCount = data.dispatchRecords.filter(
+    (record) =>
+      record.serviceEvidenceStatus === 'delivery_receipt_retained' ||
+      record.serviceEvidenceStatus === 'mailing_prepared' ||
+      record.serviceEvidenceStatus === 'executed_return_retained',
+  ).length;
   const resolveEntityStorageEmail = (entityId?: string) => {
     if (!entityId) {
       return undefined;
@@ -363,6 +376,46 @@ export default function DocumentsPage({ data, setData }: DocumentsPageProps) {
               ) : null}
             </div>
           </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Postal Delivery & Enforcement Workflow"
+        description="Route mailed notices, remittance packets, and enforcement communications into postal execution, retained proof, and returned-evidence handling."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="Postal Execution Posture"
+            subtitle="USPS business mailing, addressing, and retained delivery proof"
+            summaryItems={[
+              { label: 'Postal Dispatches', value: postalDispatchCount },
+              { label: 'Mail Evidence', value: postalEvidenceCount },
+              { label: 'Providers', value: postalProviders.length },
+            ]}
+          >
+            Enforcement notices, remittance communications, and mailed check packets should flow through dispatch records, retained mailing evidence, and returned-response intake instead of disappearing into manual notes.
+          </WorkbenchRecordCard>
+
+          {postalProviders.map((provider) => (
+            <WorkbenchRecordCard
+              key={provider.providerKey}
+              title={provider.label}
+              subtitle={`${provider.executionReadiness.replace('_', ' ')} | ${provider.availabilityStatus.replace('_', ' ')}`}
+              summaryItems={[
+                { label: 'Category', value: provider.category },
+                { label: 'Connection Rail', value: provider.connectionRail },
+                { label: 'Supported Rails', value: provider.supportedRails.join(', ') },
+              ]}
+            >
+              {provider.description}
+            </WorkbenchRecordCard>
+          ))}
         </div>
       </PageSection>
 

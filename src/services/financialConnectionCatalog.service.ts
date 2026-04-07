@@ -3,7 +3,7 @@ import type { FinancialConnectionProvider, FinancialConnectionRail } from '../ty
 export interface FinancialConnectionProviderDefinition {
   providerKey: FinancialConnectionProvider;
   label: string;
-  category: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury';
+  category: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury' | 'postal';
   connectionRail: FinancialConnectionRail;
   availabilityStatus: 'live' | 'profile_only' | 'bank_dependent';
   supportsLiveSync: boolean;
@@ -90,6 +90,42 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     supportedRails: ['ACH', 'wire', 'RTP', 'FedNow (bank dependent)'],
     description:
       'Treasury operations control layer for payments, approval workflows, reconciliation, and execution status across multiple bank rails.',
+  },
+  {
+    providerKey: 'usps_bcg',
+    label: 'USPS Business Gateway',
+    category: 'postal',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: false,
+    supportsSettlementInitiation: false,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['mailing services', 'Intelligent Mail', 'Informed Visibility', 'proof of mailing'],
+    description:
+      'Postal execution profile for business mailings, tracking, and retained delivery evidence when enforcement, notices, or remittance packets must move through USPS business mail services.',
+  },
+  {
+    providerKey: 'upu_addressing',
+    label: 'UPU Addressing Standards',
+    category: 'postal',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: false,
+    supportsSettlementInitiation: false,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['international address normalization', 'S42 templates', 'postal identifiers'],
+    description:
+      'International postal addressing posture for normalizing destination addresses and improving trusted delivery on cross-border mail and parcel dispatches.',
   },
   {
     providerKey: 'stripe',
