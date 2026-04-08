@@ -748,6 +748,22 @@ export interface InstrumentRecord {
   linkedTreasuryAccountId?: string;
   liquidationDiscount?: number;
   performanceSecurityStatus?: 'none' | 'posted' | 'called' | 'released';
+  issuanceStatus?: 'draft' | 'issued' | 'allocated' | 'pledged' | 'applied' | 'retired';
+  applicationProfile?: {
+    applicationType?:
+      | 'reserve_support'
+      | 'collateral_pledge'
+      | 'performance_security'
+      | 'purchase_funding'
+      | 'settlement_support'
+      | 'liquidity_bridge';
+    applicationStatus?: 'not_applied' | 'ready' | 'active' | 'released' | 'retired';
+    linkedObligationId?: string;
+    linkedSettlementId?: string;
+    linkedTreasuryAccountId?: string;
+    linkedCollateralHoldingId?: string;
+    applicationNotes?: string;
+  };
   linkedTokenIds?: string[];
   linkedAssetIds?: string[];
   linkedDocumentIds?: string[];
@@ -962,6 +978,7 @@ export interface NegotiableInstrumentRegisterRecord {
   linkedSettlementIds?: string[];
   linkedDocumentIds?: string[];
   linkedTokenIds?: string[];
+  applicationSummary?: string;
   notes?: string;
 }
 
@@ -981,6 +998,14 @@ export interface HolderLedgerEntryRecord {
   linkedObligationId?: string;
   linkedSettlementId?: string;
   linkedRemittanceStatementId?: string;
+  applicationEventType?:
+    | 'issuance'
+    | 'allocation'
+    | 'pledge'
+    | 'reserve_deposit'
+    | 'settlement_application'
+    | 'release'
+    | 'retirement';
   linkedDocumentIds?: string[];
   linkedTokenIds?: string[];
   notes?: string;
@@ -1553,6 +1578,14 @@ export interface InstrumentSettlementRecord {
   dueDate?: string;
   sourceDepositStatus?: 'not_deposited' | 'deposited_to_reserve' | 'partially_performed';
   remittanceReference?: string;
+  applicationStage?:
+    | 'issued'
+    | 'reserve_posted'
+    | 'collateralized'
+    | 'presented'
+    | 'applied'
+    | 'released';
+  applicationSummary?: string;
   notes?: string;
 }
 

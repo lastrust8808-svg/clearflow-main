@@ -23,6 +23,7 @@ import { buildDispatchFooter } from '../../services/dispatchIdentity.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
+import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -409,6 +410,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const complianceCount = data.aiWorkflows.filter((item) => item.category === 'compliance').length;
   const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
   const transactionProofChains = useMemo(() => buildTransactionProofChainViews(data), [data]);
+  const bondLifecycleViews = useMemo(() => buildBondLifecycleViews(data), [data]);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -1933,6 +1935,15 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       obligationType: 'reserve_backed_claim',
       reserveDepositEnabled: true,
       performanceSecurityStatus: 'posted',
+      issuanceStatus: 'issued',
+      applicationProfile: {
+        applicationType: 'reserve_support',
+        applicationStatus: 'ready',
+        linkedObligationId: obligationId,
+        linkedSettlementId: settlementRecordId,
+        applicationNotes:
+          'Initial bond issue opened with reserve-support posture so later collateral, settlement, and retirement actions can be tracked as separate application events.',
+      },
       linkedTokenIds: [token.id],
       linkedDocumentIds: [documentId],
       notes:
@@ -1983,6 +1994,8 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       faceAmount: amount,
       outstandingAmount: amount,
       currency,
+      applicationSummary:
+        'Issued into the register with reserve-support posture. Track later allocation, collateral, settlement application, release, and retirement events separately.',
       linkedDocumentIds: [documentId],
       linkedTokenIds: [token.id],
       notes:
@@ -1995,6 +2008,7 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       registerId,
       entryDate: issueDate,
       entryType: 'issue',
+      applicationEventType: 'issuance',
       holderEntityId: primaryEntity.id,
       holderLabel: entityLabel,
       amount,
@@ -2005,6 +2019,26 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       linkedDocumentIds: [documentId],
       linkedTokenIds: [token.id],
       notes: 'Initial holder-ledger issue entry created from the bond execution packet.',
+    };
+    const bondApplicationEntry: HolderLedgerEntryRecord = {
+      id: `${holderEntryId}-application`,
+      entityId: primaryEntity.id,
+      registerId,
+      entryDate: issueDate,
+      entryType: 'deposit',
+      applicationEventType: 'reserve_deposit',
+      holderEntityId: primaryEntity.id,
+      holderLabel: `${entityLabel} reserve support`,
+      amount,
+      currency,
+      resultingBalance: amount,
+      linkedInstrumentId: instrumentId,
+      linkedObligationId: obligationId,
+      linkedSettlementId: settlementRecordId,
+      linkedDocumentIds: [documentId],
+      linkedTokenIds: [token.id],
+      notes:
+        'Initial bond application event created separately from issuance so reserve support and later settlement application can be tracked explicitly.',
     };
 
     const instrumentSettlement: InstrumentSettlementRecord = {
@@ -2026,6 +2060,9 @@ Pay against this bill of exchange the stated sum in lawful money or stated forei
       effectiveDate: issueDate,
       dueDate: maturityDate,
       sourceDepositStatus: 'not_deposited',
+      applicationStage: 'issued',
+      applicationSummary:
+        'Issue opened with a staged reserve-support application. Advance this through reserve posting, collateralization, presentment, application, and release as real events occur.',
       notes:
         'Use presentment, remittance, settlement, or posted performance evidence to move this bond from issued to performed and ultimately discharge the linked obligation.',
     };
@@ -2109,6 +2146,7 @@ Bond Identifier: ${legalIdentifier}
 - Instrument record opened in the ledger.
 - Negotiable-instrument register entry opened with issued status.
 - Holder ledger opened with the initial issue balance.
+- Separate reserve-support application event opened for the bond.
 - Obligation and performance / discharge control records opened together.
 
 ## Directional Discharge Flow
@@ -2137,7 +2175,7 @@ Bond Identifier: ${legalIdentifier}
       instruments: [instrument, ...prev.instruments],
       obligations: [obligation, ...prev.obligations],
       negotiableInstrumentRegisters: [registerRecord, ...prev.negotiableInstrumentRegisters],
-      holderLedgerEntries: [holderEntry, ...prev.holderLedgerEntries],
+      holderLedgerEntries: [bondApplicationEntry, holderEntry, ...prev.holderLedgerEntries],
       instrumentSettlements: [instrumentSettlement, ...prev.instrumentSettlements],
       remittanceStatements: [remittanceStatement, ...prev.remittanceStatements],
       settlements: [settlementRecord, ...prev.settlements],
@@ -2183,6 +2221,56 @@ Bond Identifier: ${legalIdentifier}
       ],
     }));
     focusDocument(persistedDocument.id);
+  };
+
+  const launchBondLifecycleReport = () => {
+    if (!reportEntity) {
+      return;
+    }
+
+    const scopedBonds = bondLifecycleViews.filter((item) => item.instrument.entityId === reportEntity.id);
+    const document = buildGeneratedDocument({
+      entityId: reportEntity.id,
+      title: `${reportEntity.displayName || reportEntity.name} Bond Lifecycle Report`,
+      category: 'financial',
+      summary: 'Lifecycle report across bond issuance, application events, holder ledger, and settlement posture.',
+      retentionClass: 'financial_evidence',
+      body: `# Bond Lifecycle Report
+
+Entity: ${reportEntity.displayName || reportEntity.name}
+Window: ${reportWindowLabel}
+
+## Bond Rails
+${scopedBonds.length
+  ? scopedBonds
+      .map(
+        (item, index) => `### ${index + 1}. ${item.instrument.title}
+- Current stage: ${item.currentStage}
+- Face amount: ${item.faceAmountLabel}
+- Application: ${item.applicationLabel}
+- Register: ${item.register?.legalIdentifier || item.instrument.legalIdentifier || 'Pending'}
+- Obligation: ${item.obligation?.title || 'Not linked'}
+- Settlement: ${item.settlement?.status || 'Not linked'}
+- Evidence count: ${item.evidenceCount}
+- Timeline: ${item.timelineSummary}
+- Application memo: ${
+          item.instrumentSettlement?.applicationSummary ||
+          item.register?.applicationSummary ||
+          item.instrument.applicationProfile?.applicationNotes ||
+          'No application memo recorded yet.'
+        }`
+      )
+      .join('\n\n')
+  : 'No bond instruments are currently in scope for this entity.'}
+${buildEntityDocumentBrandingAppendix(reportEntity)}`,
+    });
+
+    setData((prev) => ({
+      ...prev,
+      documents: [document, ...prev.documents],
+    }));
+
+    focusDocument(document.id);
   };
 
   const launchBillExchangeAcceptanceCertificate = async () => {
@@ -4565,6 +4653,13 @@ ${scopedCases
       detail: 'Create a capital-strategy report across borrowing facilities, pledged collateral, futures overlays, and liquidation planning.',
       actionLabel: 'Create Capital Report',
       onAction: launchCapitalStrategyReport,
+    },
+    {
+      title: 'Bond Lifecycle Report',
+      subtitle: 'Issuance, application events, and holder-ledger posture',
+      detail: 'Create a report across bond issuance, application events, register control, holder ledger, and linked settlement posture.',
+      actionLabel: 'Create Bond Report',
+      onAction: launchBondLifecycleReport,
     },
     {
       title: 'Operations Exception Report',

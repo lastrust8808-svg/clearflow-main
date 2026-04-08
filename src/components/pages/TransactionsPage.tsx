@@ -7,6 +7,7 @@ import {
 } from '../../services/obligationLifecycle.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import { buildDispatchFooter } from '../../services/dispatchIdentity.service';
+import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
 import PageSection from '../ui/PageSection';
 import RecordCard from '../ui/RecordCard';
 import RecordEditorCard from '../ui/RecordEditorCard';
@@ -282,6 +283,7 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
   ).length;
   const obligationLifecycleSummaries = buildObligationLifecycleSummaries(data);
   const transactionProofChains = buildTransactionProofChainViews(data);
+  const bondLifecycleViews = buildBondLifecycleViews(data);
   const defaultedObligationCount = obligationLifecycleSummaries.filter(
     (item) => item.stage === 'defaulted'
   ).length;
@@ -2077,6 +2079,54 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               </div>
             </RecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Bond Issuance & Application Desk"
+        description="Track issuance, register control, holder-ledger application events, and how each bond is actually being applied into reserve, collateral, or settlement."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {bondLifecycleViews.length === 0 ? (
+            <RecordCard title="No bond rails yet" subtitle="Issue a bond or classify an instrument as bond paper">
+              The bond desk will show issuance packets, register control, holder-ledger application events, and linked settlement posture once bond paper is in the workspace.
+            </RecordCard>
+          ) : (
+            bondLifecycleViews.map((view) => (
+              <RecordCard
+                key={view.instrument.id}
+                title={view.instrument.title}
+                subtitle={`${view.currentStage} · ${view.faceAmountLabel} · ${view.applicationLabel}`}
+              >
+                <div style={{ display: 'grid', gap: 10, color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {statusPill(`Stage: ${view.currentStage}`, 'blue')}
+                    {statusPill(`Application: ${view.applicationLabel}`, 'gold')}
+                    {statusPill(`Evidence: ${view.evidenceCount}`, view.evidenceCount ? 'teal' : 'rose')}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Register:</strong>{' '}
+                    {view.register?.legalIdentifier || view.instrument.legalIdentifier || 'Pending legal identifier'}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Obligation / settlement:</strong>{' '}
+                    {view.obligation?.title || 'No linked obligation'} / {view.settlement?.status || 'No linked settlement'}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Application timeline:</strong>{' '}
+                    {view.timelineSummary}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Control notes:</strong>{' '}
+                    {view.instrumentSettlement?.applicationSummary ||
+                      view.register?.applicationSummary ||
+                      view.instrument.applicationProfile?.applicationNotes ||
+                      'No application memo recorded yet.'}
+                  </div>
+                </div>
+              </RecordCard>
+            ))
+          )}
         </div>
       </PageSection>
 
