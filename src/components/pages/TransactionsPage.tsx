@@ -2113,6 +2113,10 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                     {view.obligation?.title || 'No linked obligation'} / {view.settlement?.status || 'No linked settlement'}
                   </div>
                   <div>
+                    <strong style={{ color: 'var(--cf-text)' }}>Allocated collateral:</strong>{' '}
+                    {view.pledgedItemCount} item{view.pledgedItemCount === 1 ? '' : 's'} | {view.pledgedItemSummary}
+                  </div>
+                  <div>
                     <strong style={{ color: 'var(--cf-text)' }}>Application timeline:</strong>{' '}
                     {view.timelineSummary}
                   </div>

@@ -636,6 +636,17 @@ export interface AssetRecord {
   linkedLedgerAccountId?: string;
   linkedDocumentIds?: string[];
   complianceTagIds?: string[];
+  preciousMetalProfile?: {
+    metalType?: 'gold' | 'silver' | 'platinum' | 'palladium' | 'mixed' | 'jewelry' | 'other';
+    unitOfMeasure?: 'oz' | 'g' | 'kg' | 'piece' | 'bag' | 'lot' | 'other';
+    quantity?: number;
+    fineness?: string;
+    hallmark?: string;
+    storageLocation?: string;
+    custodyReference?: string;
+    itemIdentifiers?: string[];
+    liquidationReadiness?: 'ready' | 'review' | 'restricted';
+  };
   realEstateSecurityProfile?: {
     offeringStructure?: RealEstateOfferingStructure;
     rentalPoolEnabled?: boolean;
@@ -1503,6 +1514,17 @@ export interface CollateralHoldingRecord {
   linkedBorrowingFacilityId?: string;
   linkedTreasuryAccountId?: string;
   liquidationPriority?: number;
+  pledgedItemCount?: number;
+  pledgedItemSummary?: string;
+  pledgedItems?: Array<{
+    label: string;
+    quantity?: number;
+    unitOfMeasure?: 'oz' | 'g' | 'kg' | 'piece' | 'bag' | 'lot' | 'other';
+    identifier?: string;
+    assetId?: string;
+    metalType?: 'gold' | 'silver' | 'platinum' | 'palladium' | 'mixed' | 'jewelry' | 'other';
+    liquidationStatus?: 'held' | 'allocated' | 'liquidating' | 'released';
+  }>;
   linkedDocumentIds?: string[];
   notes?: string;
 }

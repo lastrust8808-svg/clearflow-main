@@ -1,4 +1,6 @@
 import type {
+  AssetRecord,
+  CollateralHoldingRecord,
   CoreDataBundle,
   HolderLedgerEntryRecord,
   InstrumentRecord,
@@ -15,6 +17,10 @@ export interface BondLifecycleView {
   settlement?: SettlementRecord;
   instrumentSettlement?: InstrumentSettlementRecord;
   holderLedgerEntries: HolderLedgerEntryRecord[];
+  collateralHoldings: CollateralHoldingRecord[];
+  pledgedAssets: AssetRecord[];
+  pledgedItemCount: number;
+  pledgedItemSummary: string;
   currentStage: string;
   applicationLabel: string;
   faceAmountLabel: string;
@@ -75,6 +81,39 @@ export function buildBondLifecycleViews(data: CoreDataBundle): BondLifecycleView
             item.linkedInstrumentId === instrument.id || item.registerId === register?.id,
         )
         .sort((left, right) => left.entryDate.localeCompare(right.entryDate));
+      const collateralHoldings = data.collateralHoldings.filter(
+        (item) =>
+          item.linkedInstrumentId === instrument.id ||
+          item.collateralType === 'bond' ||
+          item.holdingLabel.toLowerCase().includes(instrument.title.toLowerCase()),
+      );
+      const pledgedAssets = data.assets.filter(
+        (asset) =>
+          instrument.linkedAssetIds?.includes(asset.id) ||
+          collateralHoldings.some((holding) => holding.linkedAssetId === asset.id) ||
+          collateralHoldings.some((holding) =>
+            holding.pledgedItems?.some((pledgedItem) => pledgedItem.assetId === asset.id),
+          ),
+      );
+      const pledgedItemCount =
+        collateralHoldings.reduce(
+          (sum, holding) => sum + (holding.pledgedItemCount || holding.pledgedItems?.length || 0),
+          0,
+        ) || pledgedAssets.length;
+      const pledgedItemSummary = collateralHoldings
+        .flatMap((holding) =>
+          holding.pledgedItems?.map((item) => {
+            const quantityLabel =
+              typeof item.quantity === 'number'
+                ? `${item.quantity}${item.unitOfMeasure ? ` ${item.unitOfMeasure}` : ''}`
+                : item.unitOfMeasure || '';
+            return [quantityLabel, item.metalType, item.label, item.identifier]
+              .filter(Boolean)
+              .join(' ');
+          }) || (holding.pledgedItemSummary ? [holding.pledgedItemSummary] : []),
+        )
+        .filter(Boolean)
+        .join(' | ');
       const applicationType =
         instrument.applicationProfile?.applicationType ||
         (instrumentSettlement?.applicationStage === 'reserve_posted'
@@ -111,6 +150,25 @@ export function buildBondLifecycleViews(data: CoreDataBundle): BondLifecycleView
         settlement,
         instrumentSettlement,
         holderLedgerEntries,
+        collateralHoldings,
+        pledgedAssets,
+        pledgedItemCount,
+        pledgedItemSummary:
+          pledgedItemSummary ||
+          pledgedAssets
+            .map((asset) =>
+              [
+                asset.preciousMetalProfile?.quantity,
+                asset.preciousMetalProfile?.unitOfMeasure,
+                asset.preciousMetalProfile?.metalType,
+                asset.name,
+              ]
+                .filter(Boolean)
+                .join(' '),
+            )
+            .filter(Boolean)
+            .join(' | ') ||
+          'No specifically allocated collateral items recorded.',
         currentStage: formatStage(currentStage),
         applicationLabel: `${formatStage(applicationType)} / ${formatStage(applicationStatus)}`,
         faceAmountLabel: formatMoney(

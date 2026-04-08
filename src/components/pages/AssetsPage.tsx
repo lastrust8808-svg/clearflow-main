@@ -45,6 +45,9 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   });
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
   const trustFundingViews = buildTrustFundingViews(data);
+  const preciousMetalAssets = data.assets.filter(
+    (asset) => asset.category === 'metal' || Boolean(asset.preciousMetalProfile),
+  );
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -74,6 +77,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
         <StatCard label="High Howey Risk" value={realEstateSecuritySummary.highRiskCount} />
         <StatCard label="Trust Funding Files" value={trustFundingViews.length} />
+        <StatCard label="Metal / Jewelry Assets" value={preciousMetalAssets.length} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
@@ -160,6 +164,94 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
               </WorkbenchRecordCard>
             ))
           )}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Precious Metal & Bond Collateral"
+        description="Track gold, silver, jewelry, and other specifically identified pledged items so bond collateral is visibly allocated, held, and liquidation-ready."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {preciousMetalAssets.length === 0 ? (
+            <WorkbenchRecordCard title="No precious-metal collateral recorded yet" subtitle="Add gold, silver, jewelry, or other held collateral">
+              Enter each metal or jewelry asset with quantity, unit, identifiers, and custody details, then link it into a collateral holding or bond so liquidation and allocation stay specific instead of generic.
+            </WorkbenchRecordCard>
+          ) : (
+            preciousMetalAssets.map((asset) => (
+              <WorkbenchRecordCard
+                key={asset.id}
+                title={asset.name}
+                subtitle={`${asset.preciousMetalProfile?.metalType || asset.category} | ${asset.status}`}
+                summaryItems={[
+                  {
+                    label: 'Quantity',
+                    value:
+                      typeof asset.preciousMetalProfile?.quantity === 'number'
+                        ? `${asset.preciousMetalProfile.quantity} ${asset.preciousMetalProfile.unitOfMeasure || ''}`.trim()
+                        : 'Not set',
+                  },
+                  { label: 'Identifiers', value: asset.preciousMetalProfile?.itemIdentifiers?.join(', ') || asset.identifierCode || 'Not set' },
+                  { label: 'Storage', value: asset.preciousMetalProfile?.storageLocation || 'Not set' },
+                  { label: 'Liquidation', value: asset.preciousMetalProfile?.liquidationReadiness || 'review' },
+                  { label: 'Market Value', value: asset.marketValue?.toLocaleString() || asset.bookValue.toLocaleString() },
+                ]}
+                record={asset}
+                onSave={(nextRecord) =>
+                  setData((prev) => ({
+                    ...prev,
+                    assets: prev.assets.map((item) => (item.id === asset.id ? nextRecord : item)),
+                  }))
+                }
+              >
+                {asset.notes || 'Use advanced edit to maintain fineness, hallmark, custody, and item-specific collateral identifiers.'}
+              </WorkbenchRecordCard>
+            ))
+          )}
+
+          {data.collateralHoldings
+            .filter(
+              (holding) =>
+                holding.collateralType === 'bond' ||
+                holding.pledgedItems?.some((item) => item.metalType || item.identifier),
+            )
+            .map((holding) => (
+              <WorkbenchRecordCard
+                key={holding.id}
+                title={holding.holdingLabel}
+                subtitle={`${holding.collateralType} | ${holding.status}`}
+                summaryItems={[
+                  { label: 'Pledged Items', value: String(holding.pledgedItemCount || holding.pledgedItems?.length || 0) },
+                  { label: 'Market Value', value: holding.marketValue.toLocaleString() },
+                  { label: 'Lendable', value: (holding.lendableValue ?? holding.marketValue).toLocaleString() },
+                  { label: 'Bond Link', value: holding.linkedInstrumentId || 'Not linked' },
+                ]}
+                record={holding}
+                onSave={(nextRecord) =>
+                  setData((prev) => ({
+                    ...prev,
+                    collateralHoldings: prev.collateralHoldings.map((item) =>
+                      item.id === holding.id ? nextRecord : item,
+                    ),
+                  }))
+                }
+              >
+                {holding.pledgedItemSummary ||
+                  holding.pledgedItems
+                    ?.map((item) =>
+                      [
+                        typeof item.quantity === 'number' ? item.quantity : undefined,
+                        item.unitOfMeasure,
+                        item.metalType,
+                        item.label,
+                        item.identifier,
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    )
+                    .join(' | ') ||
+                  'Use advanced edit to allocate individual metal or jewelry items into this collateral pool.'}
+              </WorkbenchRecordCard>
+            ))}
         </div>
       </PageSection>
 
