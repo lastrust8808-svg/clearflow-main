@@ -96,6 +96,19 @@ export default function AccountingDashboardSection({
   liquidationPlans,
   workspaceSettings,
 }: AccountingDashboardSectionProps) {
+  const resolveAuthorityHoldReason = (payment?: PaymentRecord, settlement?: SettlementRecord) => {
+    const candidates = [
+      payment?.complianceConfirmationNote,
+      payment?.notes,
+      payment?.settlementExecution?.executionReason,
+      settlement?.executionReason,
+    ].filter((value): value is string => Boolean(value));
+
+    return (
+      candidates.find((value) => value.toLowerCase().includes('authority review')) ||
+      candidates.find((value) => value.toLowerCase().includes('authority-release hold'))
+    );
+  };
   const incomingReceiptsTotal = payments
     .filter((payment) => payment.direction === 'incoming')
     .reduce((sum, payment) => sum + payment.amount, 0);
@@ -250,6 +263,13 @@ export default function AccountingDashboardSection({
       ),
     )
     .slice(0, 4);
+  const authorityHeldPayments = payments.filter((payment) =>
+    Boolean(resolveAuthorityHoldReason(payment)),
+  );
+  const authorityHeldSettlements = settlements.filter((settlement) => {
+    const linkedPayment = payments.find((payment) => payment.id === settlement.linkedPaymentId);
+    return Boolean(resolveAuthorityHoldReason(linkedPayment, settlement));
+  });
   const entityTypeSet = new Set(entities.map((entity) => entity.type));
   const trustView = entityTypeSet.has('trust');
   const treasuryValue = treasuryAccounts.reduce(
@@ -452,7 +472,24 @@ export default function AccountingDashboardSection({
             <StatCard label="Staged Rails" value={stagedExecutionCount} />
             <StatCard label="Manual Review" value={manualReviewExecutionCount} />
             <StatCard label="Biller-Direct" value={billerDirectCount} />
+            <StatCard label="Authority Holds" value={authorityHeldPayments.length} />
           </div>
+          {authorityHeldPayments.length > 0 ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                border: '1px solid rgba(251,191,36,0.28)',
+                background: 'rgba(120,53,15,0.18)',
+                color: '#fde68a',
+                lineHeight: 1.6,
+              }}
+            >
+              {authorityHeldPayments.length} outward payment{authorityHeldPayments.length === 1 ? '' : 's'} and{' '}
+              {authorityHeldSettlements.length} linked settlement{authorityHeldSettlements.length === 1 ? '' : 's'} are
+              staged under authority hold until representative authority is cleared.
+            </div>
+          ) : null}
           <div style={{ display: 'grid', gap: 10 }}>
             {executionHighlights.length === 0 ? (
               <div style={{ color: '#d1d5db' }}>
@@ -461,6 +498,14 @@ export default function AccountingDashboardSection({
             ) : (
               executionHighlights.map((settlement) => (
                 <div key={settlement.id} style={infoCardStyle}>
+                  {resolveAuthorityHoldReason(
+                    payments.find((payment) => payment.id === settlement.linkedPaymentId),
+                    settlement,
+                  ) ? (
+                    <div style={{ color: '#fde68a', marginBottom: 8, fontWeight: 700 }}>
+                      authority hold
+                    </div>
+                  ) : null}
                   <div style={{ fontWeight: 700 }}>
                     {settlement.executionReference || settlement.id} | {settlement.executionProvider || 'manual'} |{' '}
                     {settlement.executionMode || 'staged'}
@@ -470,7 +515,12 @@ export default function AccountingDashboardSection({
                     {settlement.processorStatus || 'n/a'}
                   </div>
                   <div style={{ color: '#d1d5db', marginTop: 6 }}>
-                    {settlement.executionReason || 'Execution record retained without a processor narrative.'}
+                    {resolveAuthorityHoldReason(
+                      payments.find((payment) => payment.id === settlement.linkedPaymentId),
+                      settlement,
+                    ) ||
+                      settlement.executionReason ||
+                      'Execution record retained without a processor narrative.'}
                   </div>
                 </div>
               ))
@@ -595,6 +645,14 @@ export default function AccountingDashboardSection({
             ) : (
               priorityRailControls.map((control) => (
                 <div key={control.paymentId} style={infoCardStyle}>
+                  {resolveAuthorityHoldReason(
+                    payments.find((payment) => payment.id === control.paymentId),
+                    settlements.find((settlement) => settlement.id === control.settlementId),
+                  ) ? (
+                    <div style={{ color: '#fde68a', marginBottom: 8, fontWeight: 700 }}>
+                      authority hold
+                    </div>
+                  ) : null}
                   <div style={{ fontWeight: 700 }}>
                     {control.executionLabel} | {control.railNamespace}
                   </div>
@@ -602,7 +660,10 @@ export default function AccountingDashboardSection({
                     {control.overallStatus} | {control.passCount}/{control.checks.length} controls passing
                   </div>
                   <div style={{ color: '#d1d5db', marginTop: 6 }}>
-                    {control.recommendedAction}
+                    {resolveAuthorityHoldReason(
+                      payments.find((payment) => payment.id === control.paymentId),
+                      settlements.find((settlement) => settlement.id === control.settlementId),
+                    ) || control.recommendedAction}
                   </div>
                 </div>
               ))

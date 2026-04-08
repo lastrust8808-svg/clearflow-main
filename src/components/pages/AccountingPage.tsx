@@ -8339,6 +8339,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                         gap: 10,
                       }}
                     >
+                      {(() => {
+                        const linkedPayment = payments.find((item) => item.id === control.paymentId);
+                        const authorityHoldReason =
+                          [linkedPayment?.complianceConfirmationNote, linkedPayment?.notes, linkedPayment?.settlementExecution?.executionReason]
+                            .filter((value): value is string => Boolean(value))
+                            .find((value) => value.toLowerCase().includes('authority review'));
+
+                        return authorityHoldReason ? (
+                          <div
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              border: '1px solid rgba(251,191,36,0.28)',
+                              background: 'rgba(120,53,15,0.18)',
+                              color: '#fde68a',
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            {authorityHoldReason}
+                          </div>
+                        ) : null;
+                      })()}
                       <div
                         style={{
                           display: 'flex',
