@@ -11,6 +11,8 @@ import { buildTransactionProofChainViews } from '../../services/transactionProof
 import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildWealthManagerSummary } from '../../services/wealthManager.service';
+import { buildRewardsProgramSummary } from '../../services/rewardsProgram.service';
+import { useAuth } from '../../hooks/useAuth';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -30,6 +32,7 @@ export default function OverviewPage({
   onSelectActiveEntity,
   hasDriveAccess = false,
 }: OverviewPageProps) {
+  const auth = useAuth();
   const navigate = (hash: string) => {
     if (typeof window !== 'undefined') {
       window.location.hash = hash;
@@ -83,6 +86,7 @@ export default function OverviewPage({
     liquidationPlans: data.liquidationPlans,
   });
   const wealthManagerSummary = buildWealthManagerSummary(data, currentUser);
+  const rewardsSummary = buildRewardsProgramSummary(data, auth.appData, currentUser);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -477,6 +481,64 @@ export default function OverviewPage({
         </div>
       </PageSection>
 
+      <PageSection
+        title="ClearFlow Credits"
+        description="Internal utility rewards earned from real workspace activity and kept distinct from cash, deposits, treasury balances, and outside settlement rails."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard title="Rewards Balance" subtitle={`${rewardsSummary.tier} tier`}>
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+              <div>Credits balance: {rewardsSummary.balance}</div>
+              <div>Lifetime earned: {rewardsSummary.lifetimeEarned}</div>
+              <div>Lifetime spent: {rewardsSummary.lifetimeSpent}</div>
+              <div>Membership credits: {rewardsSummary.membershipCreditsEarned}</div>
+            </div>
+          </RecordCard>
+
+          <RecordCard title="Recent Rewards" subtitle="Latest credited activity">
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+              {rewardsSummary.recentEntries.slice(0, 4).map((entry) => (
+                <div key={entry.id}>
+                  <strong style={{ color: '#effcff' }}>+{entry.amount}</strong> {entry.description}
+                </div>
+              ))}
+            </div>
+          </RecordCard>
+
+          <RecordCard title="Badges & Terms" subtitle={`${rewardsSummary.badgeCount} unlocked badges`}>
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+              {rewardsSummary.badges.slice(0, 3).map((badge) => (
+                <div key={badge.id}>{badge.title}</div>
+              ))}
+              <div>Credits are internal utility units only.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('#terms')}
+              style={{
+                marginTop: 12,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Review Rewards Terms
+            </button>
+          </RecordCard>
+        </div>
+      </PageSection>
+
       <div
         style={{
           display: 'grid',
@@ -514,6 +576,8 @@ export default function OverviewPage({
         <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
         <StatCard label="Partner-Bank Required" value={partnerBankRequiredCount} />
         <StatCard label="Authority Reviews" value={authorityReviewItems.length} />
+        <StatCard label="ClearFlow Credits" value={rewardsSummary.balance} />
+        <StatCard label="Rewards Tier" value={rewardsSummary.tier} />
         <StatCard
           label="EFTPS Profile"
           value={

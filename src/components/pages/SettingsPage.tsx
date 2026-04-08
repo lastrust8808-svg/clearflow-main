@@ -11,6 +11,7 @@ import {
   type IntegrationStatusSnapshot,
 } from '../../services/integrationStatus.service';
 import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
+import { buildRewardsProgramSummary } from '../../services/rewardsProgram.service';
 import WorkspaceSettingsCard from '../settings/WorkspaceSettingsCard';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -54,6 +55,7 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
     currentGoogleEmail: auth.currentUser?.email,
     hasDriveAccess: auth.hasDriveAccess,
   });
+  const rewardsSummary = buildRewardsProgramSummary(data, auth.appData, auth.currentUser);
 
   useEffect(() => {
     void loadIntegrationStatus()
@@ -210,6 +212,80 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
                 These are the internal records ClearFlow keeps for platform agreement, security support, and retained custody/compliance posture.
               </div>
             </div>
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="ClearFlow Credits Program"
+        description="Internal rewards ledger, tier posture, and utility-only program terms before any future chain or mint layer is turned on."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="Rewards Account"
+            subtitle={`${rewardsSummary.tier} tier`}
+            summaryItems={[
+              { label: 'Balance', value: rewardsSummary.balance },
+              { label: 'Lifetime Earned', value: rewardsSummary.lifetimeEarned },
+              { label: 'Lifetime Spent', value: rewardsSummary.lifetimeSpent },
+              { label: 'Badges', value: rewardsSummary.badgeCount },
+            ]}
+          >
+            ClearFlow Credits are internal promotional utility credits. They are not cash, deposits, stored value, or securities.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Earn Rules Snapshot"
+            subtitle="Current v1 activity incentives"
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Membership payment: +100</div>
+              <div>Invoice sent: +2</div>
+              <div>Invoice paid: +10</div>
+              <div>Bill paid: +5</div>
+              <div>Remittance posted: +5</div>
+              <div>Entity onboarded: +40</div>
+              <div>Bank connected: +25</div>
+              <div>Wallet or trading profile connected: +20</div>
+            </div>
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Program Terms"
+            subtitle="Utility-only posture"
+            actionSlot={
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.hash = '#terms';
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 42,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(126, 242, 255, 0.24)',
+                  background: 'rgba(54, 215, 255, 0.1)',
+                  color: '#effcff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Review Terms
+              </button>
+            }
+          >
+            Credits can support feature access, reports, discounts, badges, and later optional mintable recognition artifacts, but they do not create bank, deposit, lending, or investment rights.
           </WorkbenchRecordCard>
         </div>
       </PageSection>

@@ -34,6 +34,81 @@ export interface WealthMandateProfile {
   activatedAt?: string;
 }
 
+export type RewardTier = 'steward' | 'operator' | 'treasury' | 'capital' | 'crown';
+
+export interface RewardAccount {
+  id: string;
+  userId: string;
+  balance: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+  tier: RewardTier;
+  linkedWalletId?: string;
+  status: 'active' | 'restricted' | 'paused';
+}
+
+export interface RewardEntry {
+  id: string;
+  userId: string;
+  entityId?: string;
+  type: 'earn' | 'spend' | 'gift' | 'expire' | 'adjustment' | 'refund';
+  sourceEvent:
+    | 'membership_paid'
+    | 'invoice_sent'
+    | 'invoice_paid'
+    | 'bill_paid'
+    | 'remittance_completed'
+    | 'entity_onboarded'
+    | 'bank_connected'
+    | 'wallet_connected'
+    | 'authority_completed'
+    | 'document_retained'
+    | 'manual';
+  amount: number;
+  description: string;
+  occurredAt: string;
+  status: 'posted' | 'pending' | 'reversed';
+}
+
+export interface RewardBadge {
+  id: string;
+  userId: string;
+  badgeType:
+    | 'first_entity_established'
+    | 'invoices_in_motion'
+    | 'paid_on_time'
+    | 'trust_steward'
+    | 'bond_operator'
+    | 'reserve_builder'
+    | 'settlement_clarity'
+    | 'vault_keeper';
+  title: string;
+  description: string;
+  earnedAt: string;
+  mintable?: boolean;
+  minted?: boolean;
+  linkedWalletId?: string;
+  chainNetwork?: string;
+  tokenId?: string;
+  txHash?: string;
+  metadataUri?: string;
+}
+
+export interface RewardRedemption {
+  id: string;
+  userId: string;
+  itemKey:
+    | 'ai_extraction_pack'
+    | 'premium_report'
+    | 'trust_funding_packet'
+    | 'bond_lifecycle_report'
+    | 'storage_boost'
+    | 'membership_discount';
+  creditCost: number;
+  status: 'pending' | 'fulfilled' | 'reversed';
+  redeemedAt: string;
+}
+
 export type EntityType = 'LLC' | 'C-Corp' | 'S-Corp' | 'Trust/Estate' | 'Non-profit' | 'Personal';
 
 export type WizardType = 'DTCC' | 'EXCHANGE' | 'REAL_ESTATE' | 'COLLATERAL' | 'FORENSIC' | 'SETTLEMENT' | 'LEGAL' | 'RESITUS' | 'RESOLUTION' | 'CREDIT_DEFENSE' | 'CHANCERY' | '1099' | 'ACCOUNT_RECON' | 'EDGAR' | 'MARAD';
@@ -331,6 +406,10 @@ export interface AppData {
   ratedCharges?: RatedCharge[];
   billingInvoices?: BillingInvoice[];
   settlements?: Settlement[];
+  rewardAccount?: RewardAccount;
+  rewardEntries?: RewardEntry[];
+  rewardBadges?: RewardBadge[];
+  rewardRedemptions?: RewardRedemption[];
   coreDataSnapshot?: CoreDataBundle;
 }
 

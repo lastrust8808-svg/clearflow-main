@@ -444,6 +444,34 @@ Approved by: Governing Managers
 Organization: Clear-Flow Integrated Financial Management, LLC`
 };
 
+const rewardsProgramTerms = {
+  title: 'ClearFlow Credits Program Terms',
+  content: `Effective Date: April 8, 2026
+
+ClearFlow Credits are internal promotional and utility credits used within the Clear.Flow platform.
+
+1. Nature of Credits
+ClearFlow Credits are not cash, deposits, stored value, bank balances, securities, commodities, investment contracts, or legal tender. They are internal utility credits that may be granted for qualifying platform activity, membership participation, promotional programs, or other approved use.
+
+2. Permitted Uses
+Credits may be used only for approved in-platform benefits expressly offered by Clear-Flow, including feature access, reports, premium tools, discounts, storage increases, workflow upgrades, or other internal services.
+
+3. No Guaranteed Monetary Value
+Credits do not have guaranteed monetary value and are not redeemable for cash unless Clear-Flow expressly offers a specific redemption path in writing.
+
+4. Program Adjustments
+Clear-Flow may modify earning rules, redemption rules, tiers, badges, expirations, promotional schedules, and related program mechanics at any time to prevent abuse, support lawful operation, or improve the platform.
+
+5. Reversal and Forfeiture
+Credits may be reversed, reduced, suspended, or forfeited if tied to fraud, abuse, chargebacks, reversals, unauthorized use, or violations of platform policies.
+
+6. Badges and Collectibles
+Any badges, collectibles, or future on-chain utility artifacts linked to the rewards program are recognition or platform-utility artifacts unless Clear-Flow expressly states otherwise in writing. They do not create ownership, equity, debt, deposit, custody, or profit-sharing rights by default.
+
+7. Internal Program Status
+The rewards program is part of Clear-Flow's internal engagement and utility layer and does not alter the underlying legal, financial, or accounting character of any user funds, entity assets, or platform payment rails.`,
+};
+
 const mfaAuthPolicy = {
   title: 'Authentication & MFA Documentation (Google OAuth)',
   content: `Organization: Clear-Flow Integrated Financial Management, LLC
@@ -575,6 +603,7 @@ export const SECURITY_DOCUMENTS: GovernanceDocument[] = [
 export const PRIVACY_DOCUMENTS: GovernanceDocument[] = [dataRetentionPolicy, userAuthorityNotice, encryptionPolicy];
 
 export const TERMS_DOCUMENTS: GovernanceDocument[] = [userAuthorityNotice, operatingAgreement, foundationalCharter];
+TERMS_DOCUMENTS.push(rewardsProgramTerms);
 
 // Combine all documents into a single string for the Gemini API context
 const allDocuments = [...GOVERNANCE_DOCUMENTS, ...SECURITY_DOCUMENTS];
