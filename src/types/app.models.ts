@@ -16,6 +16,22 @@ export interface User {
   clearflowInternalLedgerDepositId?: string;
   clearflowInternalLedgerDepositedAt?: string;
   clearflowInternalLedgerStatus?: 'pending' | 'recorded' | 'error';
+  wealthMandate?: WealthMandateProfile;
+}
+
+export interface WealthMandateProfile {
+  enabled: boolean;
+  objective:
+    | 'preservation'
+    | 'balanced_growth'
+    | 'income'
+    | 'opportunistic'
+    | 'fiduciary_stability';
+  liquidityPreference: 'high' | 'balanced' | 'long_horizon';
+  riskTolerance: 'low' | 'moderate' | 'elevated';
+  timeHorizon: 'short' | 'medium' | 'long';
+  notes?: string;
+  activatedAt?: string;
 }
 
 export type EntityType = 'LLC' | 'C-Corp' | 'S-Corp' | 'Trust/Estate' | 'Non-profit' | 'Personal';

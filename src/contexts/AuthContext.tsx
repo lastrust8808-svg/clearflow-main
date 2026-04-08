@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { AppData, Entity, User } from '../types/app.models';
+import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
 import { getDocumentFile } from '../services/documentVault.service';
@@ -105,7 +106,8 @@ interface AuthContextType {
     userHandle?: string,
     password?: string,
     acceptedTerms?: boolean,
-    signerName?: string
+    signerName?: string,
+    wealthMandate?: WealthMandateProfile
   ) => void;
   completeVerification: () => void;
   logout: () => void;
@@ -1425,7 +1427,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userHandle?: string,
     password?: string,
     acceptedTerms?: boolean,
-    signerName?: string
+    signerName?: string,
+    wealthMandate?: WealthMandateProfile
   ) => {
     if (!state.appData) {
       logout();
@@ -1446,6 +1449,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       userHandle: userHandle || state.appData.user.userHandle,
       isVerified: Boolean(state.apiAccessToken) || state.appData.user.isVerified,
       primaryContactType: state.appData.user.primaryContactType || (state.apiAccessToken ? 'google' : state.appData.user.primaryContactType),
+      wealthMandate:
+        wealthMandate ||
+        state.appData.user.wealthMandate ||
+        undefined,
     };
     const acceptedAt = state.appData.user.clearflowTermsAcceptedAt || new Date().toISOString();
     const enrichedAppData = enrichAppDataFromMembershipDraft({

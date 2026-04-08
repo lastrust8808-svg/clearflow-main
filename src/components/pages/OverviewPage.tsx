@@ -10,6 +10,7 @@ import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRai
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
+import { buildWealthManagerSummary } from '../../services/wealthManager.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import RecordCard from '../ui/RecordCard';
@@ -81,6 +82,7 @@ export default function OverviewPage({
     futuresStrategies: data.futuresStrategies,
     liquidationPlans: data.liquidationPlans,
   });
+  const wealthManagerSummary = buildWealthManagerSummary(data, currentUser);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -342,6 +344,83 @@ export default function OverviewPage({
             </div>
           </div>
         ) : null}
+      </PageSection>
+
+      <PageSection
+        title="AI Wealth Manager"
+        description="Mandate-driven private wealth guidance across reserves, liquidity, trusts, obligations, metals, and collateral."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard
+            title="Wealth Mandate"
+            subtitle={wealthManagerSummary.enabled ? 'Active operator profile' : 'Not configured yet'}
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+              <div>Objective: {wealthManagerSummary.objectiveLabel}</div>
+              <div>Liquidity: {wealthManagerSummary.liquidityLabel}</div>
+              <div>Risk: {wealthManagerSummary.riskLabel}</div>
+              <div>Horizon: {wealthManagerSummary.horizonLabel}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('#aiStudio')}
+              style={{
+                marginTop: 12,
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54, 215, 255, 0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Open Wealth Desk
+            </button>
+          </RecordCard>
+
+          <RecordCard
+            title="Wealth Posture"
+            subtitle="Live operator-level summary"
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+              <div>Estimated net worth: ${wealthManagerSummary.netWorthEstimate.toLocaleString()}</div>
+              <div>Liquid assets: ${wealthManagerSummary.liquidAssetValue.toLocaleString()}</div>
+              <div>Reserve value: ${wealthManagerSummary.reserveValue.toLocaleString()}</div>
+              <div>Precious metals: ${wealthManagerSummary.preciousMetalValue.toLocaleString()}</div>
+            </div>
+          </RecordCard>
+
+          <RecordCard
+            title="Priority Guidance"
+            subtitle={`${wealthManagerSummary.insights.length} current recommendations`}
+          >
+            <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.6 }}>
+              {(wealthManagerSummary.insights.length
+                ? wealthManagerSummary.insights
+                : [
+                    {
+                      title: 'Wealth desk is ready',
+                      detail:
+                        'Set a mandate in your profile and keep assets, obligations, trust records, and reserves current to deepen recommendations.',
+                    },
+                  ]
+              ).slice(0, 3).map((item) => (
+                <div key={item.title}>
+                  <strong style={{ color: '#effcff' }}>{item.title}</strong>
+                  <div>{item.detail}</div>
+                </div>
+              ))}
+            </div>
+          </RecordCard>
+        </div>
       </PageSection>
 
       <PageSection
@@ -1323,6 +1402,11 @@ export default function OverviewPage({
               title: 'Compliance',
               subtitle: `${filingQueueCount} filing items | ${reviewItems} review items | ${amlCasesOpen} AML cases`,
               hash: '#compliance',
+            },
+            {
+              title: 'Wallets & Trading',
+              subtitle: `${data.wallets.length} wallet profiles | ${data.digitalAssets.length} digital assets`,
+              hash: '#assets',
             },
           ].map((item) => (
             <RecordCard key={item.title} title={item.title} subtitle={item.subtitle}>

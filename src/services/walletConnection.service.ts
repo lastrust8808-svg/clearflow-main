@@ -164,6 +164,10 @@ export function getWalletExecutionSupport(
   if (
     provider === 'manual' ||
     provider === 'walletconnect' ||
+    provider === 'coinbase_exchange' ||
+    provider === 'kraken' ||
+    provider === 'binance_us' ||
+    provider === 'robinhood_crypto' ||
     normalizedNetwork.includes('bitcoin') ||
     normalizedNetwork.includes('solana')
   ) {
@@ -253,6 +257,14 @@ export async function connectDigitalWallet(
   const providerLabel =
     payload.provider === 'walletconnect'
       ? 'WalletConnect'
+      : payload.provider === 'coinbase_exchange'
+        ? 'Coinbase Exchange'
+      : payload.provider === 'kraken'
+        ? 'Kraken'
+      : payload.provider === 'binance_us'
+        ? 'Binance.US'
+      : payload.provider === 'robinhood_crypto'
+        ? 'Robinhood Crypto'
       : payload.provider === 'coinbase'
         ? 'Coinbase Wallet'
         : payload.provider === 'metamask'

@@ -192,8 +192,8 @@ export default function WalletConnectionWorkspace({
 
   return (
     <PageSection
-      title="Connect Digital Wallet"
-      description="Link custody wallets to treasury and ledger accounts, then sync digital asset activity into transactions, settlements, and accounting journals."
+      title="Connect Digital Wallets & Trading Accounts"
+      description="Link custody wallets and exchange-style crypto accounts to treasury and ledger accounts, then sync digital asset activity into transactions, settlements, and accounting journals."
     >
       <div style={{ display: 'grid', gap: 16 }}>
         <div
@@ -236,7 +236,7 @@ export default function WalletConnectionWorkspace({
         </div>
 
         <div style={cardStyle}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>New wallet connection</div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>New wallet or trading connection</div>
           <div
             style={{
               display: 'grid',
@@ -254,6 +254,10 @@ export default function WalletConnectionWorkspace({
               <option value="metamask">MetaMask</option>
               <option value="coinbase">Coinbase Wallet</option>
               <option value="walletconnect">WalletConnect</option>
+              <option value="coinbase_exchange">Coinbase Exchange</option>
+              <option value="kraken">Kraken</option>
+              <option value="binance_us">Binance.US</option>
+              <option value="robinhood_crypto">Robinhood Crypto</option>
               <option value="manual">Manual custody record</option>
             </select>
             <select
@@ -310,7 +314,7 @@ export default function WalletConnectionWorkspace({
               {isConnecting ? 'Connecting...' : 'Connect Wallet'}
             </button>
             <span style={{ color: '#cbd5e1', fontSize: 13 }}>
-              Injected EVM wallets can move into live broadcast mode. Bitcoin, Solana, and manual custody records still support proof, reserve tracking, and controlled release even before direct payout execution is wired in.
+              Injected EVM wallets can move into live broadcast mode. Exchange and trading-account profiles keep custody, proof, reserve tracking, and controlled release tied into the ledger even before direct API sync is turned on.
             </span>
           </div>
         </div>

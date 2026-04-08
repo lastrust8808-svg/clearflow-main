@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import type { WealthMandateProfile } from '../../types/app.models';
 
 export const ProfileSetup: React.FC = () => {
   const auth = useAuth();
@@ -13,6 +14,15 @@ export const ProfileSetup: React.FC = () => {
       auth.currentUser?.clearflowTermsSignerName ||
       auth.currentUser?.name ||
       '',
+    wealthObjective:
+      auth.currentUser?.wealthMandate?.objective ?? 'balanced_growth',
+    liquidityPreference:
+      auth.currentUser?.wealthMandate?.liquidityPreference ?? 'balanced',
+    riskTolerance:
+      auth.currentUser?.wealthMandate?.riskTolerance ?? 'moderate',
+    timeHorizon:
+      auth.currentUser?.wealthMandate?.timeHorizon ?? 'medium',
+    wealthNotes: auth.currentUser?.wealthMandate?.notes ?? '',
   });
 
   useEffect(() => {
@@ -26,22 +36,49 @@ export const ProfileSetup: React.FC = () => {
         auth.currentUser?.clearflowTermsSignerName ||
         auth.currentUser?.name ||
         current.signerName,
+      wealthObjective:
+        auth.currentUser?.wealthMandate?.objective ?? current.wealthObjective,
+      liquidityPreference:
+        auth.currentUser?.wealthMandate?.liquidityPreference ?? current.liquidityPreference,
+      riskTolerance:
+        auth.currentUser?.wealthMandate?.riskTolerance ?? current.riskTolerance,
+      timeHorizon:
+        auth.currentUser?.wealthMandate?.timeHorizon ?? current.timeHorizon,
+      wealthNotes: auth.currentUser?.wealthMandate?.notes ?? current.wealthNotes,
     }));
   }, [
     auth.currentUser?.clearflowTermsAcceptedAt,
     auth.currentUser?.clearflowTermsSignerName,
     auth.currentUser?.email,
+    auth.currentUser?.wealthMandate?.liquidityPreference,
+    auth.currentUser?.wealthMandate?.notes,
+    auth.currentUser?.wealthMandate?.objective,
+    auth.currentUser?.wealthMandate?.riskTolerance,
+    auth.currentUser?.wealthMandate?.timeHorizon,
     auth.currentUser?.name,
     auth.currentUser?.phone,
   ]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (form.name && (form.email || form.phone)) {
+      const wealthMandate: WealthMandateProfile = {
+        enabled: true,
+        objective: form.wealthObjective as WealthMandateProfile['objective'],
+        liquidityPreference:
+          form.liquidityPreference as WealthMandateProfile['liquidityPreference'],
+        riskTolerance: form.riskTolerance as WealthMandateProfile['riskTolerance'],
+        timeHorizon: form.timeHorizon as WealthMandateProfile['timeHorizon'],
+        notes: form.wealthNotes || undefined,
+        activatedAt:
+          auth.currentUser?.wealthMandate?.activatedAt || new Date().toISOString(),
+      };
       auth.completeProfileSetup(
         form.name,
         form.email || undefined,
@@ -49,7 +86,8 @@ export const ProfileSetup: React.FC = () => {
         undefined,
         undefined,
         form.acceptedTerms,
-        form.signerName || form.name
+        form.signerName || form.name,
+        wealthMandate
       );
     }
   };
@@ -102,6 +140,98 @@ export const ProfileSetup: React.FC = () => {
                 onChange={handleChange}
                 className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
               />
+            </div>
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-slate-200">
+              <div className="font-semibold text-amber-100">AI Wealth Manager Mandate</div>
+              <div className="mt-2 leading-6 text-slate-300">
+                Set your default wealth posture once so ClearFlow can tailor liquidity,
+                reserve, trust-funding, collateral, and liquidation guidance across your
+                entities.
+              </div>
+              <div className="mt-4 grid gap-4">
+                <div>
+                  <label htmlFor="wealthObjective" className="block text-sm font-medium text-slate-300">
+                    Primary Objective
+                  </label>
+                  <select
+                    id="wealthObjective"
+                    name="wealthObjective"
+                    value={form.wealthObjective}
+                    onChange={handleChange}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                  >
+                    <option value="preservation">Preservation</option>
+                    <option value="balanced_growth">Balanced Growth</option>
+                    <option value="income">Income</option>
+                    <option value="opportunistic">Opportunistic</option>
+                    <option value="fiduciary_stability">Fiduciary Stability</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="liquidityPreference" className="block text-sm font-medium text-slate-300">
+                      Liquidity
+                    </label>
+                    <select
+                      id="liquidityPreference"
+                      name="liquidityPreference"
+                      value={form.liquidityPreference}
+                      onChange={handleChange}
+                      className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                    >
+                      <option value="high">High</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="long_horizon">Long Horizon</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="riskTolerance" className="block text-sm font-medium text-slate-300">
+                      Risk
+                    </label>
+                    <select
+                      id="riskTolerance"
+                      name="riskTolerance"
+                      value={form.riskTolerance}
+                      onChange={handleChange}
+                      className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                    >
+                      <option value="low">Low</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="elevated">Elevated</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="timeHorizon" className="block text-sm font-medium text-slate-300">
+                      Horizon
+                    </label>
+                    <select
+                      id="timeHorizon"
+                      name="timeHorizon"
+                      value={form.timeHorizon}
+                      onChange={handleChange}
+                      className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                    >
+                      <option value="short">Short</option>
+                      <option value="medium">Medium</option>
+                      <option value="long">Long</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="wealthNotes" className="block text-sm font-medium text-slate-300">
+                    Wealth Notes
+                  </label>
+                  <textarea
+                    id="wealthNotes"
+                    name="wealthNotes"
+                    value={form.wealthNotes}
+                    onChange={handleChange}
+                    rows={3}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2"
+                    placeholder="Example: keep trusts liquid, use metals as collateral before sale, preserve principal, emphasize income."
+                  />
+                </div>
+              </div>
             </div>
             <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
               <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>

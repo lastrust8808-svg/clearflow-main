@@ -318,6 +318,10 @@ export type WalletConnectionProvider =
   | 'metamask'
   | 'coinbase'
   | 'walletconnect'
+  | 'coinbase_exchange'
+  | 'kraken'
+  | 'binance_us'
+  | 'robinhood_crypto'
   | 'manual';
 
 export type WalletConnectionStatus =
