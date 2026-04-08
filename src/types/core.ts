@@ -524,6 +524,13 @@ export interface EntityRecord {
   representativeRole?: string;
   authorityAttestedAt?: string;
   authorityAttestationStatement?: string;
+  authorityProofDocumentId?: string;
+  authorityProofUploadedAt?: string;
+  authorityProofStatus?: 'missing' | 'review' | 'matched' | 'similar_match' | 'mismatch';
+  authorityProofSummary?: string;
+  authorityProofNamedPartyNames?: string[];
+  authorityProofRequiredPartyNames?: string[];
+  authorityTransactionsPaused?: boolean;
   entityAccess?: {
     googleStorageEmail?: string;
     storageMode?: 'operator_google' | 'entity_google' | 'internal_only';

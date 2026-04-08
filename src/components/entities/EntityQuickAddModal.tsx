@@ -14,6 +14,7 @@ const REPRESENTATIVE_ROLE_PRESETS: Record<EntityType, string[]> = {
 interface EntityQuickAddModalProps {
   open: boolean;
   currentUserEmail?: string;
+  currentUserName?: string;
   onClose: () => void;
   onSubmit: (payload: {
     name: string;
@@ -28,7 +29,8 @@ interface EntityQuickAddModalProps {
     representativeRole: string;
     generateDispatchIdentity: boolean;
     authorityAttested: boolean;
-  }) => void;
+    authorityProofFile: File | null;
+  }) => void | Promise<void>;
 }
 
 const overlayStyle: CSSProperties = {
@@ -80,6 +82,7 @@ const buttonStyle: CSSProperties = {
 export default function EntityQuickAddModal({
   open,
   currentUserEmail,
+  currentUserName,
   onClose,
   onSubmit,
 }: EntityQuickAddModalProps) {
@@ -97,6 +100,8 @@ export default function EntityQuickAddModal({
   const [representativeRole, setRepresentativeRole] = useState('');
   const [generateDispatchIdentity, setGenerateDispatchIdentity] = useState(true);
   const [authorityAttested, setAuthorityAttested] = useState(false);
+  const [authorityProofFile, setAuthorityProofFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -112,6 +117,8 @@ export default function EntityQuickAddModal({
     setRepresentativeRole('');
     setGenerateDispatchIdentity(true);
     setAuthorityAttested(false);
+    setAuthorityProofFile(null);
+    setIsSubmitting(false);
   }, [currentUserEmail, open]);
 
   if (!open) return null;
@@ -127,7 +134,35 @@ export default function EntityQuickAddModal({
     Boolean(trimmedName) &&
     Boolean(trimmedRepresentativeName) &&
     Boolean(trimmedRepresentativeRole) &&
-    authorityAttested;
+    authorityAttested &&
+    Boolean(authorityProofFile);
+
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        name,
+        displayName,
+        type,
+        primaryEmail,
+        googleStorageEmail,
+        storageMode,
+        jurisdiction,
+        country,
+        representativeName,
+        representativeRole,
+        generateDispatchIdentity,
+        authorityAttested,
+        authorityProofFile,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div style={overlayStyle}>
@@ -232,39 +267,40 @@ export default function EntityQuickAddModal({
             />
             <span>{authorityStatement}</span>
           </label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
+              Upload a certificate of trust, certificate of existence, or similar authority proof. ClearFlow will compare named parties against {currentUserName || 'the signed-in operator'} and hold transaction release if the names do not line up or additional members/signers need to be added.
+            </div>
+            <input
+              type="file"
+              onChange={(event) => setAuthorityProofFile(event.target.files?.[0] || null)}
+              style={inputStyle}
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.txt"
+            />
+            <div style={{ color: authorityProofFile ? '#cbd5e1' : '#94a3b8', fontSize: 12 }}>
+              {authorityProofFile
+                ? `Authority proof selected: ${authorityProofFile.name}`
+                : 'Authority proof is required before creating the entity.'}
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={onClose} style={buttonStyle}>Cancel</button>
           <button
             type="button"
-            disabled={!canSubmit}
-            onClick={() =>
-              onSubmit({
-                name,
-                displayName,
-                type,
-                primaryEmail,
-                googleStorageEmail,
-                storageMode,
-                jurisdiction,
-                country,
-                representativeName,
-                representativeRole,
-                generateDispatchIdentity,
-                authorityAttested,
-              })
-            }
+            disabled={!canSubmit || isSubmitting}
+            onClick={handleSubmit}
             style={{
               ...buttonStyle,
-              background: canSubmit
+              background: canSubmit && !isSubmitting
                 ? 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))'
                 : 'rgba(71,85,105,0.6)',
-              borderColor: canSubmit ? 'rgba(126,242,255,0.28)' : 'rgba(148,163,184,0.2)',
-              cursor: canSubmit ? 'pointer' : 'not-allowed',
-              opacity: canSubmit ? 1 : 0.75,
+              borderColor: canSubmit && !isSubmitting ? 'rgba(126,242,255,0.28)' : 'rgba(148,163,184,0.2)',
+              cursor: canSubmit && !isSubmitting ? 'pointer' : 'not-allowed',
+              opacity: canSubmit && !isSubmitting ? 1 : 0.75,
             }}
           >
-            Create Entity
+            {isSubmitting ? 'Creating Entity...' : 'Create Entity'}
           </button>
         </div>
       </div>

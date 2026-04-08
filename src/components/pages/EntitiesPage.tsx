@@ -15,6 +15,8 @@ import {
   buildEntityDispatchIdentity,
   buildEntitySealDesign,
 } from '../../services/dispatchIdentity.service';
+import { saveDocumentFile } from '../../services/documentVault.service';
+import { analyzeAuthorityProofFile } from '../../services/authorityProofMatching.service';
 
 interface EntitiesPageProps {
   data: CoreDataBundle;
@@ -68,8 +70,10 @@ export default function EntitiesPage({
   const authorityReadyEntities = data.entities.filter((entity) => {
     const hasRepresentative = Boolean(entity.representativeName && entity.representativeRole);
     const hasAttestation = Boolean(entity.authorityAttestedAt);
+    const proofReady =
+      entity.authorityProofStatus === 'matched' || entity.authorityProofStatus === 'similar_match';
     const hasAuthorityReview = authorityReviewTags.some((tag) => tag.entityId === entity.id);
-    return hasRepresentative && hasAttestation && !hasAuthorityReview;
+    return hasRepresentative && hasAttestation && proofReady && !hasAuthorityReview;
   }).length;
   const authorityWatchEntities = data.entities.filter((entity) =>
     authorityReviewTags.some((tag) => tag.entityId === entity.id),
@@ -127,8 +131,9 @@ export default function EntitiesPage({
       <EntityQuickAddModal
         open={isEntityModalOpen}
         currentUserEmail={currentUser?.email}
+        currentUserName={currentUser?.name}
         onClose={() => setIsEntityModalOpen(false)}
-        onSubmit={(payload) => {
+        onSubmit={async (payload) => {
           if (!payload.authorityAttested) {
             return;
           }
@@ -140,11 +145,23 @@ export default function EntitiesPage({
           const authorityReviewTagId = `cmp-${stamp}`;
           const entityDisplayName = payload.displayName.trim() || payload.name.trim();
           const normalizedRole = payload.representativeRole.trim().toLowerCase();
+          const authorityProofAnalysis = await analyzeAuthorityProofFile({
+            file: payload.authorityProofFile,
+            operatorName: currentUser?.name || currentUser?.clearflowTermsSignerName || null,
+            representativeName: payload.representativeName,
+            entityName: entityDisplayName,
+          });
+          const proofFileMetadata = payload.authorityProofFile
+            ? await saveDocumentFile(`entity-authority-proof-${entityId}`, payload.authorityProofFile)
+            : null;
           const requiresAuthorityReview =
             payload.type === 'other' ||
             normalizedRole.includes('agent') ||
             normalizedRole.includes('attorney') ||
-            normalizedRole.includes('authorized representative');
+            normalizedRole.includes('authorized representative') ||
+            authorityProofAnalysis.status === 'missing' ||
+            authorityProofAnalysis.status === 'review' ||
+            authorityProofAnalysis.status === 'mismatch';
           const dispatchIdentity = payload.generateDispatchIdentity
             ? buildEntityDispatchIdentity({
                 entityId,
@@ -175,6 +192,15 @@ export default function EntitiesPage({
                 representativeRole: payload.representativeRole.trim() || undefined,
                 authorityAttestedAt: new Date().toISOString(),
                 authorityAttestationStatement: `${payload.representativeName.trim() || 'Authorized representative'} acting as ${payload.representativeRole.trim() || 'authorized representative'} affirmed legal authority to establish and operate ${entityDisplayName} in ClearFlow.`,
+                authorityProofDocumentId: documentId,
+                authorityProofUploadedAt: new Date().toISOString(),
+                authorityProofStatus: authorityProofAnalysis.status,
+                authorityProofSummary: authorityProofAnalysis.summary,
+                authorityProofNamedPartyNames: authorityProofAnalysis.extractedNames,
+                authorityProofRequiredPartyNames: authorityProofAnalysis.requiredAdditionalNames,
+                authorityTransactionsPaused:
+                  authorityProofAnalysis.status !== 'matched' &&
+                  authorityProofAnalysis.status !== 'similar_match',
                 entityAccess: {
                   googleStorageEmail:
                     payload.googleStorageEmail.trim() ||
@@ -270,29 +296,48 @@ export default function EntitiesPage({
                 linkedDocumentIds: [documentId],
                 notes: `Created automatically during entity setup. Operator attested that ${payload.representativeName.trim() || 'the representative'} is authorized to establish and operate ${entityDisplayName} in ClearFlow as ${payload.representativeRole.trim() || 'an authorized representative'}.`,
               },
+              ...authorityProofAnalysis.requiredAdditionalNames.map((personName, index) => ({
+                id: `${authorityId}-additional-${index + 1}`,
+                entityId,
+                personName,
+                recordType:
+                  payload.type === 'trust'
+                    ? 'trustee_authority'
+                    : ('manager_authority' as const),
+                effectiveDate: new Date().toISOString().slice(0, 10),
+                clientAuthorizationStatus: 'unknown',
+                approvalStatus: 'pending_acceptance' as const,
+                linkedDocumentIds: [documentId],
+                notes: `Named in uploaded authority proof during onboarding. Add ${personName} to the workspace or clear the authority review before external transactions.`,
+              })),
               ...prev.authorityRecords,
             ],
             documents: [
               {
                 id: documentId,
                 entityId,
-                title: `${entityDisplayName} Setup Packet`,
+                title: `${entityDisplayName} Authority Proof Packet`,
                 category: 'authority_record',
                 date: new Date().toISOString().slice(0, 10),
-                status: 'draft',
+                status: 'final',
                 templateKey: 'formation_packet',
-                outputStatus: 'drafting',
+                outputStatus: requiresAuthorityReview ? 'review' : 'ready',
                 linkedAuthorityRecordIds: [authorityId],
                 linkedTokenIds: [tokenId],
-                summary: 'Initial setup packet created automatically from the entity profile flow.',
+                summary: authorityProofAnalysis.summary,
+                fileName: proofFileMetadata?.fileName || payload.authorityProofFile?.name,
+                mimeType: proofFileMetadata?.mimeType || payload.authorityProofFile?.type,
+                sizeBytes: proofFileMetadata?.sizeBytes || payload.authorityProofFile?.size,
+                uploadedAt: proofFileMetadata?.uploadedAt || new Date().toISOString(),
+                sourceFileId: proofFileMetadata?.sourceFileId,
                 storageOwner: 'user_owned',
                 retentionClass: 'authority',
                 externalStorageTarget: 'google_drive',
                 externalStorageStatus: 'ready',
                 storageNotes:
-                  'Entity setup packet is workspace-owned and ready to route into the user-controlled Google Drive archive.',
+                  'Entity authority proof packet is workspace-owned and ready to route into the user-controlled Google Drive archive.',
                 generatedBody: dispatchIdentity
-                  ? `# ${entityDisplayName} Setup Packet\n\n## Authority Attestation\n- Representative: ${payload.representativeName.trim() || entityDisplayName}\n- Capacity: ${payload.representativeRole.trim() || 'Authorized representative'}\n- Attestation: I affirm that I have the legal authority to establish, administer, connect, and operate ${entityDisplayName} in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
+                  ? `# ${entityDisplayName} Authority Proof Packet\n\n## Authority Attestation\n- Representative: ${payload.representativeName.trim() || entityDisplayName}\n- Capacity: ${payload.representativeRole.trim() || 'Authorized representative'}\n- Attestation: I affirm that I have the legal authority to establish, administer, connect, and operate ${entityDisplayName} in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.\n- Proof analysis: ${authorityProofAnalysis.summary}\n- Uploaded proof: ${payload.authorityProofFile?.name || 'Not retained'}\n\n## Named Parties Found\n${authorityProofAnalysis.extractedNames.length ? authorityProofAnalysis.extractedNames.map((name) => `- ${name}`).join('\n') : '- No names extracted automatically'}\n\n## Required Additional Parties\n${authorityProofAnalysis.requiredAdditionalNames.length ? authorityProofAnalysis.requiredAdditionalNames.map((name) => `- ${name}`).join('\n') : '- None'}\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
                       entityName: entityDisplayName,
                       jurisdiction: payload.jurisdiction.trim() || payload.country.trim() || undefined,
                       template: 'round',
@@ -314,7 +359,7 @@ export default function EntitiesPage({
                     category: 'authority',
                     status: 'review',
                     linkedDocumentIds: [documentId],
-                    notes: `Entity was added using representative capacity "${payload.representativeRole.trim()}". Review underlying authority if bank, counterparty, or compliance onboarding requires stronger evidence.`,
+                    notes: `Entity was added using representative capacity "${payload.representativeRole.trim()}". ${authorityProofAnalysis.summary} External transactions, bank setup, and release actions should remain paused until the proof is rechecked${authorityProofAnalysis.requiredAdditionalNames.length ? ` and ${authorityProofAnalysis.requiredAdditionalNames.join(', ')} ${authorityProofAnalysis.requiredAdditionalNames.length === 1 ? 'is' : 'are'} added to the account` : ''}.`,
                   },
                   ...prev.complianceTags,
                 ]
