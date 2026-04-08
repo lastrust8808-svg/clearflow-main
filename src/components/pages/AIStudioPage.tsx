@@ -24,6 +24,7 @@ import { buildRealEstateSecuritizationSummary } from '../../services/realEstateS
 import { buildRemittanceRailControls } from '../../services/settlementRailing.service';
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
+import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -411,6 +412,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
   const transactionProofChains = useMemo(() => buildTransactionProofChainViews(data), [data]);
   const bondLifecycleViews = useMemo(() => buildBondLifecycleViews(data), [data]);
+  const trustFundingViews = useMemo(() => buildTrustFundingViews(data), [data]);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -778,6 +780,57 @@ Trust: ${primaryEntity.displayName || primaryEntity.name}
 - Beneficiary communication log
 - Authority and duty checklist
 - Reserve and remittance review page
+`,
+    });
+
+    void appendDocument(document);
+  };
+
+  const launchTrustFundingPacket = () => {
+    if (!primaryEntity) {
+      return;
+    }
+
+    const trustFunding =
+      trustFundingViews.find((item) => item.entity.id === primaryEntity.id) ||
+      trustFundingViews[0];
+    const document = buildGeneratedDocument({
+      entityId: primaryEntity.id,
+      title: `${primaryEntity.displayName || primaryEntity.name} Trust Funding Packet`,
+      category: 'financial',
+      summary:
+        'Trust funding packet covering initial funding, operating liquidity, income-bearing support, and governing-term review for fiduciary accounting.',
+      retentionClass: 'financial_evidence',
+      body: `# Trust Funding Packet
+
+Trust: ${primaryEntity.displayName || primaryEntity.name}
+
+## Funding Objective
+Confirm that the trust is actually funded with liquid operating assets, titled property or claims, and enough governing support for fiduciary accounting to reflect real rights and restrictions.
+
+## Current Funding Posture
+- Readiness: ${trustFunding?.readiness || 'underfunded'}
+- Liquid funding: ${(trustFunding?.liquidFunding || 0).toLocaleString()}
+- Reserve funding: ${(trustFunding?.reserveFunding || 0).toLocaleString()}
+- Titled assets: ${(trustFunding?.titledAssetValue || 0).toLocaleString()}
+- Income-bearing support: ${(trustFunding?.incomeBearingValue || 0).toLocaleString()}
+- Governing documents on file: ${trustFunding?.governingDocumentCount || 0}
+
+## Funding Checklist
+- Initial cash or account transfer recorded
+- Title or assignment support uploaded for trust assets
+- Governing trust agreement uploaded
+- Trustee authority and acceptance records linked
+- Interest, distribution, and reserve terms reviewed into accounting posture
+
+## Accounting Interpretation Guardrails
+- Do not treat an unfunded trust as operationally cash-funded.
+- Keep principal, income, reserve, and distribution posture distinguishable.
+- Reflect uploaded governing terms only to the extent they are actually supported by the uploaded trust records and titled assets.
+- Recheck beneficiaries, trustees, and any investment or sweep language before treating projected income as distributable cash.
+
+## Operator Notes
+${trustFunding?.summary || 'No trust funding summary is available yet. Add liquid funding, titled assets, and governing records first.'}
 `,
     });
 
@@ -4280,6 +4333,14 @@ ${scopedCases
       lane: 'trust',
       actionLabel: 'Create Packet',
       onAction: launchTrustAdministrationPacket,
+    },
+    {
+      title: 'Trust Funding Packet',
+      subtitle: 'Initial funding, income support, and fiduciary accounting posture',
+      detail: 'Create a trust-funding packet so operating liquidity, titled assets, and uploaded governing terms can be reviewed together before relying on trust accounting outputs.',
+      lane: 'trust',
+      actionLabel: 'Create Funding Packet',
+      onAction: launchTrustFundingPacket,
     },
     {
       title: 'Promissory Note Into Ledger',

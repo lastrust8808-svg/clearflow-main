@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
+import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -43,6 +44,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
     liquidationPlans: data.liquidationPlans,
   });
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
+  const trustFundingViews = buildTrustFundingViews(data);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -71,6 +73,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
         <StatCard label="High Howey Risk" value={realEstateSecuritySummary.highRiskCount} />
+        <StatCard label="Trust Funding Files" value={trustFundingViews.length} />
         <StatCard label="Digital Assets" value={data.digitalAssets.length} />
         <StatCard label="Wallets" value={data.wallets.length} />
         <StatCard label="Smart Contract Positions" value={data.smartContractPositions.length} />
@@ -126,6 +129,37 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
               {review.summary}
             </WorkbenchRecordCard>
           ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Trust Funding & Income Rails"
+        description="See whether each trust is actually funded to operate, where the liquid and titled support sits, and how much governing support is available to drive fiduciary accounting."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          {trustFundingViews.length === 0 ? (
+            <WorkbenchRecordCard title="No trust funding rails yet" subtitle="Add a trust entity to begin">
+              Once a trust exists, ClearFlow will read its bank balances, reserve accounts, titled assets, income-bearing paper, and uploaded governing records together so administration is based on actual funding instead of assumptions.
+            </WorkbenchRecordCard>
+          ) : (
+            trustFundingViews.map((view) => (
+              <WorkbenchRecordCard
+                key={view.entity.id}
+                title={view.entity.displayName || view.entity.name}
+                subtitle={`trust | ${view.readiness}`}
+                summaryItems={[
+                  { label: 'Liquid Funding', value: view.liquidFunding.toLocaleString() },
+                  { label: 'Reserve Funding', value: view.reserveFunding.toLocaleString() },
+                  { label: 'Titled Assets', value: view.titledAssetValue.toLocaleString() },
+                  { label: 'Income-Bearing', value: view.incomeBearingValue.toLocaleString() },
+                  { label: 'Governing Docs', value: String(view.governingDocumentCount) },
+                  { label: 'All Trust Docs', value: String(view.trustDocumentCount) },
+                ]}
+              >
+                {view.summary}
+              </WorkbenchRecordCard>
+            ))
+          )}
         </div>
       </PageSection>
 
