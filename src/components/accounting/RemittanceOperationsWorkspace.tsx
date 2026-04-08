@@ -147,6 +147,19 @@ function isOutgoingRemittance(payment: PaymentRecord) {
   );
 }
 
+function resolveAuthorityHoldReason(payment: PaymentRecord) {
+  const candidates = [
+    payment.complianceConfirmationNote,
+    payment.notes,
+    payment.settlementExecution?.executionReason,
+  ].filter((value): value is string => Boolean(value));
+
+  return (
+    candidates.find((value) => value.toLowerCase().includes('authority review')) ||
+    candidates.find((value) => value.toLowerCase().includes('authority-release hold'))
+  );
+}
+
 export default function RemittanceOperationsWorkspace({
   payments,
   customers,
@@ -445,16 +458,22 @@ export default function RemittanceOperationsWorkspace({
                 !needsComplianceConfirmation &&
                 (payment.settlementExecution?.processorStatus === 'requires_review' ||
                   payment.settlementExecution?.processorStatus === 'blocked');
+              const authorityHoldReason = resolveAuthorityHoldReason(payment);
+              const authorityHoldOpen = Boolean(authorityHoldReason);
               const canConfirmCompliance =
-                needsComplianceConfirmation && payment.releaseStatus !== 'released';
+                needsComplianceConfirmation &&
+                payment.releaseStatus !== 'released' &&
+                !authorityHoldOpen;
               const canApprove =
                 !needsReview &&
                 !needsComplianceConfirmation &&
+                !authorityHoldOpen &&
                 payment.approvalStatus !== 'approved' &&
                 payment.releaseStatus !== 'released';
               const canRelease =
                 !needsReview &&
                 !needsComplianceConfirmation &&
+                !authorityHoldOpen &&
                 payment.releaseStatus !== 'released' &&
                 (payment.approvalStatus === 'approved' ||
                   payment.approvalStatus === 'not_required');
@@ -516,6 +535,9 @@ export default function RemittanceOperationsWorkspace({
                       <span style={badgeStyle(needsReview || needsComplianceConfirmation ? 'warn' : 'info')}>
                         {payment.settlementExecution?.processorStatus || payment.status}
                       </span>
+                      {authorityHoldOpen ? (
+                        <span style={badgeStyle('warn')}>authority hold</span>
+                      ) : null}
                       <span
                         style={badgeStyle(
                           payment.complianceConfirmationStatus === 'confirmed'
@@ -680,6 +702,12 @@ export default function RemittanceOperationsWorkspace({
                       <strong style={{ color: '#e5e7eb' }}>Communication / Validation</strong>
                       <div>{communicationValidationDetail}</div>
                     </div>
+                    {authorityHoldOpen ? (
+                      <div>
+                        <strong style={{ color: '#e5e7eb' }}>Authority Hold</strong>
+                        <div>{authorityHoldReason}</div>
+                      </div>
+                    ) : null}
                     {payment.method === 'check' ? (
                       <div>
                         <strong style={{ color: '#e5e7eb' }}>Issued Check Packet</strong>
@@ -760,6 +788,7 @@ export default function RemittanceOperationsWorkspace({
                     }}
                   >
                     {executionClassification.detail}{' '}
+                    {authorityHoldOpen ? `${authorityHoldReason} ` : ''}
                     {checkExecutionDetail ? `${checkExecutionDetail} ` : ''}
                     {postalDeliveryDetail ? `${postalDeliveryDetail} ` : ''}
                     {settlementFlow?.erpCashflowSummary ||
@@ -998,6 +1027,21 @@ export default function RemittanceOperationsWorkspace({
                   {payment.direction} | {payment.status} | {payment.method} | {payment.currency}{' '}
                   {payment.amount.toLocaleString()}
                 </div>
+                {resolveAuthorityHoldReason(payment) ? (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(251,191,36,0.28)',
+                      background: 'rgba(120,53,15,0.18)',
+                      color: '#fde68a',
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {resolveAuthorityHoldReason(payment)}
+                  </div>
+                ) : null}
               </div>
             ))
           )}

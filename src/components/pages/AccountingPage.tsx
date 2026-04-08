@@ -8258,6 +8258,52 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             getSubtitle={(record) =>
               `${record.status} | ${record.dischargeMethod} | ${formatCurrency(record.amount, record.currency)}`
             }
+            getSummaryItems={(record) => {
+              const linkedPayment = payments.find((item) => item.id === record.linkedPaymentId);
+              const authorityHoldOpen = Boolean(
+                [linkedPayment?.complianceConfirmationNote, linkedPayment?.notes, linkedPayment?.settlementExecution?.executionReason]
+                  .filter((value): value is string => Boolean(value))
+                  .find((value) => value.toLowerCase().includes('authority review')),
+              );
+
+              return [
+                { label: 'Receiver', value: record.receiverName || 'Pending' },
+                { label: 'Reference', value: record.couponReference || 'Pending' },
+                { label: 'Payment', value: linkedPayment?.status || 'Not linked' },
+                { label: 'Release', value: linkedPayment?.releaseStatus || 'Not set' },
+                { label: 'Authority', value: authorityHoldOpen ? 'Hold open' : 'Clear' },
+                { label: 'Due', value: record.dueDate || 'Not set' },
+              ];
+            }}
+            renderDetails={(record) => {
+              const linkedPayment = payments.find((item) => item.id === record.linkedPaymentId);
+              const authorityHoldReason =
+                [linkedPayment?.complianceConfirmationNote, linkedPayment?.notes, linkedPayment?.settlementExecution?.executionReason]
+                  .filter((value): value is string => Boolean(value))
+                  .find((value) => value.toLowerCase().includes('authority review'));
+
+              return (
+                <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                  <div>
+                    Receiver account: {record.receiverAccountLabel || 'Pending'} | linked payment{' '}
+                    {linkedPayment?.id || 'not linked'} | release {linkedPayment?.releaseStatus || 'not set'}
+                  </div>
+                  {authorityHoldReason ? (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(251,191,36,0.28)',
+                        background: 'rgba(120,53,15,0.18)',
+                        color: '#fde68a',
+                      }}
+                    >
+                      {authorityHoldReason}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }}
             onSave={(nextRecord) =>
               setData((prev) => ({
                 ...prev,
