@@ -521,6 +521,17 @@ export default function AccountingPage({ data, setData }: AccountingPageProps) {
         : undefined,
     [activeEntityAuthorityReviewTags.length, defaultEntity],
   );
+  const focusActiveEntityAuthorityQueue = () => {
+    if (defaultEntity) {
+      setData((prev) => ({
+        ...prev,
+        activeEntityId: defaultEntity.id,
+      }));
+    }
+    if (typeof window !== 'undefined') {
+      window.location.hash = '#entities';
+    }
+  };
 
   const mapSettlementPathToPaymentRail = (
     path: SettlementPath,
@@ -8690,6 +8701,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             description="Connect bank accounts, set merchant rules, and post live statement activity into the operational ledger with auto-reconcile controls."
           >
             <BankFeedWorkspace
+              entityLabel={defaultEntity?.displayName || defaultEntity?.name}
+              authorityReviewOpen={activeEntityAuthorityReviewTags.length > 0}
+              authorityReviewCount={activeEntityAuthorityReviewTags.length}
+              authorityReviewSummary={activeEntityAuthorityReviewSummary}
+              onResolveAuthority={focusActiveEntityAuthorityQueue}
               bankAccounts={
                 defaultEntity
                   ? bankAccounts.filter((item) => item.entityId === defaultEntity.id)

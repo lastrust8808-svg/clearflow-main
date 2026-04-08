@@ -15,6 +15,11 @@ interface BankFeedWorkspaceProps {
   ledgerAccounts: LedgerAccountRecord[];
   rules: BankFeedRuleRecord[];
   entries: BankFeedEntryRecord[];
+  entityLabel?: string;
+  authorityReviewOpen?: boolean;
+  authorityReviewCount?: number;
+  authorityReviewSummary?: string;
+  onResolveAuthority?: () => void;
   onConnectNewInstitution: () => void;
   onAddConnectedAccount: () => void;
   onAddManualBankAccount: () => void;
@@ -46,6 +51,11 @@ export default function BankFeedWorkspace({
   ledgerAccounts,
   rules,
   entries,
+  entityLabel,
+  authorityReviewOpen = false,
+  authorityReviewCount = 0,
+  authorityReviewSummary,
+  onResolveAuthority,
   onConnectNewInstitution,
   onAddConnectedAccount,
   onAddManualBankAccount,
@@ -149,6 +159,49 @@ export default function BankFeedWorkspace({
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
+      {authorityReviewOpen ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            borderRadius: 18,
+            padding: 18,
+            background: 'rgba(120,53,15,0.2)',
+            border: '1px solid rgba(251,191,36,0.28)',
+            color: '#fde68a',
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Authority hold on banking setup</div>
+          <div style={{ lineHeight: 1.6 }}>
+            {entityLabel || 'This entity'} still has open authority review, so bank connection and
+            live execution setup should stay staged until that authority posture is cleared.
+            {authorityReviewCount ? ` Open authority items: ${authorityReviewCount}.` : ''}
+          </div>
+          {authorityReviewSummary ? (
+            <div style={{ lineHeight: 1.6 }}>{authorityReviewSummary}</div>
+          ) : null}
+          {onResolveAuthority ? (
+            <div>
+              <button
+                type="button"
+                onClick={onResolveAuthority}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(251,191,36,0.3)',
+                  background: 'rgba(15,23,42,0.4)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Focus Authority Queue
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button
           type="button"
@@ -163,6 +216,7 @@ export default function BankFeedWorkspace({
             cursor: 'pointer',
             fontWeight: 700,
           }}
+          disabled={authorityReviewOpen}
         >
           Connect Institution Login
         </button>
@@ -178,6 +232,7 @@ export default function BankFeedWorkspace({
             cursor: 'pointer',
             fontWeight: 700,
           }}
+          disabled={authorityReviewOpen}
         >
           Add Connected Provider
         </button>
@@ -194,6 +249,7 @@ export default function BankFeedWorkspace({
             cursor: 'pointer',
             fontWeight: 700,
           }}
+          disabled={authorityReviewOpen}
         >
           Add Bank Account Manually
         </button>
@@ -364,6 +420,7 @@ export default function BankFeedWorkspace({
                   cursor: 'pointer',
                   fontWeight: 700,
                 }}
+                disabled={authorityReviewOpen}
               >
                 Connect Institution Login
               </button>
@@ -379,6 +436,7 @@ export default function BankFeedWorkspace({
                   cursor: 'pointer',
                   fontWeight: 700,
                 }}
+                disabled={authorityReviewOpen}
               >
                 Add Connected Provider
               </button>
@@ -446,8 +504,9 @@ export default function BankFeedWorkspace({
                   border: '1px solid rgba(126, 242, 255, 0.28)',
                   background: 'rgba(54, 215, 255, 0.12)',
                   color: '#fff',
-                  cursor: 'pointer',
+                  cursor: authorityReviewOpen ? 'not-allowed' : 'pointer',
                 }}
+                disabled={authorityReviewOpen}
               >
                 {account.connectionType === 'plaid_connected' ? 'Reconnect Feed' : 'Connect Bank'}
               </button>
