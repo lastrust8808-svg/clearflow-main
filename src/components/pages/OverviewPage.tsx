@@ -13,6 +13,7 @@ import { buildCapitalStrategySummary } from '../../services/capitalStrategy.serv
 import { buildWealthManagerSummary } from '../../services/wealthManager.service';
 import { buildRewardsProgramSummary } from '../../services/rewardsProgram.service';
 import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
+import { buildWorkspaceGuidanceSummary } from '../../services/workspaceGuidance.service';
 import { useAuth } from '../../hooks/useAuth';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -89,6 +90,7 @@ export default function OverviewPage({
   const wealthManagerSummary = buildWealthManagerSummary(data, currentUser);
   const rewardsSummary = buildRewardsProgramSummary(data, auth.appData, currentUser);
   const revenueSummary = buildRevenueArchitectureSummary(data);
+  const workspaceGuidance = buildWorkspaceGuidanceSummary(data);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -213,6 +215,157 @@ export default function OverviewPage({
           records, with settlement-to-cash controls now folded into the same operating view.
         </p>
       </div>
+
+      <PageSection
+        title="Required Actions"
+        description="The shortest path through the platform. ClearFlow stays deep underneath, but this layer keeps the next move obvious."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            <RecordCard
+              title="Required From You"
+              subtitle={`${workspaceGuidance.requiredActions.length} active item(s)`}
+            >
+              <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.65 }}>
+                {workspaceGuidance.requiredActions.length > 0 ? (
+                  workspaceGuidance.requiredActions.map((item) => (
+                    <div
+                      key={item.title}
+                      style={{
+                        padding: 12,
+                        borderRadius: 12,
+                        border:
+                          item.severity === 'high'
+                            ? '1px solid rgba(251,191,36,0.24)'
+                            : '1px solid rgba(148,163,184,0.18)',
+                        background:
+                          item.severity === 'high'
+                            ? 'rgba(120,53,15,0.16)'
+                            : 'rgba(15,23,42,0.28)',
+                        display: 'grid',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#effcff' }}>{item.title}</div>
+                      <div>{item.description}</div>
+                      <button
+                        type="button"
+                        onClick={() => navigate(item.route)}
+                        style={{
+                          justifySelf: 'start',
+                          padding: '8px 12px',
+                          minHeight: 38,
+                          borderRadius: 10,
+                          border: '1px solid rgba(126,242,255,0.28)',
+                          background: 'rgba(54, 215, 255, 0.1)',
+                          color: '#effcff',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item.routeLabel}
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div>
+                    No urgent setup blockers are open right now. Use the desk guides to move
+                    between boards without losing the deeper capabilities underneath.
+                  </div>
+                )}
+              </div>
+            </RecordCard>
+
+            <RecordCard title="How To Use These Desks" subtitle="Plain-language routing">
+              <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.65 }}>
+                {workspaceGuidance.deskGuides.slice(0, 4).map((guide) => (
+                  <div
+                    key={guide.title}
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      border: '1px solid rgba(148,163,184,0.18)',
+                      background: 'rgba(15,23,42,0.28)',
+                      display: 'grid',
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: '#effcff' }}>{guide.title}</div>
+                    <div style={{ color: 'var(--cf-muted)' }}>{guide.subtitle}</div>
+                    <div>{guide.description}</div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(guide.route)}
+                      style={{
+                        justifySelf: 'start',
+                        padding: '8px 12px',
+                        minHeight: 38,
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54, 215, 255, 0.1)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {guide.routeLabel}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </RecordCard>
+          </div>
+
+          {workspaceGuidance.entityChecklists.length > 0 ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {workspaceGuidance.entityChecklists.slice(0, 4).map((entity) => (
+                <RecordCard
+                  key={entity.entityId}
+                  title={entity.entityLabel}
+                  subtitle={`${entity.readyCount}/${entity.totalCount} readiness items complete`}
+                >
+                  <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.6 }}>
+                    {entity.items.map((item) => (
+                      <div key={item.label}>
+                        {item.done ? 'Done' : 'Pending'} | {item.label}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('#entities')}
+                    style={{
+                      marginTop: 12,
+                      padding: '8px 12px',
+                      minHeight: 38,
+                      borderRadius: 10,
+                      border: '1px solid rgba(126,242,255,0.28)',
+                      background: 'rgba(54, 215, 255, 0.1)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Open Entity Board
+                  </button>
+                </RecordCard>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </PageSection>
 
       <PageSection
         title="Operator Workspace"
