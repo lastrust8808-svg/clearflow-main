@@ -10,6 +10,11 @@ import {
   connectDigitalWallet,
   syncConnectedWallet,
 } from '../../services/walletConnection.service';
+import {
+  buildWalletActionSummary,
+  getWalletProviderResource,
+  listWalletProviderResources,
+} from '../../services/walletResourceCatalog.service';
 
 interface WalletConnectionWorkspaceProps {
   data: CoreDataBundle;
@@ -99,13 +104,18 @@ export default function WalletConnectionWorkspace({
       syncing: data.wallets.filter((wallet) => wallet.connectionStatus === 'syncing').length,
       treasuryLinked: data.wallets.filter((wallet) => wallet.linkedTreasuryAccountId).length,
       evmReady: data.wallets.filter((wallet) =>
-        ['ethereum', 'base', 'polygon'].some((network) =>
-          wallet.network.toLowerCase().includes(network)
+        ['ethereum', 'base', 'polygon'].some((label) =>
+          wallet.network.toLowerCase().includes(label)
         )
       ).length,
       liveBroadcast: data.wallets.filter((wallet) => wallet.executionSupport === 'live_broadcast').length,
     }),
     [data.wallets]
+  );
+  const providerResources = useMemo(() => listWalletProviderResources(), []);
+  const selectedProviderResource = useMemo(
+    () => getWalletProviderResource(provider),
+    [provider]
   );
 
   const resetForm = () => {
@@ -239,6 +249,24 @@ export default function WalletConnectionWorkspace({
           <div style={{ fontWeight: 700, fontSize: 16 }}>New wallet or trading connection</div>
           <div
             style={{
+              padding: '12px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(148,163,184,0.18)',
+              background: 'rgba(15,23,42,0.22)',
+              display: 'grid',
+              gap: 8,
+            }}
+          >
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{selectedProviderResource.label}</div>
+            <div style={{ color: '#cbd5e1', fontSize: 13 }}>{selectedProviderResource.bestFor}</div>
+            <div style={{ color: '#94a3b8', fontSize: 12 }}>
+              Rail class: {selectedProviderResource.railClass.replace('_', ' ')} | Execution:{' '}
+              {selectedProviderResource.executionSupport.replace('_', ' ')}
+            </div>
+          </div>
+
+          <div
+            style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: 12,
@@ -317,6 +345,30 @@ export default function WalletConnectionWorkspace({
               Injected EVM wallets can move into live broadcast mode. Exchange and trading-account profiles keep custody, proof, reserve tracking, and controlled release tied into the ledger even before direct API sync is turned on.
             </span>
           </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 10,
+            }}
+          >
+            {selectedProviderResource.nextSteps.map((step) => (
+              <div
+                key={step}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(56,189,248,0.2)',
+                  background: 'rgba(8,145,178,0.1)',
+                  color: '#cffafe',
+                  fontSize: 12,
+                }}
+              >
+                {step}
+              </div>
+            ))}
+          </div>
         </div>
 
         {statusMessage ? (
@@ -335,60 +387,155 @@ export default function WalletConnectionWorkspace({
         ) : null}
 
         <div style={{ display: 'grid', gap: 12 }}>
-          {data.wallets.map((wallet) => (
-            <div key={wallet.id} style={cardStyle}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ display: 'grid', gap: 4 }}>
-                  <strong style={{ fontSize: 16 }}>{wallet.name}</strong>
-                  <span style={{ color: '#94a3b8', fontSize: 13 }}>
-                    {wallet.network} · {wallet.custodyType} · {wallet.connectionProvider || 'manual'}
-                  </span>
-                  <span style={{ color: '#cbd5e1', fontSize: 12 }}>{wallet.address}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSyncWallet(wallet)}
-                  style={buttonStyle}
+          {data.wallets.map((wallet) => {
+            const walletActionSummary = buildWalletActionSummary(wallet);
+            return (
+              <div key={wallet.id} style={cardStyle}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
                 >
-                  Sync Wallet Activity
-                </button>
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    <strong style={{ fontSize: 16 }}>{wallet.name}</strong>
+                    <span style={{ color: '#94a3b8', fontSize: 13 }}>
+                      {wallet.network} · {wallet.custodyType} · {walletActionSummary.providerLabel}
+                    </span>
+                    <span style={{ color: '#cbd5e1', fontSize: 12 }}>{wallet.address}</span>
+                    <span style={{ color: '#7dd3fc', fontSize: 12 }}>{walletActionSummary.nextAction}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncWallet(wallet)}
+                    style={buttonStyle}
+                  >
+                    Sync Wallet Activity
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(148,163,184,0.16)',
+                      background: 'rgba(15,23,42,0.22)',
+                      color: '#cbd5e1',
+                      fontSize: 12,
+                    }}
+                  >
+                    <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: 6 }}>
+                      Best Use
+                    </div>
+                    {walletActionSummary.bestFor}
+                  </div>
+                  {walletActionSummary.explorer ? (
+                    <a
+                      href={`${walletActionSummary.explorer.explorerUrl}address/${wallet.address}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(45,212,191,0.2)',
+                        background: 'rgba(6,78,59,0.16)',
+                        color: '#d1fae5',
+                        fontSize: 12,
+                        textDecoration: 'none',
+                        display: 'grid',
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>
+                        Open in {walletActionSummary.explorer.explorerLabel}
+                      </span>
+                      <span>Review the live address trail and on-chain proof history.</span>
+                    </a>
+                  ) : null}
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                    Status: {wallet.connectionStatus || 'connected'}
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                    Treasury: {wallet.linkedTreasuryAccountId || 'Not linked'}
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                    Ledger: {wallet.linkedLedgerAccountId || 'Not linked'}
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                    Last sync: {wallet.lastSyncAt ? new Date(wallet.lastSyncAt).toLocaleString() : 'Never'}
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>
+                    Execution: {wallet.executionSupport || 'manual_release'}
+                  </div>
+                </div>
+
+                <div style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
+                  {wallet.executionNotes || 'Wallet execution details will appear here as support expands.'}
+                </div>
               </div>
+            );
+          })}
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Connection resources</div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {providerResources.map((resource) => (
               <div
+                key={resource.provider}
                 style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(15,23,42,0.26)',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                  gap: 10,
+                  gap: 8,
                 }}
               >
-                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
-                  Status: {wallet.connectionStatus || 'connected'}
+                <div style={{ color: '#f8fafc', fontWeight: 700 }}>{resource.label}</div>
+                <div style={{ color: '#cbd5e1', fontSize: 12 }}>{resource.bestFor}</div>
+                <div style={{ color: '#94a3b8', fontSize: 12 }}>
+                  {resource.railClass.replace('_', ' ')} | {resource.executionSupport.replace('_', ' ')}
                 </div>
-                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
-                  Treasury: {wallet.linkedTreasuryAccountId || 'Not linked'}
-                </div>
-                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
-                  Ledger: {wallet.linkedLedgerAccountId || 'Not linked'}
-                </div>
-                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
-                  Last sync: {wallet.lastSyncAt ? new Date(wallet.lastSyncAt).toLocaleString() : 'Never'}
-                </div>
-                <div style={{ color: '#cbd5e1', fontSize: 13 }}>
-                  Execution: {wallet.executionSupport || 'manual_release'}
-                </div>
+                {resource.resourceLinks.map((link) => (
+                  <a
+                    key={link.url}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: '#67e8f9', fontSize: 12, textDecoration: 'none' }}
+                  >
+                    {link.label}
+                  </a>
+                ))}
               </div>
-              <div style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
-                {wallet.executionNotes || 'Wallet execution details will appear here as support expands.'}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </PageSection>
