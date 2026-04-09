@@ -5556,6 +5556,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     currency,
     openingBalance,
     accountType,
+    providerCategory,
   }: {
     entityId: string;
     code: string;
@@ -5563,18 +5564,97 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     currency: string;
     openingBalance: number;
     accountType: CoreDataBundle['bankAccounts'][number]['accountType'];
+    providerCategory?: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury' | 'postal';
   }) => ({
     id: `led-bank-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     entityId,
     code,
     name,
-    accountType: 'asset' as const,
+    accountType:
+      accountType === 'credit_card' || providerCategory === 'credit'
+        ? ('liability' as const)
+        : ('asset' as const),
     currency,
-    balance: accountType === 'credit_card' ? openingBalance * -1 : openingBalance,
-    remittanceEligible: accountType !== 'credit_card',
+    balance: openingBalance,
+    remittanceEligible:
+      accountType !== 'credit_card' &&
+      providerCategory !== 'credit' &&
+      providerCategory !== 'postal',
     remittanceClassification:
-      accountType === 'credit_card' ? ('other' as const) : ('cash' as const),
+      accountType === 'credit_card' || providerCategory === 'credit'
+        ? ('other' as const)
+        : providerCategory === 'processor' || providerCategory === 'wallet'
+          ? ('reserve' as const)
+          : ('cash' as const),
   });
+
+  const ensureConnectedLedgerAccount = ({
+    existingLedgerAccountId,
+    entityId,
+    code,
+    name,
+    currency,
+    openingBalance,
+    accountType,
+    providerCategory,
+    ledgerAccounts,
+  }: {
+    existingLedgerAccountId?: string;
+    entityId: string;
+    code: string;
+    name: string;
+    currency: string;
+    openingBalance: number;
+    accountType: CoreDataBundle['bankAccounts'][number]['accountType'];
+    providerCategory?: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury' | 'postal';
+    ledgerAccounts: CoreDataBundle['ledgerAccounts'];
+  }) => {
+    const existingLedgerAccount = existingLedgerAccountId
+      ? ledgerAccounts.find((account) => account.id === existingLedgerAccountId)
+      : ledgerAccounts.find(
+          (account) => account.entityId === entityId && account.name === name
+        );
+
+    if (existingLedgerAccount) {
+      return {
+        ledgerAccount: existingLedgerAccount,
+        ledgerAccounts: ledgerAccounts.map((account) =>
+          account.id === existingLedgerAccount.id
+            ? {
+                ...account,
+                accountType:
+                  accountType === 'credit_card' || providerCategory === 'credit'
+                    ? ('liability' as const)
+                    : account.accountType,
+                remittanceEligible:
+                  accountType === 'credit_card' || providerCategory === 'credit' || providerCategory === 'postal'
+                    ? false
+                    : account.remittanceEligible,
+                remittanceClassification:
+                  accountType === 'credit_card' || providerCategory === 'credit'
+                    ? ('other' as const)
+                    : account.remittanceClassification,
+              }
+            : account
+        ),
+      };
+    }
+
+    const nextLedgerAccount = buildConnectedLedgerAccount({
+      entityId,
+      code,
+      name,
+      currency,
+      openingBalance,
+      accountType,
+      providerCategory,
+    });
+
+    return {
+      ledgerAccount: nextLedgerAccount,
+      ledgerAccounts: [nextLedgerAccount, ...ledgerAccounts],
+    };
+  };
 
   const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
     if (!defaultEntity) {
@@ -5641,7 +5721,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         };
       }
 
-      const nextLedgerAccounts = [...prev.ledgerAccounts];
+      let nextLedgerAccounts = [...prev.ledgerAccounts];
       const existingProviderEntries: Array<[string, CoreDataBundle['bankAccounts'][number]]> = [];
       prev.bankAccounts.forEach((account) => {
         const providerKey =
@@ -5668,6 +5748,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         if (matchedExisting) {
           const nextIndex = nextBankAccounts.findIndex((item) => item.id === matchedExisting.id);
           if (nextIndex >= 0) {
+            const ensuredLedger = ensureConnectedLedgerAccount({
+              existingLedgerAccountId: nextBankAccounts[nextIndex].linkedLedgerAccountId,
+              entityId: defaultEntity.id,
+              code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
+              name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
+              currency: prev.workspaceSettings.baseCurrency,
+              openingBalance: nextBankAccounts[nextIndex].currentBalance ?? 0,
+              accountType,
+              providerCategory: 'bank',
+              ledgerAccounts: nextLedgerAccounts,
+            });
+            nextLedgerAccounts = ensuredLedger.ledgerAccounts;
             nextBankAccounts[nextIndex] = {
               ...nextBankAccounts[nextIndex],
               institutionName: payload.institutionName || nextBankAccounts[nextIndex].institutionName,
@@ -5679,6 +5771,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               liveFeedStatus: 'connected',
               liveConnectionProvider: 'plaid',
               plaidItemId: payload.itemId,
+              linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
               onboardingStatus: 'connected',
               connectedProfile: {
                 providerKey: 'plaid',
@@ -5701,15 +5794,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           return;
         }
 
-        const ledgerAccount = buildConnectedLedgerAccount({
+        const ensuredLedger = ensureConnectedLedgerAccount({
+          existingLedgerAccountId: undefined,
           entityId: defaultEntity.id,
           code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
           name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
           currency: prev.workspaceSettings.baseCurrency,
           openingBalance: 0,
           accountType,
+          providerCategory: 'bank',
+          ledgerAccounts: nextLedgerAccounts,
         });
-        nextLedgerAccounts.unshift(ledgerAccount);
+        nextLedgerAccounts = ensuredLedger.ledgerAccounts;
 
         nextBankAccounts.unshift({
           id: `bank-${Date.now()}-${index}`,
@@ -5721,7 +5817,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           currency: prev.workspaceSettings.baseCurrency,
           status: 'active',
           currentBalance: 0,
-          linkedLedgerAccountId: ledgerAccount.id,
+          linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
           onboardingStatus: 'connected',
           connectionType: 'plaid_connected',
           liveFeedEnabled: true,
@@ -5789,19 +5885,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         entity,
       });
       const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
-      const existingLedgerAccount = linkedLedgerAccountId
-        ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
-        : undefined;
-      const generatedLedgerAccount = existingLedgerAccount
-        ? undefined
-        : buildConnectedLedgerAccount({
-            entityId: entity.id,
-            code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
-            name: `${payload.accountName.trim()} ${payload.accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
-            currency: payload.currency || prev.workspaceSettings.baseCurrency,
-            openingBalance,
-            accountType: payload.accountType,
-          });
+      const ensuredLedger = ensureConnectedLedgerAccount({
+        existingLedgerAccountId: linkedLedgerAccountId,
+        entityId: entity.id,
+        code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
+        name: `${payload.accountName.trim()} ${payload.accountType === 'credit_card' ? 'Payable' : provider.category === 'processor' || provider.category === 'wallet' ? 'Settlement' : 'Cash'}`,
+        currency: payload.currency || prev.workspaceSettings.baseCurrency,
+        openingBalance,
+        accountType: payload.accountType,
+        providerCategory: provider.category,
+        ledgerAccounts: prev.ledgerAccounts,
+      });
 
       return {
         ...prev,
@@ -5816,7 +5910,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             currency: payload.currency || prev.workspaceSettings.baseCurrency,
             status: 'active',
             currentBalance: openingBalance,
-            linkedLedgerAccountId: existingLedgerAccount?.id || generatedLedgerAccount?.id,
+            linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
             onboardingStatus: 'connected',
             connectionType: 'external_provider_connected',
             liveFeedEnabled: provider.supportsLiveSync,
@@ -5849,9 +5943,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           },
           ...(prev.bankAccounts ?? []),
         ],
-        ledgerAccounts: generatedLedgerAccount
-          ? [generatedLedgerAccount, ...(prev.ledgerAccounts ?? [])]
-          : prev.ledgerAccounts,
+        ledgerAccounts: ensuredLedger.ledgerAccounts,
       };
     });
 
@@ -5875,22 +5967,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         entity,
       });
       const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
-      const existingLedgerAccount = linkedLedgerAccountId
-        ? prev.ledgerAccounts.find((account) => account.id === linkedLedgerAccountId)
-        : undefined;
-      const generatedLedgerAccount = existingLedgerAccount
-        ? undefined
-        : {
-            id: `led-bank-${stamp}`,
-            entityId: entity.id,
-            code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
-            name: `${payload.accountName.trim()} Cash`,
-            accountType: 'asset' as const,
-            currency: payload.currency || prev.workspaceSettings.baseCurrency,
-            balance: openingBalance,
-            remittanceEligible: true,
-            remittanceClassification: 'cash' as const,
-          };
+      const ensuredLedger = ensureConnectedLedgerAccount({
+        existingLedgerAccountId: linkedLedgerAccountId,
+        entityId: entity.id,
+        code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
+        name: `${payload.accountName.trim()} ${payload.accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
+        currency: payload.currency || prev.workspaceSettings.baseCurrency,
+        openingBalance,
+        accountType: payload.accountType,
+        providerCategory: payload.accountType === 'credit_card' ? 'credit' : 'bank',
+        ledgerAccounts: prev.ledgerAccounts,
+      });
       const bankAccountId = `bank-${stamp}`;
 
       return {
@@ -5906,7 +5993,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             currency: payload.currency || prev.workspaceSettings.baseCurrency,
             status: 'active',
             currentBalance: openingBalance,
-            linkedLedgerAccountId: existingLedgerAccount?.id || generatedLedgerAccount?.id,
+            linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
             onboardingStatus: 'ready',
             connectionType: 'manual_bank',
             liveFeedEnabled: false,
@@ -5926,9 +6013,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           },
           ...(prev.bankAccounts ?? []),
         ],
-        ledgerAccounts: generatedLedgerAccount
-          ? [generatedLedgerAccount, ...(prev.ledgerAccounts ?? [])]
-          : prev.ledgerAccounts,
+        ledgerAccounts: ensuredLedger.ledgerAccounts,
       };
     });
 
