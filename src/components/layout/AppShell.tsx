@@ -365,6 +365,48 @@ export default function AppShell({
   );
   const launcherResultCount = filteredLauncherItems.length;
   const routeMemoryCount = pinnedRoutes.length + recentRoutes.length;
+  const activeEntityNeedsAuthority =
+    Boolean(activeEntity?.authorityTransactionsPaused) ||
+    activeEntity?.authorityProofStatus === 'missing' ||
+    activeEntity?.authorityProofStatus === 'review' ||
+    activeEntity?.authorityProofStatus === 'mismatch';
+  const nextGuidance = activeEntity
+    ? activeEntityNeedsAuthority
+      ? {
+          label: 'Finish authority review',
+          description:
+            activeEntity.authorityProofStatus === 'mismatch'
+              ? 'Names or signer proof need follow-up before external transactions can be released.'
+              : 'This entity can keep collecting data, but release should wait until authority proof is cleared.',
+          hash: '#entities',
+        }
+      : !activeEntityWorkspace?.storageEmail && hasDriveAccess
+        ? {
+            label: 'Map entity storage',
+            description:
+              'Finish the storage mapping so uploads, packets, and routing stay on the right board.',
+            hash: '#entities',
+          }
+        : {
+            label: 'Workspace ready',
+            description:
+              'This board is ready for accounting, documents, connected accounts, and execution workflow.',
+            hash: `#${activeSection}`,
+          }
+    : entities.length === 0
+      ? {
+          label: 'Add your first entity',
+          description:
+            'Create the first entity so ClearFlow can guide accounting, documents, and authority from a real board.',
+          hash: '#entities:new',
+        }
+      : {
+          label: 'Select an entity board',
+          description:
+            'Choose an entity when you want a focused board for its records, accounting, and authority posture.',
+          hash: '#entities',
+        };
+  const learningRoute = '#aiStudio';
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
@@ -950,6 +992,22 @@ export default function AppShell({
                   >
                     Quick Open
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchRoute(learningRoute)}
+                    style={{
+                      minHeight: 42,
+                      padding: '0 14px',
+                      borderRadius: 14,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Learn & Resources
+                  </button>
                   {quickActions.slice(0, 3).map((action) => (
                     <button
                       key={action.hash}
@@ -969,6 +1027,136 @@ export default function AppShell({
                       {action.label}
                     </button>
                   ))}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  minWidth: 280,
+                  flex: '0 1 340px',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                    }}
+                  >
+                    Guided next step
+                  </div>
+                  <div style={{ fontWeight: 700 }}>{nextGuidance.label}</div>
+                  <div style={{ color: 'var(--cf-muted)', lineHeight: 1.55, fontSize: 13 }}>
+                    {nextGuidance.description}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchRoute(nextGuidance.hash)}
+                    style={{
+                      minHeight: 40,
+                      padding: '0 12px',
+                      borderRadius: 12,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(54, 215, 255, 0.08)',
+                      color: 'var(--cf-accent-soft)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Open Next Step
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchRoute(learningRoute)}
+                    style={{
+                      minHeight: 40,
+                      padding: '0 12px',
+                      borderRadius: 12,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(255,255,255,0.03)',
+                      color: 'var(--cf-text)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Open Learning Hub
+                  </button>
+                </div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 18,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--cf-border)',
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.3,
+                      color: 'var(--cf-accent-soft)',
+                    }}
+                  >
+                    Fast switching
+                  </div>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--cf-muted)' }}>
+                    <span>Entity view</span>
+                    <select
+                      value={activeEntityId || ''}
+                      onChange={(event) => onActiveEntityChange(event.target.value || null)}
+                      style={{
+                        minHeight: 40,
+                        borderRadius: 12,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(10, 16, 28, 0.72)',
+                        color: 'var(--cf-text)',
+                        padding: '0 12px',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="">Collective workspace</option>
+                      {entities.map((entity) => (
+                        <option key={entity.id} value={entity.id}>
+                          {entity.displayName || entity.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {resumeRoutes[0] ? (
+                    <button
+                      type="button"
+                      onClick={() => goToHash(resumeRoutes[0].hash)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        border: '1px solid var(--cf-border)',
+                        background: 'rgba(255,255,255,0.03)',
+                        color: 'var(--cf-text)',
+                        cursor: 'pointer',
+                        display: 'grid',
+                        gap: 4,
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>Resume {resumeRoutes[0].label}</span>
+                      <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Last working route</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
               {showUtilityPanels ? (

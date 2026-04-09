@@ -9117,20 +9117,29 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
             <div
               style={{
-                padding: '14px 16px',
-                borderRadius: 14,
-                border: '1px solid rgba(148,163,184,0.2)',
-                background: 'rgba(15,23,42,0.35)',
-                display: 'grid',
-                gap: 6,
+                padding: '12px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(148,163,184,0.16)',
+                background: 'rgba(15,23,42,0.22)',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+                alignItems: 'center',
               }}
             >
-              <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                Current Accounting View
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#94a3b8',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.8,
+                }}
+              >
+                Accounting view
               </div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
-              <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
-                Stay inside Accounting here for invoices, bills, remittances, journals, bank feed, and reconciliation. Use the left sidebar only when you want to leave Accounting for another desk.
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.6, flex: '1 1 320px' }}>
+                Stay inside Accounting for ERP work. Use the left sidebar only when you want a different desk.
               </div>
             </div>
 
