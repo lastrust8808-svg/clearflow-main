@@ -9090,6 +9090,29 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           description="ERP accounting workspace for receivables, payables, journal workflow, intake, and reconciliation."
         >
           <div style={{ display: 'grid', gap: 16 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <RecordCard title="What This Desk Is For" subtitle="Daily ERP work">
+                <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.6 }}>
+                  <div>Use Accounting for invoices, bills, remittances, journals, bank feed, and reconciliation.</div>
+                  <div>Stay inside this desk while working ERP activity. The left sidebar is only for leaving Accounting.</div>
+                </div>
+              </RecordCard>
+              <RecordCard title="Best Next Steps" subtitle="Simple operating order">
+                <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.6 }}>
+                  <div>1. Add counterparties in Vendors or Customers.</div>
+                  <div>2. Connect bank, card, processor, or treasury sources.</div>
+                  <div>3. Enter bills, invoices, and remittances.</div>
+                  <div>4. Reconcile and release from the rail controls.</div>
+                </div>
+              </RecordCard>
+            </div>
+
             <AccountingToolbar
               onAddInvoice={() => setIsInvoiceModalOpen(true)}
               onRecordPayment={() => setIsPaymentModalOpen(true)}

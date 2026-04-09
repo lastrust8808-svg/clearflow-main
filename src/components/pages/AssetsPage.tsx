@@ -58,6 +58,34 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         </p>
       </div>
 
+      <PageSection
+        title="How To Use This Desk"
+        description="Keep custody, reserve, collateral, and digital holdings organized here before using them in bonds, treasury, or liquidation planning."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard title="What Belongs Here" subtitle="Reserve and custody layer">
+            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
+              <div>Use this desk for wallets, metals, titled assets, securities, collateral, and trust funding support.</div>
+              <div>Connected wallets and financial accounts should land here as reserve or custody posture, then flow into accounting through linked COA records.</div>
+            </div>
+          </WorkbenchRecordCard>
+          <WorkbenchRecordCard title="Best Next Steps" subtitle="Simple order">
+            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
+              <div>1. Connect or record custody accounts and wallets.</div>
+              <div>2. Enter metals, jewelry, and titled assets with identifiers.</div>
+              <div>3. Link pledged items into collateral and bond support.</div>
+              <div>4. Review trust funding and liquidation posture regularly.</div>
+            </div>
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
       <div
         style={{
           display: 'grid',

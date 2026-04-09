@@ -850,6 +850,35 @@ export default function EntitiesPage({
         </div>
       </div>
 
+      <PageSection
+        title="How To Use This Desk"
+        description="Establish each board here first so the rest of the platform can route banking, records, authority, and accounting correctly."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard title="Start Here" subtitle="Entity setup order">
+            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
+              <div>1. Add the entity and representative capacity.</div>
+              <div>2. Upload authority proof and clear any name mismatch.</div>
+              <div>3. Map storage and connection rails.</div>
+              <div>4. Then move into banking, vendors, and outward activity.</div>
+            </div>
+          </WorkbenchRecordCard>
+          <WorkbenchRecordCard title="When ClearFlow Pauses Release" subtitle="Data can still be entered">
+            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
+              <div>Authority review does not stop drafting or record retention.</div>
+              <div>It only pauses transaction-capable onboarding and release until proof is cleared.</div>
+              <div>Use the authority controls below to resolve those holds quickly.</div>
+            </div>
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
       {data.entities.length === 0 ? (
         <PageSection
           title="Start Your Entity Boards"
