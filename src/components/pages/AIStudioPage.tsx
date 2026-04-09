@@ -26,6 +26,7 @@ import { buildTransactionProofChainViews } from '../../services/transactionProof
 import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
+import { buildWorkspaceGuidanceSummary } from '../../services/workspaceGuidance.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -415,6 +416,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const bondLifecycleViews = useMemo(() => buildBondLifecycleViews(data), [data]);
   const trustFundingViews = useMemo(() => buildTrustFundingViews(data), [data]);
   const revenueSummary = useMemo(() => buildRevenueArchitectureSummary(data), [data]);
+  const workspaceGuidance = useMemo(() => buildWorkspaceGuidanceSummary(data), [data]);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -5472,6 +5474,146 @@ ${scopedCases
           </PageSection>
         </div>
       ))}
+
+      <PageSection
+        title="Getting Started & Learning Hub"
+        description="Use this layer to understand the desks, see what ClearFlow still needs from you, and work each entity through a calmer checklist without removing any capability."
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {workspaceGuidance.deskGuides.map((guide) => (
+              <WorkbenchRecordCard
+                key={guide.title}
+                title={guide.title}
+                subtitle={guide.subtitle}
+                actionSlot={
+                  <button
+                    type="button"
+                    onClick={() => focusRoute(guide.route)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(126, 242, 255, 0.28)',
+                      background: 'rgba(54, 215, 255, 0.09)',
+                      color: '#effcff',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {guide.routeLabel}
+                  </button>
+                }
+              >
+                {guide.description}
+              </WorkbenchRecordCard>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 16,
+            }}
+          >
+            <WorkbenchRecordCard
+              title="Required From You"
+              subtitle={`${workspaceGuidance.requiredActions.length} active action item(s)`}
+            >
+              <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.7 }}>
+                {workspaceGuidance.requiredActions.length ? (
+                  workspaceGuidance.requiredActions.map((item) => (
+                    <div
+                      key={item.title}
+                      style={{
+                        padding: 12,
+                        borderRadius: 12,
+                        border:
+                          item.severity === 'high'
+                            ? '1px solid rgba(251,191,36,0.24)'
+                            : '1px solid rgba(148,163,184,0.18)',
+                        background:
+                          item.severity === 'high'
+                            ? 'rgba(120,53,15,0.16)'
+                            : 'rgba(15,23,42,0.28)',
+                        display: 'grid',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#effcff' }}>{item.title}</div>
+                      <div>{item.description}</div>
+                      <button
+                        type="button"
+                        onClick={() => focusRoute(item.route)}
+                        style={{
+                          justifySelf: 'start',
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(126, 242, 255, 0.28)',
+                          background: 'rgba(54, 215, 255, 0.09)',
+                          color: '#effcff',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item.routeLabel}
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div>
+                    No urgent setup blockers are open right now. Use the desk guides to learn the system and keep expanding the workspace.
+                  </div>
+                )}
+              </div>
+            </WorkbenchRecordCard>
+
+            <WorkbenchRecordCard
+              title="Entity Readiness Checklists"
+              subtitle="Simple progress view per board"
+            >
+              <div style={{ display: 'grid', gap: 12, color: '#d1d5db', lineHeight: 1.7 }}>
+                {workspaceGuidance.entityChecklists.length ? (
+                  workspaceGuidance.entityChecklists.slice(0, 5).map((entity) => (
+                    <div
+                      key={entity.entityId}
+                      style={{
+                        padding: 12,
+                        borderRadius: 12,
+                        border: '1px solid rgba(148,163,184,0.18)',
+                        background: 'rgba(15,23,42,0.28)',
+                        display: 'grid',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#effcff' }}>
+                        {entity.entityLabel} · {entity.readyCount}/{entity.totalCount}
+                      </div>
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {entity.items.map((item) => (
+                          <div key={item.label}>
+                            {item.done ? 'Done' : 'Pending'} · {item.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div>
+                    Entity checklists appear here after the first entity is created.
+                  </div>
+                )}
+              </div>
+            </WorkbenchRecordCard>
+          </div>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Revenue & Embedded Finance Strategy"

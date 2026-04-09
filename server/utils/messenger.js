@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 function normalizeProvider(value) {
   return String(value || '').trim().toLowerCase();
 }
