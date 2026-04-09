@@ -469,7 +469,10 @@ Credits may be reversed, reduced, suspended, or forfeited if tied to fraud, abus
 Any badges, collectibles, or future on-chain utility artifacts linked to the rewards program are recognition or platform-utility artifacts unless Clear-Flow expressly states otherwise in writing. They do not create ownership, equity, debt, deposit, custody, or profit-sharing rights by default.
 
 7. Internal Program Status
-The rewards program is part of Clear-Flow's internal engagement and utility layer and does not alter the underlying legal, financial, or accounting character of any user funds, entity assets, or platform payment rails.`,
+The rewards program is part of Clear-Flow's internal engagement and utility layer and does not alter the underlying legal, financial, or accounting character of any user funds, entity assets, or platform payment rails.
+
+8. Referral Credits
+Clear-Flow may award promotional utility credits for referred operator signups, membership activity, or other qualifying referral events. Referral credits are internal program credits only. They are not cash interest, commissions on deposits, securities income, or guaranteed recurring payments.`,
 };
 
 const mfaAuthPolicy = {

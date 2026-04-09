@@ -6,6 +6,7 @@ import type {
   User,
 } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
+import { buildReferralCode, getReferralAccounts } from './localAuth.service';
 
 export interface RewardsProgramSummary {
   balance: number;
@@ -16,6 +17,12 @@ export interface RewardsProgramSummary {
   recentEntries: RewardEntry[];
   badges: RewardBadge[];
   membershipCreditsEarned: number;
+  referralCode: string;
+  referralLink: string;
+  referredUserCount: number;
+  referredActiveMemberCount: number;
+  referralCreditsEarned: number;
+  referralResidualCreditsEarned: number;
 }
 
 function resolveTier(balance: number): RewardTier {
@@ -62,6 +69,17 @@ function badgeForActivity(
       badgeType: 'trust_steward',
       title: 'Trust Steward',
       description: 'Maintains a trust-aware fiduciary workspace.',
+      earnedAt: now,
+      mintable: true,
+    });
+  }
+  if (getReferralAccounts(buildReferralCode({ id: userId, name: '', isVerified: false, email: undefined })).length > 0) {
+    badges.push({
+      id: `badge-network-${userId}`,
+      userId,
+      badgeType: 'network_builder',
+      title: 'Network Builder',
+      description: 'Brought other operators into ClearFlow through referral links.',
       earnedAt: now,
       mintable: true,
     });
@@ -122,6 +140,8 @@ export function buildRewardsProgramSummary(
   const userId = user?.id || appData?.user.id || 'operator';
   const now = new Date().toISOString();
   const derivedEntries: RewardEntry[] = [];
+  const referralCode = buildReferralCode(appData?.user || user || { id: userId, name: '', isVerified: false });
+  const referralAccounts = getReferralAccounts(referralCode);
 
   const paidMembershipInvoices =
     appData?.billingInvoices?.filter((item) => item.status === 'paid' || item.status === 'settled') || [];
@@ -135,6 +155,36 @@ export function buildRewardsProgramSummary(
       description: `Membership payment reward for billing cycle ${index + 1}.`,
       occurredAt: invoice.issueDate,
       status: 'posted',
+    });
+  });
+
+  referralAccounts
+    .filter((account) => account.termsAccepted)
+    .forEach((account) => {
+      derivedEntries.push({
+        id: `reward-referral-signup-${account.userId}`,
+        userId,
+        type: 'earn',
+        sourceEvent: 'referral_signup',
+        amount: 250,
+        description: `Referral reward for ${account.name} completing sign-up under your ClearFlow link.`,
+        occurredAt: now,
+        status: 'posted',
+      });
+    });
+
+  referralAccounts.forEach((account) => {
+    Array.from({ length: account.membershipPaymentCount }).forEach((_, index) => {
+      derivedEntries.push({
+        id: `reward-referral-membership-${account.userId}-${index + 1}`,
+        userId,
+        type: 'earn',
+        sourceEvent: 'referral_membership_paid',
+        amount: 25,
+        description: `Residual membership credit from referred operator ${account.name}.`,
+        occurredAt: now,
+        status: 'posted',
+      });
     });
   });
 
@@ -261,6 +311,18 @@ export function buildRewardsProgramSummary(
     .reduce((sum, item) => sum + item.creditCost, 0);
   const balance = Math.max(0, lifetimeEarned - lifetimeSpent);
   const badges = appData?.rewardBadges?.length ? appData.rewardBadges : badgeForActivity(userId, data, now);
+  const referralCreditsEarned = rewardEntries
+    .filter((entry) => entry.sourceEvent === 'referral_signup' && entry.status === 'posted')
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const referralResidualCreditsEarned = rewardEntries
+    .filter(
+      (entry) => entry.sourceEvent === 'referral_membership_paid' && entry.status === 'posted'
+    )
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const referralLink =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}?ref=${encodeURIComponent(referralCode)}`
+      : `?ref=${encodeURIComponent(referralCode)}`;
 
   return {
     balance,
@@ -273,5 +335,12 @@ export function buildRewardsProgramSummary(
       .slice(0, 8),
     badges,
     membershipCreditsEarned: paidMembershipInvoices.length * 100,
+    referralCode,
+    referralLink,
+    referredUserCount: referralAccounts.length,
+    referredActiveMemberCount: referralAccounts.filter((account) => account.membershipPaymentCount > 0)
+      .length,
+    referralCreditsEarned,
+    referralResidualCreditsEarned,
   };
 }

@@ -289,6 +289,25 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
           >
             Credits can support feature access, reports, discounts, badges, and later optional mintable recognition artifacts, but they do not create bank, deposit, lending, or investment rights.
           </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Referral Network"
+            subtitle={rewardsSummary.referralCode}
+            summaryItems={[
+              { label: 'Referred Users', value: rewardsSummary.referredUserCount },
+              { label: 'Active Members', value: rewardsSummary.referredActiveMemberCount },
+              { label: 'Referral Credits', value: rewardsSummary.referralCreditsEarned },
+              { label: 'Residual Credits', value: rewardsSummary.referralResidualCreditsEarned },
+            ]}
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              <div>Share link: {rewardsSummary.referralLink}</div>
+              <div>
+                Referral rewards stay inside ClearFlow Credits. They are promotional utility
+                credits, not cash interest, deposits, or securities.
+              </div>
+            </div>
+          </WorkbenchRecordCard>
         </div>
       </PageSection>
 

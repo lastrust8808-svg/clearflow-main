@@ -25,6 +25,15 @@ interface LocalAuthAccountRecord {
   appData: AppData;
 }
 
+export interface ReferralAccountSnapshot {
+  userId: string;
+  name: string;
+  email?: string;
+  userHandle?: string;
+  termsAccepted: boolean;
+  membershipPaymentCount: number;
+}
+
 const LOCAL_AUTH_STORAGE_KEY = 'clearflow-local-auth-accounts-v2';
 
 function getStorage() {
@@ -63,6 +72,14 @@ function normalizeUserHandle(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9._-]/g, '')
     .replace(/^[._-]+|[._-]+$/g, '');
+}
+
+function normalizeReferralCode(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/^-+|-+$/g, '');
 }
 
 export function normalizeCredentialValue(
@@ -126,9 +143,28 @@ function buildVerificationCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+export function buildReferralCode(user: User) {
+  if (user.referralCode) {
+    return normalizeReferralCode(user.referralCode);
+  }
+
+  const base =
+    user.userHandle ||
+    (user.email ? user.email.split('@')[0] : '') ||
+    user.name.replace(/\s+/g, '-') ||
+    `member-${user.id.slice(0, 6)}`;
+
+  const normalizedBase =
+    normalizeReferralCode(base) || `MEMBER-${user.id.slice(0, 6).toUpperCase()}`;
+  return `CF-${normalizedBase.slice(0, 18)}`;
+}
+
 function buildAppData(user: User): AppData {
   return {
-    user,
+    user: {
+      ...user,
+      referralCode: buildReferralCode(user),
+    },
     entities: [],
   };
 }
@@ -179,6 +215,29 @@ export function findLocalAccountByGoogleEmail(email: string) {
     userId: account.userId,
     appData: account.appData,
   };
+}
+
+export function getReferralAccounts(referralCode?: string | null): ReferralAccountSnapshot[] {
+  const normalizedCode = referralCode ? normalizeReferralCode(referralCode) : '';
+  if (!normalizedCode) {
+    return [];
+  }
+
+  return loadAccounts()
+    .filter(
+      (account) =>
+        normalizeReferralCode(account.appData.user.referredByCode || '') === normalizedCode
+    )
+    .map((account) => ({
+      userId: account.userId,
+      name: account.appData.user.name || account.userHandle || 'Referred member',
+      email: account.appData.user.email,
+      userHandle: account.userHandle,
+      termsAccepted: Boolean(account.appData.user.clearflowTermsAcceptedAt),
+      membershipPaymentCount: (account.appData.billingInvoices || []).filter(
+        (item) => item.status === 'paid' || item.status === 'settled'
+      ).length,
+    }));
 }
 
 function inferHandleFromUser(user: User) {
@@ -469,6 +528,7 @@ export async function upsertLocalBackupAccount(input: {
     ...input.appData,
     user: {
       ...input.appData.user,
+      referralCode: buildReferralCode(input.appData.user),
       userHandle: desiredHandle || input.appData.user.userHandle,
       email: input.appData.user.email || (contactType === 'email' ? contactValue : undefined),
       phone: input.appData.user.phone || (contactType === 'phone' ? contactValue : undefined),
@@ -511,7 +571,13 @@ export function saveLocalAuthAppData(userId: string, appData: AppData) {
           ...account,
           userHandle:
             appData.user.userHandle || account.userHandle || inferHandleFromUser(appData.user),
-          appData,
+          appData: {
+            ...appData,
+            user: {
+              ...appData.user,
+              referralCode: buildReferralCode(appData.user),
+            },
+          },
         }
       : account
   );

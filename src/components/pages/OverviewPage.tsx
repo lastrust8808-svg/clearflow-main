@@ -494,14 +494,24 @@ export default function OverviewPage({
             gap: 16,
           }}
         >
-          <RecordCard title="Rewards Balance" subtitle={`${rewardsSummary.tier} tier`}>
-            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
-              <div>Credits balance: {rewardsSummary.balance}</div>
-              <div>Lifetime earned: {rewardsSummary.lifetimeEarned}</div>
-              <div>Lifetime spent: {rewardsSummary.lifetimeSpent}</div>
-              <div>Membership credits: {rewardsSummary.membershipCreditsEarned}</div>
-            </div>
-          </RecordCard>
+            <RecordCard title="Rewards Balance" subtitle={`${rewardsSummary.tier} tier`}>
+              <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                <div>Credits balance: {rewardsSummary.balance}</div>
+                <div>Lifetime earned: {rewardsSummary.lifetimeEarned}</div>
+                <div>Lifetime spent: {rewardsSummary.lifetimeSpent}</div>
+                <div>Membership credits: {rewardsSummary.membershipCreditsEarned}</div>
+                <div>Referral credits: {rewardsSummary.referralCreditsEarned}</div>
+                <div>Residual referral credits: {rewardsSummary.referralResidualCreditsEarned}</div>
+              </div>
+            </RecordCard>
+
+            <RecordCard title="Referral Link" subtitle={rewardsSummary.referralCode}>
+              <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                <div>Referred users: {rewardsSummary.referredUserCount}</div>
+                <div>Active referred members: {rewardsSummary.referredActiveMemberCount}</div>
+                <div>{rewardsSummary.referralLink}</div>
+              </div>
+            </RecordCard>
 
           <RecordCard title="Recent Rewards" subtitle="Latest credited activity">
             <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>

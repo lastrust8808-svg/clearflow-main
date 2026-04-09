@@ -11,6 +11,7 @@ import type {
 } from '../services/localAuth.service';
 import {
   authenticateLocalPassword,
+  buildReferralCode,
   findLocalAccountByGoogleEmail,
   saveLocalAuthAppData,
   startLocalAuthChallenge,
@@ -124,6 +125,15 @@ interface StoredTermsAcceptance {
   acceptedAt: string;
   signerName?: string;
   termsVersion?: string;
+}
+
+function loadReferralCodeFromLocation() {
+  try {
+    const url = new URL(window.location.href);
+    return url.searchParams.get('ref')?.trim().toUpperCase() || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function buildGoogleDurableAccountId(email?: string | null) {
@@ -1483,6 +1493,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       email: email || state.appData.user.email,
       phone: phone || state.appData.user.phone,
       userHandle: userHandle || state.appData.user.userHandle,
+      referralCode: buildReferralCode({
+        ...state.appData.user,
+        name,
+        email: email || state.appData.user.email,
+        userHandle: userHandle || state.appData.user.userHandle,
+      }),
+      referredByCode:
+        state.appData.user.referredByCode ||
+        loadReferralCodeFromLocation(),
       isVerified: Boolean(state.apiAccessToken) || state.appData.user.isVerified,
       primaryContactType: state.appData.user.primaryContactType || (state.apiAccessToken ? 'google' : state.appData.user.primaryContactType),
       wealthMandate:

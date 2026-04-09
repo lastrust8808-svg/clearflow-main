@@ -6,6 +6,8 @@ export interface User {
   email?: string;
   phone?: string;
   userHandle?: string;
+  referralCode?: string;
+  referredByCode?: string;
   primaryContactType?: 'google' | 'email' | 'phone';
   isVerified: boolean;
   clearflowTermsAcceptedAt?: string;
@@ -54,6 +56,8 @@ export interface RewardEntry {
   type: 'earn' | 'spend' | 'gift' | 'expire' | 'adjustment' | 'refund';
   sourceEvent:
     | 'membership_paid'
+    | 'referral_signup'
+    | 'referral_membership_paid'
     | 'invoice_sent'
     | 'invoice_paid'
     | 'bill_paid'
@@ -74,8 +78,9 @@ export interface RewardBadge {
   id: string;
   userId: string;
   badgeType:
-    | 'first_entity_established'
-    | 'invoices_in_motion'
+      | 'first_entity_established'
+      | 'network_builder'
+      | 'invoices_in_motion'
     | 'paid_on_time'
     | 'trust_steward'
     | 'bond_operator'
