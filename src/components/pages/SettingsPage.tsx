@@ -12,6 +12,7 @@ import {
 } from '../../services/integrationStatus.service';
 import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.service';
 import { buildRewardsProgramSummary } from '../../services/rewardsProgram.service';
+import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
 import WorkspaceSettingsCard from '../settings/WorkspaceSettingsCard';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -56,6 +57,7 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
     hasDriveAccess: auth.hasDriveAccess,
   });
   const rewardsSummary = buildRewardsProgramSummary(data, auth.appData, auth.currentUser);
+  const revenueSummary = buildRevenueArchitectureSummary(data);
 
   useEffect(() => {
     void loadIntegrationStatus()
@@ -286,6 +288,56 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
             }
           >
             Credits can support feature access, reports, discounts, badges, and later optional mintable recognition artifacts, but they do not create bank, deposit, lending, or investment rights.
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Revenue Architecture"
+        description="The monetization stack: accounts, cards, processors, payment flow, membership base, and reserve-yield posture that can expand ClearFlow income."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="Embedded Finance Readiness"
+            subtitle="Accounts, cards, and processors"
+            summaryItems={[
+              { label: 'Revenue Accounts', value: revenueSummary.connectedRevenueAccountCount },
+              { label: 'Embedded Banking Ready', value: revenueSummary.embeddedBankingReadyCount },
+              { label: 'Connected Cards', value: revenueSummary.connectedCardAccountCount },
+              { label: 'Processor Settlements', value: revenueSummary.processorSettlementCount },
+            ]}
+          >
+            Connected financial accounts now form the spine for future monetization through business accounts, cards, bill pay, payout rails, and treasury services.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Yield Posture"
+            subtitle="Reserve and operating cash"
+            summaryItems={[
+              { label: 'Yield-Ready Reserves', value: revenueSummary.yieldReadyReserveCount },
+              { label: 'Idle Operating Cash', value: `$${revenueSummary.idleOperationalCash.toLocaleString()}` },
+              { label: 'Membership Base', value: `$${revenueSummary.monetizableAnnualizedSubscriptionBase.toLocaleString()}` },
+              { label: 'Workspace Scale', value: revenueSummary.monetizableUserCount },
+            ]}
+          >
+            Reserve accounts and operating cash can support future sweep, yield, treasury, or capital-offer layers once the execution rails are expanded.
+          </WorkbenchRecordCard>
+
+          <WorkbenchRecordCard
+            title="Monetization Priority"
+            subtitle="Recommended order"
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              {revenueSummary.nextMoves.map((move) => (
+                <div key={move}>{move}</div>
+              ))}
+            </div>
           </WorkbenchRecordCard>
         </div>
       </PageSection>

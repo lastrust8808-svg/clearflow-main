@@ -12,6 +12,7 @@ import { buildEntityWorkspaceViews } from '../../services/entityWorkspace.servic
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildWealthManagerSummary } from '../../services/wealthManager.service';
 import { buildRewardsProgramSummary } from '../../services/rewardsProgram.service';
+import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
 import { useAuth } from '../../hooks/useAuth';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -87,6 +88,7 @@ export default function OverviewPage({
   });
   const wealthManagerSummary = buildWealthManagerSummary(data, currentUser);
   const rewardsSummary = buildRewardsProgramSummary(data, auth.appData, currentUser);
+  const revenueSummary = buildRevenueArchitectureSummary(data);
   const totalAssetBookValue = data.assets.reduce((sum, item) => sum + item.bookValue, 0);
   const totalDigitalEstimatedValue = data.digitalAssets.reduce(
     (sum, item) => sum + item.estimatedValue,
@@ -578,6 +580,8 @@ export default function OverviewPage({
         <StatCard label="Authority Reviews" value={authorityReviewItems.length} />
         <StatCard label="ClearFlow Credits" value={rewardsSummary.balance} />
         <StatCard label="Rewards Tier" value={rewardsSummary.tier} />
+        <StatCard label="Revenue-Ready Accounts" value={revenueSummary.connectedRevenueAccountCount} />
+        <StatCard label="Yield-Ready Reserves" value={revenueSummary.yieldReadyReserveCount} />
         <StatCard
           label="EFTPS Profile"
           value={
@@ -602,6 +606,53 @@ export default function OverviewPage({
         />
         <StatCard label="Review Items" value={reviewItems} />
       </div>
+
+      <PageSection
+        title="Revenue & Yield"
+        description="Embedded-finance readiness, monetizable flow, and reserve-yield posture derived from live accounts, cards, processors, payments, invoices, and treasury structure."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 16,
+            marginBottom: 16,
+          }}
+        >
+          <StatCard label="Embedded Banking Ready" value={revenueSummary.embeddedBankingReadyCount} />
+          <StatCard label="Connected Cards" value={revenueSummary.connectedCardAccountCount} />
+          <StatCard label="Processor Settlements" value={revenueSummary.processorSettlementCount} />
+          <StatCard label="Idle Operating Cash" value={`$${revenueSummary.idleOperationalCash.toLocaleString()}`} />
+          <StatCard label="Payment Volume" value={`$${revenueSummary.monetizablePaymentVolume.toLocaleString()}`} />
+          <StatCard label="Invoice Volume" value={`$${revenueSummary.monetizableInvoiceVolume.toLocaleString()}`} />
+          <StatCard
+            label="Annualized Membership Base"
+            value={`$${revenueSummary.monetizableAnnualizedSubscriptionBase.toLocaleString()}`}
+          />
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <RecordCard title="Revenue Signals" subtitle="What the workspace can monetize next">
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              {revenueSummary.revenueSignals.map((signal) => (
+                <div key={signal}>{signal}</div>
+              ))}
+            </div>
+          </RecordCard>
+          <RecordCard title="Next Moves" subtitle="Practical monetization path">
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              {revenueSummary.nextMoves.map((move) => (
+                <div key={move}>{move}</div>
+              ))}
+            </div>
+          </RecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Authority Watch"

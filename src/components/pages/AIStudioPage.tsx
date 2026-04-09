@@ -25,6 +25,7 @@ import { buildRemittanceRailControls } from '../../services/settlementRailing.se
 import { buildTransactionProofChainViews } from '../../services/transactionProofChain.service';
 import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
+import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -413,6 +414,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const transactionProofChains = useMemo(() => buildTransactionProofChainViews(data), [data]);
   const bondLifecycleViews = useMemo(() => buildBondLifecycleViews(data), [data]);
   const trustFundingViews = useMemo(() => buildTrustFundingViews(data), [data]);
+  const revenueSummary = useMemo(() => buildRevenueArchitectureSummary(data), [data]);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -5470,6 +5472,89 @@ ${scopedCases
           </PageSection>
         </div>
       ))}
+
+      <PageSection
+        title="Revenue & Embedded Finance Strategy"
+        description="Use the live workspace footprint to decide where ClearFlow should earn first: business accounts, cards, bill pay, processor settlement, capital, or yield."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <StatCard label="Revenue Accounts" value={revenueSummary.connectedRevenueAccountCount} />
+          <StatCard label="Embedded Banking Ready" value={revenueSummary.embeddedBankingReadyCount} />
+          <StatCard label="Connected Cards" value={revenueSummary.connectedCardAccountCount} />
+          <StatCard label="Processor Settlements" value={revenueSummary.processorSettlementCount} />
+          <StatCard label="Yield-Ready Reserves" value={revenueSummary.yieldReadyReserveCount} />
+          <StatCard label="Idle Operating Cash" value={`$${revenueSummary.idleOperationalCash.toLocaleString()}`} />
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <WorkbenchRecordCard
+            title="Revenue Signals"
+            subtitle="Current workspace posture"
+            actionSlot={
+              <button
+                type="button"
+                onClick={() => focusRoute('#settings')}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126, 242, 255, 0.28)',
+                  background: 'rgba(54, 215, 255, 0.09)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Revenue Settings
+              </button>
+            }
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              {revenueSummary.revenueSignals.map((signal) => (
+                <div key={signal}>{signal}</div>
+              ))}
+            </div>
+          </WorkbenchRecordCard>
+          <WorkbenchRecordCard
+            title="Monetization Priority Stack"
+            subtitle="What to add next"
+            actionSlot={
+              <button
+                type="button"
+                onClick={() => focusRoute('#accounting:bankFeed')}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126, 242, 255, 0.28)',
+                  background: 'rgba(54, 215, 255, 0.09)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Open Banking Rails
+              </button>
+            }
+          >
+            <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.7 }}>
+              {revenueSummary.nextMoves.map((move) => (
+                <div key={move}>{move}</div>
+              ))}
+            </div>
+          </WorkbenchRecordCard>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Research & Filing Library"
