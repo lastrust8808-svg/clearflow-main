@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type {
   CoreDataBundle,
+  LedgerAccountRecord,
   WalletConnectionProvider,
   WalletRecord,
 } from '../../types/core';
@@ -68,6 +69,39 @@ function upsertRecord<T extends { id: string }>(collection: T[], nextRecord: T) 
   }
 
   return collection.map((record) => (record.id === nextRecord.id ? nextRecord : record));
+}
+
+function buildWalletLedgerAccount(input: {
+  wallet: WalletRecord;
+  existingLedgerAccounts: LedgerAccountRecord[];
+  currency: string;
+}) {
+  const matchedExisting =
+    input.existingLedgerAccounts.find((account) =>
+      account.linkedWalletIds?.includes(input.wallet.id)
+    ) ||
+    input.existingLedgerAccounts.find(
+      (account) =>
+        account.entityId === input.wallet.entityId &&
+        account.name === `${input.wallet.name} Digital Asset Custody`
+    );
+
+  if (matchedExisting) {
+    return matchedExisting;
+  }
+
+  return {
+    id: `led-wallet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    entityId: input.wallet.entityId,
+    code: `115${String((input.existingLedgerAccounts.length % 90) + 10).padStart(2, '0')}`,
+    name: `${input.wallet.name} Digital Asset Custody`,
+    accountType: 'asset' as const,
+    currency: input.currency,
+    balance: 0,
+    remittanceEligible: false,
+    remittanceClassification: 'other' as const,
+    linkedWalletIds: [input.wallet.id],
+  };
 }
 
 export default function WalletConnectionWorkspace({
@@ -144,10 +178,47 @@ export default function WalletConnectionWorkspace({
       });
 
       setData((prev) => ({
+        ...(() => {
+          const generatedLedgerAccount = result.wallet.linkedLedgerAccountId
+            ? prev.ledgerAccounts.find((account) => account.id === result.wallet.linkedLedgerAccountId)
+            : buildWalletLedgerAccount({
+                wallet: result.wallet,
+                existingLedgerAccounts: prev.ledgerAccounts,
+                currency: prev.workspaceSettings.baseCurrency,
+              });
+          const resolvedWallet =
+            generatedLedgerAccount && result.wallet.linkedLedgerAccountId !== generatedLedgerAccount.id
+              ? {
+                  ...result.wallet,
+                  linkedLedgerAccountId: generatedLedgerAccount.id,
+                }
+              : result.wallet;
+          const shouldAddLedgerAccount = generatedLedgerAccount
+            ? !prev.ledgerAccounts.some((account) => account.id === generatedLedgerAccount.id)
+            : false;
+
+          return {
         ...prev,
-        wallets: upsertRecord(prev.wallets, result.wallet),
+            wallets: upsertRecord(prev.wallets, resolvedWallet),
+            ledgerAccounts:
+              generatedLedgerAccount && shouldAddLedgerAccount
+                ? [generatedLedgerAccount, ...prev.ledgerAccounts]
+                : prev.ledgerAccounts.map((account) =>
+                    account.id === generatedLedgerAccount?.id
+                      ? {
+                          ...account,
+                          linkedWalletIds: Array.from(
+                            new Set([...(account.linkedWalletIds ?? []), resolvedWallet.id])
+                          ),
+                        }
+                      : account
+                  ),
+          };
+        })(),
       }));
-      setStatusMessage(result.notice);
+      setStatusMessage(
+        `${result.notice} A linked digital-asset custody account was added to the chart of accounts so the wallet is available in accounting flows.`
+      );
       resetForm();
     } finally {
       setIsConnecting(false);
@@ -156,14 +227,28 @@ export default function WalletConnectionWorkspace({
 
   const handleSyncWallet = (wallet: WalletRecord) => {
     setData((prev) => {
+      const generatedLedgerAccount = wallet.linkedLedgerAccountId
+        ? prev.ledgerAccounts.find((account) => account.id === wallet.linkedLedgerAccountId)
+        : buildWalletLedgerAccount({
+            wallet,
+            existingLedgerAccounts: prev.ledgerAccounts,
+            currency: prev.workspaceSettings.baseCurrency,
+          });
+      const resolvedWallet =
+        generatedLedgerAccount && wallet.linkedLedgerAccountId !== generatedLedgerAccount.id
+          ? {
+              ...wallet,
+              linkedLedgerAccountId: generatedLedgerAccount.id,
+            }
+          : wallet;
       const treasuryAccount = wallet.linkedTreasuryAccountId
         ? prev.treasuryAccounts.find((account) => account.id === wallet.linkedTreasuryAccountId)
         : undefined;
-      const linkedLedger = wallet.linkedLedgerAccountId
-        ? prev.ledgerAccounts.find((account) => account.id === wallet.linkedLedgerAccountId)
+      const linkedLedger = resolvedWallet.linkedLedgerAccountId
+        ? prev.ledgerAccounts.find((account) => account.id === resolvedWallet.linkedLedgerAccountId)
         : undefined;
       const syncResult = syncConnectedWallet({
-        wallet,
+        wallet: resolvedWallet,
         existingDigitalAssets: prev.digitalAssets,
         existingOnChainTransactions: prev.onChainTransactions,
         treasuryAccount,
@@ -174,6 +259,19 @@ export default function WalletConnectionWorkspace({
 
       return {
         ...prev,
+        ledgerAccounts:
+          generatedLedgerAccount && !prev.ledgerAccounts.some((account) => account.id === generatedLedgerAccount.id)
+            ? [generatedLedgerAccount, ...prev.ledgerAccounts]
+            : prev.ledgerAccounts.map((account) =>
+                account.id === generatedLedgerAccount?.id
+                  ? {
+                      ...account,
+                      linkedWalletIds: Array.from(
+                        new Set([...(account.linkedWalletIds ?? []), resolvedWallet.id])
+                      ),
+                    }
+                  : account
+              ),
         wallets: prev.wallets.map((record) =>
           record.id === wallet.id ? syncResult.wallet : record
         ),
@@ -196,7 +294,7 @@ export default function WalletConnectionWorkspace({
     });
 
     setStatusMessage(
-      `${wallet.name} synced. The imported on-chain movement is now reflected in digital assets, transactions, settlements, and journals.`
+      `${wallet.name} synced. The imported on-chain movement is now reflected in digital assets, transactions, settlements, journals, and the linked chart of accounts record.`
     );
   };
 
