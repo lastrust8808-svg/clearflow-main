@@ -205,6 +205,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [hasAcceptedClearFlowTerms, normalizeIdentityEmail, storedTermsAcceptanceIndex]
   );
 
+  const canBypassProfileSetupForGoogleIdentity = useCallback(
+    (identity?: { email?: string | null; name?: string | null }, appData?: AppData | null) => {
+      if (hasAcceptedClearFlowTerms(appData)) {
+        return true;
+      }
+
+      const normalizedEmail =
+        normalizeIdentityEmail(identity?.email) ||
+        normalizeIdentityEmail(appData?.user.email);
+      const storedAcceptance = normalizedEmail
+        ? storedTermsAcceptanceIndex[normalizedEmail]
+        : null;
+
+      return Boolean(storedAcceptance?.acceptedAt);
+    },
+    [hasAcceptedClearFlowTerms, normalizeIdentityEmail, storedTermsAcceptanceIndex]
+  );
+
   const persistStoredTermsAcceptance = useCallback(
     (email: string | undefined, acceptance: StoredTermsAcceptance) => {
       const normalizedEmail = normalizeIdentityEmail(email);
@@ -385,9 +403,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             (current.status === 'pending-gsi' || current.status === 'pending-drive-check') &&
             current.appData?.user
           ) {
+            const nextStatus = canBypassProfileSetupForGoogleIdentity(
+              current.gsiUser || {
+                email: current.appData.user.email,
+                name: current.appData.user.name,
+              },
+              current.appData
+            )
+              ? 'authenticated'
+              : 'pending-profile-setup';
             return {
               ...current,
-              status: 'pending-profile-setup',
+              status: nextStatus,
               gsiUser: null,
             };
           }
@@ -413,9 +440,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error('OAuth profile hydration failed:', error);
         setState((current) => {
           if (current.appData?.user) {
+            const nextStatus = canBypassProfileSetupForGoogleIdentity(
+              current.gsiUser || {
+                email: current.appData.user.email,
+                name: current.appData.user.name,
+              },
+              current.appData
+            )
+              ? 'authenticated'
+              : 'pending-profile-setup';
             return {
               ...current,
-              status: 'pending-profile-setup',
+              status: nextStatus,
               gsiUser: null,
             };
           }
@@ -430,7 +466,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         });
       });
-  }, [exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
+  }, [canBypassProfileSetupForGoogleIdentity, exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
