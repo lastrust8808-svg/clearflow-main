@@ -6,6 +6,10 @@ function getRuntimeEnv() {
   return ((window as any).process?.env || {}) as Record<string, string | undefined>;
 }
 
+function getBuildEnv() {
+  return (import.meta.env || {}) as Record<string, string | undefined>;
+}
+
 function hasRealValue(value?: string) {
   if (!value) {
     return false;
@@ -24,7 +28,11 @@ function hasRealValue(value?: string) {
 
 export function getGoogleClientId() {
   const env = getRuntimeEnv();
-  const clientId = env.GOOGLE_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID;
+  const buildEnv = getBuildEnv();
+  const clientId =
+    env.GOOGLE_CLIENT_ID ||
+    env.VITE_GOOGLE_CLIENT_ID ||
+    buildEnv.VITE_GOOGLE_CLIENT_ID;
   return hasRealValue(clientId) ? clientId! : '';
 }
 
@@ -34,7 +42,11 @@ export function isGoogleConfiguredFromEnv() {
 
 export function getApiBaseUrl() {
   const env = getRuntimeEnv();
-  const configuredBase = env.REACT_APP_API_BASE_URL || env.VITE_API_BASE_URL;
+  const buildEnv = getBuildEnv();
+  const configuredBase =
+    env.REACT_APP_API_BASE_URL ||
+    env.VITE_API_BASE_URL ||
+    buildEnv.VITE_API_BASE_URL;
 
   if (hasRealValue(configuredBase)) {
     return configuredBase!.replace(/\/$/, '');
@@ -51,7 +63,8 @@ export function getApiBaseUrl() {
 
 export function getGeminiApiKey() {
   const env = getRuntimeEnv();
-  const apiKey = env.API_KEY || env.VITE_GEMINI_API_KEY;
+  const buildEnv = getBuildEnv();
+  const apiKey = env.API_KEY || env.VITE_GEMINI_API_KEY || buildEnv.VITE_GEMINI_API_KEY;
   return hasRealValue(apiKey) ? apiKey! : '';
 }
 
