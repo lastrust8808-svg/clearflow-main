@@ -6,7 +6,8 @@ import {
 } from './accountPersistence.service';
 
 type IntakeKind = 'bill' | 'receipt' | 'coupon';
-const EXTRACTION_CACHE_STORAGE_KEY = 'clearflow-accounting-extraction-cache-v1';
+const EXTRACTION_CACHE_STORAGE_KEY = 'clearflow-accounting-extraction-cache-v2';
+const EXTRACTION_CACHE_VERSION = 'v2';
 
 export interface IntakeExtractionResult {
   status: 'manual' | 'extracted' | 'needs_review' | 'failed';
@@ -45,11 +46,117 @@ function extractDateFromText(text: string | undefined) {
   if (isoMatch) return isoMatch[1];
 
   const slashMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/20\d{2})\b/);
-  if (!slashMatch) return undefined;
+  if (slashMatch) {
+    const parsed = new Date(slashMatch[1]);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+  }
 
-  const parsed = new Date(slashMatch[1]);
+  const longFormMatch = text.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d{2}\b/i
+  );
+  if (!longFormMatch) return undefined;
+
+  const parsed = new Date(longFormMatch[0]);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return parsed.toISOString().slice(0, 10);
+}
+
+function parseAmountFromText(text: string | undefined) {
+  if (!text) return undefined;
+
+  const preferredPatterns = [
+    /(?:amount due|total amount due|total due|amount enclosed|payment amount|total new charges)[^$\d]{0,20}\$?\s*([0-9][0-9,]*\.\d{2})/i,
+    /(?:current charges|balance due)[^$\d]{0,20}\$?\s*([0-9][0-9,]*\.\d{2})/i,
+    /\$\s*([0-9][0-9,]*\.\d{2})/,
+  ];
+
+  for (const pattern of preferredPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return parseCurrencyValue(match[1]);
+    }
+  }
+
+  return undefined;
+}
+
+function extractAnalysisAmount(analysis: AnalysisResult) {
+  const highlightAmount =
+    analysis.financialHighlights
+      ?.map((item) => {
+        const label = item.label?.toLowerCase() || '';
+        const parsed = parseCurrencyValue(item.value);
+        if (!parsed) {
+          return undefined;
+        }
+        const preferred =
+          label.includes('amount due') ||
+          label.includes('total due') ||
+          label.includes('total amount') ||
+          label.includes('balance due') ||
+          label.includes('new charges');
+        return preferred ? parsed : undefined;
+      })
+      .find((value) => value !== undefined) ?? undefined;
+
+  if (highlightAmount !== undefined) {
+    return highlightAmount;
+  }
+
+  const anyHighlightAmount =
+    analysis.financialHighlights
+      ?.map((item) => parseCurrencyValue(item.value))
+      .find((value) => value !== undefined) ?? undefined;
+
+  if (anyHighlightAmount !== undefined) {
+    return anyHighlightAmount;
+  }
+
+  return parseAmountFromText(
+    [
+      analysis.summary,
+      analysis.paymentInstructionSummary,
+      analysis.accountReference,
+      analysis.processingReference,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+}
+
+function extractAnalysisDate(analysis: AnalysisResult) {
+  const labeledDate =
+    analysis.keyDates
+      ?.map((item) => {
+        const label = item.label?.toLowerCase() || '';
+        const parsed = extractDateFromText(item.date);
+        const preferred =
+          label.includes('due') ||
+          label.includes('payment due') ||
+          label.includes('statement date') ||
+          label.includes('notice date');
+        return preferred ? parsed : undefined;
+      })
+      .find((value) => value !== undefined) ?? undefined;
+
+  if (labeledDate) {
+    return labeledDate;
+  }
+
+  const anyDate =
+    analysis.keyDates
+      ?.map((item) => extractDateFromText(item.date))
+      .find((value) => value !== undefined) ?? undefined;
+
+  if (anyDate) {
+    return anyDate;
+  }
+
+  return extractDateFromText(
+    [analysis.summary, analysis.paymentInstructionSummary].filter(Boolean).join(' '),
+  );
 }
 
 function categorizeDocument(documentType: string | undefined) {
@@ -83,7 +190,7 @@ function fallbackExtraction(kind: IntakeKind, file: File): IntakeExtractionResul
 }
 
 function buildExtractionCacheKey(kind: IntakeKind, file: File) {
-  return [kind, file.name, file.size, file.lastModified, file.type].join('::');
+  return [EXTRACTION_CACHE_VERSION, kind, file.name, file.size, file.lastModified, file.type].join('::');
 }
 
 async function loadDurableExtractionCache(
@@ -210,14 +317,8 @@ export async function analyzeAccountingUpload(
 
   try {
     const analysis = await geminiService.analyzeDocument(file);
-    const amount =
-      analysis.financialHighlights
-        ?.map((item) => parseCurrencyValue(item.value))
-        .find((value) => value !== undefined) ?? undefined;
-    const detectedDate =
-      analysis.keyDates
-        ?.map((item) => extractDateFromText(item.date))
-        .find((value) => value !== undefined) ?? undefined;
+    const amount = extractAnalysisAmount(analysis);
+    const detectedDate = extractAnalysisDate(analysis);
 
     const result: IntakeExtractionResult = {
       status: 'extracted',
