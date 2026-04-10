@@ -37,6 +37,21 @@ const featureHighlights = [
   'Document vault, compliance review, AI generation, and retained proof chains built into every workflow',
 ];
 
+const featureColumns = [
+  {
+    title: 'Operate',
+    points: ['Entity boards', 'Authority and proof', 'ERP accounting', 'Remittance flow'],
+  },
+  {
+    title: 'Control',
+    points: ['Treasury and reserve', 'Wallets and assets', 'Settlement posture', 'Document retention'],
+  },
+  {
+    title: 'Grow',
+    points: ['AI resource studio', 'Reporting and strategy', 'Rewards and referrals', 'Membership value stack'],
+  },
+];
+
 const membershipTiers = [
   {
     name: 'Steward',
@@ -128,7 +143,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
         position: 'relative',
         overflow: 'hidden',
         background:
-          'radial-gradient(circle at top left, rgba(54, 215, 255, 0.2), transparent 25%), radial-gradient(circle at 80% 10%, rgba(88, 141, 255, 0.16), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.12), transparent 20%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
+          'radial-gradient(circle at top left, rgba(54, 215, 255, 0.2), transparent 25%), radial-gradient(circle at 80% 10%, rgba(88, 141, 255, 0.16), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.18), transparent 20%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
         color: '#fff6fd',
         fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
       }}
@@ -145,6 +160,17 @@ export const Welcome: React.FC<WelcomeProps> = ({
           backgroundPosition: '0 0, 18px 18px',
           backgroundSize: '36px 36px',
           maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 75%)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background:
+            'linear-gradient(90deg, transparent 0%, rgba(247,211,123,0.06) 50%, transparent 100%)',
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 85%)',
         }}
       />
 
@@ -203,11 +229,11 @@ export const Welcome: React.FC<WelcomeProps> = ({
 
         <section
           style={{
-            borderRadius: 32,
-            padding: 32,
-            background: 'rgba(24, 18, 42, 0.74)',
+            borderRadius: 36,
+            padding: 36,
+            background: 'linear-gradient(180deg, rgba(24, 18, 42, 0.82), rgba(14, 16, 33, 0.8))',
             border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
+            boxShadow: '0 28px 100px rgba(9, 5, 17, 0.48)',
             backdropFilter: 'blur(18px)',
             display: 'grid',
             gap: 28,
@@ -233,12 +259,12 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               30 Days Free To Start
             </div>
-            <div style={{ fontSize: 50, fontWeight: 800, lineHeight: 1.02, maxWidth: 920 }}>
-              The operating system for trusts, businesses, treasury, records, and cash flow.
+            <div style={{ fontSize: 54, fontWeight: 800, lineHeight: 1, maxWidth: 980 }}>
+              The royal operating system for trusts, businesses, treasury, records, and cash flow.
             </div>
             <div
               style={{
-                fontSize: 18,
+                fontSize: 19,
                 lineHeight: 1.8,
                 color: '#d9e7ef',
                 maxWidth: 900,
@@ -261,15 +287,46 @@ export const Welcome: React.FC<WelcomeProps> = ({
               <div
                 key={item}
                 style={{
-                  borderRadius: 20,
+                  borderRadius: 22,
                   padding: '16px 18px',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))',
                   border: '1px solid rgba(255,255,255,0.08)',
                   color: '#edf6fb',
                   lineHeight: 1.6,
                 }}
               >
                 {item}
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {featureColumns.map((column) => (
+              <div
+                key={column.title}
+                style={{
+                  borderRadius: 24,
+                  padding: 20,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(247,211,123,0.12)',
+                  display: 'grid',
+                  gap: 10,
+                }}
+              >
+                <div style={{ color: '#f7d37b', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 800 }}>
+                  {column.title}
+                </div>
+                <div style={{ display: 'grid', gap: 8, color: '#eef5fa', lineHeight: 1.55 }}>
+                  {column.points.map((point) => (
+                    <div key={point}>{point}</div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -295,9 +352,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
 
         <section
           style={{
-            borderRadius: 30,
-            padding: 28,
-            background: 'rgba(28, 19, 45, 0.86)',
+            borderRadius: 34,
+            padding: 30,
+            background: 'linear-gradient(180deg, rgba(28, 19, 45, 0.9), rgba(16, 20, 37, 0.88))',
             border: '1px solid rgba(126, 242, 255, 0.16)',
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
             backdropFilter: 'blur(20px)',
@@ -337,21 +394,43 @@ export const Welcome: React.FC<WelcomeProps> = ({
               <div
                 key={tier.name}
                 style={{
-                  borderRadius: 24,
-                  padding: 22,
+                  borderRadius: 26,
+                  padding: 24,
                   background: tier.featured
-                    ? 'linear-gradient(180deg, rgba(54, 215, 255, 0.14), rgba(88, 141, 255, 0.08))'
-                    : 'rgba(255,255,255,0.03)',
+                    ? 'linear-gradient(180deg, rgba(54, 215, 255, 0.18), rgba(88, 141, 255, 0.1))'
+                    : 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))',
                   border: tier.featured
                     ? '1px solid rgba(126, 242, 255, 0.24)'
                     : '1px solid rgba(255,255,255,0.08)',
                   display: 'grid',
                   gap: 12,
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
+                {tier.featured ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 14,
+                      right: 14,
+                      padding: '6px 10px',
+                      borderRadius: 999,
+                      background: 'rgba(247,211,123,0.16)',
+                      border: '1px solid rgba(247,211,123,0.22)',
+                      color: '#f7d37b',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: 1.4,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Best Value
+                  </div>
+                ) : null}
                 <div style={{ display: 'grid', gap: 6 }}>
                   <div style={{ fontSize: 24, fontWeight: 800 }}>{tier.name}</div>
-                  <div style={{ color: '#9fe8ff', fontWeight: 700 }}>{tier.price}</div>
+                  <div style={{ color: '#9fe8ff', fontWeight: 800, fontSize: 28 }}>{tier.price}</div>
                   <div style={{ color: '#f7d37b', fontSize: 13 }}>
                     {tier.autopayPrice} with connected bank autopay
                   </div>
@@ -360,7 +439,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 </div>
                 <div style={{ display: 'grid', gap: 8, color: '#e8f2f8', lineHeight: 1.55 }}>
                   {tier.features.map((feature) => (
-                    <div key={feature}>{feature}</div>
+                    <div key={feature}>Included | {feature}</div>
                   ))}
                 </div>
               </div>
