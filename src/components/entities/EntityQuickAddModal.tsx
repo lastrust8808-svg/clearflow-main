@@ -108,18 +108,18 @@ export default function EntityQuickAddModal({
     setName('');
     setDisplayName('');
     setType('llc');
-    setPrimaryEmail('');
+    setPrimaryEmail(currentUserEmail || '');
     setGoogleStorageEmail(currentUserEmail || '');
     setStorageMode(currentUserEmail ? 'operator_google' : 'internal_only');
     setJurisdiction('');
     setCountry('United States');
-    setRepresentativeName('');
+    setRepresentativeName(currentUserName || '');
     setRepresentativeRole('');
     setGenerateDispatchIdentity(true);
     setAuthorityAttested(false);
     setAuthorityProofFile(null);
     setIsSubmitting(false);
-  }, [currentUserEmail, open]);
+  }, [currentUserEmail, currentUserName, open]);
 
   if (!open) return null;
 

@@ -417,7 +417,7 @@ export default function CouponPresentmentModal({
           <div style={{ display: 'grid', gap: 12 }}>
             <input
               type="file"
-              accept={mode === 'camera' ? 'image/*' : undefined}
+              accept={mode === 'camera' ? 'image/*' : '.pdf,image/*,.heic,.heif'}
               capture={mode === 'camera' ? 'environment' : undefined}
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
