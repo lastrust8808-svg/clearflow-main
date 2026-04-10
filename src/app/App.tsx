@@ -1062,7 +1062,7 @@ export default function App({
       case 'accounting':
         return (
           <AccountingPage
-            data={scopedData}
+            data={data}
             setData={setData}
             activeEntityId={activeEntityId}
           />

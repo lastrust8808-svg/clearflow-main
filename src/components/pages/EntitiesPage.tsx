@@ -17,6 +17,7 @@ import {
 } from '../../services/dispatchIdentity.service';
 import { saveDocumentFile } from '../../services/documentVault.service';
 import { analyzeAuthorityProofFile } from '../../services/authorityProofMatching.service';
+import { useAuth } from '../../hooks/useAuth';
 
 interface EntitiesPageProps {
   data: CoreDataBundle;
@@ -41,6 +42,7 @@ export default function EntitiesPage({
   activeEntityId,
   onSetActiveEntity,
 }: EntitiesPageProps) {
+  const auth = useAuth();
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const [isConnectionRailModalOpen, setIsConnectionRailModalOpen] = useState(false);
   const [connectionRailPreset, setConnectionRailPreset] = useState<'general' | 'business_partner'>(
@@ -179,8 +181,9 @@ export default function EntitiesPage({
                 uspsCrid: data.workspaceSettings.uspsCrid,
               })
             : null;
-          setData((prev) => ({
-            ...prev,
+          setData((prev) => {
+            const nextBundle = {
+              ...prev,
             entities: [
               {
                 id: entityId,
@@ -387,7 +390,10 @@ export default function EntitiesPage({
               },
               ...prev.tokens,
             ],
-          }));
+            };
+            auth.updateCoreDataSnapshot(nextBundle);
+            return nextBundle;
+          });
           setIsEntityModalOpen(false);
           onSetActiveEntity?.(entityId);
           goToHash('#entities');

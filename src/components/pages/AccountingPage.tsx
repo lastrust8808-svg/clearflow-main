@@ -43,6 +43,7 @@ import {
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
+import { scopeBundleToEntity } from '../../services/entityBundleScope.service';
 import {
   canUseInjectedWalletExecution,
   executeInjectedWalletPayment,
@@ -281,6 +282,10 @@ function parseAccountingActionHash(hashValue: string): AccountingHashAction | nu
 
 export default function AccountingPage({ data, setData, activeEntityId }: AccountingPageProps) {
   const auth = useAuth();
+  const scopedData = useMemo(
+    () => (activeEntityId ? scopeBundleToEntity(data, activeEntityId) : data),
+    [activeEntityId, data],
+  );
   const [activeSubsection, setActiveSubsection] =
     useState<AccountingSection>('dashboard');
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -449,42 +454,57 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
     return () => window.removeEventListener('hashchange', applyHash);
   }, []);
 
-  const invoices = data.invoices ?? [];
-  const bills = data.bills ?? [];
-  const expenses = data.expenses ?? [];
-  const receipts = data.receipts ?? [];
-  const couponPresentments = data.couponPresentments ?? [];
-  const employees = data.employees ?? [];
-  const directDepositAuthorizations = data.directDepositAuthorizations ?? [];
-  const customers = data.customers ?? [];
-  const vendors = data.vendors ?? [];
-  const payments = data.payments ?? [];
-  const journalEntries = data.journalEntries ?? [];
-  const interEntityTransfers = data.interEntityTransfers ?? [];
-  const bankAccounts = data.bankAccounts ?? [];
-  const bankFeedRules = data.bankFeedRules ?? [];
-  const bankFeedEntries = data.bankFeedEntries ?? [];
-  const reconciliations = data.reconciliations ?? [];
-  const ledgerAccounts = data.ledgerAccounts ?? [];
-  const treasuryAccounts = data.treasuryAccounts ?? [];
-  const instrumentSettlements = data.instrumentSettlements ?? [];
-  const obligations = data.obligations ?? [];
-  const complianceTags = data.complianceTags ?? [];
-  const movementIdentifiers = data.movementIdentifiers ?? [];
-  const returnEvents = data.returnEvents ?? [];
-  const reclamationEvents = data.reclamationEvents ?? [];
-  const taxReportingLinks = data.taxReportingLinks ?? [];
-  const wallets = data.wallets ?? [];
-  const digitalAssets = data.digitalAssets ?? [];
+  const invoices: CoreDataBundle['invoices'] = scopedData.invoices ?? [];
+  const bills: CoreDataBundle['bills'] = scopedData.bills ?? [];
+  const expenses: CoreDataBundle['expenses'] = scopedData.expenses ?? [];
+  const receipts: CoreDataBundle['receipts'] = scopedData.receipts ?? [];
+  const couponPresentments: CoreDataBundle['couponPresentments'] = scopedData.couponPresentments ?? [];
+  const employees: CoreDataBundle['employees'] = scopedData.employees ?? [];
+  const directDepositAuthorizations: CoreDataBundle['directDepositAuthorizations'] =
+    scopedData.directDepositAuthorizations ?? [];
+  const customers: CoreDataBundle['customers'] = scopedData.customers ?? [];
+  const vendors: CoreDataBundle['vendors'] = scopedData.vendors ?? [];
+  const payments: CoreDataBundle['payments'] = scopedData.payments ?? [];
+  const journalEntries: CoreDataBundle['journalEntries'] = scopedData.journalEntries ?? [];
+  const interEntityTransfers: CoreDataBundle['interEntityTransfers'] =
+    scopedData.interEntityTransfers ?? [];
+  const bankAccounts: CoreDataBundle['bankAccounts'] = scopedData.bankAccounts ?? [];
+  const bankFeedRules: CoreDataBundle['bankFeedRules'] = scopedData.bankFeedRules ?? [];
+  const bankFeedEntries: CoreDataBundle['bankFeedEntries'] = scopedData.bankFeedEntries ?? [];
+  const reconciliations: CoreDataBundle['reconciliations'] = scopedData.reconciliations ?? [];
+  const ledgerAccounts: CoreDataBundle['ledgerAccounts'] = scopedData.ledgerAccounts ?? [];
+  const treasuryAccounts: CoreDataBundle['treasuryAccounts'] = scopedData.treasuryAccounts ?? [];
+  const instrumentSettlements: CoreDataBundle['instrumentSettlements'] =
+    scopedData.instrumentSettlements ?? [];
+  const obligations: CoreDataBundle['obligations'] = scopedData.obligations ?? [];
+  const complianceTags: CoreDataBundle['complianceTags'] = scopedData.complianceTags ?? [];
+  const movementIdentifiers: CoreDataBundle['movementIdentifiers'] =
+    scopedData.movementIdentifiers ?? [];
+  const returnEvents: CoreDataBundle['returnEvents'] = scopedData.returnEvents ?? [];
+  const reclamationEvents: CoreDataBundle['reclamationEvents'] =
+    scopedData.reclamationEvents ?? [];
+  const taxReportingLinks: CoreDataBundle['taxReportingLinks'] =
+    scopedData.taxReportingLinks ?? [];
+  const wallets: CoreDataBundle['wallets'] = scopedData.wallets ?? [];
+  const digitalAssets: CoreDataBundle['digitalAssets'] = scopedData.digitalAssets ?? [];
 
   const quoteRecords = invoices.filter(isQuoteRecord);
   const standardInvoices = invoices.filter((record) => !isQuoteRecord(record));
-  const stats = useMemo(() => buildAccountingStats(data, journalEntries), [data, journalEntries]);
-  const remittanceRailControls = useMemo(() => buildRemittanceRailControls(data), [data]);
-  const settlementFlows = useMemo(() => buildSettlementFlowViews(data), [data]);
-  const defaultEntity = getPrimaryEntity(data);
+  const stats = useMemo(
+    () => buildAccountingStats(scopedData, journalEntries),
+    [journalEntries, scopedData],
+  );
+  const remittanceRailControls = useMemo(
+    () => buildRemittanceRailControls(scopedData),
+    [scopedData],
+  );
+  const settlementFlows = useMemo(
+    () => buildSettlementFlowViews(scopedData),
+    [scopedData],
+  );
+  const defaultEntity = getPrimaryEntity(scopedData);
   const defaultPayrollEntity =
-    data.entities.find((entity) =>
+    scopedData.entities.find((entity) =>
       entity.type === 'llc' ||
       entity.type === 'corporation' ||
       entity.type === 'partnership' ||
@@ -492,10 +512,10 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
     ) || defaultEntity;
   const obligationLifecycleSummaries = useMemo(
     () =>
-      buildObligationLifecycleSummaries(data).filter((item) =>
+      buildObligationLifecycleSummaries(scopedData).filter((item) =>
         defaultEntity ? item.obligation.entityId === defaultEntity.id : true
       ),
-    [data, defaultEntity]
+    [defaultEntity, scopedData]
   );
   const activeEntityAuthorityReviewTags = useMemo(
     () =>
