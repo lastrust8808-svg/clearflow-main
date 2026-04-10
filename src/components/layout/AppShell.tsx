@@ -406,6 +406,36 @@ export default function AppShell({
             'Choose an entity when you want a focused board for its records, accounting, and authority posture.',
           hash: '#entities',
         };
+  const attentionItems = [
+    entities.length === 0
+      ? {
+          title: 'Add your first entity',
+          detail: 'Create one board first so records, accounting, and authority have a real home.',
+          hash: '#entities:new',
+        }
+      : null,
+    activeEntityNeedsAuthority
+      ? {
+          title: 'Authority review is holding release',
+          detail: 'Data entry can continue, but external release and sensitive onboarding should wait until proof is cleared.',
+          hash: '#entities',
+        }
+      : null,
+    entities.length > 0 && !activeEntityId
+      ? {
+          title: 'Choose an entity for focused work',
+          detail: 'A focused board keeps the desk scoped to the right records, accounts, and controls.',
+          hash: '#entities',
+        }
+      : null,
+    hasDriveAccess
+      ? null
+      : {
+          title: 'Connect Drive for smoother routing',
+          detail: 'Uploads, generated packets, and board storage routing work better once Drive access is connected.',
+          hash: '#settings',
+        },
+  ].filter((item): item is { title: string; detail: string; hash: string } => Boolean(item));
   const learningRoute = '#aiStudio';
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
@@ -1575,6 +1605,58 @@ export default function AppShell({
               ) : null}
             </div>
           </section>
+          {attentionItems.length > 0 ? (
+            <section
+              style={{
+                marginBottom: 18,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.3,
+                  color: 'var(--cf-accent-soft)',
+                }}
+              >
+                Needs Your Attention
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {attentionItems.slice(0, 3).map((item) => (
+                  <button
+                    key={item.title}
+                    type="button"
+                    onClick={() => handleLaunchRoute(item.hash)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '14px 16px',
+                      borderRadius: 18,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(255,255,255,0.03)',
+                      color: 'var(--cf-text)',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gap: 6,
+                      boxShadow: 'var(--cf-shadow)',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>{item.title}</span>
+                    <span style={{ color: 'var(--cf-muted)', fontSize: 13, lineHeight: 1.55 }}>
+                      {item.detail}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {children}
         </div>
       </main>
