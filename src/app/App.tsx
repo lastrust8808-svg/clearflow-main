@@ -1060,7 +1060,13 @@ export default function App({
           />
         );
       case 'accounting':
-        return <AccountingPage data={scopedData} setData={setData} />;
+        return (
+          <AccountingPage
+            data={scopedData}
+            setData={setData}
+            activeEntityId={activeEntityId}
+          />
+        );
       case 'entities':
         return (
           <EntitiesPage

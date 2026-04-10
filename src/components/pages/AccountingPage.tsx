@@ -113,6 +113,7 @@ import type { PlaidConnectionPayload } from '../../types/app.models';
 interface AccountingPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
+  activeEntityId?: string | null;
 }
 
 type VendorReceiveMethod =
@@ -278,7 +279,7 @@ function parseAccountingActionHash(hashValue: string): AccountingHashAction | nu
     : null;
 }
 
-export default function AccountingPage({ data, setData }: AccountingPageProps) {
+export default function AccountingPage({ data, setData, activeEntityId }: AccountingPageProps) {
   const auth = useAuth();
   const [activeSubsection, setActiveSubsection] =
     useState<AccountingSection>('dashboard');
@@ -2226,7 +2227,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const numericAmount = Number(payload.amount || 0);
     const issuedDate = new Date().toISOString().slice(0, 10);
     const billId = `bill-${Date.now()}`;
-    const targetEntityId = defaultEntity?.id ?? data.entities[0]?.id ?? 'entity-unknown';
+    const targetEntityId =
+      activeEntityId ??
+      defaultEntity?.id ??
+      data.entities[0]?.id ??
+      'entity-unknown';
     const extraction = await analyzeAccountingUpload('bill', payload.uploadedFile, {
       accountId: auth.currentUser?.id,
     });
@@ -2328,7 +2333,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         subtotal: resolvedAmount,
         balanceDue: resolvedAmount,
         status: 'entered',
-        dueDate: payload.dueDate || extraction.date || base.dueDate,
+        dueDate: payload.dueDate || extraction.date || base?.dueDate,
         linkedLineItems: base?.linkedLineItems ?? [],
         intakeStatus: payload.uploadedFile ? extraction.status : 'manual',
         extractionSummary: extraction.summary,
@@ -2337,8 +2342,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         extractedDueDate: extraction.date,
         notes: payload.description || payload.parsedNotes || extraction.summary,
         linkedDocumentIds: documentRecord
-          ? [documentRecord.id, ...(base.linkedDocumentIds ?? [])]
-          : base.linkedDocumentIds,
+          ? [documentRecord.id, ...(base?.linkedDocumentIds ?? [])]
+          : base?.linkedDocumentIds,
       };
       const obligationBase = prev.obligations?.[0];
       const existingRecurringObligation =
@@ -2492,6 +2497,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setActiveSubsection('bills');
     setIsBillModalOpen(false);
+    setOperationsNotice('Saved the bill into the active entity accounting records.');
   };
 
   const handleReceiptSubmit = async (payload: ReceiptSubmitPayload) => {
