@@ -2226,11 +2226,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     const numericAmount = Number(payload.amount || 0);
     const issuedDate = new Date().toISOString().slice(0, 10);
     const billId = `bill-${Date.now()}`;
+    const targetEntityId = defaultEntity?.id ?? data.entities[0]?.id ?? 'entity-unknown';
     const extraction = await analyzeAccountingUpload('bill', payload.uploadedFile, {
       accountId: auth.currentUser?.id,
     });
     const documentRecord = await persistUploadDocument({
-      entityId: bills[0]?.entityId ?? data.entities[0]?.id ?? 'entity-unknown',
+      entityId: targetEntityId,
       folder: 'bills',
       title: `${payload.vendorName || extraction.vendorOrMerchantName || 'Vendor'} Bill Source`,
       summary:
@@ -2246,8 +2247,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setData((prev) => {
       const base = prev.bills?.[0];
-      if (!base) return prev;
-      const entity = prev.entities[0];
+      const entity =
+        prev.entities.find((item) => item.id === targetEntityId) ?? prev.entities[0];
       if (!entity) return prev;
       const { vendorId, vendors: vendorSeed } = ensureVendorRecord(prev, entity.id, {
         name: payload.vendorName || extraction.vendorOrMerchantName,
@@ -2312,17 +2313,23 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             }
           : undefined;
       const nextRecord = {
-        ...base,
+        ...(base ?? {}),
         id: billId,
         entityId: entity.id,
         vendorId,
         billNumber,
         issueDate: issuedDate,
+        currency:
+          base?.currency ||
+          entity.operationalDefaults?.baseCurrency ||
+          prev.workspaceSettings.baseCurrency,
         totalAmount: resolvedAmount,
+        taxAmount: base?.taxAmount ?? 0,
         subtotal: resolvedAmount,
         balanceDue: resolvedAmount,
         status: 'entered',
         dueDate: payload.dueDate || extraction.date || base.dueDate,
+        linkedLineItems: base?.linkedLineItems ?? [],
         intakeStatus: payload.uploadedFile ? extraction.status : 'manual',
         extractionSummary: extraction.summary,
         extractedVendorName: extraction.vendorOrMerchantName,

@@ -97,7 +97,9 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
   }, [open]);
 
   const missingFields = [
-    (mode === 'upload' || mode === 'camera') && !uploadedFile ? 'source file' : '',
+    (mode === 'upload' || mode === 'camera') && !uploadedFile && !uploadedFileName
+      ? 'source file'
+      : '',
     !vendorName.trim() ? 'vendor' : '',
     !dueDate ? 'due date' : '',
     !amount || Number(amount) <= 0 ? 'amount' : '',
@@ -186,7 +188,7 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
             </div>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf,.heic,.heif"
               capture="environment"
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
@@ -242,6 +244,7 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
           <div style={{ display: 'grid', gap: 12 }}>
             <input
               type="file"
+              accept=".pdf,image/*,.heic,.heif"
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
                 setUploadedFile(file);
