@@ -159,7 +159,7 @@ export function buildRewardsProgramSummary(
   });
 
   referralAccounts
-    .filter((account) => account.termsAccepted)
+    .filter((account) => account.membershipPaymentCount >= 2)
     .forEach((account) => {
       derivedEntries.push({
         id: `reward-referral-signup-${account.userId}`,
@@ -167,20 +167,20 @@ export function buildRewardsProgramSummary(
         type: 'earn',
         sourceEvent: 'referral_signup',
         amount: 250,
-        description: `Referral reward for ${account.name} completing sign-up under your ClearFlow link.`,
+        description: `Referral unlock for ${account.name} after retained paid membership milestone.`,
         occurredAt: now,
         status: 'posted',
       });
     });
 
   referralAccounts.forEach((account) => {
-    Array.from({ length: account.membershipPaymentCount }).forEach((_, index) => {
+    Array.from({ length: Math.max(0, account.membershipPaymentCount - 1) }).forEach((_, index) => {
       derivedEntries.push({
         id: `reward-referral-membership-${account.userId}-${index + 1}`,
         userId,
         type: 'earn',
         sourceEvent: 'referral_membership_paid',
-        amount: 25,
+        amount: 50,
         description: `Residual membership credit from referred operator ${account.name}.`,
         occurredAt: now,
         status: 'posted',
@@ -338,7 +338,7 @@ export function buildRewardsProgramSummary(
     referralCode,
     referralLink,
     referredUserCount: referralAccounts.length,
-    referredActiveMemberCount: referralAccounts.filter((account) => account.membershipPaymentCount > 0)
+    referredActiveMemberCount: referralAccounts.filter((account) => account.membershipPaymentCount >= 2)
       .length,
     referralCreditsEarned,
     referralResidualCreditsEarned,

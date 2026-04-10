@@ -1,4 +1,5 @@
 import type { AppData, User } from '../types/app.models';
+import { buildDevOperatorAppData } from './membershipProgram.service';
 
 export type LocalAuthContactType = 'email' | 'phone';
 export type LocalAuthIdentifierType = 'email' | 'phone' | 'user_id';
@@ -166,6 +167,49 @@ function buildAppData(user: User): AppData {
       referralCode: buildReferralCode(user),
     },
     entities: [],
+  };
+}
+
+export function getOrCreateDevOperatorAccount(input?: {
+  name?: string;
+  email?: string;
+}) {
+  const name = input?.name || 'ClearFlow Dev User';
+  const email = normalizeEmail(input?.email || 'dev@clearflow.site');
+  const accounts = loadAccounts();
+  const existingAccount = accounts.find(
+    (account) => account.contactType === 'email' && account.contactValue === email
+  );
+
+  if (existingAccount) {
+    return {
+      userId: existingAccount.userId,
+      appData: existingAccount.appData,
+    };
+  }
+
+  const userId = `dev-${crypto.randomUUID()}`;
+  const devUser: User = {
+    id: userId,
+    name,
+    email,
+    primaryContactType: 'email',
+    isVerified: true,
+  };
+  const appData = buildDevOperatorAppData(devUser);
+
+  accounts.unshift({
+    userId,
+    contactType: 'email',
+    contactValue: email,
+    userHandle: 'clearflow.dev',
+    appData,
+  });
+  saveAccounts(accounts);
+
+  return {
+    userId,
+    appData,
   };
 }
 

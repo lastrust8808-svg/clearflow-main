@@ -13,6 +13,7 @@ import {
   authenticateLocalPassword,
   buildReferralCode,
   findLocalAccountByGoogleEmail,
+  getOrCreateDevOperatorAccount,
   saveLocalAuthAppData,
   startLocalAuthChallenge,
   upsertLocalBackupAccount,
@@ -1142,14 +1143,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [ensureGoogleClients, isConfigured, isInitialized, startGoogleSignIn]);
 
   const mockLogin = (name: string, email: string) => {
-    const mockUser: User = { id: `mock-${crypto.randomUUID()}`, name, email, isVerified: true };
-    setState({
-      ...state,
-      appData: { user: mockUser, entities: [] },
-      token: 'mock-token',
-      localAccountId: null,
-      status: 'authenticated'
+    const seededAccount = getOrCreateDevOperatorAccount({ name, email });
+    const acceptedAt =
+      seededAccount.appData.user.clearflowTermsAcceptedAt || new Date().toISOString();
+    const retainedAppData = applyClearFlowRetentionRecords(seededAccount.appData, {
+      acceptedAt,
+      termsVersion: CLEARFLOW_TERMS_VERSION,
+      signerName:
+        seededAccount.appData.user.clearflowTermsSignerName || seededAccount.appData.user.name,
     });
+
+    saveLocalAuthAppData(seededAccount.userId, retainedAppData);
+    void saveAccountAppData(seededAccount.userId, retainedAppData).catch((error) => {
+      console.warn('Failed to persist dev operator workspace to durable storage.', error);
+    });
+
+    setState((current) => ({
+      ...current,
+      appData: retainedAppData,
+      token: 'mock-token',
+      localAccountId: seededAccount.userId,
+      status: 'authenticated',
+    }));
   };
 
   const startCredentialAuth = async (input: {
