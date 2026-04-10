@@ -19,6 +19,7 @@ export interface User {
   clearflowInternalLedgerDepositedAt?: string;
   clearflowInternalLedgerStatus?: 'pending' | 'recorded' | 'error';
   wealthMandate?: WealthMandateProfile;
+  membershipProfile?: MembershipProfile;
 }
 
 export interface WealthMandateProfile {
@@ -34,6 +35,32 @@ export interface WealthMandateProfile {
   timeHorizon: 'short' | 'medium' | 'long';
   notes?: string;
   activatedAt?: string;
+}
+
+export type MembershipTierPlan = 'steward' | 'operator' | 'crown';
+export type MembershipBillingCadence = 'monthly';
+export type MembershipAutopayMethod = 'bank' | 'card' | 'none';
+export type MembershipStatus =
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'paused'
+  | 'canceled';
+
+export interface MembershipProfile {
+  tier: MembershipTierPlan;
+  status: MembershipStatus;
+  billingCadence: MembershipBillingCadence;
+  monthlyRate: number;
+  autopayEnabled: boolean;
+  autopayMethod: MembershipAutopayMethod;
+  autopayDiscountRate: number;
+  effectiveMonthlyRate: number;
+  trialStartedAt: string;
+  trialEndsAt: string;
+  nextBillingDate: string;
+  devProfileLinked?: boolean;
+  referralCreditsUnlockedAt?: string;
 }
 
 export type RewardTier = 'steward' | 'operator' | 'treasury' | 'capital' | 'crown';
@@ -407,6 +434,7 @@ export interface Settlement {
 export interface AppData {
   user: User;
   entities: Entity[];
+  membershipProfile?: MembershipProfile;
   // New billing models
   ratedCharges?: RatedCharge[];
   billingInvoices?: BillingInvoice[];

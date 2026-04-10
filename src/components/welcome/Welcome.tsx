@@ -108,6 +108,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
   const [signInIntent, setSignInIntent] = useState<'new' | 'existing'>(initialIntent);
   const [googleLaunchError, setGoogleLaunchError] = useState('');
   const [isLaunchingGoogle, setIsLaunchingGoogle] = useState(false);
+  const [isCompact, setIsCompact] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 720
+  );
   const canUseDevAccess =
     typeof window !== 'undefined' &&
     ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -135,6 +138,17 @@ export const Welcome: React.FC<WelcomeProps> = ({
       setIsLaunchingGoogle(false);
     }
   }, [entryView]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleResize = () => setIsCompact(window.innerWidth < 720);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <div
@@ -183,25 +197,25 @@ export const Welcome: React.FC<WelcomeProps> = ({
           minHeight: '100vh',
           display: 'grid',
           gap: 28,
-          padding: '32px 20px',
+          padding: isCompact ? '20px 14px 28px' : '32px 20px',
         }}
       >
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
+            alignItems: isCompact ? 'stretch' : 'center',
             gap: 16,
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Logo height={64} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? 12 : 16, minWidth: 0 }}>
+            <Logo height={isCompact ? 52 : 64} />
             <div>
               <div style={{ fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', color: '#8cebff' }}>
                 ClearFlow Operating System
               </div>
-              <div style={{ color: '#c5d7e3', fontSize: 14 }}>
+              <div style={{ color: '#c5d7e3', fontSize: isCompact ? 13 : 14, lineHeight: 1.5 }}>
                 Integrated financial management, treasury, records, and execution control
               </div>
             </div>
@@ -218,6 +232,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
               color: '#eff6fb',
               fontWeight: 700,
               cursor: 'pointer',
+              width: isCompact ? '100%' : 'auto',
             }}
             disabled={isLaunchingGoogle}
           >
@@ -229,14 +244,14 @@ export const Welcome: React.FC<WelcomeProps> = ({
 
         <section
           style={{
-            borderRadius: 36,
-            padding: 36,
+            borderRadius: isCompact ? 24 : 36,
+            padding: isCompact ? 22 : 36,
             background: 'linear-gradient(180deg, rgba(24, 18, 42, 0.82), rgba(14, 16, 33, 0.8))',
             border: '1px solid rgba(126, 242, 255, 0.16)',
             boxShadow: '0 28px 100px rgba(9, 5, 17, 0.48)',
             backdropFilter: 'blur(18px)',
             display: 'grid',
-            gap: 28,
+            gap: isCompact ? 20 : 28,
           }}
         >
           <div style={{ display: 'grid', gap: 18 }}>
@@ -259,12 +274,12 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               30 Days Free To Start
             </div>
-            <div style={{ fontSize: 54, fontWeight: 800, lineHeight: 1, maxWidth: 980 }}>
+            <div style={{ fontSize: isCompact ? 36 : 54, fontWeight: 800, lineHeight: 1, maxWidth: 980 }}>
               The royal operating system for trusts, businesses, treasury, records, and cash flow.
             </div>
             <div
               style={{
-                fontSize: 19,
+                fontSize: isCompact ? 16 : 19,
                 lineHeight: 1.8,
                 color: '#d9e7ef',
                 maxWidth: 900,
@@ -352,14 +367,14 @@ export const Welcome: React.FC<WelcomeProps> = ({
 
         <section
           style={{
-            borderRadius: 34,
-            padding: 30,
+            borderRadius: isCompact ? 24 : 34,
+            padding: isCompact ? 22 : 30,
             background: 'linear-gradient(180deg, rgba(28, 19, 45, 0.9), rgba(16, 20, 37, 0.88))',
             border: '1px solid rgba(126, 242, 255, 0.16)',
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
             backdropFilter: 'blur(20px)',
             display: 'grid',
-            gap: 22,
+            gap: isCompact ? 18 : 22,
           }}
         >
           <div>
@@ -374,7 +389,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
             >
               Memberships
             </div>
-            <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.1 }}>
+            <div style={{ fontSize: isCompact ? 28 : 34, fontWeight: 800, lineHeight: 1.1 }}>
               Choose the operating tier that matches your workload
             </div>
             <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
@@ -506,6 +521,22 @@ export const Welcome: React.FC<WelcomeProps> = ({
                       ? 'Starting Google...'
                       : 'Start Free 30-Day Trial'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
+                    style={{
+                      minHeight: 48,
+                      borderRadius: 16,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#eff6fb',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                    disabled={isLaunchingGoogle}
+                  >
+                    Existing User Login
+                  </button>
                 </div>
 
                 <div
@@ -527,6 +558,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   <div style={{ color: '#b9cbda', lineHeight: 1.6, fontSize: 14 }}>
                     Referral rewards only unlock after referred members become retained paid users.
                     Bank autopay discount begins after the trial period.
+                  </div>
+                  <div style={{ color: '#9fb4c4', lineHeight: 1.6, fontSize: 13 }}>
+                    If Google does not open right away on mobile, try again once the browser allows the popup window or use the existing-user login button first.
                   </div>
                 </div>
               </div>
@@ -605,7 +639,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEntryView('signin')}
+                  onClick={() => setEntryView('landing')}
                   style={{
                     minHeight: 42,
                     padding: '0 14px',
