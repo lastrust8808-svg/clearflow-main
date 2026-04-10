@@ -30,6 +30,56 @@ const moduleLabels = [
   'AI Studio',
 ];
 
+const featureHighlights = [
+  'Multi-entity operating system for trusts, businesses, fiduciary boards, and reserve structures',
+  'ERP accounting with invoices, bills, remittances, bank feed, journals, and reconciliation',
+  'Treasury, settlement, bond, collateral, wallet, and reserve control layers in one workspace',
+  'Document vault, compliance review, AI generation, and retained proof chains built into every workflow',
+];
+
+const membershipTiers = [
+  {
+    name: 'Steward',
+    price: '$39/mo',
+    autopayPrice: '$35.10/mo',
+    subtitle: 'For first boards and solo operators',
+    emphasis: 'Start with one entity, one operator, and a clean operating base.',
+    features: [
+      '30 days free',
+      'Core entity setup and authority flow',
+      'Accounting basics, documents, and AI learning hub',
+      'Rewards credits and referral link',
+    ],
+  },
+  {
+    name: 'Operator',
+    price: '$89/mo',
+    autopayPrice: '$80.10/mo',
+    subtitle: 'Best for active businesses and trust administration',
+    emphasis: 'This is the primary plan for most real users.',
+    featured: true,
+    features: [
+      '30 days free',
+      'Full ERP accounting and remittance flow',
+      'Bank feed, wallet, reserve, and settlement visibility',
+      'Multi-entity workflow, richer AI/reporting, and deeper resource access',
+    ],
+  },
+  {
+    name: 'Crown',
+    price: '$179/mo',
+    autopayPrice: '$161.10/mo',
+    subtitle: 'For treasury-heavy, fiduciary, and multi-entity operators',
+    emphasis: 'Advanced control, reporting, reserve, capital, and white-glove depth.',
+    features: [
+      '30 days free',
+      'Everything in Operator',
+      'Advanced treasury, reserve, bond, collateral, and strategy layers',
+      'Priority support and premium operating surfaces',
+    ],
+  },
+];
+
 export const Welcome: React.FC<WelcomeProps> = ({
   initialView = 'landing',
   initialIntent = 'existing',
@@ -106,12 +156,51 @@ export const Welcome: React.FC<WelcomeProps> = ({
           margin: '0 auto',
           minHeight: '100vh',
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.2fr) minmax(340px, 0.88fr)',
           gap: 28,
-          alignItems: 'center',
           padding: '32px 20px',
         }}
       >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Logo height={64} />
+            <div>
+              <div style={{ fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', color: '#8cebff' }}>
+                ClearFlow Operating System
+              </div>
+              <div style={{ color: '#c5d7e3', fontSize: 14 }}>
+                Integrated financial management, treasury, records, and execution control
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
+            style={{
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.04)',
+              color: '#eff6fb',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            disabled={isLaunchingGoogle}
+          >
+            {isLaunchingGoogle && signInIntent === 'existing'
+              ? 'Opening Login...'
+              : 'Existing User Login'}
+          </button>
+        </div>
+
         <section
           style={{
             borderRadius: 32,
@@ -121,10 +210,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
             backdropFilter: 'blur(18px)',
             display: 'grid',
-            gap: 24,
+            gap: 28,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: 18 }}>
             <div
               style={{
                 display: 'inline-flex',
@@ -139,49 +228,25 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 letterSpacing: 2,
                 textTransform: 'uppercase',
                 fontWeight: 700,
+                justifySelf: 'start',
               }}
             >
-              ClearFlow Core OS
+              30 Days Free To Start
             </div>
-            <div style={{ color: '#c5d7e3', fontSize: 14 }}>
-              Integrated Financial Management with wealth-operator energy
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <Logo height={72} />
-              <div>
-                <div style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05 }}>
-                  Finance, records, compliance, and cash flow in one place.
-                </div>
-              </div>
+            <div style={{ fontSize: 50, fontWeight: 800, lineHeight: 1.02, maxWidth: 920 }}>
+              The operating system for trusts, businesses, treasury, records, and cash flow.
             </div>
             <div
               style={{
                 fontSize: 18,
-                lineHeight: 1.75,
-                color: '#d9e7ef',
-                maxWidth: 760,
-              }}
-            >
-              ClearFlow is built to feel like a real financial operating system, not a pile of
-              disconnected tools. The goal is one workspace for entity setup, ERP accounting,
-              asset control, treasury and settlement visibility, compliance tracking, document
-              vaulting, and AI-guided workflow generation.
-            </div>
-            <div
-              style={{
-                fontSize: 16,
                 lineHeight: 1.8,
-                color: '#b9cbda',
-                maxWidth: 760,
+                color: '#d9e7ef',
+                maxWidth: 900,
               }}
             >
-              This is where users can create and manage entities, keep their books aligned,
-              register assets and wallets, reconcile money movement, retain supporting documents,
-              and generate the records needed to keep wealth structures and business operations
-              moving cleanly.
+              ClearFlow combines the most useful parts of accounting ERP, treasury control,
+              compliance workflow, vault retention, remittance operations, reserve management,
+              wallet connectivity, and AI-guided document systems into one platform.
             </div>
           </div>
 
@@ -192,9 +257,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
               gap: 14,
             }}
           >
-            {platformPillars.map((pillar) => (
+            {featureHighlights.map((item) => (
               <div
-                key={pillar}
+                key={item}
                 style={{
                   borderRadius: 20,
                   padding: '16px 18px',
@@ -204,7 +269,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   lineHeight: 1.6,
                 }}
               >
-                {pillar}
+                {item}
               </div>
             ))}
           </div>
@@ -237,9 +302,71 @@ export const Welcome: React.FC<WelcomeProps> = ({
             boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
             backdropFilter: 'blur(20px)',
             display: 'grid',
-            gap: 20,
+            gap: 22,
           }}
         >
+          <div>
+            <div
+              style={{
+                fontSize: 14,
+                textTransform: 'uppercase',
+                letterSpacing: 2,
+                color: '#8cebff',
+                marginBottom: 10,
+              }}
+            >
+              Memberships
+            </div>
+            <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.1 }}>
+              Choose the operating tier that matches your workload
+            </div>
+            <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
+              Every plan starts with a free 30-day trial. Connect bank autopay after trial to save
+              10% on monthly billing.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {membershipTiers.map((tier) => (
+              <div
+                key={tier.name}
+                style={{
+                  borderRadius: 24,
+                  padding: 22,
+                  background: tier.featured
+                    ? 'linear-gradient(180deg, rgba(54, 215, 255, 0.14), rgba(88, 141, 255, 0.08))'
+                    : 'rgba(255,255,255,0.03)',
+                  border: tier.featured
+                    ? '1px solid rgba(126, 242, 255, 0.24)'
+                    : '1px solid rgba(255,255,255,0.08)',
+                  display: 'grid',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800 }}>{tier.name}</div>
+                  <div style={{ color: '#9fe8ff', fontWeight: 700 }}>{tier.price}</div>
+                  <div style={{ color: '#f7d37b', fontSize: 13 }}>
+                    {tier.autopayPrice} with connected bank autopay
+                  </div>
+                  <div style={{ color: '#d9e7ef', lineHeight: 1.6 }}>{tier.subtitle}</div>
+                  <div style={{ color: '#b9cbda', lineHeight: 1.6 }}>{tier.emphasis}</div>
+                </div>
+                <div style={{ display: 'grid', gap: 8, color: '#e8f2f8', lineHeight: 1.55 }}>
+                  {tier.features.map((feature) => (
+                    <div key={feature}>{feature}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {entryView === 'landing' ? (
             <>
               <div>
@@ -252,62 +379,18 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     marginBottom: 10,
                   }}
                 >
-                  Secure Entry
+                  Free Trial Sign Up
                 </div>
                 <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
-                  Choose how you want to enter ClearFlow
+                  Start your 30-day membership trial
                 </div>
                 <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                  Existing members use Google to go straight into their dashboard. New users sign
-                  in with Google first, complete their personal operator profile, then connect
-                  entities from inside the workspace.
+                  New users start with Google, review the tiers, and enter ClearFlow free for 30
+                  days before paid billing begins.
                 </div>
               </div>
 
               <div style={{ display: 'grid', gap: 16 }}>
-                {lastKnownGoogleUser ? (
-                  <div
-                    style={{
-                      borderRadius: 24,
-                      padding: 22,
-                      background:
-                        'linear-gradient(180deg, rgba(54, 215, 255, 0.14), rgba(88, 141, 255, 0.08))',
-                      border: '1px solid rgba(126, 242, 255, 0.24)',
-                      display: 'grid',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: '#8cebff' }}>
-                      Returning Member
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 800 }}>Return to Dashboard</div>
-                    <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                      Continue as <strong>{lastKnownGoogleUser.name}</strong> using{' '}
-                      <strong>{lastKnownGoogleUser.email}</strong>.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void launchGoogle('returning')}
-                      style={{
-                        minHeight: 50,
-                        borderRadius: 16,
-                        border: '1px solid rgba(126, 242, 255, 0.28)',
-                        background:
-                          'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
-                        color: '#fff',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        fontSize: 15,
-                      }}
-                      disabled={isLaunchingGoogle}
-                    >
-                      {isLaunchingGoogle && signInIntent === 'existing'
-                        ? 'Opening Dashboard Access...'
-                        : 'Return with Google'}
-                    </button>
-                  </div>
-                ) : null}
-
                 <div
                   style={{
                     borderRadius: 24,
@@ -319,9 +402,10 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     gap: 12,
                   }}
                 >
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>New User Sign Up</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>New Member Sign Up</div>
                   <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Start with Google, then complete your operator profile first and connect entities afterward.
+                    Continue with Google to choose your membership, begin free for 30 days, and
+                    complete your operator profile.
                   </div>
                   <button
                     type="button"
@@ -341,7 +425,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
                   >
                     {isLaunchingGoogle && signInIntent === 'new'
                       ? 'Starting Google...'
-                      : 'Continue with Google'}
+                      : 'Start Free 30-Day Trial'}
                   </button>
                 </div>
 
@@ -355,31 +439,16 @@ export const Welcome: React.FC<WelcomeProps> = ({
                     gap: 12,
                   }}
                 >
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>Existing Sign In</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>Why membership matters</div>
                   <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Continue with the Google account already connected to your ClearFlow workspace.
+                    Membership unlocks the full operating system: entity administration, ERP,
+                    reserve and wallet control, remittance flow, compliance records, AI tools, and
+                    the resource library in one place.
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void launchGoogle('existing')}
-                    style={{
-                      minHeight: 48,
-                      borderRadius: 16,
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: '#eff6fb',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontSize: 15,
-                    }}
-                    disabled={isLaunchingGoogle}
-                  >
-                    {isLaunchingGoogle && signInIntent === 'existing'
-                      ? 'Starting Google...'
-                      : lastKnownGoogleUser
-                        ? 'Use another Google account'
-                        : 'Continue with Google'}
-                  </button>
+                  <div style={{ color: '#b9cbda', lineHeight: 1.6, fontSize: 14 }}>
+                    Referral rewards only unlock after referred members become retained paid users.
+                    Bank autopay discount begins after the trial period.
+                  </div>
                 </div>
               </div>
               {googleLaunchError ? (
