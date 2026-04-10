@@ -2250,11 +2250,27 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       date: issuedDate,
     });
 
+    let didSaveBill = false;
+    let savedEntityLabel = '';
+
     setData((prev) => {
       const base = prev.bills?.[0];
+      const scopedEntityName =
+        defaultEntity?.displayName ||
+        defaultEntity?.name ||
+        data.entities.find((item) => item.id === targetEntityId)?.displayName ||
+        data.entities.find((item) => item.id === targetEntityId)?.name;
       const entity =
-        prev.entities.find((item) => item.id === targetEntityId) ?? prev.entities[0];
+        prev.entities.find((item) => item.id === targetEntityId) ??
+        prev.entities.find(
+          (item) =>
+            Boolean(scopedEntityName) &&
+            [item.displayName, item.name].filter(Boolean).includes(scopedEntityName),
+        ) ??
+        prev.entities[0];
       if (!entity) return prev;
+      didSaveBill = true;
+      savedEntityLabel = entity.displayName || entity.name;
       const { vendorId, vendors: vendorSeed } = ensureVendorRecord(prev, entity.id, {
         name: payload.vendorName || extraction.vendorOrMerchantName,
         phone: extraction.contactPhone,
@@ -2495,9 +2511,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
+    if (!didSaveBill) {
+      setOperationsNotice(
+        'Unable to save the bill into the selected entity records yet. Reopen the entity, then try the bill again.',
+      );
+      return;
+    }
+
     setActiveSubsection('bills');
     setIsBillModalOpen(false);
-    setOperationsNotice('Saved the bill into the active entity accounting records.');
+    setOperationsNotice(`Saved the bill into ${savedEntityLabel || 'the active entity'} accounting records.`);
   };
 
   const handleReceiptSubmit = async (payload: ReceiptSubmitPayload) => {
