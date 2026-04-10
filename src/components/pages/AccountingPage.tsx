@@ -8298,22 +8298,56 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       case 'bills':
         return (
-          <EditableRecordSection
-            title="Bills"
-            description="Editable bill records."
-            emptyMessage="No bill records yet."
-            records={bills}
-            getTitle={(record) => record.billNumber ?? record.id}
-            getSubtitle={(record) =>
-              `${record.status ?? 'entered'} | ${record.intakeStatus ?? 'manual'} | ${formatCurrency(record.totalAmount, record.currency)}`
-            }
-            onSave={(nextRecord) =>
-              setData((prev) => ({
-                ...prev,
-                bills: updateCollectionRecord(prev.bills, nextRecord),
-              }))
-            }
-          />
+          <div style={{ display: 'grid', gap: 16 }}>
+            {operationsNotice ? (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(96,165,250,0.24)',
+                  background: 'rgba(30,41,59,0.4)',
+                  color: '#bfdbfe',
+                  lineHeight: 1.55,
+                }}
+              >
+                {operationsNotice}
+              </div>
+            ) : null}
+            <EditableRecordSection
+              title="Bills"
+              description="Editable bill records."
+              emptyMessage="No bill records yet."
+              records={bills}
+              getTitle={(record) => record.billNumber ?? record.id}
+              getSubtitle={(record) =>
+                `${record.status ?? 'entered'} | ${record.intakeStatus ?? 'manual'} | ${formatCurrency(record.totalAmount, record.currency)}`
+              }
+              getSummaryItems={(record) => [
+                { label: 'Vendor', value: vendors.find((item) => item.id === record.vendorId)?.name || record.extractedVendorName || 'Pending' },
+                { label: 'Due', value: record.dueDate || 'Not set' },
+                { label: 'Amount', value: formatCurrency(record.totalAmount, record.currency) },
+                { label: 'Status', value: record.status ?? 'entered' },
+                { label: 'Intake', value: record.intakeStatus ?? 'manual' },
+                { label: 'Docs', value: String(record.linkedDocumentIds?.length ?? 0) },
+              ]}
+              renderDetails={(record) => (
+                <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
+                  <div>
+                    Vendor {vendors.find((item) => item.id === record.vendorId)?.name || record.extractedVendorName || 'Pending'} | bill number {record.billNumber || 'Pending'} | due {record.dueDate || 'Not set'}
+                  </div>
+                  <div>
+                    Source docs {record.linkedDocumentIds?.length ?? 0} | extraction {record.extractionSummary || 'No extraction notes saved'}
+                  </div>
+                </div>
+              )}
+              onSave={(nextRecord) =>
+                setData((prev) => ({
+                  ...prev,
+                  bills: updateCollectionRecord(prev.bills, nextRecord),
+                }))
+              }
+            />
+          </div>
         );
 
       case 'expenses':
