@@ -151,9 +151,17 @@ export default function EntitiesPage({
             representativeName: payload.representativeName,
             entityName: entityDisplayName,
           });
-          const proofFileMetadata = payload.authorityProofFile
-            ? await saveDocumentFile(`entity-authority-proof-${entityId}`, payload.authorityProofFile)
-            : null;
+          let proofFileMetadata = null;
+          if (payload.authorityProofFile) {
+            try {
+              proofFileMetadata = await saveDocumentFile(
+                `entity-authority-proof-${entityId}`,
+                payload.authorityProofFile,
+              );
+            } catch (error) {
+              console.warn('Failed to save entity authority proof file.', error);
+            }
+          }
           const requiresAuthorityReview =
             payload.type === 'other' ||
             normalizedRole.includes('agent') ||
@@ -382,7 +390,7 @@ export default function EntitiesPage({
           }));
           setIsEntityModalOpen(false);
           onSetActiveEntity?.(entityId);
-          goToHash(`#documents:${documentId}`);
+          goToHash('#entities');
         }}
       />
       <EntityConnectionRailModal
