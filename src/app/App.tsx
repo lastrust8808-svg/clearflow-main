@@ -19,6 +19,7 @@ const OverviewPage = lazy(() => import('../components/pages/OverviewPage'));
 const EntitiesPage = lazy(() => import('../components/pages/EntitiesPage'));
 const AccountingPage = lazy(() => import('../components/pages/AccountingPage'));
 const LedgerPage = lazy(() => import('../components/pages/LedgerPage'));
+const InvestmentsPage = lazy(() => import('../components/pages/InvestmentsPage'));
 const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
 const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
 const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
@@ -123,6 +124,7 @@ const allowedSections: AppSection[] = [
   'accounting',
   'entities',
   'ledger',
+  'investments',
   'assets',
   'transactions',
   'compliance',
@@ -661,6 +663,9 @@ function preloadWorkspaceSection(section: AppSection) {
     case 'ledger':
       void import('../components/pages/LedgerPage');
       break;
+    case 'investments':
+      void import('../components/pages/InvestmentsPage');
+      break;
     case 'assets':
       void import('../components/pages/AssetsPage');
       break;
@@ -1080,6 +1085,8 @@ export default function App({
         );
       case 'ledger':
         return <LedgerPage data={scopedData} setData={setData} />;
+      case 'investments':
+        return <InvestmentsPage data={scopedData} />;
       case 'assets':
         return <AssetsPage data={scopedData} setData={setData} />;
       case 'transactions':

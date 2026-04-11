@@ -28,6 +28,7 @@ const navGroups: Array<{
       { id: 'entities', label: 'Entities', hint: 'Formation and authority' },
       { id: 'accounting', label: 'Accounting', hint: 'ERP and cash flow' },
       { id: 'ledger', label: 'Ledger & Treasury', hint: 'Books and reserve control' },
+      { id: 'investments', label: 'Investments', hint: 'Strategy, 1031, funding' },
     ],
   },
   {
@@ -71,6 +72,11 @@ const sectionQuickActions: Record<
     { label: 'Open Treasury', hash: '#ledger', description: 'Review private reserve posture' },
     { label: 'Settlement Desk', hash: '#transactions', description: 'Continue obligation execution' },
     { label: 'Documents', hash: '#documents', description: 'Open supporting memos and proofs' },
+  ],
+  investments: [
+    { label: 'Deal Analyzer', hash: '#investments:real-estate', description: 'Estimate costs, ROI, debt, and hold period' },
+    { label: '1031 Packet', hash: '#investments:1031', description: 'Stage a like-kind exchange checklist and packet' },
+    { label: 'Funding Paths', hash: '#investments:funding', description: 'Review capital stack and short-term placement options' },
   ],
   assets: [
     { label: 'Wallet Reserve', hash: '#assets', description: 'Review custody and reserve assets' },
@@ -442,6 +448,7 @@ export default function AppShell({
     entities: 'Formation, authority, ownership, and establishment records for every profile.',
     accounting: 'ERP intake, receivables, payables, payroll, bank flows, and reconciliations.',
     ledger: 'Private reserve, treasury movement, and internal book control surfaces.',
+    investments: 'Investment education, deal planning, 1031 exchange packets, and strategy simulations.',
     assets: 'Custody, wallets, reserves, digital holdings, and asset support records.',
     transactions: 'Settlement, performance, obligations, remittance, and movement execution.',
     compliance: 'Review queues, filings, controls, and reporting follow-through.',

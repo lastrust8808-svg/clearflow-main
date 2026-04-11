@@ -3,6 +3,7 @@ export type AppSection =
   | 'entities'
   | 'accounting'
   | 'ledger'
+  | 'investments'
   | 'assets'
   | 'transactions'
   | 'compliance'
