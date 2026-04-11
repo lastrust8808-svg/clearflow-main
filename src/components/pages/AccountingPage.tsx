@@ -346,6 +346,36 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
     replaceAccountingHash('#accounting:presentments');
   };
 
+  const openBillPaymentModal = (billId: string) => {
+    const bill = data.bills.find((item) => item.id === billId);
+    if (!bill) {
+      setOperationsNotice('The selected bill could not be found for payment setup.');
+      return;
+    }
+
+    const vendor = data.vendors.find((item) => item.id === bill.vendorId);
+    const nextAmount = bill.balanceDue > 0 ? bill.balanceDue : bill.totalAmount;
+
+    setPaymentModalDraft({
+      linkedBillId: bill.id,
+      direction: 'outgoing',
+      counterpartyType: 'vendor',
+      counterpartyId: bill.vendorId,
+      amount: nextAmount > 0 ? String(nextAmount) : '',
+      method: 'ach',
+      memo: `Bill payment for ${bill.billNumber || vendor?.name || bill.id}`,
+      note: bill.notes || bill.extractionSummary || '',
+      sourceBankAccountId: '',
+      sourceLedgerAccountId: '',
+      treasuryAccountId: '',
+      dischargeMethod: undefined,
+      currency: bill.currency,
+    });
+    setActiveSubsection('payments');
+    setIsPaymentModalOpen(true);
+    replaceAccountingHash('#accounting:payments');
+  };
+
   const resumeSavedPresentmentDraft = () => {
     const savedDraft = loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey);
     if (!savedDraft) {
@@ -8369,8 +8399,47 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 { label: 'Vendor', value: vendors.find((item) => item.id === record.vendorId)?.name || record.extractedVendorName || 'Pending' },
                 { label: 'Due', value: record.dueDate || 'Not set' },
                 { label: 'Amount', value: formatCurrency(record.totalAmount, record.currency) },
-                { label: 'Status', value: record.status ?? 'entered' },
-                { label: 'Intake', value: record.intakeStatus ?? 'manual' },
+                {
+                  label: 'Payment',
+                  value:
+                    (() => {
+                      const linkedPayments = payments.filter((item) => item.linkedBillIds?.includes(record.id));
+                      if (!linkedPayments.length) {
+                        return 'Not submitted';
+                      }
+
+                      const applied = linkedPayments.find(
+                        (item) =>
+                          item.settlementExecution?.externalStatus === 'applied' ||
+                          item.externalRecognitionStatus === 'recognized_by_saved_terms',
+                      );
+                      if (applied) {
+                        return 'Applied';
+                      }
+
+                      const settled = linkedPayments.find(
+                        (item) =>
+                          item.status === 'settled' ||
+                          item.settlementExecution?.externalStatus === 'settled',
+                      );
+                      if (settled) {
+                        return 'Settled';
+                      }
+
+                      const processing = linkedPayments.find(
+                        (item) =>
+                          item.settlementExecution?.externalStatus === 'processing' ||
+                          item.settlementExecution?.externalStatus === 'accepted' ||
+                          item.releaseStatus === 'released',
+                      );
+                      if (processing) {
+                        return 'Submitted';
+                      }
+
+                      return 'Queued';
+                    })(),
+                },
+                { label: 'Bill', value: record.status ?? 'entered' },
                 { label: 'Docs', value: String(record.linkedDocumentIds?.length ?? 0) },
               ]}
               renderDetails={(record) => (
@@ -8379,7 +8448,64 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                     Vendor {vendors.find((item) => item.id === record.vendorId)?.name || record.extractedVendorName || 'Pending'} | bill number {record.billNumber || 'Pending'} | due {record.dueDate || 'Not set'}
                   </div>
                   <div>
+                    Payment state{' '}
+                    {(() => {
+                      const linkedPayments = payments.filter((item) => item.linkedBillIds?.includes(record.id));
+                      if (!linkedPayments.length) {
+                        return 'Not submitted';
+                      }
+
+                      const applied = linkedPayments.find(
+                        (item) =>
+                          item.settlementExecution?.externalStatus === 'applied' ||
+                          item.externalRecognitionStatus === 'recognized_by_saved_terms',
+                      );
+                      if (applied) {
+                        return `Applied${applied.id ? ` | ${applied.id}` : ''}`;
+                      }
+
+                      const settled = linkedPayments.find(
+                        (item) =>
+                          item.status === 'settled' ||
+                          item.settlementExecution?.externalStatus === 'settled',
+                      );
+                      if (settled) {
+                        return `Settled${settled.id ? ` | ${settled.id}` : ''}`;
+                      }
+
+                      const processing = linkedPayments.find(
+                        (item) =>
+                          item.settlementExecution?.externalStatus === 'processing' ||
+                          item.settlementExecution?.externalStatus === 'accepted' ||
+                          item.releaseStatus === 'released',
+                      );
+                      if (processing) {
+                        return `Submitted${processing.id ? ` | ${processing.id}` : ''}`;
+                      }
+
+                      return `Queued${linkedPayments[0]?.id ? ` | ${linkedPayments[0].id}` : ''}`;
+                    })()}
+                  </div>
+                  <div>
                     Source docs {record.linkedDocumentIds?.length ?? 0} | extraction {record.extractionSummary || 'No extraction notes saved'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => openBillPaymentModal(record.id)}
+                      style={{
+                        padding: '10px 14px',
+                        minHeight: 42,
+                        borderRadius: 10,
+                        border: '1px solid rgba(96,165,250,0.28)',
+                        background: 'rgba(37,99,235,0.18)',
+                        color: '#dbeafe',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Pay This Bill
+                    </button>
                   </div>
                 </div>
               )}
