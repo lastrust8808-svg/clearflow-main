@@ -221,18 +221,18 @@ const academyVideoPlans = [
   {
     title: 'ClearFlow Overview',
     playlist: 'Getting Started',
-    status: 'Upload ready',
+    status: 'Published',
     route: '#overview',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/ZW4OXF2-5-M',
     outline:
       'Show the command center, entity selector, left-panel navigation, and how records flow from intake to ledger to proof.',
   },
   {
     title: 'Add A Bill And Submit For Payment',
     playlist: 'Accounting & Bills',
-    status: 'Upload ready',
+    status: 'Published',
     route: '#accounting:bills',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/S4XGBjYy2Zo',
     outline:
       'Upload or manually enter a bill, confirm extracted data, save it to the active entity, reopen it, and use Pay This Bill.',
   },

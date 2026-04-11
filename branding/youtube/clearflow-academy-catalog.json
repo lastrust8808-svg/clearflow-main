@@ -13,8 +13,8 @@
       "localVideoPath": "academy/generated/clearflow-overview-video-01.mp4",
       "scriptPath": "academy/clearflow-overview-video-01.md",
       "thumbnailPath": "academy/clearflow-overview-thumbnail.svg",
-      "youtubeUrl": "",
-      "status": "rendered_upload_ready"
+      "youtubeUrl": "https://youtu.be/ZW4OXF2-5-M",
+      "status": "published"
     },
     {
       "id": "clearflow-bill-payment-video-02",
@@ -22,8 +22,8 @@
       "playlist": "Accounting & Bills",
       "localVideoPath": "academy/generated/clearflow-bill-payment-video-02.mp4",
       "scriptPath": "academy/clearflow-bill-payment-video-02.md",
-      "youtubeUrl": "",
-      "status": "rendered_upload_ready"
+      "youtubeUrl": "https://youtu.be/S4XGBjYy2Zo",
+      "status": "published"
     }
   ]
 }
