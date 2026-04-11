@@ -26,6 +26,14 @@
       "scriptPath": "academy/clearflow-bill-payment-video-02.md",
       "youtubeUrl": "https://youtu.be/esLTVSPyWWk",
       "status": "published_guided"
+    },
+    {
+      "id": "clearflow-bank-rails-video-03",
+      "title": "Connect Accounts And Understand Payment Rails In ClearFlow",
+      "playlist": "Bank Feed & Payments",
+      "guidedReplacementPath": "academy/generated/clearflow-bank-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "upload_ready"
     }
   ]
 }

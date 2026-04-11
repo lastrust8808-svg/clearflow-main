@@ -239,7 +239,7 @@ const academyVideoPlans = [
   {
     title: 'Connect Accounts And Understand Rails',
     playlist: 'Bank Feed & Payments',
-    status: 'Script ready',
+    status: 'Upload ready',
     route: '#accounting:bankFeed',
     youtubeUrl: '',
     outline:
