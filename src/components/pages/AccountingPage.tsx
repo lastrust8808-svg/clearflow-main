@@ -6006,10 +6006,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             statementImportPolicy: 'review_all',
             statementAutoPostThreshold: 1000,
             fundsRightsClassification: defaultFundsRightsClassification,
-            achOriginationEnabled: provider.supportsSettlementInitiation,
-            wireEnabled: provider.supportsSettlementInitiation,
-            checkDraftEnabled: provider.accountTypeHint !== 'credit_card',
-            positivePayEnabled: provider.accountTypeHint !== 'credit_card',
+            achOriginationEnabled: provider.supportsAchOrigination,
+            wireEnabled: provider.supportsWireOrigination,
+            checkDraftEnabled:
+              provider.providerKey === 'checkbook' ||
+              (provider.accountTypeHint !== 'credit_card' && provider.category !== 'processor'),
+            positivePayEnabled:
+              provider.providerKey === 'checkbook' ||
+              (provider.accountTypeHint !== 'credit_card' && provider.category !== 'processor'),
             overdraftPolicy: 'manual_review',
             connectedProfile: {
               providerKey: provider.providerKey,

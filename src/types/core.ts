@@ -299,12 +299,15 @@ export type FinancialConnectionProvider =
   | 'dwolla'
   | 'treasury_prime'
   | 'modern_treasury'
+  | 'unit'
+  | 'checkbook'
   | 'usps_bcg'
   | 'upu_addressing'
   | 'stripe'
   | 'cash_app'
   | 'paypal'
   | 'square'
+  | 'lithic'
   | 'issuer_portal'
   | 'manual';
 export type FinancialConnectionRail =
@@ -2236,10 +2239,10 @@ export interface BankAccountRecord {
     supportsLiveSync: boolean;
     supportsTransactionImport: boolean;
     supportsSettlementInitiation: boolean;
-      availabilityStatus: 'live' | 'profile_only';
-      connectedAt: string;
-      lastProviderSyncAt?: string;
-    };
+    availabilityStatus: 'live' | 'profile_only' | 'bank_dependent';
+    connectedAt: string;
+    lastProviderSyncAt?: string;
+  };
   checkDraftEnabled?: boolean;
   positivePayEnabled?: boolean;
   overdraftPolicy?: 'none' | 'bank_authorized' | 'controlled_sweep' | 'manual_review';
