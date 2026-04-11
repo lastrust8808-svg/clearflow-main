@@ -232,7 +232,7 @@ const academyVideoPlans = [
     playlist: 'Accounting & Bills',
     status: 'Published',
     route: '#accounting:bills',
-    youtubeUrl: 'https://youtu.be/S4XGBjYy2Zo',
+    youtubeUrl: 'https://youtu.be/esLTVSPyWWk',
     outline:
       'Upload or manually enter a bill, confirm extracted data, save it to the active entity, reopen it, and use Pay This Bill.',
   },
