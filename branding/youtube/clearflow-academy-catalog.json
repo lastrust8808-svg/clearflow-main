@@ -34,6 +34,14 @@
       "guidedReplacementPath": "academy/generated/clearflow-bank-guided-video.mp4",
       "youtubeUrl": "https://youtu.be/sg_TZZdGeyA",
       "status": "published_guided"
+    },
+    {
+      "id": "clearflow-entities-authority-video-04",
+      "title": "Set Up Entity Profiles And Authority Proof In ClearFlow",
+      "playlist": "Entities & Authority",
+      "guidedReplacementPath": "academy/generated/clearflow-entities-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/Qown0-nnpV0",
+      "status": "published_guided"
     }
   ]
 }

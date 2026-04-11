@@ -248,9 +248,9 @@ const academyVideoPlans = [
   {
     title: 'Create An Entity And Prove Authority',
     playlist: 'Entities & Authority',
-    status: 'Script ready',
+    status: 'Published',
     route: '#entities',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/Qown0-nnpV0',
     outline:
       'Create a trust or business profile, upload authority documents, understand transaction holds, and add authorized people when names do not match.',
   },
