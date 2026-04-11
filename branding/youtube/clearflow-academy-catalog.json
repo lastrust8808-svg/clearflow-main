@@ -42,6 +42,14 @@
       "guidedReplacementPath": "academy/generated/clearflow-entities-guided-video.mp4",
       "youtubeUrl": "https://youtu.be/Qown0-nnpV0",
       "status": "published_guided"
+    },
+    {
+      "id": "clearflow-documents-vault-video-05",
+      "title": "Use Documents And Vault To Keep Proof In ClearFlow",
+      "playlist": "Documents & Vault",
+      "guidedReplacementPath": "academy/generated/clearflow-documents-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/dOax_U8xuHU",
+      "status": "published_guided"
     }
   ]
 }

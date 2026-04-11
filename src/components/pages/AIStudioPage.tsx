@@ -257,9 +257,9 @@ const academyVideoPlans = [
   {
     title: 'Use The Documents Vault',
     playlist: 'Documents & Vault',
-    status: 'Script ready',
+    status: 'Published',
     route: '#documents',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/dOax_U8xuHU',
     outline:
       'Upload records, review generated packets, connect evidence to accounting and compliance, and retain proof for later review.',
   },
