@@ -239,9 +239,9 @@ const academyVideoPlans = [
   {
     title: 'Connect Accounts And Understand Rails',
     playlist: 'Bank Feed & Payments',
-    status: 'Upload ready',
+    status: 'Published',
     route: '#accounting:bankFeed',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/sg_TZZdGeyA',
     outline:
       'Explain Plaid, Stripe, Checkbook, Treasury Prime, Modern Treasury, Unit, Lithic, ACH, checks, bank bill pay, and readiness flags.',
   },
