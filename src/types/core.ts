@@ -315,6 +315,7 @@ export type FinancialConnectionProvider =
   | 'treasury_prime'
   | 'modern_treasury'
   | 'unit'
+  | 'mercury'
   | 'checkbook'
   | 'usps_bcg'
   | 'upu_addressing'

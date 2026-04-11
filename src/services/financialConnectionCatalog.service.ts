@@ -16,6 +16,7 @@ export interface FinancialConnectionProviderDefinition {
   executionReadiness: 'ready_now' | 'staged' | 'institution_dependent';
   supportedRails: string[];
   description: string;
+  referralSignupUrl?: string;
 }
 
 const providerCatalog: FinancialConnectionProviderDefinition[] = [
@@ -108,6 +109,34 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     supportedRails: ['embedded bank accounts', 'ACH', 'wire', 'cards', 'statements'],
     description:
       'Embedded banking provider profile for business deposit accounts, account-backed ERP cashflow, card programs, statements, and bank-partner controlled movement.',
+  },
+  {
+    providerKey: 'mercury',
+    label: 'Mercury Business Banking',
+    category: 'treasury',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: true,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: true,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'checking',
+    executionReadiness: 'staged',
+    supportedRails: [
+      'business account sync',
+      'balances',
+      'transactions',
+      'statements',
+      'cards',
+      'recipients',
+      'payment to existing recipient (Mercury approval / token scoped)',
+      'ClearFlow referral signup path pending referral URL',
+    ],
+    description:
+      'Business banking integration profile for Mercury accounts. Use API-token or approved OAuth posture for account, balance, transaction, statement, card, treasury, and recipient sync; payment execution remains Mercury approval and credential scoped. Add ClearFlow’s Mercury referral URL before routing new-account signup traffic.',
+    referralSignupUrl: '',
   },
   {
     providerKey: 'checkbook',
