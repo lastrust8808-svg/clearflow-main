@@ -223,7 +223,7 @@ const academyVideoPlans = [
     playlist: 'Getting Started',
     status: 'Published',
     route: '#overview',
-    youtubeUrl: 'https://youtu.be/ZW4OXF2-5-M',
+    youtubeUrl: 'https://youtu.be/KdWSJmHpLXA',
     outline:
       'Show the command center, entity selector, left-panel navigation, and how records flow from intake to ledger to proof.',
   },
