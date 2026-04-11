@@ -265,10 +265,10 @@ const academyVideoPlans = [
   },
   {
     title: 'Build An Investment Plan',
-    playlist: 'Investments',
-    status: 'Script ready',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
     route: '#investments',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/PKg6Oi0kEX4',
     outline:
       'Model a real estate deal, save a 1031/funding/strategy plan of action, and keep education separate from live execution.',
   },

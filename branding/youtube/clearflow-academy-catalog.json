@@ -50,6 +50,14 @@
       "guidedReplacementPath": "academy/generated/clearflow-documents-guided-video.mp4",
       "youtubeUrl": "https://youtu.be/dOax_U8xuHU",
       "status": "published_guided"
+    },
+    {
+      "id": "clearflow-investments-video-06",
+      "title": "How To Use The Investments Section In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-investments-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/PKg6Oi0kEX4",
+      "status": "published_guided"
     }
   ]
 }
