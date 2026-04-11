@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="ClearFlow Overview YouTube thumbnail">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="48%" stop-color="#102a3a"/>
+      <stop offset="100%" stop-color="#1d3b2e"/>
+    </linearGradient>
+    <linearGradient id="orb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#005A9E"/>
+      <stop offset="55%" stop-color="#21c2c6"/>
+      <stop offset="100%" stop-color="#4CAF50"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <circle cx="1030" cy="150" r="260" fill="#21c2c6" opacity="0.12"/>
+  <circle cx="180" cy="640" r="340" fill="#4CAF50" opacity="0.1"/>
+  <rect x="70" y="70" width="1140" height="580" rx="46" fill="rgba(2,6,23,0.66)" stroke="rgba(126,242,255,0.22)" stroke-width="3"/>
+
+  <circle cx="230" cy="210" r="108" fill="url(#orb)"/>
+  <path d="M 156 184 C 190 144 254 238 308 186" stroke="#ffffff" stroke-width="22" stroke-linecap="round" fill="none"/>
+  <path d="M 156 236 C 194 276 250 150 308 230" stroke="#ffffff" stroke-width="22" stroke-linecap="round" fill="none"/>
+
+  <text x="380" y="185" font-family="Segoe UI, Saira, sans-serif" font-size="48" font-weight="800" fill="#7ef2ff" letter-spacing="5">
+    CLEARFLOW ACADEMY
+  </text>
+  <text x="380" y="300" font-family="Segoe UI, Saira, sans-serif" font-size="86" font-weight="900" fill="#ffffff">
+    ClearFlow Overview
+  </text>
+  <text x="380" y="392" font-family="Segoe UI, Saira, sans-serif" font-size="54" font-weight="800" fill="#f7d37b">
+    Navigate. Save. Verify.
+  </text>
+  <text x="380" y="490" font-family="Segoe UI, Saira, sans-serif" font-size="34" font-weight="650" fill="#d9e7ef">
+    Entities • Accounting • Documents • Payments • Investments
+  </text>
+</svg>
