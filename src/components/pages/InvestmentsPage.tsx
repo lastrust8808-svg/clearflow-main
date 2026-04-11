@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { CoreDataBundle } from '../../types/core';
+import type { Dispatch, SetStateAction } from 'react';
+import type { CoreDataBundle, InvestmentActionPlanRecord } from '../../types/core';
 
 interface InvestmentsPageProps {
   data: CoreDataBundle;
+  setData: Dispatch<SetStateAction<CoreDataBundle>>;
 }
 
 type FundingPath = 'cash' | 'loan' | 'seller_finance' | 'partner_capital' | 'project_funding';
@@ -74,7 +76,7 @@ const exchangeChecklist = [
   'Coordinate tax, legal, title, lender, and qualified intermediary review before execution.',
 ];
 
-export default function InvestmentsPage({ data }: InvestmentsPageProps) {
+export default function InvestmentsPage({ data, setData }: InvestmentsPageProps) {
   const [purchasePrice, setPurchasePrice] = useState('250000');
   const [rehabBudget, setRehabBudget] = useState('35000');
   const [closingCosts, setClosingCosts] = useState('7500');
@@ -89,6 +91,9 @@ export default function InvestmentsPage({ data }: InvestmentsPageProps) {
   const [fundingPath, setFundingPath] = useState<FundingPath>('loan');
   const [strategyCapital, setStrategyCapital] = useState('1000');
   const [maxDailyLoss, setMaxDailyLoss] = useState('2');
+  const [planTitle, setPlanTitle] = useState('Real estate investment action plan');
+  const [planNotes, setPlanNotes] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
 
   const deal = useMemo(() => {
     const price = asNumber(purchasePrice);
@@ -142,6 +147,57 @@ export default function InvestmentsPage({ data }: InvestmentsPageProps) {
   ]);
 
   const activeEntityCount = data.entities.filter((entity) => entity.status === 'active').length;
+  const activeEntity = data.entities[0];
+  const investmentPlans = data.investmentActionPlans ?? [];
+
+  const saveActionPlan = (planType: InvestmentActionPlanRecord['planType']) => {
+    const now = new Date().toISOString();
+    const title = planTitle.trim() || 'Investment action plan';
+    const plan: InvestmentActionPlanRecord = {
+      id: `investment-plan-${Date.now()}`,
+      entityId: activeEntity?.id,
+      title,
+      planType,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+      inputs: {
+        purchasePrice,
+        rehabBudget,
+        closingCosts,
+        afterRepairValue,
+        monthlyRent,
+        monthlyOperatingCosts,
+        holdMonths,
+        loanEnabled,
+        downPaymentPercent,
+        interestRate,
+        loanYears,
+        fundingPath,
+        strategyCapital,
+        maxDailyLoss,
+      },
+      outputs: {
+        totalProjectCost: deal.totalProjectCost,
+        upfrontCash: deal.upfrontCash,
+        loanPrincipal: deal.loanPrincipal,
+        monthlyDebtService: deal.debtService,
+        netMonthlyCashflow: deal.netMonthlyCashflow,
+        budgetSpreadEquity: deal.equitySpread,
+        cashOnCashPercent: deal.cashOnCash,
+        projectedHoldProfit: deal.projectedHoldProfit,
+        projectedHoldRoiPercent: deal.roi,
+      },
+      checklist: exchangeChecklist.map((label) => ({ label, completed: false })),
+      notes: planNotes.trim() || undefined,
+    };
+
+    setData((prev) => ({
+      ...prev,
+      investmentActionPlans: [plan, ...(prev.investmentActionPlans ?? [])],
+    }));
+    setSaveNotice(`Saved "${title}" as an investment plan of action.`);
+  };
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -161,6 +217,56 @@ export default function InvestmentsPage({ data }: InvestmentsPageProps) {
           Educational and planning workspace only. Live trading, securities advice, and exchange
           execution should require qualified provider connections, user approval, and professional review.
         </div>
+      </section>
+
+      <section style={{ ...cardStyle, display: 'grid', gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>Save This Plan Of Action</div>
+          <div style={{ color: '#94a3b8', marginTop: 6 }}>
+            Store the current calculator, funding, 1031, and strategy inputs as a retained investment plan.
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Plan Title</span>
+            <input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Notes / Next Step</span>
+            <input
+              value={planNotes}
+              onChange={(event) => setPlanNotes(event.target.value)}
+              placeholder="Review lender terms, identify replacement property, prepare packet..."
+              style={inputStyle}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {[
+            ['Save Deal Plan', 'real_estate_deal'],
+            ['Save 1031 Plan', '1031_exchange'],
+            ['Save Funding Plan', 'funding_path'],
+            ['Save Strategy Lab Plan', 'strategy_lab'],
+          ].map(([label, type]) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => saveActionPlan(type as InvestmentActionPlanRecord['planType'])}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'linear-gradient(135deg, rgba(20,184,166,0.85), rgba(37,99,235,0.72))',
+                color: '#fff',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {saveNotice ? <div style={{ color: '#7ef2ff' }}>{saveNotice}</div> : null}
       </section>
 
       <section style={{ ...cardStyle, display: 'grid', gap: 16 }}>
@@ -311,6 +417,48 @@ export default function InvestmentsPage({ data }: InvestmentsPageProps) {
           Suggested guardrail: paper trade up to {currency(asNumber(strategyCapital))} with a daily
           loss stop of {percent(asNumber(maxDailyLoss))}. No income guarantee, no silent live execution.
         </div>
+      </section>
+
+      <section style={{ ...cardStyle, display: 'grid', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>Saved Investment Plans</div>
+          <div style={{ color: '#94a3b8', marginTop: 6 }}>
+            Retained plans of action for the current investment workspace.
+          </div>
+        </div>
+        {investmentPlans.length === 0 ? (
+          <div style={{ color: '#94a3b8' }}>
+            No investment plans saved yet. Use the save buttons above to retain the current inputs.
+          </div>
+        ) : (
+          investmentPlans.map((plan) => (
+            <div
+              key={plan.id}
+              style={{
+                borderRadius: 16,
+                padding: 14,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <strong>{plan.title}</strong>
+                <span style={{ color: '#7ef2ff' }}>{plan.planType.replace(/_/g, ' ')}</span>
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                Saved {new Date(plan.createdAt).toLocaleString()} | Status: {plan.status}
+              </div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+                Upfront cash {currency(Number(plan.outputs.upfrontCash || 0))} | ROI{' '}
+                {percent(Number(plan.outputs.projectedHoldRoiPercent || 0))} | Cashflow{' '}
+                {currency(Number(plan.outputs.netMonthlyCashflow || 0))}/mo
+              </div>
+              {plan.notes ? <div style={{ color: '#e5eef7' }}>{plan.notes}</div> : null}
+            </div>
+          ))
+        )}
       </section>
     </div>
   );

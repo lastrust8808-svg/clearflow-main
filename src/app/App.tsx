@@ -231,6 +231,7 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     borrowingFacilities: [],
     collateralHoldings: [],
     futuresStrategies: [],
+    investmentActionPlans: [],
     liquidationPlans: [],
     instrumentSettlements: [],
     remittanceStatements: [],
@@ -299,6 +300,7 @@ function stripDemoSeedData(raw: Partial<CoreDataBundle>): Partial<CoreDataBundle
     borrowingFacilities: [],
     collateralHoldings: [],
     futuresStrategies: [],
+    investmentActionPlans: [],
     liquidationPlans: [],
     instrumentSettlements: [],
     remittanceStatements: [],
@@ -366,6 +368,7 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     borrowingFacilities: candidate.borrowingFacilities ?? base.borrowingFacilities,
     collateralHoldings: candidate.collateralHoldings ?? base.collateralHoldings,
     futuresStrategies: candidate.futuresStrategies ?? base.futuresStrategies,
+    investmentActionPlans: candidate.investmentActionPlans ?? base.investmentActionPlans,
     liquidationPlans: candidate.liquidationPlans ?? base.liquidationPlans,
     instrumentSettlements:
       candidate.instrumentSettlements ?? base.instrumentSettlements,
@@ -1086,7 +1089,7 @@ export default function App({
       case 'ledger':
         return <LedgerPage data={scopedData} setData={setData} />;
       case 'investments':
-        return <InvestmentsPage data={scopedData} />;
+        return <InvestmentsPage data={scopedData} setData={setData} />;
       case 'assets':
         return <AssetsPage data={scopedData} setData={setData} />;
       case 'transactions':

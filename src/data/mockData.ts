@@ -979,6 +979,7 @@ export const coreMockData: CoreDataBundle = {
       notes: 'Carry and liquidity overlay intended to support reserve yield while preserving cashflow optionality for future bond purchases.',
     },
   ],
+  investmentActionPlans: [],
   liquidationPlans: [
     {
       id: 'liq-001',

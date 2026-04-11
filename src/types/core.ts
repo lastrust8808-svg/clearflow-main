@@ -20,6 +20,20 @@ export type EntityType =
   | 'nonprofit'
   | 'other';
 
+export interface InvestmentActionPlanRecord {
+  id: string;
+  entityId?: string;
+  title: string;
+  planType: 'real_estate_deal' | '1031_exchange' | 'funding_path' | 'short_term_placement' | 'strategy_lab';
+  status: 'draft' | 'review' | 'ready' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  inputs: Record<string, string | number | boolean>;
+  outputs: Record<string, string | number>;
+  checklist: Array<{ label: string; completed: boolean }>;
+  notes?: string;
+}
+
 export type AssetCategory =
   | 'real_estate'
   | 'metal'
@@ -2350,6 +2364,7 @@ export interface CoreDataBundle {
   borrowingFacilities: BorrowingFacilityRecord[];
   collateralHoldings: CollateralHoldingRecord[];
   futuresStrategies: FuturesStrategyRecord[];
+  investmentActionPlans: InvestmentActionPlanRecord[];
   liquidationPlans: LiquidationPlanRecord[];
   instrumentSettlements: InstrumentSettlementRecord[];
   remittanceStatements: RemittanceStatementRecord[];
