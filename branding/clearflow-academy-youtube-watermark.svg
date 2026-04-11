@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="ClearFlow Academy YouTube watermark">
+  <defs>
+    <linearGradient id="cfAcademyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#005A9E"/>
+      <stop offset="54%" stop-color="#1EA7B7"/>
+      <stop offset="100%" stop-color="#4CAF50"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#020617" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <circle cx="250" cy="250" r="218" fill="rgba(2, 6, 23, 0.82)" filter="url(#softShadow)"/>
+  <circle cx="250" cy="250" r="198" fill="url(#cfAcademyGradient)"/>
+  <circle cx="250" cy="250" r="174" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="8"/>
+
+  <path d="M 122 196 C 178 132 288 286 378 198" stroke="#ffffff" stroke-width="34" stroke-linecap="round" fill="none"/>
+  <path d="M 122 304 C 186 370 280 150 378 292" stroke="#ffffff" stroke-width="34" stroke-linecap="round" fill="none"/>
+
+  <text x="250" y="438" text-anchor="middle" font-family="Saira, Segoe UI, sans-serif" font-size="42" font-weight="800" letter-spacing="4" fill="#ffffff">
+    ACADEMY
+  </text>
+</svg>
