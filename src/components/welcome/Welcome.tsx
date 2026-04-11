@@ -275,7 +275,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
               30 Days Free To Start
             </div>
             <div style={{ fontSize: isCompact ? 36 : 54, fontWeight: 800, lineHeight: 1, maxWidth: 980 }}>
-              The royal operating system for trusts, businesses, treasury, records, and cash flow.
+              The integrated operating system for trusts, businesses, treasury, records, and cash flow.
             </div>
             <div
               style={{
@@ -285,9 +285,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
                 maxWidth: 900,
               }}
             >
-              ClearFlow combines the most useful parts of accounting ERP, treasury control,
-              compliance workflow, vault retention, remittance operations, reserve management,
-              wallet connectivity, and AI-guided document systems into one platform.
+              ClearFlow brings accounting ERP, treasury controls, compliance workflow, retained
+              records, remittance operations, reserve management, wallet connectivity, and
+              AI-guided document organization into one coordinated operations platform.
             </div>
           </div>
 
