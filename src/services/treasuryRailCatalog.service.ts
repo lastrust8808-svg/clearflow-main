@@ -24,7 +24,7 @@ const treasuryRailCatalog: TreasuryRailDefinition[] = [
     readiness: 'live_now',
     bestUse: 'standard vendor disbursements, payroll-style bank settlement, and recurring ERP cashflow',
     notes:
-      'Best for broad compatibility. Requires verified payee instructions and a real origination provider or bank channel.',
+      'Best for broad compatibility. Requires verified payee instructions and a real origination provider or bank channel; Nacha membership is a governance and education path, not origination authority by itself.',
   },
   {
     railKey: 'same_day_ach',
@@ -87,7 +87,7 @@ const treasuryRailCatalog: TreasuryRailDefinition[] = [
     readiness: 'bank_dependent',
     bestUse: 'institution-controlled ACH origination with file approval and treasury operations',
     notes:
-      'Useful for treasury desks and banks that prefer ACH file upload over direct API origination.',
+      'Useful for treasury desks and banks that prefer ACH file upload over direct API origination. Pair with Nacha Operating Rules review and bank/ODFI approval before live release.',
   },
   {
     railKey: 'internal_ledger',

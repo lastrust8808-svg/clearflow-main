@@ -46,6 +46,20 @@ const researchLinks = [
     detail: 'Reference Treasury guidance for federal ACH formats, returns, NOCs, and payment operations.',
   },
   {
+    title: 'Nacha Payments Innovation Alliance',
+    subtitle: 'ACH network education, rules resources, and payments innovation membership',
+    url: 'https://www.nacha.org/payments-innovation-alliance',
+    detail:
+      'Retained from Nacha outreach: Observer membership is useful for Operating Rules resources, webinars, and a Nacha point of contact; Participating membership adds project teams, meetings, and advisory visibility. Membership supports governance and learning, but does not by itself make ClearFlow an ACH originator.',
+  },
+  {
+    title: 'Nacha Operating Rules',
+    subtitle: 'ACH rules publication and operating guidance',
+    url: 'https://www.nacha.org/rules',
+    detail:
+      'Use Nacha rules resources when designing ACH authorization, return, reversal, file, third-party sender, and ODFI-bank workflow controls.',
+  },
+  {
     title: 'Treasury Gold Book',
     subtitle: 'Treasury check reclamation guidance',
     url: 'https://fiscal.treasury.gov/files/reference-guidance/gold-book/gold-book-full.pdf',
@@ -200,6 +214,65 @@ const researchLinks = [
     subtitle: 'Presentment procedure',
     url: 'https://www.law.cornell.edu/ucc/3/3-501',
     detail: 'Use UCC 3-501 when structuring presentment, dishonor, and evidence flow for drafts and exchange instruments.',
+  },
+];
+
+const academyVideoPlans = [
+  {
+    title: 'ClearFlow Overview',
+    playlist: 'Getting Started',
+    status: 'Script ready',
+    route: '#overview',
+    outline:
+      'Show the command center, entity selector, left-panel navigation, and how records flow from intake to ledger to proof.',
+  },
+  {
+    title: 'Add A Bill And Submit For Payment',
+    playlist: 'Accounting & Bills',
+    status: 'Priority recording',
+    route: '#accounting:bills',
+    outline:
+      'Upload or manually enter a bill, confirm extracted data, save it to the active entity, reopen it, and use Pay This Bill.',
+  },
+  {
+    title: 'Connect Accounts And Understand Rails',
+    playlist: 'Bank Feed & Payments',
+    status: 'Script ready',
+    route: '#accounting:bankFeed',
+    outline:
+      'Explain Plaid, Stripe, Checkbook, Treasury Prime, Modern Treasury, Unit, Lithic, ACH, checks, bank bill pay, and readiness flags.',
+  },
+  {
+    title: 'Create An Entity And Prove Authority',
+    playlist: 'Entities & Authority',
+    status: 'Script ready',
+    route: '#entities',
+    outline:
+      'Create a trust or business profile, upload authority documents, understand transaction holds, and add authorized people when names do not match.',
+  },
+  {
+    title: 'Use The Documents Vault',
+    playlist: 'Documents & Vault',
+    status: 'Script ready',
+    route: '#documents',
+    outline:
+      'Upload records, review generated packets, connect evidence to accounting and compliance, and retain proof for later review.',
+  },
+  {
+    title: 'Build An Investment Plan',
+    playlist: 'Investments',
+    status: 'Script ready',
+    route: '#investments',
+    outline:
+      'Model a real estate deal, save a 1031/funding/strategy plan of action, and keep education separate from live execution.',
+  },
+  {
+    title: 'Nacha And ACH Governance Basics',
+    playlist: 'Payments Education',
+    status: 'Resource brief',
+    route: '#aiStudio',
+    outline:
+      'Explain Nacha as a rules, education, and payments innovation resource while clarifying that ACH origination still requires a provider, bank, or ODFI path.',
   },
 ];
 
@@ -5612,6 +5685,55 @@ ${scopedCases
               </div>
             </WorkbenchRecordCard>
           </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="ClearFlow Academy & Media Hub"
+        description="YouTube-ready training plans, walkthrough scripts, and education topics that can become support content and a future media revenue stream."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {academyVideoPlans.map((video) => (
+            <WorkbenchRecordCard
+              key={video.title}
+              title={video.title}
+              subtitle={`${video.playlist} | ${video.status}`}
+              actionSlot={
+                <button
+                  type="button"
+                  onClick={() => focusRoute(video.route)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126, 242, 255, 0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Desk
+                </button>
+              }
+              summaryItems={[
+                { label: 'Playlist', value: video.playlist },
+                { label: 'Status', value: video.status },
+              ]}
+            >
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div>{video.outline}</div>
+                <div style={{ color: '#93c5fd' }}>
+                  Recording prompt: explain the goal, show the click path, complete one saved action, and close with where the user verifies the result.
+                </div>
+              </div>
+            </WorkbenchRecordCard>
+          ))}
         </div>
       </PageSection>
 
