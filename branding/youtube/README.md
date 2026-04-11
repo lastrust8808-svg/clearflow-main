@@ -14,6 +14,11 @@ Use this folder to track public YouTube publishing metadata, channel links, loca
 
 Keep scripts in `scripts/` and written narration packages in `academy/`.
 
+Generated guided replacements:
+
+- `academy/generated/clearflow-overview-guided-video.mp4`
+- `academy/generated/clearflow-bill-guided-video.mp4`
+
 ## Production Standard
 
 Future videos should not be read-only slide decks. Use one of these formats:

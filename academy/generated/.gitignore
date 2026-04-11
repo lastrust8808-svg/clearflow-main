@@ -2,3 +2,7 @@ slides/
 slides.txt
 bill-slides/
 bill-slides.txt
+guided-*-slides/
+guided-*-slides.txt
+*-guided-narration.wav
+tts-test.wav
