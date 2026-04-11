@@ -1,0 +1,29 @@
+{
+  "channel": {
+    "name": "ClearFlow Academy",
+    "handle": "@ClearFlowAcademy",
+    "url": "https://www.youtube.com/@ClearFlowAcademy",
+    "channelId": "UCMdAeknxzY9G4RdjaSGpYZQ"
+  },
+  "videos": [
+    {
+      "id": "clearflow-overview-video-01",
+      "title": "ClearFlow Overview: How To Navigate Entities, Accounting, Documents, and Payments",
+      "playlist": "Getting Started",
+      "localVideoPath": "academy/generated/clearflow-overview-video-01.mp4",
+      "scriptPath": "academy/clearflow-overview-video-01.md",
+      "thumbnailPath": "academy/clearflow-overview-thumbnail.svg",
+      "youtubeUrl": "",
+      "status": "rendered_upload_ready"
+    },
+    {
+      "id": "clearflow-bill-payment-video-02",
+      "title": "How To Add And Save A Bill In ClearFlow",
+      "playlist": "Accounting & Bills",
+      "localVideoPath": "academy/generated/clearflow-bill-payment-video-02.mp4",
+      "scriptPath": "academy/clearflow-bill-payment-video-02.md",
+      "youtubeUrl": "",
+      "status": "rendered_upload_ready"
+    }
+  ]
+}

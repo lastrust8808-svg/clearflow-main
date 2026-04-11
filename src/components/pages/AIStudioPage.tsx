@@ -221,16 +221,18 @@ const academyVideoPlans = [
   {
     title: 'ClearFlow Overview',
     playlist: 'Getting Started',
-    status: 'Script ready',
+    status: 'Upload ready',
     route: '#overview',
+    youtubeUrl: '',
     outline:
       'Show the command center, entity selector, left-panel navigation, and how records flow from intake to ledger to proof.',
   },
   {
     title: 'Add A Bill And Submit For Payment',
     playlist: 'Accounting & Bills',
-    status: 'Priority recording',
+    status: 'Upload ready',
     route: '#accounting:bills',
+    youtubeUrl: '',
     outline:
       'Upload or manually enter a bill, confirm extracted data, save it to the active entity, reopen it, and use Pay This Bill.',
   },
@@ -239,6 +241,7 @@ const academyVideoPlans = [
     playlist: 'Bank Feed & Payments',
     status: 'Script ready',
     route: '#accounting:bankFeed',
+    youtubeUrl: '',
     outline:
       'Explain Plaid, Stripe, Checkbook, Treasury Prime, Modern Treasury, Unit, Lithic, ACH, checks, bank bill pay, and readiness flags.',
   },
@@ -247,6 +250,7 @@ const academyVideoPlans = [
     playlist: 'Entities & Authority',
     status: 'Script ready',
     route: '#entities',
+    youtubeUrl: '',
     outline:
       'Create a trust or business profile, upload authority documents, understand transaction holds, and add authorized people when names do not match.',
   },
@@ -255,6 +259,7 @@ const academyVideoPlans = [
     playlist: 'Documents & Vault',
     status: 'Script ready',
     route: '#documents',
+    youtubeUrl: '',
     outline:
       'Upload records, review generated packets, connect evidence to accounting and compliance, and retain proof for later review.',
   },
@@ -263,6 +268,7 @@ const academyVideoPlans = [
     playlist: 'Investments',
     status: 'Script ready',
     route: '#investments',
+    youtubeUrl: '',
     outline:
       'Model a real estate deal, save a 1031/funding/strategy plan of action, and keep education separate from live execution.',
   },
@@ -271,6 +277,7 @@ const academyVideoPlans = [
     playlist: 'Payments Education',
     status: 'Resource brief',
     route: '#aiStudio',
+    youtubeUrl: '',
     outline:
       'Explain Nacha as a rules, education, and payments innovation resource while clarifying that ACH origination still requires a provider, bank, or ODFI path.',
   },
@@ -5707,7 +5714,7 @@ ${scopedCases
               actionSlot={
                 <button
                   type="button"
-                  onClick={() => focusRoute(video.route)}
+                  onClick={() => (video.youtubeUrl ? openLink(video.youtubeUrl) : focusRoute(video.route))}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 10,
@@ -5718,12 +5725,13 @@ ${scopedCases
                     fontWeight: 700,
                   }}
                 >
-                  Open Desk
+                  {video.youtubeUrl ? 'Watch On YouTube' : 'Open Desk'}
                 </button>
               }
               summaryItems={[
                 { label: 'Playlist', value: video.playlist },
                 { label: 'Status', value: video.status },
+                { label: 'Channel', value: 'youtube.com/@ClearFlowAcademy' },
               ]}
             >
               <div style={{ display: 'grid', gap: 8 }}>
