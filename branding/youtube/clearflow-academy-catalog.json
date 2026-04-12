@@ -7,6 +7,14 @@
   },
   "videos": [
     {
+      "id": "clearflow-navigation-video-00",
+      "title": "How To Navigate ClearFlow And Find Saved Work",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-navigation-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/llsykLoArtw",
+      "status": "published_guided"
+    },
+    {
       "id": "clearflow-overview-video-01",
       "title": "ClearFlow Overview: How To Navigate Entities, Accounting, Documents, and Payments",
       "playlist": "Getting Started",

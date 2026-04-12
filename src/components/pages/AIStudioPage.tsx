@@ -219,6 +219,15 @@ const researchLinks = [
 
 const academyVideoPlans = [
   {
+    title: 'Navigate ClearFlow And Find Saved Work',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#overview',
+    youtubeUrl: 'https://youtu.be/llsykLoArtw',
+    outline:
+      'Use the left panel, desk tabs, Quick Open, search, recent routes, pinned paths, and saved-record validation.',
+  },
+  {
     title: 'ClearFlow Overview',
     playlist: 'Getting Started',
     status: 'Published',
