@@ -374,27 +374,27 @@ const academyVideoPlans = [
   {
     title: 'Resolve Authority Name Mismatches',
     playlist: 'App Walkthroughs',
-    status: 'Ready to upload',
+    status: 'Published',
     route: '#entities',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/OFRgkOO7LfE',
     outline:
       'Review uploaded authority proof, signer or administrator name checks, authorized people, transaction holds, and release after review.',
   },
   {
     title: 'Use Trust Funding And Reserve Holdings',
     playlist: 'App Walkthroughs',
-    status: 'Ready to upload',
+    status: 'Published',
     route: '#assets',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/E0DqzLSN9R8',
     outline:
       'Record trust funding, reserve holdings, collateral, asset identifiers, supporting documents, and accounting links.',
   },
   {
     title: 'Use Wallets And Digital Assets',
     playlist: 'App Walkthroughs',
-    status: 'Ready to upload',
+    status: 'Published',
     route: '#assets',
-    youtubeUrl: '',
+    youtubeUrl: 'https://youtu.be/32fP0vOLezw',
     outline:
       'Record wallet labels, providers, public identifiers, linked entities, custody proof, accounting mapping, and transfer proof.',
   },

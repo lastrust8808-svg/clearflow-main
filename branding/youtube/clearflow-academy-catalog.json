@@ -152,24 +152,24 @@
       "title": "How To Resolve Authority Name Mismatches In ClearFlow",
       "playlist": "App Walkthroughs",
       "guidedReplacementPath": "academy/generated/clearflow-authority-guided-video.mp4",
-      "youtubeUrl": "",
-      "status": "ready_to_upload"
+      "youtubeUrl": "https://youtu.be/OFRgkOO7LfE",
+      "status": "published_guided"
     },
     {
       "id": "clearflow-trustfunding-video-14",
       "title": "How To Use Trust Funding And Reserve Holdings In ClearFlow",
       "playlist": "App Walkthroughs",
       "guidedReplacementPath": "academy/generated/clearflow-trustfunding-guided-video.mp4",
-      "youtubeUrl": "",
-      "status": "ready_to_upload"
+      "youtubeUrl": "https://youtu.be/E0DqzLSN9R8",
+      "status": "published_guided"
     },
     {
       "id": "clearflow-wallets-video-15",
       "title": "How To Use Wallets And Digital Assets In ClearFlow",
       "playlist": "App Walkthroughs",
       "guidedReplacementPath": "academy/generated/clearflow-wallets-guided-video.mp4",
-      "youtubeUrl": "",
-      "status": "ready_to_upload"
+      "youtubeUrl": "https://youtu.be/32fP0vOLezw",
+      "status": "published_guided"
     },
     {
       "id": "clearflow-membership-video-16",
