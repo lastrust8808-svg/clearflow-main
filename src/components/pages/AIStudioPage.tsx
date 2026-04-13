@@ -228,6 +228,15 @@ const academyVideoPlans = [
       'Use the left panel, desk tabs, Quick Open, search, recent routes, pinned paths, and saved-record validation.',
   },
   {
+    title: 'Connect Mercury In ClearFlow',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:bankFeed',
+    youtubeUrl: 'https://youtu.be/xW2Zl66RoOI',
+    outline:
+      'Use Mercury login for existing users, ClearFlow referral signup for new users, then save the profile and map it into COA.',
+  },
+  {
     title: 'Reconcile Bank Activity',
     playlist: 'App Walkthroughs',
     status: 'Published',

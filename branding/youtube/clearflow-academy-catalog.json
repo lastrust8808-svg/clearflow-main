@@ -7,6 +7,14 @@
   },
   "videos": [
     {
+      "id": "clearflow-mercury-video-04",
+      "title": "How To Connect Mercury In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-mercury-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/xW2Zl66RoOI",
+      "status": "published_guided"
+    },
+    {
       "id": "clearflow-reconciliation-video-03",
       "title": "How To Reconcile Bank Activity In ClearFlow",
       "playlist": "App Walkthroughs",
