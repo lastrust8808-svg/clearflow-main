@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('overview', 'bill', 'bank', 'entities', 'documents', 'investments', 'navigation', 'coa', 'paybill', 'reconcile', 'mercury', 'vendors', 'invoice', 'receipts', 'journal', 'reports', 'settings', 'authority', 'trustfunding', 'wallets', 'membership')]
+  [ValidateSet('overview', 'bill', 'bank', 'entities', 'documents', 'investments', 'navigation', 'coa', 'paybill', 'reconcile', 'mercury', 'vendors', 'invoice', 'receipts', 'journal', 'reports', 'settings', 'authority', 'trustfunding', 'wallets', 'membership', 'launch')]
   [string]$Video = 'overview',
   [string]$VoiceName = 'Microsoft David Desktop'
 )
@@ -12,6 +12,7 @@ $slidesDir = Join-Path $outDir ("guided-$Video-slides")
 $ffmpeg = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe'
 $videoOut = Join-Path $outDir ("clearflow-$Video-guided-video.mp4")
 $audioOut = Join-Path $outDir ("clearflow-$Video-guided-narration.wav")
+$audioReady = $true
 $concatFile = Join-Path $outDir ("guided-$Video-slides.txt")
 
 New-Item -ItemType Directory -Force -Path $slidesDir | Out-Null
@@ -143,7 +144,10 @@ function New-Narration {
   $stream.Format = $format
   $stream.Open($Path, 3, $false)
   $voice.AudioOutputStream = $stream
-  [void] $voice.Speak($Text)
+  $chunks = [regex]::Matches($Text, '.{1,900}(?:\s|$)') | ForEach-Object { $_.Value.Trim() } | Where-Object { $_ }
+  foreach ($chunk in $chunks) {
+    [void] $voice.Speak($chunk)
+  }
   $stream.Close()
 }
 
@@ -268,6 +272,14 @@ if ($Video -eq 'bill') {
     @{ Title='Share Referral Links'; Subtitle='Users can share their referral link and track qualified referral status.'; ActiveNav='Settings'; Tabs=@('Referrals','Rewards','Status','Ledger'); ActiveTab='Referrals'; Cards=@('Referral Link|Share with invitee','Qualified Signup|New user joins','Payment Rule|Credit after required payment','Rewards|Pending or earned'); Callout='Teacher cue: referral rewards should show pending versus earned clearly.'; Script='Users can share referral links and track status. Referral rewards should show pending versus earned clearly, especially when credits depend on the referred user completing a required paid month.' },
     @{ Title='Connect Billing To Records'; Subtitle='Membership payments, discounts, and rewards should be visible in the user account trail.'; ActiveNav='Settings'; Tabs=@('Billing','Autopay','Receipts','Rewards'); ActiveTab='Billing'; Cards=@('Autopay|Connected payment method','Receipt|Payment proof','Discount|Applied plan credit','Reward|Coin or credit record'); Callout='Teacher cue: billing and rewards need their own visible trail.'; Script='Membership payments, autopay, discounts, receipts, and rewards should be visible in the user account trail so users can understand what was billed, credited, or earned.' }
   )
+} elseif ($Video -eq 'launch') {
+  $scenes = @(
+    @{ Title='ClearFlow: Operate The Whole Entity'; Subtitle='One workspace for trusts, businesses, records, money movement, documents, and proof.'; ActiveNav='Overview'; Tabs=@('Overview','Entities','Accounting','Documents'); ActiveTab='Overview'; Cards=@('Entity Command Center|Trusts, businesses, individuals','ERP Accounting|Bills, invoices, COA, journals','Vault Proof|Uploads, packets, records','Rail Readiness|Bank feed, payments, reconciliation'); Callout='From setup to proof, ClearFlow keeps the work connected.'; Script='Meet ClearFlow, a full operating workspace for trusts, businesses, and complex recordkeeping. Instead of juggling separate tools for entities, documents, accounting, payments, and compliance review, ClearFlow keeps the work connected from setup to proof.' },
+    @{ Title='Built For Real Operating Work'; Subtitle='Create profiles, collect proof, enter bills and invoices, map accounts, and track status.'; ActiveNav='Accounting'; Tabs=@('Bills','Invoices','COA','Reconciliation'); ActiveTab='Bills'; Cards=@('Payables|Bills, vendors, remittances','Receivables|Invoices, receipts, income','Connected Accounts|Banks, cards, processors, wallets','Ledger Trail|Journal, COA, reconciliation'); Callout='Every action should leave a visible record trail.'; Script='ClearFlow is built for real operating work. Users can create entity profiles, collect authority proof, enter bills and invoices, map connected accounts into the chart of accounts, reconcile activity, and retain documents with the accounting record.' },
+    @{ Title='More Than Accounting Software'; Subtitle='Add reserves, investments, authority review, rewards, Academy help, and provider connections.'; ActiveNav='Assets & Reserve'; Tabs=@('Reserve','Investments','Authority','Academy'); ActiveTab='Reserve'; Cards=@('Trust Funding|Cash, collateral, reserves','Investment Plans|Real estate, 1031, funding models','Authority Holds|Proof before transaction release','Academy|Walkthroughs and guided support'); Callout='Packed with tools, organized into guided workflows.'; Script='It goes beyond basic accounting. ClearFlow supports trust funding, reserve holdings, collateral records, investment planning, authority review, connected financial services, referral rewards, and ClearFlow Academy walkthroughs, all organized into guided workflows.' },
+    @{ Title='Memberships That Start Easy'; Subtitle='Launch with a 30-day free trial, tiered plans, autopay savings, and referral rewards.'; ActiveNav='Settings'; Tabs=@('Membership','Trial','Autopay','Referrals'); ActiveTab='Membership'; Cards=@('30-Day Trial|Start before the first paid month','Tiered Plans|Choose the right operating level','Autopay Discount|Save with connected billing','Referral Rewards|Earn after qualified paid users'); Callout='Start free, connect the workspace, then grow into the plan you need.'; Script='Membership is designed to start easy. New users can begin with a thirty day free trial, choose the tier that matches their operating needs, set up autopay for savings when available, and use referral rewards after qualified referred users complete their required paid month.' },
+    @{ Title='Ready When You Are'; Subtitle='If your records, entities, and money movement need one command center, start in ClearFlow.'; ActiveNav='Overview'; Tabs=@('Start','Connect','Upload','Operate'); ActiveTab='Start'; Cards=@('Start Free|Create your profile','Connect|Banks and providers as available','Upload|Bills, proof, authority records','Operate|Track, reconcile, report'); Callout='ClearFlow is where the operation comes together.'; Script='When you are ready to stop losing time between disconnected tools, start in ClearFlow. Create the profile, connect what is available, upload the records, and run the operation from one command center. ClearFlow is where the operation comes together.' }
+  )
 } else {
   $scenes = @(
     @{ Title='ClearFlow Navigation Map'; Subtitle='Use the left panel for major desks, then stay inside the selected desk for the work.'; ActiveNav='Overview'; Tabs=@('Command Center','Tasks','Records','Readiness'); ActiveTab='Command Center'; Cards=@('Overview|Health and next actions','Entities|Profiles and authority','Accounting|Bills, ledger, payments','Documents|Evidence and packets'); Callout='Teacher cue: the left panel changes desks; tabs inside the desk complete the workflow.'; Script='Welcome to ClearFlow Academy. The left panel is your desk switcher. Choose Overview, Entities, Accounting, Documents, or Investments, then stay inside that desk to complete the workflow without losing context.' },
@@ -289,13 +301,22 @@ for ($i = 0; $i -lt $scenes.Count; $i++) {
 $lastPath = (Join-Path $slidesDir ('slide-{0:D2}.png' -f $scenes.Count)).Replace('\', '/').Replace("'", "'\''")
 $concatLines.Add("file '$lastPath'")
 Set-Content -Path $concatFile -Value $concatLines -Encoding ASCII
-New-Narration -Path $audioOut -Text ($narrationParts -join ' ') -VoiceName $VoiceName
-
 if (!(Test-Path $ffmpeg)) {
   throw "FFmpeg not found at $ffmpeg"
 }
 
-& $ffmpeg -y -f concat -safe 0 -i $concatFile -i $audioOut -vf "scale=1920:1080,format=yuv420p" -r 30 -c:v libx264 -c:a aac -b:a 160k -shortest -movflags +faststart $videoOut
+try {
+  New-Narration -Path $audioOut -Text ($narrationParts -join ' ') -VoiceName $VoiceName
+} catch {
+  $audioReady = $false
+  Write-Warning "Narration failed; rendering with silent audio. $($_.Exception.Message)"
+}
+
+if ($audioReady) {
+  & $ffmpeg -y -f concat -safe 0 -i $concatFile -i $audioOut -vf "scale=1920:1080,format=yuv420p" -r 30 -c:v libx264 -c:a aac -b:a 160k -shortest -movflags +faststart $videoOut
+} else {
+  & $ffmpeg -y -f concat -safe 0 -i $concatFile -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -vf "scale=1920:1080,format=yuv420p" -r 30 -c:v libx264 -c:a aac -b:a 160k -shortest -movflags +faststart $videoOut
+}
 if ($LASTEXITCODE -ne 0) {
   throw "FFmpeg failed with exit code $LASTEXITCODE"
 }

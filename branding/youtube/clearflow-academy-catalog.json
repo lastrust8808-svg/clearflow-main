@@ -178,6 +178,14 @@
       "guidedReplacementPath": "academy/generated/clearflow-membership-guided-video.mp4",
       "youtubeUrl": "",
       "status": "ready_to_upload"
+    },
+    {
+      "id": "clearflow-launch-marketing-video-17",
+      "title": "ClearFlow Launch Overview: Entity Operations, Accounting, Records, And Payments",
+      "playlist": "Launch & Product Overview",
+      "guidedReplacementPath": "academy/generated/clearflow-launch-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "ready_to_upload"
     }
   ]
 }
