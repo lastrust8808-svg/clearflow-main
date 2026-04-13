@@ -127,6 +127,105 @@ function New-GuidedSlide {
   $bmp.Dispose()
 }
 
+function Draw-CommercialBadge {
+  param($Graphics, [int] $X, [int] $Y, [int] $W, [string] $Text, [string] $Fill)
+  $rect = New-Object System.Drawing.Rectangle $X, $Y, $W, 52
+  $path = New-RoundedRectPath -Rect $rect -Radius 26
+  $Graphics.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml($Fill))), $path)
+  $Graphics.DrawString($Text, (New-Object System.Drawing.Font('Segoe UI Semibold', 20, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#f8fafc'))), $X + 24, $Y + 12)
+}
+
+function New-CommercialSlide {
+  param(
+    [string] $Path,
+    [string] $Title,
+    [string] $Subtitle,
+    [string[]] $Cards,
+    [string] $Callout,
+    [int] $Index
+  )
+
+  $width = 1920
+  $height = 1080
+  $bmp = New-Object System.Drawing.Bitmap $width, $height
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+  $bgRect = New-Object System.Drawing.Rectangle 0, 0, $width, $height
+  $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush $bgRect, ([System.Drawing.ColorTranslator]::FromHtml('#030712')), ([System.Drawing.ColorTranslator]::FromHtml('#064e3b')), 25
+  $g.FillRectangle($bg, $bgRect)
+
+  $auroraA = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $auroraA.AddEllipse(980, -180, 820, 520)
+  $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(145, 45, 212, 191))), $auroraA)
+  $auroraB = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $auroraB.AddEllipse(-180, 680, 680, 430)
+  $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(110, 14, 165, 233))), $auroraB)
+  $auroraC = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $auroraC.AddEllipse(1180, 620, 600, 360)
+  $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(85, 245, 158, 11))), $auroraC)
+
+  $panelRect = New-Object System.Drawing.Rectangle 86, 86, 1748, 908
+  $panel = New-RoundedRectPath -Rect $panelRect -Radius 48
+  $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(210, 8, 20, 36))), $panel)
+  $g.DrawPath((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(180, 125, 211, 252), 3)), $panel)
+
+  $brandFont = New-Object System.Drawing.Font('Segoe UI Semibold', 28, [System.Drawing.FontStyle]::Bold)
+  $g.DrawString('CLEARFLOW', $brandFont, (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#dffcf5'))), 140, 132)
+  Draw-CommercialBadge -Graphics $g -X 1420 -Y 126 -W 300 -Text '30-DAY FREE TRIAL' -Fill '#0f766e'
+
+  $titleFont = New-Object System.Drawing.Font('Segoe UI Black', 60, [System.Drawing.FontStyle]::Bold)
+  $subFont = New-Object System.Drawing.Font('Segoe UI', 27, [System.Drawing.FontStyle]::Regular)
+  $g.DrawString($Title, $titleFont, (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#ffffff'))), (New-Object System.Drawing.RectangleF 138, 230, 880, 250))
+  $g.DrawString($Subtitle, $subFont, (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#bae6fd'))), (New-Object System.Drawing.RectangleF 145, 500, 860, 128))
+
+  $orbitPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(95, 125, 211, 252), 4)
+  $g.DrawEllipse($orbitPen, 1110, 240, 540, 540)
+  $g.DrawEllipse((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(75, 45, 212, 191), 3)), 1195, 325, 370, 370)
+  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#ecfeff'))), 1270, 405, 220, 220)
+  $centerFont = New-Object System.Drawing.Font('Segoe UI Black', 23, [System.Drawing.FontStyle]::Bold)
+  $centerBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#0f172a'))
+  $g.DrawString('ONE', $centerFont, $centerBrush, 1323, 447)
+  $g.DrawString('COMMAND', $centerFont, $centerBrush, 1296, 500)
+  $g.DrawString('CENTER', $centerFont, $centerBrush, 1310, 553)
+
+  $nodes = @(
+    @{ X=1118; Y=340; Text='ERP' },
+    @{ X=1500; Y=300; Text='VAULT' },
+    @{ X=1580; Y=610; Text='RAILS' },
+    @{ X=1150; Y=665; Text='TRUST' },
+    @{ X=1352; Y=235; Text='COA' },
+    @{ X=1392; Y=735; Text='AI' }
+  )
+  foreach ($node in $nodes) {
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#0f766e'))), $node.X, $node.Y, 112, 112)
+    $g.DrawEllipse((New-Object System.Drawing.Pen ([System.Drawing.ColorTranslator]::FromHtml('#99f6e4'), 4)), $node.X, $node.Y, 112, 112)
+    $g.DrawString($node.Text, (New-Object System.Drawing.Font('Segoe UI Black', 22, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#ffffff'))), $node.X + 22, $node.Y + 38)
+  }
+
+  $cardX = 140
+  $cardY = 660
+  for ($i = 0; $i -lt $Cards.Count; $i++) {
+    $rect = New-Object System.Drawing.Rectangle ($cardX + ($i * 292)), $cardY, 264, 132
+    $cardPath = New-RoundedRectPath -Rect $rect -Radius 28
+    $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(225, 15, 23, 42))), $cardPath)
+    $g.DrawPath((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(120, 186, 230, 253), 2)), $cardPath)
+    $parts = $Cards[$i].Split('|')
+    $g.DrawString($parts[0], (New-Object System.Drawing.Font('Segoe UI Black', 18, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#ffffff'))), (New-Object System.Drawing.RectangleF ($rect.X + 20), ($rect.Y + 22), 222, 36))
+    if ($parts.Count -gt 1) {
+      $g.DrawString($parts[1], (New-Object System.Drawing.Font('Segoe UI', 15, [System.Drawing.FontStyle]::Regular)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#cbd5e1'))), (New-Object System.Drawing.RectangleF ($rect.X + 20), ($rect.Y + 62), 220, 60))
+    }
+  }
+
+  $g.DrawString($Callout, (New-Object System.Drawing.Font('Segoe UI Black', 31, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#fef9c3'))), (New-Object System.Drawing.RectangleF 142, 845, 1280, 90))
+  $g.DrawString('clearflow.site', (New-Object System.Drawing.Font('Segoe UI Semibold', 25, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#99f6e4'))), 1498, 850)
+  $g.DrawString(('0{0}' -f ($Index + 1)), (New-Object System.Drawing.Font('Segoe UI Black', 44, [System.Drawing.FontStyle]::Bold)), (New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(90, 255, 255, 255))), 1625, 895)
+
+  $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose()
+  $bmp.Dispose()
+}
+
 function New-Narration {
   param([string] $Path, [string] $Text, [string] $VoiceName)
   $voice = New-Object -ComObject SAPI.SpVoice
@@ -292,10 +391,14 @@ $concatLines = New-Object System.Collections.Generic.List[string]
 $narrationParts = New-Object System.Collections.Generic.List[string]
 for ($i = 0; $i -lt $scenes.Count; $i++) {
   $slidePath = Join-Path $slidesDir ('slide-{0:D2}.png' -f ($i + 1))
-  New-GuidedSlide -Path $slidePath -Title $scenes[$i].Title -Subtitle $scenes[$i].Subtitle -LeftNav $baseNav -ActiveNav $scenes[$i].ActiveNav -Tabs $scenes[$i].Tabs -ActiveTab $scenes[$i].ActiveTab -Cards $scenes[$i].Cards -Callout $scenes[$i].Callout
+  if ($Video -eq 'launch') {
+    New-CommercialSlide -Path $slidePath -Title $scenes[$i].Title -Subtitle $scenes[$i].Subtitle -Cards $scenes[$i].Cards -Callout $scenes[$i].Callout -Index $i
+  } else {
+    New-GuidedSlide -Path $slidePath -Title $scenes[$i].Title -Subtitle $scenes[$i].Subtitle -LeftNav $baseNav -ActiveNav $scenes[$i].ActiveNav -Tabs $scenes[$i].Tabs -ActiveTab $scenes[$i].ActiveTab -Cards $scenes[$i].Cards -Callout $scenes[$i].Callout
+  }
   $safePath = $slidePath.Replace('\', '/').Replace("'", "'\''")
   $concatLines.Add("file '$safePath'")
-  $concatLines.Add('duration 16')
+  $concatLines.Add($(if ($Video -eq 'launch') { 'duration 5' } else { 'duration 16' }))
   $narrationParts.Add($scenes[$i].Script)
 }
 $lastPath = (Join-Path $slidesDir ('slide-{0:D2}.png' -f $scenes.Count)).Replace('\', '/').Replace("'", "'\''")
@@ -305,11 +408,15 @@ if (!(Test-Path $ffmpeg)) {
   throw "FFmpeg not found at $ffmpeg"
 }
 
-try {
-  New-Narration -Path $audioOut -Text ($narrationParts -join ' ') -VoiceName $VoiceName
-} catch {
+if ($Video -eq 'launch') {
   $audioReady = $false
-  Write-Warning "Narration failed; rendering with silent audio. $($_.Exception.Message)"
+} else {
+  try {
+    New-Narration -Path $audioOut -Text ($narrationParts -join ' ') -VoiceName $VoiceName
+  } catch {
+    $audioReady = $false
+    Write-Warning "Narration failed; rendering with silent audio. $($_.Exception.Message)"
+  }
 }
 
 if ($audioReady) {
