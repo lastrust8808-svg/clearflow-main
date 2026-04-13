@@ -228,6 +228,15 @@ const academyVideoPlans = [
       'Use the left panel, desk tabs, Quick Open, search, recent routes, pinned paths, and saved-record validation.',
   },
   {
+    title: 'Reconcile Bank Activity',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:reconciliation',
+    youtubeUrl: 'https://youtu.be/AKqWMASBWOw',
+    outline:
+      'Match bank feed activity, payments, receipts, journal entries, trace references, documents, and exceptions.',
+  },
+  {
     title: 'Pay A Saved Bill',
     playlist: 'App Walkthroughs',
     status: 'Published',

@@ -7,6 +7,14 @@
   },
   "videos": [
     {
+      "id": "clearflow-reconciliation-video-03",
+      "title": "How To Reconcile Bank Activity In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-reconcile-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/AKqWMASBWOw",
+      "status": "published_guided"
+    },
+    {
       "id": "clearflow-paybill-video-02",
       "title": "How To Pay A Saved Bill In ClearFlow",
       "playlist": "App Walkthroughs",
