@@ -7,6 +7,14 @@
   },
   "videos": [
     {
+      "id": "clearflow-paybill-video-02",
+      "title": "How To Pay A Saved Bill In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-paybill-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/caocdNIiWNM",
+      "status": "published_guided"
+    },
+    {
       "id": "clearflow-navigation-video-00",
       "title": "How To Navigate ClearFlow And Find Saved Work",
       "playlist": "App Walkthroughs",

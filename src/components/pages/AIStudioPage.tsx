@@ -228,6 +228,15 @@ const academyVideoPlans = [
       'Use the left panel, desk tabs, Quick Open, search, recent routes, pinned paths, and saved-record validation.',
   },
   {
+    title: 'Pay A Saved Bill',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:bills',
+    youtubeUrl: 'https://youtu.be/caocdNIiWNM',
+    outline:
+      'Open a saved bill, confirm vendor, amount, due date, proof, working payment method, payment status, ledger movement, and bank match.',
+  },
+  {
     title: 'Use Chart Of Accounts',
     playlist: 'App Walkthroughs',
     status: 'Published',
