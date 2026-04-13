@@ -318,6 +318,96 @@ const academyVideoPlans = [
       'Model a real estate deal, save a 1031/funding/strategy plan of action, and keep education separate from live execution.',
   },
   {
+    title: 'Add A Vendor Or Payee',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:vendors',
+    youtubeUrl: 'https://youtu.be/bY-pitpRv3w',
+    outline:
+      'Search known payees, add manual vendors, confirm payment references, and keep vendor records reusable across bills and reporting.',
+  },
+  {
+    title: 'Add An Invoice And Track Receivables',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:invoices',
+    youtubeUrl: 'https://youtu.be/nl8VdEol7iI',
+    outline:
+      'Create an invoice, add customer and line item details, then connect incoming payments and ledger activity back to receivables.',
+  },
+  {
+    title: 'Use Receipts And Income Tracking',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:receipts',
+    youtubeUrl: 'https://youtu.be/QO9e1hI-xTA',
+    outline:
+      'Record receipts and income, attach proof, connect receipts to invoices or deposits, and review the ledger and bank match.',
+  },
+  {
+    title: 'Use Journal Entries',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:journal',
+    youtubeUrl: 'https://youtu.be/Z-deGZHHFpg',
+    outline:
+      'Use debit and credit accounts, memos, supporting documents, review-before-posting, and ledger impact for manual adjustments.',
+  },
+  {
+    title: 'Use Reports And Compliance Review',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#reports',
+    youtubeUrl: 'https://youtu.be/dZsf_rqN0yI',
+    outline:
+      'Generate entity-scoped reports, review exceptions, identify evidence gaps, and save report packets into the record trail.',
+  },
+  {
+    title: 'Use Settings, Profile, And Connected Services',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#settings',
+    youtubeUrl: 'https://youtu.be/jDy2zh-xACc',
+    outline:
+      'Review profile, workspace preferences, connected services, sign-in posture, billing, membership, provider setup, and support paths.',
+  },
+  {
+    title: 'Resolve Authority Name Mismatches',
+    playlist: 'App Walkthroughs',
+    status: 'Ready to upload',
+    route: '#entities',
+    youtubeUrl: '',
+    outline:
+      'Review uploaded authority proof, signer or administrator name checks, authorized people, transaction holds, and release after review.',
+  },
+  {
+    title: 'Use Trust Funding And Reserve Holdings',
+    playlist: 'App Walkthroughs',
+    status: 'Ready to upload',
+    route: '#assets',
+    youtubeUrl: '',
+    outline:
+      'Record trust funding, reserve holdings, collateral, asset identifiers, supporting documents, and accounting links.',
+  },
+  {
+    title: 'Use Wallets And Digital Assets',
+    playlist: 'App Walkthroughs',
+    status: 'Ready to upload',
+    route: '#assets',
+    youtubeUrl: '',
+    outline:
+      'Record wallet labels, providers, public identifiers, linked entities, custody proof, accounting mapping, and transfer proof.',
+  },
+  {
+    title: 'Use Rewards, Referrals, And Membership',
+    playlist: 'App Walkthroughs',
+    status: 'Ready to upload',
+    route: '#settings',
+    youtubeUrl: '',
+    outline:
+      'Review membership status, free trial, billing, autopay, referral links, pending rewards, earned rewards, receipts, and discounts.',
+  },
+  {
     title: 'Nacha And ACH Governance Basics',
     playlist: 'Payments Education',
     status: 'Resource brief',

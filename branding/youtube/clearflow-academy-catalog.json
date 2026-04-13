@@ -98,6 +98,86 @@
       "guidedReplacementPath": "academy/generated/clearflow-investments-guided-video.mp4",
       "youtubeUrl": "https://youtu.be/PKg6Oi0kEX4",
       "status": "published_guided"
+    },
+    {
+      "id": "clearflow-vendors-video-07",
+      "title": "How To Add A Vendor Or Payee In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-vendors-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/bY-pitpRv3w",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-invoice-video-08",
+      "title": "How To Add An Invoice And Track Receivables In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-invoice-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/nl8VdEol7iI",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-receipts-video-09",
+      "title": "How To Use Receipts And Income Tracking In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-receipts-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/QO9e1hI-xTA",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-journal-video-10",
+      "title": "How To Use Journal Entries In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-journal-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/Z-deGZHHFpg",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-reports-video-11",
+      "title": "How To Use Reports And Compliance Review In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-reports-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/dZsf_rqN0yI",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-settings-video-12",
+      "title": "How To Use Settings, Profile, And Connected Services In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-settings-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/jDy2zh-xACc",
+      "status": "published_guided"
+    },
+    {
+      "id": "clearflow-authority-video-13",
+      "title": "How To Resolve Authority Name Mismatches In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-authority-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "ready_to_upload"
+    },
+    {
+      "id": "clearflow-trustfunding-video-14",
+      "title": "How To Use Trust Funding And Reserve Holdings In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-trustfunding-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "ready_to_upload"
+    },
+    {
+      "id": "clearflow-wallets-video-15",
+      "title": "How To Use Wallets And Digital Assets In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-wallets-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "ready_to_upload"
+    },
+    {
+      "id": "clearflow-membership-video-16",
+      "title": "How To Use Rewards, Referrals, And Membership In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-membership-guided-video.mp4",
+      "youtubeUrl": "",
+      "status": "ready_to_upload"
     }
   ]
 }
