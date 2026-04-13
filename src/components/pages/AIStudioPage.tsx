@@ -228,6 +228,15 @@ const academyVideoPlans = [
       'Use the left panel, desk tabs, Quick Open, search, recent routes, pinned paths, and saved-record validation.',
   },
   {
+    title: 'Use Chart Of Accounts',
+    playlist: 'App Walkthroughs',
+    status: 'Published',
+    route: '#accounting:chartOfAccounts',
+    youtubeUrl: 'https://youtu.be/4I5O2jiafMw',
+    outline:
+      'Open Chart of Accounts, review connected account mapping, COA rules, journal entries, and reconciliation effects.',
+  },
+  {
     title: 'ClearFlow Overview',
     playlist: 'Getting Started',
     status: 'Published',

@@ -15,6 +15,14 @@
       "status": "published_guided"
     },
     {
+      "id": "clearflow-coa-video-01",
+      "title": "How To Use Chart Of Accounts In ClearFlow",
+      "playlist": "App Walkthroughs",
+      "guidedReplacementPath": "academy/generated/clearflow-coa-guided-video.mp4",
+      "youtubeUrl": "https://youtu.be/4I5O2jiafMw",
+      "status": "published_guided"
+    },
+    {
       "id": "clearflow-overview-video-01",
       "title": "ClearFlow Overview: How To Navigate Entities, Accounting, Documents, and Payments",
       "playlist": "Getting Started",
