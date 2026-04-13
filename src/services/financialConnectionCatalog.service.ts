@@ -136,7 +136,7 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     ],
     description:
       'Business banking integration profile for Mercury accounts. Use API-token or approved OAuth posture for account, balance, transaction, statement, card, treasury, and recipient sync; payment execution remains Mercury approval and credential scoped. Add ClearFlow’s Mercury referral URL before routing new-account signup traffic.',
-    referralSignupUrl: '',
+    referralSignupUrl: 'https://mercury.com/r/clearflow',
   },
   {
     providerKey: 'checkbook',
