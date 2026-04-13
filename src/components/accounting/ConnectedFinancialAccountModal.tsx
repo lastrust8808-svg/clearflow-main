@@ -114,6 +114,8 @@ export default function ConnectedFinancialAccountModal({
   }, [defaultCurrency, isOpen]);
 
   const selectedProvider = getFinancialConnectionProvider(form.providerKey);
+  const mercuryReferralUrl =
+    selectedProvider?.providerKey === 'mercury' ? selectedProvider.referralSignupUrl : undefined;
 
   useEffect(() => {
     if (!selectedProvider) {
@@ -157,6 +159,32 @@ export default function ConnectedFinancialAccountModal({
           <div style={{ color: '#93c5fd', marginTop: 8 }}>
             Availability: {selectedProvider?.availabilityStatus === 'live' ? 'live connector' : 'persistent profile now, deeper OAuth later'}
           </div>
+          {selectedProvider?.providerKey === 'mercury' ? (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() =>
+                  window.open('https://app.mercury.com/login', '_blank', 'noopener,noreferrer')
+                }
+                style={secondaryButtonStyle}
+              >
+                Login To Existing Mercury
+              </button>
+              {mercuryReferralUrl ? (
+                <button
+                  type="button"
+                  onClick={() => window.open(mercuryReferralUrl, '_blank', 'noopener,noreferrer')}
+                  style={primaryButtonStyle}
+                >
+                  Open New Mercury Account
+                </button>
+              ) : null}
+              <div style={{ flexBasis: '100%', color: '#cbd5e1', fontSize: 13 }}>
+                Existing users can log in to Mercury now, then save the Mercury account profile here. New users can
+                open Mercury through ClearFlow, then return to map the account into the COA.
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div
