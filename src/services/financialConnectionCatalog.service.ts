@@ -3,7 +3,7 @@ import type { FinancialConnectionProvider, FinancialConnectionRail } from '../ty
 export interface FinancialConnectionProviderDefinition {
   providerKey: FinancialConnectionProvider;
   label: string;
-  category: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury' | 'postal';
+  category: 'bank' | 'credit' | 'processor' | 'wallet' | 'card_program' | 'treasury' | 'postal' | 'government';
   connectionRail: FinancialConnectionRail;
   availabilityStatus: 'live' | 'profile_only' | 'bank_dependent';
   supportsLiveSync: boolean;
@@ -155,6 +155,96 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     supportedRails: ['digital check', 'mailed check', 'ACH', 'RTP', 'virtual card'],
     description:
       'Bill-pay bridge for printable, mailed, and digital check execution, plus ACH and instant-payment posture when provider credentials are enabled.',
+  },
+  {
+    providerKey: 'tyler_payments',
+    label: 'Tyler Payments / TPE',
+    category: 'government',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: true,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['government checkout', 'card', 'e-check / ACH debit', 'reporting', 'agency receipt capture'],
+    description:
+      'Government payment processor profile for courts, state agencies, and local agencies using Tyler / NIC-style payment rails. Treat as vendor-credential and agency-contract scoped before enabling live checkout or transaction posting.',
+  },
+  {
+    providerKey: 'payit',
+    label: 'PayIt Government Payments',
+    category: 'government',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: true,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['state agency portal', 'digital government checkout', 'cards', 'bank payment', 'receipt capture'],
+    description:
+      'Digital government payment profile for state and local agency portals. Use for searchable agency payees, payment-link handoff, retained confirmation numbers, and reconciliation once PayIt or agency integration credentials exist.',
+  },
+  {
+    providerKey: 'catalis_court_payments',
+    label: 'Catalis / nCourt Court Payments',
+    category: 'government',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: true,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['court fines', 'fees', 'citations', 'card payments', 'e-check', 'court receipt capture'],
+    description:
+      'Court-focused payment provider profile for fines, fees, citations, and other justice payments. Use as a court payee rail with jurisdiction, case number, docket, receipt, and confirmation validation before marking paid.',
+  },
+  {
+    providerKey: 'lexisnexis_government_payments',
+    label: 'LexisNexis Government Payments',
+    category: 'government',
+    connectionRail: 'api',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: true,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['government portal handoff', 'agency payment confirmation', 'case or filing reference capture'],
+    description:
+      'Government payment and filing-adjacent provider profile for agency or court workflows where LexisNexis-operated services are in use. Keep execution staged until a specific agency endpoint and contract path are confirmed.',
+  },
+  {
+    providerKey: 'gov_pay',
+    label: 'Gov-Pay Court / Agency Portal',
+    category: 'government',
+    connectionRail: 'manual_profile',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: true,
+    supportsSettlementInitiation: false,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: false,
+    accountTypeHint: 'other',
+    executionReadiness: 'institution_dependent',
+    supportedRails: ['online payment page', 'credit card', 'debit card', 'electronic check', 'settlement email capture'],
+    description:
+      'Portal-style government and municipal court payment profile. Use for agency search, payment-link handoff, confirmation upload, settlement email capture, and ledger reconciliation when no direct API exists.',
   },
   {
     providerKey: 'usps_bcg',
