@@ -323,6 +323,14 @@ export type FinancialConnectionProvider =
   | 'earnnest'
   | 'titleeq'
   | 'escrow_com'
+  | 'embed_auto'
+  | 'deal_payment'
+  | 'equirig'
+  | 'construction_escrow'
+  | 'dependly'
+  | 'lendapi'
+  | 'chargeafter'
+  | 'ecapital'
   | 'tyler_payments'
   | 'tyler_odyssey_file_serve'
   | 'payit'
@@ -385,6 +393,38 @@ export type TitleCompanyWireVerificationStatus =
   | 'instructions_received'
   | 'call_back_pending'
   | 'verified'
+  | 'changed_requires_reverification'
+  | 'rejected';
+
+export type AssetAcquisitionClass =
+  | 'real_property'
+  | 'land'
+  | 'heavy_equipment'
+  | 'fleet_vehicle'
+  | 'construction_materials'
+  | 'aircraft'
+  | 'marine'
+  | 'inventory'
+  | 'general_asset';
+
+export type AssetAcquisitionRail =
+  | 'Fedwire'
+  | 'FedNow'
+  | 'RTP'
+  | 'ACH'
+  | 'escrow_platform'
+  | 'dealer_portal'
+  | 'supplier_portal'
+  | 'equipment_finance'
+  | 'purchase_order'
+  | 'manual_review';
+
+export type AcquisitionInstructionVerificationStatus =
+  | 'not_requested'
+  | 'instructions_received'
+  | 'counterparty_verified'
+  | 'lien_or_title_verified'
+  | 'inspection_verified'
   | 'changed_requires_reverification'
   | 'rejected';
 
@@ -736,6 +776,32 @@ export interface AssetRecord {
     linkedSettlementId?: string;
     collateralNoteTreatment?: 'purchase_money_note' | 'seller_finance_note' | 'collateral_deposit_note' | 'reserve_backed_note' | 'cash_wire_only';
     titleAcceptanceReference?: string;
+    notes?: string;
+  };
+  acquisitionProfile?: {
+    acquisitionClass?: AssetAcquisitionClass;
+    acquisitionStatus?: RealPropertyAcquisitionStatus;
+    sellerOrSupplierName?: string;
+    purchaseOrderNumber?: string;
+    invoiceNumber?: string;
+    billOfSaleDocumentId?: string;
+    purchaseAgreementDocumentId?: string;
+    inspectionDocumentId?: string;
+    titleOrLienDocumentId?: string;
+    deliveryOrPossessionDocumentId?: string;
+    preferredRail?: AssetAcquisitionRail;
+    preferredProvider?: FinancialConnectionProvider;
+    instructionVerificationStatus?: AcquisitionInstructionVerificationStatus;
+    sourceBankAccountId?: string;
+    linkedAcquisitionNoteId?: string;
+    linkedSettlementId?: string;
+    collateralTreatment?: 'cash_purchase' | 'purchase_money_note' | 'seller_finance_note' | 'equipment_finance' | 'floorplan_or_inventory_line' | 'reserve_backed_note';
+    serialNumber?: string;
+    vin?: string;
+    parcelId?: string;
+    unitCount?: number;
+    deliveryDeadline?: string;
+    acceptanceReference?: string;
     notes?: string;
   };
   notes?: string;

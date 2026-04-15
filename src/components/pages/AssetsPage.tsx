@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
+import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
@@ -66,6 +67,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
     liquidationPlans: data.liquidationPlans,
   });
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
+  const assetAcquisitionViews = buildAssetAcquisitionRailViews(data);
   const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
   const preciousMetalAssets = data.assets.filter(
@@ -128,6 +130,11 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
         <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
+        <StatCard label="Asset Purchases" value={assetAcquisitionViews.length} />
+        <StatCard
+          label="Ready Purchases"
+          value={assetAcquisitionViews.filter((item) => item.blockers.length === 0).length}
+        />
         <StatCard label="Property Acquisitions" value={realPropertyAcquisitionViews.length} />
         <StatCard
           label="Clear To Close"
@@ -245,6 +252,65 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
           <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
             No real property acquisition profiles are active yet. Add or edit a real-estate asset with purchase,
             title-company, wire, note, and closing proof details to activate this rail view.
+          </div>
+        )}
+      </PageSection>
+
+      <PageSection
+        title="Capital Asset Purchase Rails"
+        description="Heavy equipment, fleet vehicles, land, materials, inventory, aircraft, marine assets, and supplier purchases can route through verified seller instructions, escrow, dealer portals, equipment finance, or bank wires."
+      >
+        {assetAcquisitionViews.length ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {assetAcquisitionViews.map((view) => (
+              <div
+                key={view.assetId}
+                style={{
+                  padding: 14,
+                  borderRadius: 16,
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(15,23,42,0.28)',
+                  display: 'grid',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>{view.assetLabel}</div>
+                    <div style={{ color: '#94a3b8', marginTop: 4 }}>
+                      {view.acquisitionClass?.replace(/_/g, ' ')} | {view.sellerOrSupplier}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={statusPillStyle(view.instructionReady)}>Instructions</span>
+                    <span style={statusPillStyle(view.collateralReady)}>Collateral</span>
+                    <span style={statusPillStyle(view.settlementReady)}>Settlement</span>
+                  </div>
+                </div>
+                <div style={{ color: '#d1d5db', lineHeight: 1.55 }}>
+                  Rail: <strong>{view.preferredRail}</strong>
+                  {view.preferredProvider ? (
+                    <>
+                      {' '}
+                      through <strong>{view.preferredProvider.replace(/_/g, ' ')}</strong>
+                    </>
+                  ) : null}
+                  . Purchase amount: <strong>{formatMoney(view.purchaseAmount)}</strong>. Next: {view.nextAction}
+                </div>
+                {view.blockers.length ? (
+                  <div style={{ color: '#fca5a5', display: 'grid', gap: 4 }}>
+                    {view.blockers.map((blocker) => (
+                      <div key={blocker}>- {blocker}</div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+            No capital asset purchase profiles are active yet. Add an acquisition profile to equipment, fleet,
+            materials, land, inventory, aircraft, or marine assets to activate purchase rail readiness.
           </div>
         )}
       </PageSection>
