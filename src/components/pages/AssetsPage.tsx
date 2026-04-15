@@ -6,7 +6,6 @@ import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
-import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
 
 interface AssetsPageProps {
   data: CoreDataBundle;
@@ -59,30 +58,32 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
       </div>
 
       <PageSection
-        title="How To Use This Desk"
-        description="Keep custody, reserve, collateral, and digital holdings organized here before using them in bonds, treasury, or liquidation planning."
+        title="Reserve Command Strip"
+        description="Use the left sidebar to switch desks. This desk starts with live reserve/custody totals, then detailed assets, wallets, trust funding, and liquidation sections."
       >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 16,
-          }}
-        >
-          <WorkbenchRecordCard title="What Belongs Here" subtitle="Reserve and custody layer">
-            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
-              <div>Use this desk for wallets, metals, titled assets, securities, collateral, and trust funding support.</div>
-              <div>Connected wallets and financial accounts should land here as reserve or custody posture, then flow into accounting through linked COA records.</div>
-            </div>
-          </WorkbenchRecordCard>
-          <WorkbenchRecordCard title="Best Next Steps" subtitle="Simple order">
-            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
-              <div>1. Connect or record custody accounts and wallets.</div>
-              <div>2. Enter metals, jewelry, and titled assets with identifiers.</div>
-              <div>3. Link pledged items into collateral and bond support.</div>
-              <div>4. Review trust funding and liquidation posture regularly.</div>
-            </div>
-          </WorkbenchRecordCard>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {[
+            'Wallets and custody',
+            'Metals and titled assets',
+            'Collateral and bonds',
+            'Trust funding',
+            'Liquidation posture',
+          ].map((label) => (
+            <span
+              key={label}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 999,
+                border: '1px solid rgba(148,163,184,0.18)',
+                background: 'rgba(15,23,42,0.28)',
+                color: '#d1d5db',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {label}
+            </span>
+          ))}
         </div>
       </PageSection>
 

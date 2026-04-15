@@ -185,6 +185,12 @@ export default function ConnectedFinancialAccountModal({
               </div>
             </div>
           ) : null}
+          {selectedProvider?.category === 'government' ? (
+            <div style={{ color: '#fde68a', marginTop: 10, fontSize: 13 }}>
+              Court and agency rails are provider or portal scoped. Save the profile here, then require a case or
+              agency reference, confirmation number, and accepted receipt before clearing an obligation as paid.
+            </div>
+          ) : null}
         </div>
 
         <div

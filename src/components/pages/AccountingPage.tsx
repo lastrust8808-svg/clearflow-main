@@ -9309,28 +9309,44 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           title="Accounting"
           description="ERP accounting workspace for receivables, payables, journal workflow, intake, and reconciliation."
         >
-          <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 12 }}>
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                display: 'flex',
+                flexWrap: 'wrap',
                 gap: 12,
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                borderRadius: 14,
+                border: '1px solid rgba(148,163,184,0.14)',
+                background: 'rgba(15,23,42,0.22)',
               }}
             >
-              <RecordCard title="What This Desk Is For" subtitle="Daily ERP work">
-                <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.6 }}>
-                  <div>Use Accounting for invoices, bills, remittances, journals, bank feed, and reconciliation.</div>
-                  <div>Stay inside this desk while working ERP activity. The left sidebar is only for leaving Accounting.</div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                  Active accounting view
                 </div>
-              </RecordCard>
-              <RecordCard title="Best Next Steps" subtitle="Simple operating order">
-                <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.6 }}>
-                  <div>1. Add counterparties in Vendors or Customers.</div>
-                  <div>2. Connect bank, card, processor, or treasury sources.</div>
-                  <div>3. Enter bills, invoices, and remittances.</div>
-                  <div>4. Reconcile and release from the rail controls.</div>
-                </div>
-              </RecordCard>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>{activeSubnavLabel}</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {[
+                  ['Vendors', 'vendors'],
+                  ['Bills', 'bills'],
+                  ['Bank Feed', 'bankFeed'],
+                  ['Reconcile', 'reconciliation'],
+                  ['COA', 'chartOfAccounts'],
+                ].map(([label, id]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => openAccountingSubsection(id as AccountingSection)}
+                    style={sectionButtonStyle(activeSubsection === id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <AccountingToolbar
@@ -9380,9 +9396,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               >
                 Accounting view
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
-              <div style={{ color: '#cbd5e1', lineHeight: 1.6, flex: '1 1 320px' }}>
-                Stay inside Accounting for ERP work. Use the left sidebar only when you want a different desk.
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.45, flex: '1 1 320px' }}>
+                Work inside Accounting here; use the left sidebar only to switch major dashboards.
               </div>
             </div>
 
