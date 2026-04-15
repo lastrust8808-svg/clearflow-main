@@ -365,6 +365,23 @@ export type RailNamespace =
   | 'fedwire'
   | 'irs_reporting';
 
+export type RealPropertyAcquisitionStatus =
+  | 'pipeline'
+  | 'under_contract'
+  | 'title_review'
+  | 'clear_to_close'
+  | 'wire_released'
+  | 'acquired'
+  | 'failed';
+
+export type TitleCompanyWireVerificationStatus =
+  | 'not_requested'
+  | 'instructions_received'
+  | 'call_back_pending'
+  | 'verified'
+  | 'changed_requires_reverification'
+  | 'rejected';
+
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
 export type InterEntitySettlementMode = 'mirrored_halves' | 'cross_entity_clearing';
@@ -691,6 +708,30 @@ export interface AssetRecord {
     securitiesRiskNotes?: string;
     linkedComplianceTagIds?: string[];
   };
+  realPropertyAcquisitionProfile?: {
+    acquisitionStatus?: RealPropertyAcquisitionStatus;
+    propertyAddress?: string;
+    parcelId?: string;
+    purchasePrice?: number;
+    earnestMoneyAmount?: number;
+    closingDate?: string;
+    titleCompanyName?: string;
+    titleEscrowOfficer?: string;
+    titleEmail?: string;
+    titlePhone?: string;
+    titleWireVerificationStatus?: TitleCompanyWireVerificationStatus;
+    titleWireInstructionDocumentId?: string;
+    closingDisclosureDocumentId?: string;
+    purchaseAgreementDocumentId?: string;
+    deedDocumentId?: string;
+    preferredSettlementRail?: 'Fedwire' | 'FedNow' | 'RTP' | 'SameDayACH' | 'StandardACH' | 'manual_review';
+    sourceBankAccountId?: string;
+    linkedAcquisitionNoteId?: string;
+    linkedSettlementId?: string;
+    collateralNoteTreatment?: 'purchase_money_note' | 'seller_finance_note' | 'collateral_deposit_note' | 'reserve_backed_note' | 'cash_wire_only';
+    titleAcceptanceReference?: string;
+    notes?: string;
+  };
   notes?: string;
 }
 
@@ -805,6 +846,18 @@ export interface InstrumentRecord {
     linkedTreasuryAccountId?: string;
     linkedCollateralHoldingId?: string;
     applicationNotes?: string;
+  };
+  realPropertyNoteProfile?: {
+    acquisitionAssetId?: string;
+    titleCompanyName?: string;
+    titleCaseNumber?: string;
+    collateralDescription?: string;
+    collateralDepositAmount?: number;
+    noteFundingRole?: 'purchase_money' | 'seller_financing' | 'collateral_deposit' | 'bridge_to_wire' | 'reserve_support';
+    titleAcceptanceStatus?: 'not_presented' | 'presented' | 'accepted' | 'rejected' | 'requires_cash_wire';
+    titleAcceptanceReference?: string;
+    acceptedBy?: string;
+    acceptanceDate?: string;
   };
   linkedTokenIds?: string[];
   linkedAssetIds?: string[];
@@ -1157,6 +1210,20 @@ export interface SettlementRecord {
     | 'StandardACH'
     | 'LedgerRemittance'
     | 'None';
+  realPropertyClosingProfile?: {
+    assetId?: string;
+    titleCompanyName?: string;
+    escrowFileNumber?: string;
+    closingDate?: string;
+    wireInstructionDocumentId?: string;
+    wireVerificationStatus?: TitleCompanyWireVerificationStatus;
+    callBackVerifiedBy?: string;
+    callBackVerifiedAt?: string;
+    titleReceiptDocumentId?: string;
+    titlePostedReference?: string;
+    acquisitionNoteId?: string;
+    disbursementMemo?: string;
+  };
   processorStatus?:
     | 'queued'
     | 'processing'

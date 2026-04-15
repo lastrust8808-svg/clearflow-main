@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
+import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
@@ -10,6 +11,28 @@ import StatCard from '../ui/StatCard';
 interface AssetsPageProps {
   data: CoreDataBundle;
   setData: Dispatch<SetStateAction<CoreDataBundle>>;
+}
+
+function formatMoney(value: number, currency = 'USD') {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value || 0);
+}
+
+function statusPillStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 9px',
+    borderRadius: 999,
+    border: `1px solid ${active ? 'rgba(45,212,191,0.45)' : 'rgba(248,113,113,0.32)'}`,
+    background: active ? 'rgba(15,118,110,0.22)' : 'rgba(127,29,29,0.16)',
+    color: active ? '#99f6e4' : '#fecaca',
+    fontSize: 12,
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  };
 }
 
 export default function AssetsPage({ data, setData }: AssetsPageProps) {
@@ -43,6 +66,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
     liquidationPlans: data.liquidationPlans,
   });
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
+  const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
   const preciousMetalAssets = data.assets.filter(
     (asset) => asset.category === 'metal' || Boolean(asset.preciousMetalProfile),
@@ -104,6 +128,11 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
         <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
+        <StatCard label="Property Acquisitions" value={realPropertyAcquisitionViews.length} />
+        <StatCard
+          label="Clear To Close"
+          value={realPropertyAcquisitionViews.filter((item) => item.closingReady).length}
+        />
         <StatCard label="High Howey Risk" value={realEstateSecuritySummary.highRiskCount} />
         <StatCard label="Trust Funding Files" value={trustFundingViews.length} />
         <StatCard label="Metal / Jewelry Assets" value={preciousMetalAssets.length} />
@@ -163,6 +192,61 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
             </WorkbenchRecordCard>
           ))}
         </div>
+      </PageSection>
+
+      <PageSection
+        title="Real Property Acquisition Rails"
+        description="Title-company closings normally require verified wire instructions and bank-originated Fedwire release. Entity-issued notes can support the acquisition only when accepted by the seller, title company, or closing instructions."
+      >
+        {realPropertyAcquisitionViews.length ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {realPropertyAcquisitionViews.map((view) => (
+              <div
+                key={view.assetId}
+                style={{
+                  padding: 14,
+                  borderRadius: 16,
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(15,23,42,0.28)',
+                  display: 'grid',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>{view.propertyLabel}</div>
+                    <div style={{ color: '#94a3b8', marginTop: 4 }}>
+                      {view.titleCompany} | {view.acquisitionStatus?.replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={statusPillStyle(view.wireReady)}>Wire {view.wireReady ? 'ready' : 'pending'}</span>
+                    <span style={statusPillStyle(view.noteReady)}>Note {view.noteReady ? 'accepted' : 'review'}</span>
+                    <span style={statusPillStyle(view.closingReady)}>
+                      {view.closingReady ? 'Clear to close' : 'Needs proof'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ color: '#d1d5db', lineHeight: 1.55 }}>
+                  Preferred rail: <strong>{view.preferredRail}</strong>. Purchase price:{' '}
+                  <strong>{formatMoney(view.purchasePrice)}</strong>. Next: {view.nextAction}
+                </div>
+                {view.blockers.length ? (
+                  <div style={{ color: '#fca5a5', display: 'grid', gap: 4 }}>
+                    {view.blockers.map((blocker) => (
+                      <div key={blocker}>- {blocker}</div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+            No real property acquisition profiles are active yet. Add or edit a real-estate asset with purchase,
+            title-company, wire, note, and closing proof details to activate this rail view.
+          </div>
+        )}
       </PageSection>
 
       <PageSection
