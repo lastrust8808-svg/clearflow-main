@@ -318,8 +318,11 @@ export type FinancialConnectionProvider =
   | 'mercury'
   | 'checkbook'
   | 'tyler_payments'
+  | 'tyler_odyssey_file_serve'
   | 'payit'
   | 'catalis_court_payments'
+  | 'journal_epay_it'
+  | 'imagesoft_truefiling'
   | 'lexisnexis_government_payments'
   | 'gov_pay'
   | 'usps_bcg'
@@ -847,6 +850,19 @@ export interface ObligationRecord {
   defaultDeclaredAt?: string;
   dischargedAt?: string;
   enforcementMemo?: string;
+  courtAdministration?: {
+    jurisdiction?: string;
+    courtName?: string;
+    caseNumber?: string;
+    docketNumber?: string;
+    docketAssetRecognition?: 'source_document_only' | 'receivable_claim' | 'pledged_or_bonded_claim';
+    accrualRecognition?: 'expense_and_payable' | 'bonded_obligation_review' | 'disputed_claim_review';
+    acceptedSettlementProvider?: FinancialConnectionProvider;
+    providerConfirmationNumber?: string;
+    courtReceiptDocumentId?: string;
+    acceptanceStatus?: 'not_submitted' | 'submitted' | 'accepted_by_court' | 'rejected' | 'requires_review';
+    notes?: string;
+  };
   recurringSchedule?: {
     enabled: boolean;
     frequency?: RecurrenceFrequency;
