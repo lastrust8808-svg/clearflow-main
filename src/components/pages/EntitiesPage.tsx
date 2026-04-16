@@ -91,6 +91,13 @@ export default function EntitiesPage({
     if (right.id === activeEntityId) return 1;
     return (left.displayName || left.name).localeCompare(right.displayName || right.name);
   });
+  const authorityHeldEntities = orderedEntities.filter(
+    (entity) =>
+      entity.authorityTransactionsPaused ||
+      authorityReviewTags.some((tag) => tag.entityId === entity.id) ||
+      Boolean(entity.authorityProofRequiredPartyNames?.length),
+  );
+  const firstHeldEntity = authorityHeldEntities[0];
 
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
@@ -153,6 +160,49 @@ export default function EntitiesPage({
           : tag,
       ),
     }));
+  };
+
+  const deleteEntityProfile = (entityId: string) => {
+    const entityLabel = entityNameById.get(entityId) || 'this entity';
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Delete ${entityLabel}? This removes the entity profile and linked setup/authority records from this workspace.`)
+    ) {
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      entities: prev.entities.filter((entity) => entity.id !== entityId),
+      authorityRecords: prev.authorityRecords.filter((record) => record.entityId !== entityId),
+      complianceTags: prev.complianceTags.filter((tag) => tag.entityId !== entityId),
+      documents: prev.documents.filter((document) => document.entityId !== entityId),
+      tokens: prev.tokens.filter((token) => token.entityId !== entityId),
+      bankAccounts: prev.bankAccounts.filter((account) => account.entityId !== entityId),
+      treasuryAccounts: prev.treasuryAccounts.filter((account) => account.entityId !== entityId),
+      wallets: prev.wallets.filter((wallet) => wallet.entityId !== entityId),
+      entityConnections: prev.entityConnections.filter(
+        (connection) =>
+          connection.ownerEntityId !== entityId && connection.connectedEntityId !== entityId,
+      ),
+      creditRails: prev.creditRails.filter((rail) => rail.ownerEntityId !== entityId),
+      instruments: prev.instruments.filter((instrument) => instrument.entityId !== entityId),
+      obligations: prev.obligations.filter((obligation) => obligation.entityId !== entityId),
+      instrumentSettlements: prev.instrumentSettlements.filter((settlement) => settlement.entityId !== entityId),
+      negotiableInstrumentRegisters: prev.negotiableInstrumentRegisters.filter(
+        (register) =>
+          register.entityId !== entityId &&
+          register.issuerEntityId !== entityId &&
+          register.currentHolderEntityId !== entityId,
+      ),
+      holderLedgerEntries: prev.holderLedgerEntries.filter((entry) => entry.entityId !== entityId),
+      remittanceStatements: prev.remittanceStatements.filter((statement) => statement.entityId !== entityId),
+      entityMarkUsageRecords: prev.entityMarkUsageRecords.filter((record) => record.entityId !== entityId),
+    }));
+
+    if (activeEntityId === entityId) {
+      onSetActiveEntity?.(null);
+    }
   };
 
   useEffect(() => {
@@ -848,12 +898,48 @@ export default function EntitiesPage({
           goToHash(`#documents:${documentId}`);
         }}
       />
-      <div>
-        <h1 style={{ marginTop: 0, fontSize: 30 }}>Entities</h1>
-        <p style={{ color: '#9ca3af', marginBottom: 0 }}>
-          Entity records, workspace identity, and operational defaults for the operating system.
-        </p>
-        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          borderRadius: 18,
+          border: '1px solid var(--cf-border)',
+          background: 'rgba(15,23,42,0.34)',
+          padding: 14,
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 26 }}>Entities</h1>
+            <p style={{ color: '#9ca3af', margin: '4px 0 0' }}>
+              Profiles, authority, records, and operating routes by entity.
+            </p>
+          </div>
+          {firstHeldEntity ? (
+            <div style={{ color: '#fef3c7', fontSize: 13, lineHeight: 1.5 }}>
+              Next: finish authorization for <strong>{firstHeldEntity.displayName || firstHeldEntity.name}</strong>.
+            </div>
+          ) : null}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {firstHeldEntity ? (
+            <button
+              type="button"
+              onClick={() => openAuthorityWorkspace(firstHeldEntity.id)}
+              style={{
+                padding: '10px 14px',
+                minHeight: 42,
+                borderRadius: 10,
+                border: '1px solid rgba(251,191,36,0.38)',
+                background: 'rgba(251,191,36,0.16)',
+                color: '#fffbeb',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              Resume Authorization
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setIsEntityModalOpen(true)}
@@ -868,7 +954,7 @@ export default function EntitiesPage({
               fontWeight: 700,
             }}
           >
-            + Add Entity
+            {data.entities.length ? '+ Add Another Entity' : '+ Add Entity'}
           </button>
           <button
             type="button"
@@ -911,34 +997,40 @@ export default function EntitiesPage({
         </div>
       </div>
 
-      <PageSection
-        title="How To Use This Desk"
-        description="Establish each board here first so the rest of the platform can route banking, records, authority, and accounting correctly."
-      >
+      {firstHeldEntity ? (
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 16,
+            borderRadius: 16,
+            border: '1px solid rgba(251,191,36,0.28)',
+            background: 'rgba(120, 53, 15, 0.16)',
+            padding: 12,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'center',
           }}
         >
-          <WorkbenchRecordCard title="Start Here" subtitle="Entity setup order">
-            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
-              <div>1. Add the entity and representative capacity.</div>
-              <div>2. Upload authority proof and clear any name mismatch.</div>
-              <div>3. Map storage and connection rails.</div>
-              <div>4. Then move into banking, vendors, and outward activity.</div>
-            </div>
-          </WorkbenchRecordCard>
-          <WorkbenchRecordCard title="When ClearFlow Pauses Release" subtitle="Data can still be entered">
-            <div style={{ display: 'grid', gap: 6, color: '#d1d5db', lineHeight: 1.65 }}>
-              <div>Authority review does not stop drafting or record retention.</div>
-              <div>It only pauses transaction-capable onboarding and release until proof is cleared.</div>
-              <div>Use the authority controls below to resolve those holds quickly.</div>
-            </div>
-          </WorkbenchRecordCard>
+          <div style={{ color: '#fde68a', lineHeight: 1.45 }}>
+            Authority review does not block data entry, but it pauses bank setup and transaction release until cleared.
+          </div>
+          <button
+            type="button"
+            onClick={() => openAuthorityWorkspace(firstHeldEntity.id)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px solid rgba(251,191,36,0.38)',
+              background: 'rgba(251,191,36,0.14)',
+              color: '#fffbeb',
+              cursor: 'pointer',
+              fontWeight: 800,
+            }}
+          >
+            Continue Required Info
+          </button>
         </div>
-      </PageSection>
+      ) : null}
 
       {data.entities.length === 0 ? (
         <PageSection
@@ -1001,8 +1093,8 @@ export default function EntitiesPage({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 16,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 10,
         }}
       >
         <StatCard label="Entities" value={String(data.entities.length)} />
@@ -1085,6 +1177,23 @@ export default function EntitiesPage({
                               }}
                             >
                               Add Needed Info
+                            </button>
+                          ) : null}
+                          {tag.entityId ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteEntityProfile(tag.entityId || '')}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: 10,
+                                border: '1px solid rgba(248,113,113,0.28)',
+                                background: 'rgba(127,29,29,0.22)',
+                                color: '#fecaca',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Delete Stale Entity
                             </button>
                           ) : null}
                         </div>
@@ -1304,6 +1413,21 @@ export default function EntitiesPage({
                       }}
                     >
                       Confirm Authority And Release Hold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteEntityProfile(entity.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(248,113,113,0.28)',
+                        background: 'rgba(127,29,29,0.22)',
+                        color: '#fecaca',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                      }}
+                    >
+                      Delete This Entity
                     </button>
                   </div>
                 </div>
