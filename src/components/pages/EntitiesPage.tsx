@@ -99,6 +99,62 @@ export default function EntitiesPage({
         (document.templateKey === 'formation_packet' || document.category === 'authority_record'),
     );
 
+  const openAuthorityWorkspace = (entityId?: string | null) => {
+    if (entityId) {
+      onSetActiveEntity?.(entityId);
+    }
+    if (typeof window !== 'undefined') {
+      window.location.hash = '#entities:authority';
+      window.setTimeout(() => {
+        document.getElementById('entity-authority-workspace')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 60);
+    }
+  };
+
+  const releaseAuthorityHold = (entityId: string) => {
+    setData((prev) => ({
+      ...prev,
+      entities: prev.entities.map((entity) =>
+        entity.id === entityId
+          ? {
+              ...entity,
+              authorityTransactionsPaused: false,
+              authorityProofStatus:
+                entity.authorityProofStatus === 'matched' ? entity.authorityProofStatus : 'similar_match',
+              authorityProofSummary: `${entity.authorityProofSummary || 'Authority reviewed.'} Release hold cleared by operator on ${new Date().toISOString().slice(0, 10)}.`,
+            }
+          : entity,
+      ),
+      authorityRecords: prev.authorityRecords.map((record) =>
+        record.entityId === entityId
+          ? {
+              ...record,
+              clientAuthorizationStatus:
+                record.clientAuthorizationStatus === 'revoked'
+                  ? record.clientAuthorizationStatus
+                  : 'active',
+              approvalStatus:
+                record.approvalStatus === 'declined' ? record.approvalStatus : 'accepted',
+              acceptedAt: record.acceptedAt || new Date().toISOString(),
+              acceptedBy: record.acceptedBy || currentUser?.name || record.personName,
+            }
+          : record,
+      ),
+      complianceTags: prev.complianceTags.map((tag) =>
+        tag.category === 'authority' && tag.entityId === entityId && tag.status === 'review'
+          ? {
+              ...tag,
+              status: 'ok',
+              notes: `${tag.notes || tag.label} Authority hold cleared by operator on ${new Date().toISOString().slice(0, 10)}.`,
+            }
+          : tag,
+      ),
+    }));
+  };
+
   useEffect(() => {
     const applyHash = () => {
       if (typeof window === 'undefined') {
@@ -1001,20 +1057,7 @@ export default function EntitiesPage({
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <button
                             type="button"
-                            onClick={() =>
-                              setData((prev) => ({
-                                ...prev,
-                                complianceTags: prev.complianceTags.map((item) =>
-                                  item.id === tag.id
-                                    ? {
-                                        ...item,
-                                        status: 'ok',
-                                        notes: `${item.notes || item.label} Resolved in authority control on ${new Date().toISOString().slice(0, 10)}.`,
-                                      }
-                                    : item,
-                                ),
-                              }))
-                            }
+                            onClick={() => tag.entityId && releaseAuthorityHold(tag.entityId)}
                             style={{
                               padding: '8px 12px',
                               borderRadius: 10,
@@ -1025,12 +1068,12 @@ export default function EntitiesPage({
                               fontWeight: 700,
                             }}
                           >
-                            Mark Cleared
+                            Authorize / Clear Hold
                           </button>
                           {tag.entityId ? (
                             <button
                               type="button"
-                              onClick={() => onSetActiveEntity?.(tag.entityId || null)}
+                              onClick={() => openAuthorityWorkspace(tag.entityId)}
                               style={{
                                 padding: '8px 12px',
                                 borderRadius: 10,
@@ -1041,7 +1084,7 @@ export default function EntitiesPage({
                                 fontWeight: 700,
                               }}
                             >
-                              Focus Entity
+                              Add Needed Info
                             </button>
                           ) : null}
                         </div>
@@ -1190,6 +1233,81 @@ export default function EntitiesPage({
                   }))
                 }
               />
+              {entity.authorityTransactionsPaused ||
+              authorityReviewTags.some((tag) => tag.entityId === entity.id) ||
+              entity.authorityProofRequiredPartyNames?.length ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 14,
+                    borderRadius: 14,
+                    border: '1px solid rgba(251,191,36,0.28)',
+                    background: 'rgba(120, 53, 15, 0.18)',
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#fef3c7' }}>
+                    Authorization needed before this entity can transact
+                  </div>
+                  <div style={{ color: '#fde68a', lineHeight: 1.55, fontSize: 13 }}>
+                    {entity.authorityProofSummary ||
+                      'Authority proof needs review before bank setup, payment release, or outside settlement.'}
+                    {entity.authorityProofRequiredPartyNames?.length
+                      ? ` Add or confirm: ${entity.authorityProofRequiredPartyNames.join(', ')}.`
+                      : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => openAuthorityWorkspace(entity.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(251,191,36,0.36)',
+                        background: 'rgba(251,191,36,0.14)',
+                        color: '#fffbeb',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                      }}
+                    >
+                      Add / Review Authorization Info
+                    </button>
+                    {resolveEntitySetupDocument(entity.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => goToHash(`#documents:${resolveEntitySetupDocument(entity.id)?.id}`)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(96,165,250,0.4)',
+                          background: 'rgba(37,99,235,0.18)',
+                          color: '#e5e7eb',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Open Authority Packet
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => releaseAuthorityHold(entity.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(74,222,128,0.28)',
+                        background: 'rgba(34,197,94,0.14)',
+                        color: '#dcfce7',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                      }}
+                    >
+                      Confirm Authority And Release Hold
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                 {resolveEntitySetupDocument(entity.id) ? (
                   <button
@@ -1406,12 +1524,14 @@ export default function EntitiesPage({
         </div>
       </PageSection>
 
-      <PageSection
-        title="Entity Resource Studio"
-        description="Create the working resources an entity needs to operate: bank accounts, wallets, authority records, obligations, instruments, and control documents."
-      >
-        <EntityResourceStudio data={data} setData={setData} />
-      </PageSection>
+      <div id="entity-authority-workspace">
+        <PageSection
+          title="Entity Resource Studio"
+          description="Create the working resources an entity needs to operate: bank accounts, wallets, authority records, obligations, instruments, and control documents. Use Authority Record for additional trustees, members, managers, or signers."
+        >
+          <EntityResourceStudio data={data} setData={setData} />
+        </PageSection>
+      </div>
 
       <PageSection
         title="Entity Execution Studio"
@@ -1472,6 +1592,21 @@ export default function EntitiesPage({
                               }
                             : item
                         ),
+                        entities:
+                          status === 'accepted' && record.entityId
+                            ? prev.entities.map((entity) =>
+                                entity.id === record.entityId
+                                  ? {
+                                      ...entity,
+                                      authorityTransactionsPaused: false,
+                                      authorityProofStatus:
+                                        entity.authorityProofStatus === 'matched'
+                                          ? entity.authorityProofStatus
+                                          : 'similar_match',
+                                    }
+                                  : entity,
+                              )
+                            : prev.entities,
                         complianceTags:
                           status === 'accepted'
                             ? prev.complianceTags.map((tag) =>
