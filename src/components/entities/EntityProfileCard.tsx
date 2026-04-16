@@ -119,6 +119,7 @@ export default function EntityProfileCard({
   });
   const storageMode = draft.entityAccess?.storageMode ?? 'operator_google';
   const storageEmail = draft.entityAccess?.googleStorageEmail || draft.primaryEmail || '';
+  const entityEmail = storageEmail;
   const currentEmail = (currentGoogleEmail || '').trim().toLowerCase();
   const targetEmail = storageEmail.trim().toLowerCase();
   const storageStatus =
@@ -196,25 +197,15 @@ export default function EntityProfileCard({
         }}
       >
         <label style={{ display: 'grid', gap: 6 }}>
-          <span>Primary Entity Email</span>
+          <span>Entity Email / Storage Email</span>
           <input
             style={inputStyle}
             type="email"
-            value={draft.primaryEmail ?? ''}
-            onChange={(event) =>
-              setDraft((prev) => ({ ...prev, primaryEmail: event.target.value || undefined }))
-            }
-          />
-        </label>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Google Storage Email</span>
-          <input
-            style={inputStyle}
-            type="email"
-            value={draft.entityAccess?.googleStorageEmail ?? ''}
+            value={entityEmail}
             onChange={(event) =>
               setDraft((prev) => ({
                 ...prev,
+                primaryEmail: event.target.value || undefined,
                 entityAccess: {
                   ...prev.entityAccess,
                   googleStorageEmail: event.target.value || undefined,
@@ -222,6 +213,10 @@ export default function EntityProfileCard({
               }))
             }
           />
+          <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
+            Optional. Use this when the entity has its own email or Drive account. The signed-in operator remains{' '}
+            {currentGoogleEmail || 'the current ClearFlow user'}.
+          </small>
         </label>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Entity Storage Mode</span>

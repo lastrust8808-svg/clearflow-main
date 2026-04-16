@@ -182,6 +182,11 @@ export default function EntitiesPage({
               })
             : null;
           setData((prev) => {
+            const entityEmail =
+              payload.googleStorageEmail.trim() ||
+              payload.primaryEmail.trim() ||
+              undefined;
+            const storageEmail = entityEmail || currentUser?.email || undefined;
             const nextBundle = {
               ...prev,
             entities: [
@@ -190,11 +195,7 @@ export default function EntitiesPage({
                 name: payload.name.trim(),
                 displayName: entityDisplayName,
                 type: payload.type,
-                primaryEmail:
-                  payload.primaryEmail.trim() ||
-                  payload.googleStorageEmail.trim() ||
-                  currentUser?.email ||
-                  undefined,
+                primaryEmail: entityEmail || currentUser?.email || undefined,
                 jurisdiction: payload.jurisdiction.trim() || undefined,
                 country: payload.country.trim() || undefined,
                 formationDate: new Date().toISOString().slice(0, 10),
@@ -213,11 +214,7 @@ export default function EntitiesPage({
                   authorityProofAnalysis.status !== 'matched' &&
                   authorityProofAnalysis.status !== 'similar_match',
                 entityAccess: {
-                  googleStorageEmail:
-                    payload.googleStorageEmail.trim() ||
-                    payload.primaryEmail.trim() ||
-                    currentUser?.email ||
-                    undefined,
+                  googleStorageEmail: storageEmail,
                   storageMode:
                     payload.storageMode ||
                     (currentUser?.email ? 'operator_google' : 'internal_only'),
@@ -227,9 +224,7 @@ export default function EntitiesPage({
                       : !hasDriveAccess
                         ? 'not_connected'
                         : (
-                            payload.googleStorageEmail.trim() ||
-                            payload.primaryEmail.trim() ||
-                            currentUser?.email
+                            storageEmail
                           )?.trim().toLowerCase() === currentUser?.email?.trim().toLowerCase()
                           ? 'connected'
                           : 'needs_google_switch',
@@ -240,11 +235,7 @@ export default function EntitiesPage({
                   accentColor: prev.workspaceSettings.preferredAccentColor || '#36d7ff',
                   documentLogoText: entityDisplayName,
                   emailFromName: entityDisplayName,
-                  replyToEmail:
-                    payload.primaryEmail.trim() ||
-                    payload.googleStorageEmail.trim() ||
-                    currentUser?.email ||
-                    undefined,
+                  replyToEmail: entityEmail || currentUser?.email || undefined,
                   invoiceFooterNote: 'Operational records generated through ClearFlow.',
                   sealValueEnabled: true,
                   sealUnitValue: 1,

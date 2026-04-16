@@ -108,8 +108,8 @@ export default function EntityQuickAddModal({
     setName('');
     setDisplayName('');
     setType('llc');
-    setPrimaryEmail(currentUserEmail || '');
-    setGoogleStorageEmail(currentUserEmail || '');
+    setPrimaryEmail('');
+    setGoogleStorageEmail('');
     setStorageMode(currentUserEmail ? 'operator_google' : 'internal_only');
     setJurisdiction('');
     setCountry('United States');
@@ -127,6 +127,7 @@ export default function EntityQuickAddModal({
   const trimmedDisplayName = displayName.trim();
   const trimmedRepresentativeName = representativeName.trim();
   const trimmedRepresentativeRole = representativeRole.trim();
+  const entityEmail = googleStorageEmail.trim() || primaryEmail.trim();
   const entityLabel = trimmedDisplayName || trimmedName || 'this entity';
   const rolePresets = REPRESENTATIVE_ROLE_PRESETS[type];
   const authorityStatement = `I am ${trimmedRepresentativeRole || 'an authorized representative'} of ${entityLabel} and have the legal authority to establish, administer, connect, and operate this entity in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.`;
@@ -170,8 +171,24 @@ export default function EntityQuickAddModal({
         <div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>Add Entity</div>
           <div style={{ color: '#94a3b8', marginTop: 6 }}>
-            Stand up a new entity profile with branding, numbering, and operating defaults ready to edit.
+            Stand up a new entity profile. Your signed-in ClearFlow user stays connected automatically; only enter a
+            separate entity/storage email if this entity keeps records under its own address.
           </div>
+        </div>
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.16)',
+            background: 'rgba(15,23,42,0.35)',
+            color: '#cbd5e1',
+            lineHeight: 1.5,
+            fontSize: 13,
+          }}
+        >
+          Signed-in operator: <strong>{currentUserEmail || 'Not connected'}</strong>. This is the user account
+          connected to ClearFlow. The entity email below is only for the entity board, reply-to address, and optional
+          entity-owned Google storage.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Legal name" style={inputStyle} />
@@ -185,8 +202,15 @@ export default function EntityQuickAddModal({
             <option value="individual">Individual</option>
             <option value="other">Other</option>
           </select>
-          <input value={primaryEmail} onChange={(e) => setPrimaryEmail(e.target.value)} placeholder="Entity email" style={inputStyle} />
-          <input value={googleStorageEmail} onChange={(e) => setGoogleStorageEmail(e.target.value)} placeholder="Google storage email" style={inputStyle} />
+          <input
+            value={entityEmail}
+            onChange={(e) => {
+              setPrimaryEmail(e.target.value);
+              setGoogleStorageEmail(e.target.value);
+            }}
+            placeholder="Entity email / storage email, optional"
+            style={inputStyle}
+          />
           <select value={storageMode} onChange={(e) => setStorageMode(e.target.value as 'operator_google' | 'entity_google' | 'internal_only')} style={inputStyle}>
             <option value="operator_google">Operator Google Drive</option>
             <option value="entity_google">Entity Google Drive</option>
