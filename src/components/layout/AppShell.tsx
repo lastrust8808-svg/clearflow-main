@@ -49,6 +49,28 @@ const navGroups: Array<{
   },
 ];
 
+const clearFlowLogoDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="ClearFlow">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="50%" stop-color="#005A9E"/>
+      <stop offset="50%" stop-color="#4CAF50"/>
+    </linearGradient>
+    <clipPath id="circleClip"><circle cx="0" cy="0" r="48"/></clipPath>
+  </defs>
+  <g transform="translate(50, 50)">
+    <g clip-path="url(#circleClip)">
+      <rect x="-50" y="-50" width="100" height="100" fill="url(#logoGradient)"/>
+      <path d="M -45,-18 C -20,-42 25,12 45,-8" stroke="#ffffff" stroke-width="11" stroke-linecap="round" fill="none"/>
+      <path d="M -45,18 C -25,42 15,-18 45,8" stroke="#ffffff" stroke-width="11" stroke-linecap="round" fill="none"/>
+    </g>
+  </g>
+  <text x="112" y="70" font-family="Saira, Segoe UI, sans-serif" font-weight="700" font-style="italic" font-size="54" letter-spacing="-2">
+    <tspan fill="#005A9E">Clear</tspan><tspan fill="#4CAF50">Flow</tspan>
+  </text>
+</svg>
+`)}`;
+
 const sectionQuickActions: Record<
   AppSection,
   Array<{ label: string; hash: string; description: string }>
@@ -658,35 +680,42 @@ export default function AppShell({
           gap: 18,
         }}
       >
-        <div>
-          <div
+        <button
+          type="button"
+          onClick={() => onSectionChange('overview')}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            padding: 0,
+            cursor: 'pointer',
+            textAlign: 'left',
+            display: 'grid',
+            gap: 10,
+          }}
+          aria-label="Open ClearFlow home"
+        >
+          <img
+            src={clearFlowLogoDataUri}
+            alt="ClearFlow"
+            style={{ width: 190, maxWidth: '100%', display: 'block' }}
+          />
+          <span
             style={{
+              width: 'fit-content',
+              padding: '7px 12px',
+              borderRadius: 999,
+              border: '1px solid var(--cf-border)',
+              background: activeSection === 'overview' ? 'rgba(54, 215, 255, 0.12)' : 'rgba(255,255,255,0.03)',
+              color: activeSection === 'overview' ? 'var(--cf-accent-soft)' : 'var(--cf-muted)',
               fontSize: 12,
+              fontWeight: 800,
               textTransform: 'uppercase',
-              letterSpacing: 2.4,
-              color: 'var(--cf-accent-soft)',
-              marginBottom: 8,
+              letterSpacing: 1.1,
             }}
           >
-            ClearFlow
-          </div>
-          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 0.4 }}>Core OS</div>
-          <div
-            style={{
-              marginTop: 12,
-              padding: '14px 14px 16px',
-              borderRadius: 18,
-              background:
-                'linear-gradient(145deg, rgba(54, 215, 255, 0.16), rgba(88, 141, 255, 0.08) 45%, rgba(255,255,255,0.02))',
-              border: '1px solid rgba(126, 242, 255, 0.18)',
-              color: 'var(--cf-muted)',
-              fontSize: 12,
-              lineHeight: 1.6,
-            }}
-          >
-            Wealth OS with calmer controls, clearer desk routing, and refresh-safe navigation.
-          </div>
-        </div>
+            Home Dashboard
+          </span>
+        </button>
 
         <div
           style={{
@@ -787,6 +816,36 @@ export default function AppShell({
               ? activeEntityWorkspace.sessionStatusLabel
               : 'Collective workspace view combines the connected entity boards.'}
           </div>
+          {activeEntity ? (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {[
+                { label: 'Entity Profile', hash: '#entities' },
+                { label: 'COA / Accounts', hash: '#accounting:chartOfAccounts' },
+                { label: 'Accounting', hash: '#accounting:dashboard' },
+                { label: 'Documents', hash: '#documents' },
+              ].map((route) => (
+                <button
+                  key={route.hash}
+                  type="button"
+                  onClick={() => handleLaunchRoute(route.hash)}
+                  style={{
+                    minHeight: 34,
+                    borderRadius: 10,
+                    border: '1px solid var(--cf-border)',
+                    background: 'rgba(255,255,255,0.03)',
+                    color: 'var(--cf-text)',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textAlign: 'left',
+                    padding: '0 10px',
+                  }}
+                >
+                  {route.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <nav style={{ display: 'grid', gap: 16 }}>
@@ -875,24 +934,15 @@ export default function AppShell({
         >
           <section
             style={{
-              padding: '20px 22px',
-              borderRadius: 24,
+              padding: '12px 14px',
+              borderRadius: 18,
               border: '1px solid var(--cf-border)',
-              background:
-                'linear-gradient(145deg, rgba(8, 15, 28, 0.5), rgba(18, 26, 43, 0.82))',
+              background: 'rgba(8, 15, 28, 0.34)',
               boxShadow: 'var(--cf-shadow)',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                gap: 16,
-                alignItems: 'flex-start',
-              }}
-            >
-              <div style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gap: 8, minWidth: 220 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                   <div
                     style={{
@@ -970,31 +1020,7 @@ export default function AppShell({
                     </button>
                   ) : null}
                 </div>
-                <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {activeItem.hint}
-                </div>
-                <div style={{ color: 'var(--cf-muted)', lineHeight: 1.65, fontSize: 15 }}>
-                  {sectionSummaryById[activeSection]}
-                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-                  {resumeRoutes[0] ? (
-                    <button
-                      type="button"
-                      onClick={() => goToHash(resumeRoutes[0].hash)}
-                      style={{
-                        minHeight: 42,
-                        padding: '0 14px',
-                        borderRadius: 14,
-                        border: '1px solid rgba(126, 242, 255, 0.18)',
-                        background: 'rgba(54, 215, 255, 0.08)',
-                        color: 'var(--cf-accent-soft)',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Resume {resumeRoutes[0].label}
-                    </button>
-                  ) : null}
                   {isSectionSubroute ? (
                     <button
                       type="button"
@@ -1029,23 +1055,7 @@ export default function AppShell({
                   >
                     Quick Open
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchRoute(learningRoute)}
-                    style={{
-                      minHeight: 42,
-                      padding: '0 14px',
-                      borderRadius: 14,
-                      border: '1px solid var(--cf-border)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'var(--cf-text)',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                    }}
-                  >
-                    Learn & Resources
-                  </button>
-                  {quickActions.slice(0, 3).map((action) => (
+                  {quickActions.slice(0, 2).map((action) => (
                     <button
                       key={action.hash}
                       type="button"
@@ -1068,91 +1078,14 @@ export default function AppShell({
               </div>
               <div
                 style={{
-                  display: 'grid',
+                  display: 'flex',
                   gap: 10,
-                  minWidth: 280,
-                  flex: '0 1 340px',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
                 }}
               >
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 18,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid var(--cf-border)',
-                    display: 'grid',
-                    gap: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1.3,
-                      color: 'var(--cf-accent-soft)',
-                    }}
-                  >
-                    Guided next step
-                  </div>
-                  <div style={{ fontWeight: 700 }}>{nextGuidance.label}</div>
-                  <div style={{ color: 'var(--cf-muted)', lineHeight: 1.55, fontSize: 13 }}>
-                    {nextGuidance.description}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchRoute(nextGuidance.hash)}
-                    style={{
-                      minHeight: 40,
-                      padding: '0 12px',
-                      borderRadius: 12,
-                      border: '1px solid var(--cf-border)',
-                      background: 'rgba(54, 215, 255, 0.08)',
-                      color: 'var(--cf-accent-soft)',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Open Next Step
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchRoute(learningRoute)}
-                    style={{
-                      minHeight: 40,
-                      padding: '0 12px',
-                      borderRadius: 12,
-                      border: '1px solid var(--cf-border)',
-                      background: 'rgba(255,255,255,0.03)',
-                      color: 'var(--cf-text)',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Open Learning Hub
-                  </button>
-                </div>
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 18,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid var(--cf-border)',
-                    display: 'grid',
-                    gap: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1.3,
-                      color: 'var(--cf-accent-soft)',
-                    }}
-                  >
-                    Fast switching
-                  </div>
-                  <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--cf-muted)' }}>
-                    <span>Entity view</span>
+                  <label style={{ display: 'grid', gap: 5, fontSize: 12, color: 'var(--cf-muted)', minWidth: 220 }}>
+                    <span>Entity board</span>
                     <select
                       value={activeEntityId || ''}
                       onChange={(event) => onActiveEntityChange(event.target.value || null)}
@@ -1174,27 +1107,23 @@ export default function AppShell({
                       ))}
                     </select>
                   </label>
-                  {resumeRoutes[0] ? (
-                    <button
-                      type="button"
-                      onClick={() => goToHash(resumeRoutes[0].hash)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        borderRadius: 12,
-                        border: '1px solid var(--cf-border)',
-                        background: 'rgba(255,255,255,0.03)',
-                        color: 'var(--cf-text)',
-                        cursor: 'pointer',
-                        display: 'grid',
-                        gap: 4,
-                      }}
-                    >
-                      <span style={{ fontWeight: 700 }}>Resume {resumeRoutes[0].label}</span>
-                      <span style={{ color: 'var(--cf-muted)', fontSize: 12 }}>Last working route</span>
-                    </button>
-                  ) : null}
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchRoute(nextGuidance.hash)}
+                    title={nextGuidance.description}
+                    style={{
+                      minHeight: 40,
+                      padding: '0 12px',
+                      borderRadius: 12,
+                      border: '1px solid var(--cf-border)',
+                      background: 'rgba(54, 215, 255, 0.08)',
+                      color: 'var(--cf-accent-soft)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {nextGuidance.label}
+                  </button>
               </div>
               {showUtilityPanels ? (
               <div
