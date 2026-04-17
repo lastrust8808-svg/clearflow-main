@@ -7,6 +7,7 @@ import { getConversionConnectorCatalog } from '../../services/conversionConnecto
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
+import { buildTreasuryPresentmentMailTodos } from '../../services/treasuryPresentmentMail.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
@@ -75,6 +76,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const conversionConnectors = getConversionConnectorCatalog();
   const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
+  const treasuryPresentmentMailTodos = buildTreasuryPresentmentMailTodos(data);
   const preciousMetalAssets = data.assets.filter(
     (asset) => asset.category === 'metal' || Boolean(asset.preciousMetalProfile),
   );
@@ -138,6 +140,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Asset Purchases" value={assetAcquisitionViews.length} />
         <StatCard label="Collateral Conversions" value={collateralConversionViews.length} />
         <StatCard label="Conversion Connectors" value={conversionConnectors.length} />
+        <StatCard label="Mail Presentments" value={treasuryPresentmentMailTodos.length} />
         <StatCard
           label="Cash-Available Conversions"
           value={collateralConversionViews.filter((item) => item.cashAvailable).length}
@@ -263,6 +266,76 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
           <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
             No real property acquisition profiles are active yet. Add or edit a real-estate asset with purchase,
             title-company, wire, note, and closing proof details to activate this rail view.
+          </div>
+        )}
+      </PageSection>
+
+      <PageSection
+        title="Registered Mail Presentment To-Do"
+        description="When an executed note, bond, or instrument must be physically presented, use this queue to generate the cover letter, mail packet checklist, USPS/EPS proof path, and returned-response evidence trail."
+      >
+        {treasuryPresentmentMailTodos.length ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {treasuryPresentmentMailTodos.map((todo) => (
+              <WorkbenchRecordCard
+                key={todo.id}
+                title={todo.title}
+                subtitle={`${todo.entityLabel} | ${todo.status.replace(/_/g, ' ')}`}
+                summaryItems={[
+                  { label: 'Recipient', value: todo.recipientLabel },
+                  { label: 'Identifier', value: todo.legalIdentifier || 'not set' },
+                  { label: 'Amount', value: formatMoney(todo.amount) },
+                ]}
+              >
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div style={{ color: '#d1d5db', lineHeight: 1.6 }}>{todo.nextStep}</div>
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      border: '1px solid rgba(148,163,184,0.18)',
+                      background: 'rgba(15,23,42,0.3)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, marginBottom: 8 }}>All-inclusive presentment instructions</div>
+                    <div style={{ display: 'grid', gap: 5, color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {todo.checklist.map((item) => (
+                        <div key={item}>- {item}</div>
+                      ))}
+                    </div>
+                  </div>
+                  <details
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid rgba(96,165,250,0.24)',
+                      background: 'rgba(37,99,235,0.12)',
+                      padding: 12,
+                    }}
+                  >
+                    <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#bfdbfe' }}>
+                      Generated cover letter / form text
+                    </summary>
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        margin: '12px 0 0',
+                        color: '#dbeafe',
+                        fontFamily: 'inherit',
+                        lineHeight: 1.55,
+                      }}
+                    >
+                      {todo.coverLetterBody}
+                    </pre>
+                  </details>
+                </div>
+              </WorkbenchRecordCard>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+            No executed notes, bonds, or instruments are currently waiting on registered/certified mail
+            presentment. Once an issued instrument needs outside treasury or receiving-office presentment, it will
+            appear here with mailing instructions, USPS/EPS evidence steps, and generated cover letter text.
           </div>
         )}
       </PageSection>

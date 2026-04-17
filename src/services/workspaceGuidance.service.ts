@@ -1,4 +1,5 @@
 import type { AppSection, CoreDataBundle, EntityRecord } from '../types/core';
+import { buildTreasuryPresentmentMailTodos } from './treasuryPresentmentMail.service';
 
 export interface WorkspaceGuideCard {
   title: string;
@@ -113,6 +114,7 @@ export function buildWorkspaceGuidanceSummary(data: CoreDataBundle): WorkspaceGu
   ];
 
   const requiredActions: WorkspaceRequiredAction[] = [];
+  const treasuryPresentmentMailTodos = buildTreasuryPresentmentMailTodos(data);
 
   if (data.entities.length === 0) {
     requiredActions.push({
@@ -172,6 +174,16 @@ export function buildWorkspaceGuidanceSummary(data: CoreDataBundle): WorkspaceGu
       route: '#documents:upload',
       routeLabel: 'Upload Documents',
       severity: 'medium',
+    });
+  }
+
+  if (treasuryPresentmentMailTodos.length > 0) {
+    requiredActions.push({
+      title: 'Mail instrument presentment packet',
+      description: `${treasuryPresentmentMailTodos.length} executed note/bond/instrument item(s) need registered/certified mail presentment instructions, USPS/EPS evidence, and returned-response tracking.`,
+      route: '#assets',
+      routeLabel: 'Open Presentment Mail',
+      severity: 'high',
     });
   }
 
