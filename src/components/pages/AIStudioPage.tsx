@@ -27,6 +27,7 @@ import { buildBondLifecycleViews } from '../../services/bondLifecycle.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import { buildRevenueArchitectureSummary } from '../../services/revenueArchitecture.service';
 import { buildWorkspaceGuidanceSummary } from '../../services/workspaceGuidance.service';
+import { getEcfrApiCatalog } from '../../services/ecfrApiCatalog.service';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -39,6 +40,20 @@ interface AIStudioPageProps {
 type ReportWindowOption = '30d' | '90d' | '365d' | 'all';
 
 const researchLinks = [
+  {
+    title: 'eCFR API',
+    subtitle: 'Official current and historical CFR data',
+    url: 'https://www.ecfr.gov/developers/documentation/api/v1',
+    detail:
+      'Use the eCFR API for current and historical federal regulation text, title structure, search, changes, and corrections when building banking, securities, treasury, postal, tax, privacy, and record-retention research packets.',
+  },
+  {
+    title: 'eCFR Reader',
+    subtitle: 'Browse official CFR text',
+    url: 'https://www.ecfr.gov/current',
+    detail:
+      'Open the official eCFR reader when a user needs to review current regulation text directly before relying on a workflow conclusion.',
+  },
   {
     title: 'Treasury Green Book',
     subtitle: 'Federal ACH guidance and returns',
@@ -632,6 +647,7 @@ export default function AIStudioPage({ data, setData }: AIStudioPageProps) {
   const trustFundingViews = useMemo(() => buildTrustFundingViews(data), [data]);
   const revenueSummary = useMemo(() => buildRevenueArchitectureSummary(data), [data]);
   const workspaceGuidance = useMemo(() => buildWorkspaceGuidanceSummary(data), [data]);
+  const ecfrApiCatalog = useMemo(() => getEcfrApiCatalog(), []);
   const paymentsById = useMemo(
     () => new Map(data.payments.map((payment) => [payment.id, payment])),
     [data.payments],
@@ -5998,6 +6014,30 @@ ${scopedCases
               }
             >
               {resource.detail}
+            </WorkbenchRecordCard>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="eCFR API Connector Map"
+        description="Official CFR endpoints ClearFlow can use for live regulation lookup, historical snapshots, title structure, search, changes, and corrections."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {ecfrApiCatalog.map((endpoint) => (
+            <WorkbenchRecordCard
+              key={endpoint.key}
+              title={endpoint.label}
+              subtitle={endpoint.bestUse}
+              summaryItems={[{ label: 'Endpoint', value: endpoint.endpoint }]}
+            >
+              {endpoint.workflowUse}
             </WorkbenchRecordCard>
           ))}
         </div>
