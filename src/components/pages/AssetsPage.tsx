@@ -2,12 +2,14 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
+import { buildCollateralConversionRailViews } from '../../services/collateralConversionRails.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
+import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
 
 interface AssetsPageProps {
   data: CoreDataBundle;
@@ -68,6 +70,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   });
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
   const assetAcquisitionViews = buildAssetAcquisitionRailViews(data);
+  const collateralConversionViews = buildCollateralConversionRailViews(data);
   const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
   const preciousMetalAssets = data.assets.filter(
@@ -131,6 +134,11 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
         <StatCard label="Asset Purchases" value={assetAcquisitionViews.length} />
+        <StatCard label="Collateral Conversions" value={collateralConversionViews.length} />
+        <StatCard
+          label="Cash-Available Conversions"
+          value={collateralConversionViews.filter((item) => item.cashAvailable).length}
+        />
         <StatCard
           label="Ready Purchases"
           value={assetAcquisitionViews.filter((item) => item.blockers.length === 0).length}
@@ -252,6 +260,66 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
           <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
             No real property acquisition profiles are active yet. Add or edit a real-estate asset with purchase,
             title-company, wire, note, and closing proof details to activate this rail view.
+          </div>
+        )}
+      </PageSection>
+
+      <PageSection
+        title="Collateral Conversion Rails"
+        description="Move pledged assets, metals, securities, notes, receivables, digital assets, and reserve property from tracked collateral into verified cash only after provider, custody, sale, and bank receipt proof are retained."
+      >
+        {collateralConversionViews.length ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {collateralConversionViews.map((view) => (
+              <div
+                key={view.assetId}
+                style={{
+                  padding: 14,
+                  borderRadius: 16,
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(15,23,42,0.28)',
+                  display: 'grid',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>{view.assetLabel}</div>
+                    <div style={{ color: '#94a3b8', marginTop: 4 }}>
+                      {view.entityLabel} | {view.sourceClass.replace(/_/g, ' ')} | {view.status.replace(/_/g, ' ')}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={statusPillStyle(view.providerConnectionStatus !== 'not_connected')}>Provider</span>
+                    <span style={statusPillStyle(view.custodyProofReady)}>Custody</span>
+                    <span style={statusPillStyle(view.saleProofReady)}>Sale proof</span>
+                    <span style={statusPillStyle(view.cashReceiptReady)}>Cash receipt</span>
+                  </div>
+                </div>
+                <div style={{ color: '#d1d5db', lineHeight: 1.55 }}>
+                  Provider: <strong>{view.providerLabel}</strong>. Destination:{' '}
+                  <strong>{view.destinationLabel}</strong>. Net proceeds:{' '}
+                  <strong>{formatMoney(view.estimatedNetProceeds)}</strong>. Next: {view.nextAction}
+                </div>
+                <div style={{ color: '#cbd5e1', lineHeight: 1.55 }}>
+                  SEC/Treasury/private-offering reference:{' '}
+                  <strong>{view.securitiesReferenceReady ? 'ready or not required' : 'needed before securities-backed conversion'}</strong>.
+                </div>
+                {view.blockers.length ? (
+                  <div style={{ color: '#fca5a5', display: 'grid', gap: 4 }}>
+                    {view.blockers.map((blocker) => (
+                      <div key={blocker}>- {blocker}</div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+            No collateral conversion rails are active yet. Add a collateral conversion profile to a metal, security,
+            note, receivable, digital asset, real property, equipment, or reserve asset when it needs to become
+            bank-recognized cash for inter-entity funding, acquisition wires, checks, or treasury release.
           </div>
         )}
       </PageSection>

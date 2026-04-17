@@ -804,6 +804,61 @@ export interface AssetRecord {
     acceptanceReference?: string;
     notes?: string;
   };
+  collateralConversionProfile?: {
+    conversionStatus?:
+      | 'draft'
+      | 'provider_selected'
+      | 'submitted'
+      | 'pending_settlement'
+      | 'cash_received'
+      | 'reconciled'
+      | 'blocked';
+    conversionProvider?:
+      | 'manual_sale'
+      | 'bank_treasury'
+      | 'broker_dealer'
+      | 'qualified_custodian'
+      | 'precious_metals_dealer'
+      | 'digital_asset_exchange'
+      | 'escrow_agent'
+      | 'title_settlement_agent'
+      | 'transfer_agent'
+      | 'private_placement_admin'
+      | 'other';
+    providerName?: string;
+    providerConnectionStatus?: 'not_connected' | 'profile_ready' | 'portal_linked' | 'api_connected' | 'manual_only';
+    sourceCollateralClass?:
+      | 'precious_metal'
+      | 'security'
+      | 'digital_asset'
+      | 'note'
+      | 'receivable'
+      | 'real_property'
+      | 'equipment'
+      | 'reserve_asset'
+      | 'other';
+    estimatedGrossProceeds?: number;
+    estimatedFees?: number;
+    estimatedNetProceeds?: number;
+    destinationEntityId?: string;
+    destinationBankAccountId?: string;
+    destinationTreasuryAccountId?: string;
+    linkedLiquidationPlanId?: string;
+    linkedInstrumentId?: string;
+    linkedSettlementId?: string;
+    linkedInterEntityTransferId?: string;
+    secOfferingReference?: string;
+    edgarAccessionNumber?: string;
+    treasuryDirectReference?: string;
+    privateOfferingExemption?: 'reg_d_506b' | 'reg_d_506c' | 'reg_s' | 'section_4a2' | 'intrastate' | 'not_applicable' | 'review';
+    custodyProofDocumentId?: string;
+    saleConfirmationDocumentId?: string;
+    settlementStatementDocumentId?: string;
+    wireConfirmationDocumentId?: string;
+    bankFeedMatchId?: string;
+    lastReviewDate?: string;
+    notes?: string;
+  };
   notes?: string;
 }
 
