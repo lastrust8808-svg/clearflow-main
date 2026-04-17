@@ -3,6 +3,7 @@ import type { CoreDataBundle } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
 import { buildCollateralConversionRailViews } from '../../services/collateralConversionRails.service';
+import { getConversionConnectorCatalog } from '../../services/conversionConnectorCatalog.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
@@ -71,6 +72,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const realEstateSecuritySummary = buildRealEstateSecuritizationSummary(data);
   const assetAcquisitionViews = buildAssetAcquisitionRailViews(data);
   const collateralConversionViews = buildCollateralConversionRailViews(data);
+  const conversionConnectors = getConversionConnectorCatalog();
   const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
   const preciousMetalAssets = data.assets.filter(
@@ -135,6 +137,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         <StatCard label="RE Security Reviews" value={realEstateSecuritySummary.reviews.length} />
         <StatCard label="Asset Purchases" value={assetAcquisitionViews.length} />
         <StatCard label="Collateral Conversions" value={collateralConversionViews.length} />
+        <StatCard label="Conversion Connectors" value={conversionConnectors.length} />
         <StatCard
           label="Cash-Available Conversions"
           value={collateralConversionViews.filter((item) => item.cashAvailable).length}
@@ -322,6 +325,38 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
             bank-recognized cash for inter-entity funding, acquisition wires, checks, or treasury release.
           </div>
         )}
+      </PageSection>
+
+      <PageSection
+        title="Conversion Connector Directory"
+        description="Use these as the practical rails for turning contracts, debt instruments, collateral, and reserve assets into externally recognized cash. ClearFlow should only mark cash available after the relevant provider, custodian, broker, bank, escrow, or treasury proof is retained."
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+          {conversionConnectors.map((connector) => (
+            <WorkbenchRecordCard
+              key={connector.key}
+              title={connector.label}
+              subtitle={`${connector.category.replace(/_/g, ' ')} | ${connector.executionPosture.replace(/_/g, ' ')}`}
+              summaryItems={[
+                { label: 'Access', value: connector.access.replace(/_/g, ' ') },
+                { label: 'Use', value: connector.bestUse },
+              ]}
+            >
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div>{connector.conversionRole}</div>
+                <div style={{ color: '#cbd5e1' }}>Next setup: {connector.nextSetupStep}</div>
+                <a
+                  href={connector.officialUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#7dd3fc', fontWeight: 800 }}
+                >
+                  Open official connector reference
+                </a>
+              </div>
+            </WorkbenchRecordCard>
+          ))}
+        </div>
       </PageSection>
 
       <PageSection
