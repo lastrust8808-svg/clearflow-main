@@ -8,6 +8,11 @@
     "dev:author": "vite --host localhost --port 3001 --strictPort",
     "server:dev": "node server.js",
     "build": "vite build",
+    "mobile:sync": "npm run build && cap sync",
+    "mobile:add:android": "cap add android",
+    "mobile:add:ios": "cap add ios",
+    "mobile:open:android": "cap open android",
+    "mobile:open:ios": "cap open ios",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
@@ -29,6 +34,10 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",

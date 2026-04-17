@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ClearFlow</string>
+    <string name="title_activity_main">ClearFlow</string>
+    <string name="package_name">site.clearflow.app</string>
+    <string name="custom_url_scheme">site.clearflow.app</string>
+</resources>
