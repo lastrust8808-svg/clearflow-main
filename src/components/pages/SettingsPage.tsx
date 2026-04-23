@@ -144,6 +144,26 @@ export default function SettingsPage({ data, setData, activeEntityId }: Settings
               { label: 'Drive Access', value: auth.hasDriveAccess ? 'Connected' : 'Not connected' },
               { label: 'Terms Accepted', value: auth.currentUser?.clearflowTermsAcceptedAt ? 'Accepted' : 'Pending' },
             ]}
+            actionSlot={
+              auth.hasDriveAccess ? undefined : (
+                <button
+                  type="button"
+                  onClick={() => void auth.requestDriveAccess()}
+                  style={{
+                    minHeight: 42,
+                    padding: '0 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(126, 242, 255, 0.28)',
+                    background: 'rgba(54, 215, 255, 0.12)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                  }}
+                >
+                  Connect Google Drive Access
+                </button>
+              )
+            }
           >
             Use Google as the main sign-in path. ClearFlow retains only the required platform and custody records while letting user-owned workspace data stay external where that storage path is available.
           </WorkbenchRecordCard>

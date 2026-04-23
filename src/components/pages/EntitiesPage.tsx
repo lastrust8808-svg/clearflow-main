@@ -1241,6 +1241,7 @@ export default function EntitiesPage({
                 currentGoogleEmail={currentUser?.email}
                 isActive={entity.id === activeEntityId}
                 onSetActive={() => onSetActiveEntity?.(entity.id)}
+                onRequestDriveAccess={() => auth.requestDriveAccess()}
                 defaultCurrency={data.workspaceSettings.baseCurrency}
                 sealValueSummary={(() => {
                   const usageRecords = data.entityMarkUsageRecords.filter((item) => item.entityId === entity.id);

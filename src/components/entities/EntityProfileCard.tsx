@@ -31,6 +31,7 @@ interface EntityProfileCardProps {
     digitalAssetLabel?: string;
     currency: string;
   };
+  onRequestDriveAccess?: () => void | Promise<void>;
   onSave: (nextEntity: EntityRecord) => void;
 }
 
@@ -125,6 +126,7 @@ export default function EntityProfileCard({
   onSetActive,
   defaultCurrency,
   sealValueSummary,
+  onRequestDriveAccess,
   onSave,
 }: EntityProfileCardProps) {
   const [draft, setDraft] = useState<EntityRecord>(entity);
@@ -375,6 +377,42 @@ export default function EntityProfileCard({
             <option value="internal_only">Internal only</option>
           </select>
         </label>
+        <div
+          style={{
+            alignSelf: 'end',
+            display: 'grid',
+            gap: 6,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(126,242,255,0.14)',
+            background: 'rgba(54,215,255,0.06)',
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>Google Drive Access</div>
+          <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
+            {storageMode === 'entity_google' && storageEmail && currentGoogleEmail?.trim().toLowerCase() !== storageEmail.trim().toLowerCase()
+              ? `To route this entity into its own Drive, connect Google as ${storageEmail}.`
+              : storageLabel}
+          </small>
+          {onRequestDriveAccess ? (
+            <button
+              type="button"
+              onClick={() => void onRequestDriveAccess()}
+              style={{
+                justifySelf: 'start',
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.28)',
+                background: 'rgba(54,215,255,0.12)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              {storageMode === 'entity_google' && storageEmail ? 'Connect Entity Google Drive' : 'Connect Google Drive'}
+            </button>
+          ) : null}
+        </div>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Share In Collective Overview</span>
           <select

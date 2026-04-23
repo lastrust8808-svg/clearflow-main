@@ -113,7 +113,7 @@ interface AuthContextType {
   ) => void;
   completeVerification: () => void;
   logout: () => void;
-  requestDriveAccess: () => void;
+  requestDriveAccess: () => void | Promise<void>;
   continueGoogleOnboardingFallback: () => void;
 }
 
@@ -1750,7 +1750,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const requestDriveAccess = () => {
+  const requestDriveAccess = async () => {
+    if (!isConfigured) {
+      return;
+    }
+    await ensureGoogleClients();
     const activeTokenClient = tokenClientRef.current || tokenClient;
     if (activeTokenClient) {
       setState((current) => ({
