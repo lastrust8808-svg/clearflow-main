@@ -137,6 +137,7 @@ export default function EntitiesPage({
               authorityProofStatus:
                 entity.authorityProofStatus === 'matched' ? entity.authorityProofStatus : 'similar_match',
               authorityProofSummary: `${entity.authorityProofSummary || 'Authority reviewed.'} Release hold cleared by operator on ${new Date().toISOString().slice(0, 10)}.`,
+              authorityProofRequiredPartyNames: [],
             }
           : entity,
       ),
@@ -163,8 +164,12 @@ export default function EntitiesPage({
               notes: `${tag.notes || tag.label} Authority hold cleared by operator on ${new Date().toISOString().slice(0, 10)}.`,
             }
           : tag,
-      ),
+        ),
     }));
+    onSetActiveEntity?.(entityId);
+    window.setTimeout(() => {
+      goToHash('#accounting:bankFeed');
+    }, 80);
   };
 
   const deleteEntityProfile = (entityId: string) => {
@@ -973,6 +978,42 @@ export default function EntitiesPage({
           >
             {data.entities.length ? '+ Add Another Entity' : '+ Add Entity'}
           </button>
+          {!firstHeldEntity && data.entities.length ? (
+            <>
+              <button
+                type="button"
+                onClick={() => goToHash('#accounting:bankFeed')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54,215,255,0.12)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                }}
+              >
+                Connect Bank / Provider
+              </button>
+              <button
+                type="button"
+                onClick={() => goToHash('#accounting:bills')}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.22)',
+                  background: 'rgba(15,23,42,0.5)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Upload Accounting Intake
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -1046,6 +1087,73 @@ export default function EntitiesPage({
           >
             Continue Required Info
           </button>
+        </div>
+      ) : null}
+
+      {!firstHeldEntity && data.entities.length ? (
+        <div
+          style={{
+            borderRadius: 16,
+            border: '1px solid rgba(74,222,128,0.24)',
+            background: 'rgba(22,101,52,0.14)',
+            padding: 12,
+            display: 'grid',
+            gap: 10,
+          }}
+        >
+          <div style={{ color: '#dcfce7', lineHeight: 1.5 }}>
+            Authority is clear for the active entity path. Next, connect bank/provider access, create entity rails, or bulk upload operating records.
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => goToHash('#accounting:bankFeed')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(74,222,128,0.3)',
+                background: 'rgba(34,197,94,0.14)',
+                color: '#dcfce7',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              Connect Bank / Mercury / Provider
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConnectionRailPreset('general');
+                setIsConnectionRailModalOpen(true);
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(96,165,250,0.32)',
+                background: 'rgba(37,99,235,0.18)',
+                color: '#dbeafe',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              Create Settlement Rail
+            </button>
+            <button
+              type="button"
+              onClick={() => goToHash('#accounting:bills')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(126,242,255,0.24)',
+                background: 'rgba(54,215,255,0.1)',
+                color: '#effcff',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              Bulk Upload Accounting Docs
+            </button>
+          </div>
         </div>
       ) : null}
 
