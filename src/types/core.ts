@@ -648,6 +648,12 @@ export interface EntityRecord {
     sealSecondaryText?: string;
     sealInkColor?: string;
     entitySealSvg?: string;
+    customSealDataUrl?: string;
+    customSealFileName?: string;
+    customLogoDataUrl?: string;
+    customLogoFileName?: string;
+    documentSealSource?: 'generated' | 'uploaded';
+    documentLogoSource?: 'text' | 'uploaded';
     sealValueEnabled?: boolean;
     sealUnitValue?: number;
     sealValueCurrency?: string;

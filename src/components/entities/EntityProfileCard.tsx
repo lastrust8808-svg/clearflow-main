@@ -103,6 +103,21 @@ function downloadSvgFile(fileName: string, svg: string) {
   window.URL.revokeObjectURL(url);
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function assetPreviewMarkup(src?: string) {
+  if (!src) return '';
+  if (src.trim().startsWith('<svg')) return src;
+  return `<img src="${src}" alt="Uploaded entity brand asset" style="max-width:100%;max-height:180px;object-fit:contain;" />`;
+}
+
 export default function EntityProfileCard({
   entity,
   currentGoogleEmail,
@@ -147,6 +162,14 @@ export default function EntityProfileCard({
           ? 'Connected to current Google session'
           : 'Needs Google account switch for entity storage';
   const savedSealSvg = draft.branding?.entitySealSvg || liveSealSvg;
+  const activeDocumentSeal =
+    draft.branding?.documentSealSource === 'uploaded' && draft.branding?.customSealDataUrl
+      ? draft.branding.customSealDataUrl
+      : liveSealSvg;
+  const activeLetterheadLogo =
+    draft.branding?.documentLogoSource === 'uploaded' && draft.branding?.customLogoDataUrl
+      ? draft.branding.customLogoDataUrl
+      : draft.branding?.documentLogoText || draft.displayName || draft.name;
 
   const regenerateDispatchAssets = () => {
     const dispatchIdentity = buildEntityDispatchIdentity({
@@ -173,9 +196,34 @@ export default function EntityProfileCard({
       ...draft,
       branding: {
         ...draft.branding,
-        entitySealSvg: liveSealSvg,
+        entitySealSvg:
+          draft.branding?.documentSealSource === 'uploaded' && draft.branding?.customSealDataUrl
+            ? draft.branding.customSealDataUrl
+            : liveSealSvg,
       },
     });
+  };
+
+  const handleBrandUpload = async (file: File | undefined, target: 'seal' | 'logo') => {
+    if (!file) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    setDraft((prev) => ({
+      ...prev,
+      branding: {
+        ...prev.branding,
+        ...(target === 'seal'
+          ? {
+              customSealDataUrl: dataUrl,
+              customSealFileName: file.name,
+              documentSealSource: 'uploaded' as const,
+            }
+          : {
+              customLogoDataUrl: dataUrl,
+              customLogoFileName: file.name,
+              documentLogoSource: 'uploaded' as const,
+            }),
+      },
+    }));
   };
 
   return (
@@ -556,6 +604,74 @@ export default function EntityProfileCard({
           />
         </label>
         <label style={{ display: 'grid', gap: 6 }}>
+          <span>Seal Used On Documents</span>
+          <select
+            style={inputStyle}
+            value={draft.branding?.documentSealSource ?? 'generated'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  documentSealSource: event.target.value as NonNullable<EntityRecord['branding']>['documentSealSource'],
+                },
+              }))
+            }
+          >
+            <option value="generated">Generated seal</option>
+            <option value="uploaded">Uploaded seal</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Letterhead Logo Source</span>
+          <select
+            style={inputStyle}
+            value={draft.branding?.documentLogoSource ?? 'text'}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                branding: {
+                  ...prev.branding,
+                  documentLogoSource: event.target.value as NonNullable<EntityRecord['branding']>['documentLogoSource'],
+                },
+              }))
+            }
+          >
+            <option value="text">Text logo / name</option>
+            <option value="uploaded">Uploaded logo</option>
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Upload Custom Seal</span>
+          <input
+            style={inputStyle}
+            type="file"
+            accept=".svg,.png,.jpg,.jpeg,.webp"
+            onChange={(event) => {
+              void handleBrandUpload(event.target.files?.[0], 'seal');
+              event.currentTarget.value = '';
+            }}
+          />
+          <small style={{ color: 'var(--cf-muted)' }}>
+            {draft.branding?.customSealFileName || 'Upload a higher quality seal image or SVG.'}
+          </small>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Upload Letterhead Logo</span>
+          <input
+            style={inputStyle}
+            type="file"
+            accept=".svg,.png,.jpg,.jpeg,.webp"
+            onChange={(event) => {
+              void handleBrandUpload(event.target.files?.[0], 'logo');
+              event.currentTarget.value = '';
+            }}
+          />
+          <small style={{ color: 'var(--cf-muted)' }}>
+            {draft.branding?.customLogoFileName || 'Upload the logo to use on letterheads, invoices, and packets.'}
+          </small>
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
           <span>Seal Value Reserve Enabled</span>
           <select
             style={inputStyle}
@@ -858,18 +974,57 @@ export default function EntityProfileCard({
       ) : null}
 
       {savedSealSvg ? (
-        <div style={{ display: 'grid', gap: 6 }}>
-          <span>Entity Stamp / Seal Design Space</span>
-          <div style={{ ...previewFrameStyle(), minHeight: 220 }}>
-            <div
-              style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
-              dangerouslySetInnerHTML={{ __html: savedSealSvg }}
-            />
+        <div style={{ display: 'grid', gap: 12 }}>
+          <span>Entity Seal & Letterhead Choices</span>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'grid', gap: 6 }}>
+              <strong>Generated Seal</strong>
+              <div style={{ ...previewFrameStyle(), minHeight: 220 }}>
+                <div
+                  style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                  dangerouslySetInnerHTML={{ __html: liveSealSvg }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <strong>Uploaded Seal</strong>
+              <div
+                style={{ ...previewFrameStyle(), minHeight: 220 }}
+                dangerouslySetInnerHTML={{
+                  __html: assetPreviewMarkup(draft.branding?.customSealDataUrl) || '<span>No uploaded seal yet.</span>',
+                }}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <strong>Active Document Seal</strong>
+              <div
+                style={{ ...previewFrameStyle(), minHeight: 220 }}
+                dangerouslySetInnerHTML={{ __html: assetPreviewMarkup(activeDocumentSeal) }}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <strong>Active Letterhead Logo</strong>
+              <div style={{ ...previewFrameStyle(), minHeight: 220 }}>
+                {draft.branding?.documentLogoSource === 'uploaded' && draft.branding?.customLogoDataUrl ? (
+                  <div dangerouslySetInnerHTML={{ __html: assetPreviewMarkup(draft.branding.customLogoDataUrl) }} />
+                ) : (
+                  <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--cf-accent-soft)' }}>
+                    {activeLetterheadLogo}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() => downloadSvgFile(`${draft.displayName || draft.name}-entity-seal.svg`, savedSealSvg)}
+              onClick={() => downloadSvgFile(`${draft.displayName || draft.name}-entity-seal.svg`, liveSealSvg)}
               style={{
                 padding: '8px 10px',
                 borderRadius: 10,
@@ -880,8 +1035,27 @@ export default function EntityProfileCard({
                 fontWeight: 700,
               }}
             >
-              Download Seal SVG
+              Download Generated Seal SVG
             </button>
+            {draft.branding?.customSealDataUrl ? (
+              <button
+                type="button"
+                onClick={() =>
+                  downloadSvgFile(`${draft.displayName || draft.name}-uploaded-seal.svg`, draft.branding?.customSealDataUrl || '')
+                }
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.22)',
+                  background: 'rgba(54,215,255,0.08)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Download Uploaded Seal
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={regenerateDispatchAssets}
