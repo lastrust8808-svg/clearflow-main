@@ -98,6 +98,11 @@ export default function EntitiesPage({
       Boolean(entity.authorityProofRequiredPartyNames?.length),
   );
   const firstHeldEntity = authorityHeldEntities[0];
+  const visibleAuthorityRecords = data.authorityRecords.filter((record, index, records) => {
+    const makeKey = (item: typeof record) =>
+      [item.entityId, item.personName.trim().toLowerCase(), item.recordType, item.signerEmail?.trim().toLowerCase() || ''].join('|');
+    return index === records.findIndex((candidate) => makeKey(candidate) === makeKey(record));
+  });
 
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
@@ -278,6 +283,18 @@ export default function EntitiesPage({
             authorityProofAnalysis.status === 'missing' ||
             authorityProofAnalysis.status === 'review' ||
             authorityProofAnalysis.status === 'mismatch';
+          const requiredAdditionalPartyNames = Array.from(
+            new Set(
+              authorityProofAnalysis.requiredAdditionalNames
+                .map((name) => name.trim())
+                .filter(Boolean)
+                .filter(
+                  (name) =>
+                    name.toLowerCase() !==
+                    (payload.representativeName.trim() || entityDisplayName).toLowerCase(),
+                ),
+            ),
+          );
           const dispatchIdentity = payload.generateDispatchIdentity
             ? buildEntityDispatchIdentity({
                 entityId,
@@ -315,7 +332,7 @@ export default function EntitiesPage({
                 authorityProofStatus: authorityProofAnalysis.status,
                 authorityProofSummary: authorityProofAnalysis.summary,
                 authorityProofNamedPartyNames: authorityProofAnalysis.extractedNames,
-                authorityProofRequiredPartyNames: authorityProofAnalysis.requiredAdditionalNames,
+                authorityProofRequiredPartyNames: requiredAdditionalPartyNames,
                 authorityTransactionsPaused:
                   authorityProofAnalysis.status !== 'matched' &&
                   authorityProofAnalysis.status !== 'similar_match',
@@ -404,7 +421,7 @@ export default function EntitiesPage({
                 linkedDocumentIds: [documentId],
                 notes: `Created automatically during entity setup. Operator attested that ${payload.representativeName.trim() || 'the representative'} is authorized to establish and operate ${entityDisplayName} in ClearFlow as ${payload.representativeRole.trim() || 'an authorized representative'}.`,
               },
-              ...authorityProofAnalysis.requiredAdditionalNames.map((personName, index) => ({
+              ...requiredAdditionalPartyNames.map((personName, index) => ({
                 id: `${authorityId}-additional-${index + 1}`,
                 entityId,
                 personName,
@@ -445,7 +462,7 @@ export default function EntitiesPage({
                 storageNotes:
                   'Entity authority proof packet is workspace-owned and ready to route into the user-controlled Google Drive archive.',
                 generatedBody: dispatchIdentity
-                  ? `# ${entityDisplayName} Authority Proof Packet\n\n## Authority Attestation\n- Representative: ${payload.representativeName.trim() || entityDisplayName}\n- Capacity: ${payload.representativeRole.trim() || 'Authorized representative'}\n- Attestation: I affirm that I have the legal authority to establish, administer, connect, and operate ${entityDisplayName} in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.\n- Proof analysis: ${authorityProofAnalysis.summary}\n- Uploaded proof: ${payload.authorityProofFile?.name || 'Not retained'}\n\n## Named Parties Found\n${authorityProofAnalysis.extractedNames.length ? authorityProofAnalysis.extractedNames.map((name) => `- ${name}`).join('\n') : '- No names extracted automatically'}\n\n## Required Additional Parties\n${authorityProofAnalysis.requiredAdditionalNames.length ? authorityProofAnalysis.requiredAdditionalNames.map((name) => `- ${name}`).join('\n') : '- None'}\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
+                  ? `# ${entityDisplayName} Authority Proof Packet\n\n## Authority Attestation\n- Representative: ${payload.representativeName.trim() || entityDisplayName}\n- Capacity: ${payload.representativeRole.trim() || 'Authorized representative'}\n- Attestation: I affirm that I have the legal authority to establish, administer, connect, and operate ${entityDisplayName} in ClearFlow, including authorizing records, integrations, and retained platform history for that entity.\n- Proof analysis: ${authorityProofAnalysis.summary}\n- Uploaded proof: ${payload.authorityProofFile?.name || 'Not retained'}\n\n## Named Parties Found\n${authorityProofAnalysis.extractedNames.length ? authorityProofAnalysis.extractedNames.map((name) => `- ${name}`).join('\n') : '- No names extracted automatically'}\n\n## Required Additional Parties\n${requiredAdditionalPartyNames.length ? requiredAdditionalPartyNames.map((name) => `- ${name}`).join('\n') : '- None'}\n\n<div style="display:flex;justify-content:center;padding:12px 0;">${buildEntitySealDesign({
                       entityName: entityDisplayName,
                       jurisdiction: payload.jurisdiction.trim() || payload.country.trim() || undefined,
                       template: 'round',
@@ -467,7 +484,7 @@ export default function EntitiesPage({
                     category: 'authority',
                     status: 'review',
                     linkedDocumentIds: [documentId],
-                    notes: `Entity was added using representative capacity "${payload.representativeRole.trim()}". ${authorityProofAnalysis.summary} External transactions, bank setup, and release actions should remain paused until the proof is rechecked${authorityProofAnalysis.requiredAdditionalNames.length ? ` and ${authorityProofAnalysis.requiredAdditionalNames.join(', ')} ${authorityProofAnalysis.requiredAdditionalNames.length === 1 ? 'is' : 'are'} added to the account` : ''}.`,
+                    notes: `Entity was added using representative capacity "${payload.representativeRole.trim()}". ${authorityProofAnalysis.summary} External transactions, bank setup, and release actions should remain paused until the proof is rechecked${requiredAdditionalPartyNames.length ? ` and ${requiredAdditionalPartyNames.join(', ')} ${requiredAdditionalPartyNames.length === 1 ? 'is' : 'are'} added to the account` : ''}.`,
                   },
                   ...prev.complianceTags,
                 ]
@@ -1248,7 +1265,13 @@ export default function EntitiesPage({
                       data.workspaceSettings.baseCurrency,
                   };
                 })()}
-                onSave={(nextRecord) =>
+                onSave={(nextRecord) => {
+                  const needsAuthorityNext =
+                    nextRecord.authorityTransactionsPaused ||
+                    nextRecord.authorityProofStatus === 'missing' ||
+                    nextRecord.authorityProofStatus === 'review' ||
+                    nextRecord.authorityProofStatus === 'mismatch' ||
+                    Boolean(nextRecord.authorityProofRequiredPartyNames?.length);
                   setData((prev) => ({
                     ...prev,
                     entities: prev.entities.map((item) =>
@@ -1348,8 +1371,15 @@ export default function EntitiesPage({
                           })()
                         : item
                     ),
-                  }))
-                }
+                  }));
+                  window.setTimeout(() => {
+                    if (needsAuthorityNext) {
+                      openAuthorityWorkspace(nextRecord.id);
+                    } else {
+                      goToHash('#accounting:bankFeed');
+                    }
+                  }, 80);
+                }}
               />
               {entity.authorityTransactionsPaused ||
               authorityReviewTags.some((tag) => tag.entityId === entity.id) ||
@@ -1461,7 +1491,7 @@ export default function EntitiesPage({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => goToHash('#documents')}
+                  onClick={() => goToHash('#documents:upload')}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 10,
@@ -1472,7 +1502,22 @@ export default function EntitiesPage({
                     fontWeight: 700,
                   }}
                 >
-                  Open Documents
+                  Upload Entity Records
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goToHash('#accounting:bills')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54, 215, 255, 0.09)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Bulk Accounting Intake
                 </button>
                 <button
                   type="button"
@@ -1678,7 +1723,7 @@ export default function EntitiesPage({
         description="Track signer assignments, acceptance state, and verification readiness."
       >
         <div style={{ display: 'grid', gap: 12 }}>
-          {data.authorityRecords.map((record) => (
+          {visibleAuthorityRecords.map((record) => (
             <div
               key={record.id}
               style={{

@@ -128,6 +128,7 @@ export default function EntityProfileCard({
   onSave,
 }: EntityProfileCardProps) {
   const [draft, setDraft] = useState<EntityRecord>(entity);
+  const [showAdvancedDefaults, setShowAdvancedDefaults] = useState(false);
 
   useEffect(() => {
     setDraft(entity);
@@ -286,9 +287,50 @@ export default function EntityProfileCard({
 
       <div
         style={{
+          borderRadius: 14,
+          border: '1px solid rgba(126,242,255,0.18)',
+          background: 'rgba(54,215,255,0.06)',
+          padding: 14,
+          display: 'grid',
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Essential entity setup</div>
+        <div style={{ color: 'var(--cf-muted)', lineHeight: 1.55 }}>
+          Review only the basics here. After saving, ClearFlow will route you to the next needed step:
+          authority documents if the entity is still held, otherwise banking/treasury connection.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+          <div><strong>Name:</strong> {draft.displayName || draft.name}</div>
+          <div><strong>Type:</strong> {formatModeLabel(draft.type)}</div>
+          <div><strong>Authority:</strong> {draft.authorityTransactionsPaused ? 'Needs review' : 'Ready or accepted'}</div>
+          <div><strong>Storage:</strong> {storageStatus}</div>
+        </div>
+      </div>
+
+      <details
+        open={showAdvancedDefaults}
+        onToggle={(event) => setShowAdvancedDefaults(event.currentTarget.open)}
+        style={{
+          borderRadius: 14,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.03)',
+          padding: 12,
+        }}
+      >
+        <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--cf-accent-soft)' }}>
+          Advanced entity defaults, branding, numbering, dispatch, and document settings
+        </summary>
+        <div style={{ color: 'var(--cf-muted)', marginTop: 8, lineHeight: 1.5 }}>
+          These fields are optional setup controls. You usually do not need to edit prefixes, QR payloads,
+          seal values, or dispatch identifiers during first onboarding.
+        </div>
+      <div
+        style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 12,
+          marginTop: 12,
         }}
       >
         <label style={{ display: 'grid', gap: 6 }}>
@@ -890,6 +932,7 @@ export default function EntityProfileCard({
           />
         </label>
       </div>
+      </details>
 
       <div
         style={{
@@ -1229,7 +1272,7 @@ export default function EntityProfileCard({
             fontWeight: 700,
           }}
         >
-          Save Entity Defaults
+          Save And Continue
         </button>
 
         <button

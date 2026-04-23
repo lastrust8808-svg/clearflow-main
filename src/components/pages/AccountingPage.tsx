@@ -2573,6 +2573,62 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setOperationsNotice(`Saved the bill into ${savedEntityLabel || 'the active entity'} accounting records.`);
   };
 
+  const handleBulkAccountingDocumentUpload = async (files: FileList | null) => {
+    const selectedFiles = Array.from(files ?? []);
+    const targetEntityId =
+      activeEntityId ??
+      defaultEntity?.id ??
+      data.entities[0]?.id;
+    if (!selectedFiles.length || !targetEntityId) {
+      return;
+    }
+
+    const existingFileKeys = new Set(
+      (data.documents ?? [])
+        .filter((doc) => doc.entityId === targetEntityId)
+        .map((doc) => `${doc.fileName || doc.title}:${doc.sizeBytes || 0}`.toLowerCase()),
+    );
+    const freshFiles = selectedFiles.filter(
+      (file) => !existingFileKeys.has(`${file.name}:${file.size}`.toLowerCase()),
+    );
+    if (!freshFiles.length) {
+      setOperationsNotice('Those accounting intake files are already retained for this entity, so ClearFlow did not duplicate records.');
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const savedDocuments = (
+      await Promise.all(
+        freshFiles.map((file) =>
+          persistUploadDocument({
+            entityId: targetEntityId,
+            folder: 'documents',
+            title: file.name.replace(/\.[^.]+$/, '') || 'Accounting intake document',
+            summary: 'Bulk initial accounting intake upload retained for review, coding, bill creation, receipt matching, or reconciliation.',
+            sourceRecordType: 'document',
+            sourceRecordId: `bulk-intake-${file.name}-${file.size}`,
+            file,
+            date: today,
+          }),
+        ),
+      )
+    ).filter((doc): doc is NonNullable<typeof doc> => Boolean(doc));
+
+    if (!savedDocuments.length) {
+      setOperationsNotice('No bulk accounting documents were saved. Try again with supported files.');
+      return;
+    }
+
+    setData((prev) => ({
+      ...prev,
+      documents: [...savedDocuments, ...(prev.documents ?? [])],
+    }));
+    setActiveSubsection('bills');
+    setOperationsNotice(
+      `Saved ${savedDocuments.length} bulk accounting intake document${savedDocuments.length === 1 ? '' : 's'} for the active entity. Review them from Documents or convert them into bills, receipts, expenses, or journals when ready.`,
+    );
+  };
+
   const handleReceiptSubmit = async (payload: ReceiptSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
     const extraction = await analyzeAccountingUpload('receipt', payload.uploadedFile, {
@@ -5967,12 +6023,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setData((prev) => {
       const stamp = Date.now();
       const openingBalance = Number(payload.openingBalance || 0);
+      const persistentConnectionKey = `${provider.providerKey}:${payload.externalAccountId?.trim() || payload.accountName.trim().toLowerCase().replace(/\s+/g, '-')}`;
+      const existingConnectedAccount = (prev.bankAccounts ?? []).find(
+        (account) =>
+          account.entityId === entity.id &&
+          account.connectedProfile?.persistentConnectionKey === persistentConnectionKey,
+      );
       const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
         entity,
       });
       const linkedLedgerAccountId = payload.linkedLedgerAccountId?.trim();
       const ensuredLedger = ensureConnectedLedgerAccount({
-        existingLedgerAccountId: linkedLedgerAccountId,
+        existingLedgerAccountId: existingConnectedAccount?.linkedLedgerAccountId || linkedLedgerAccountId,
         entityId: entity.id,
         code: `10${String((prev.bankAccounts?.length ?? 0) + 20).padStart(2, '0')}`,
         name: `${payload.accountName.trim()} ${payload.accountType === 'credit_card' ? 'Payable' : provider.category === 'processor' || provider.category === 'wallet' ? 'Settlement' : 'Cash'}`,
@@ -5985,8 +6047,38 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       return {
         ...prev,
-        bankAccounts: [
-          {
+        bankAccounts: existingConnectedAccount
+          ? (prev.bankAccounts ?? []).map((account) =>
+              account.id === existingConnectedAccount.id
+                ? {
+                    ...account,
+                    institutionName: payload.institutionName.trim(),
+                    accountName: payload.accountName.trim(),
+                    last4: payload.last4?.trim() || account.last4,
+                    accountType: payload.accountType,
+                    currency: payload.currency || account.currency,
+                    currentBalance: openingBalance || account.currentBalance,
+                    linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
+                    onboardingStatus: 'connected',
+                    liveFeedEnabled: provider.supportsLiveSync,
+                    liveFeedStatus: provider.supportsLiveSync ? 'connected' : 'attention_needed',
+                    connectedProfile: {
+                      ...account.connectedProfile,
+                      providerKey: provider.providerKey,
+                      providerLabel: provider.label,
+                      connectionRail: provider.connectionRail,
+                      sourceInstitutionName: payload.institutionName.trim(),
+                      externalAccountId: payload.externalAccountId?.trim() || account.connectedProfile?.externalAccountId,
+                      externalCustomerId: payload.externalCustomerId?.trim() || account.connectedProfile?.externalCustomerId,
+                      loginLabel: payload.loginLabel?.trim() || account.connectedProfile?.loginLabel,
+                      persistentConnectionKey,
+                      lastProviderSyncAt: new Date().toISOString(),
+                    },
+                  }
+                : account,
+            )
+          : [
+              {
             id: `bank-provider-${stamp}`,
             entityId: entity.id,
             institutionName: payload.institutionName.trim(),
@@ -6023,7 +6115,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               externalAccountId: payload.externalAccountId?.trim() || undefined,
               externalCustomerId: payload.externalCustomerId?.trim() || undefined,
               loginLabel: payload.loginLabel?.trim() || undefined,
-              persistentConnectionKey: `${provider.providerKey}:${payload.externalAccountId?.trim() || payload.accountName.trim().toLowerCase().replace(/\s+/g, '-')}`,
+              persistentConnectionKey,
               supportsLiveSync: provider.supportsLiveSync,
               supportsTransactionImport: provider.supportsTransactionImport,
               supportsSettlementInitiation: provider.supportsSettlementInitiation,
@@ -6032,7 +6124,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             },
           },
           ...(prev.bankAccounts ?? []),
-        ],
+            ],
         ledgerAccounts: ensuredLedger.ledgerAccounts,
       };
     });
@@ -8390,6 +8482,45 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 {operationsNotice}
               </div>
             ) : null}
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: '1px solid rgba(126,242,255,0.18)',
+                background: 'rgba(54,215,255,0.06)',
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>Bulk Initial Accounting Intake</div>
+              <div style={{ color: 'var(--cf-muted)', fontSize: 13, lineHeight: 1.55 }}>
+                Upload prior bills, invoices, receipts, statements, tax docs, and operating files in one pass. Files are retained once per entity by file name and size so refreshes do not duplicate the books.
+              </div>
+              <label
+                style={{
+                  justifySelf: 'start',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(126,242,255,0.32)',
+                  background: 'rgba(54,215,255,0.12)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                }}
+              >
+                Upload Accounting Docs In Bulk
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.xls,.doc,.docx,.txt"
+                  onChange={(event) => {
+                    void handleBulkAccountingDocumentUpload(event.target.files);
+                    event.currentTarget.value = '';
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
             <EditableRecordSection
               title="Bills"
               description="Editable bill records."

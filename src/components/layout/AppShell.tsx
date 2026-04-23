@@ -464,6 +464,12 @@ export default function AppShell({
           hash: '#settings',
         },
   ].filter((item): item is { title: string; detail: string; hash: string } => Boolean(item));
+  const attentionActionLabel = (hash: string) => {
+    if (hash === '#entities:new') return 'Start entity setup';
+    if (hash === '#entities') return 'Open entity board';
+    if (hash === '#settings') return 'Connect storage';
+    return 'Open setup';
+  };
   const learningRoute = '#aiStudio';
   const sectionSummaryById: Record<AppSection, string> = {
     overview: 'Live operating view across your desks, filings, rail posture, and next actions.',
@@ -1587,6 +1593,20 @@ export default function AppShell({
                     <span style={{ fontWeight: 700 }}>{item.title}</span>
                     <span style={{ color: 'var(--cf-muted)', fontSize: 13, lineHeight: 1.55 }}>
                       {item.detail}
+                    </span>
+                    <span
+                      style={{
+                        justifySelf: 'start',
+                        marginTop: 4,
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        background: 'rgba(54,215,255,0.14)',
+                        color: 'var(--cf-accent)',
+                        fontSize: 12,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {attentionActionLabel(item.hash)}
                     </span>
                   </button>
                 ))}
