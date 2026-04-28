@@ -871,6 +871,12 @@ export interface AssetRecord {
     state?: string;
     recorderBook?: string;
     recorderPage?: string;
+    recordingStickerReference?: string;
+    recordingNumber?: string;
+    recordedAt?: string;
+    recordingDocumentType?: string;
+    recorderName?: string;
+    feeBreakdownText?: string;
     bookEntryIdentifier?: string;
     securityPoolName?: string;
     depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';
@@ -1029,6 +1035,12 @@ export interface InstrumentRecord {
     state?: string;
     recorderBook?: string;
     recorderPage?: string;
+    recordingStickerReference?: string;
+    recordingNumber?: string;
+    recordedAt?: string;
+    recordingDocumentType?: string;
+    recorderName?: string;
+    feeBreakdownText?: string;
     bookEntryIdentifier?: string;
     securityPoolName?: string;
     depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';

@@ -53,6 +53,12 @@ interface BookEntrySecurityDraft {
   state: string;
   recorderBook: string;
   recorderPage: string;
+  recordingStickerReference: string;
+  recordingNumber: string;
+  recordedAt: string;
+  recordingDocumentType: string;
+  recorderName: string;
+  feeBreakdownText: string;
   bookEntryIdentifier: string;
   securityPoolName: string;
   issuerName: string;
@@ -93,6 +99,12 @@ function buildInitialBookEntrySecurityDraft(defaultEntityId?: string): BookEntry
     state: '',
     recorderBook: '',
     recorderPage: '',
+    recordingStickerReference: '',
+    recordingNumber: '',
+    recordedAt: '',
+    recordingDocumentType: '',
+    recorderName: '',
+    feeBreakdownText: '',
     bookEntryIdentifier: '',
     securityPoolName: '',
     issuerName: '',
@@ -392,7 +404,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         sourceRecordId: nextAssetId,
         linkedAssetIds: [nextAssetId],
         linkedInstrumentIds: nextInstrumentId ? [nextInstrumentId] : undefined,
-        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nDepository Source: ${bookEntryDraft.depositorySource.toUpperCase()}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
+        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nSticker Ref / BK-PG: ${bookEntryDraft.recordingStickerReference || 'Not provided'}\nRecording Number: ${bookEntryDraft.recordingNumber || 'Not provided'}\nRecorded At: ${bookEntryDraft.recordedAt || 'Not provided'}\nRecorded Document Type: ${bookEntryDraft.recordingDocumentType || 'Not provided'}\nRecorder Name: ${bookEntryDraft.recorderName || 'Not provided'}\nSticker Fee Breakdown: ${bookEntryDraft.feeBreakdownText || 'Not provided'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nDepository Source: ${bookEntryDraft.depositorySource.toUpperCase()}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
         storageOwner: 'user_owned' as const,
         retentionClass: 'financial_evidence' as const,
         externalStorageTarget: 'google_drive' as const,
@@ -414,6 +426,14 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
           state: bookEntryDraft.state.trim() || undefined,
           recorderBook: bookEntryDraft.recorderBook.trim() || undefined,
           recorderPage: bookEntryDraft.recorderPage.trim() || undefined,
+          recordingStickerReference:
+            bookEntryDraft.recordingStickerReference.trim() || undefined,
+          recordingNumber: bookEntryDraft.recordingNumber.trim() || undefined,
+          recordedAt: bookEntryDraft.recordedAt || undefined,
+          recordingDocumentType:
+            bookEntryDraft.recordingDocumentType.trim() || undefined,
+          recorderName: bookEntryDraft.recorderName.trim() || undefined,
+          feeBreakdownText: bookEntryDraft.feeBreakdownText.trim() || undefined,
           bookEntryIdentifier: bookEntryDraft.bookEntryIdentifier.trim() || undefined,
           securityPoolName: bookEntryDraft.securityPoolName.trim() || securityName,
           depositorySource: bookEntryDraft.depositorySource,
@@ -721,6 +741,116 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
+                <span>Sticker Ref / BK-PG</span>
+                <input
+                  value={bookEntryDraft.recordingStickerReference}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      recordingStickerReference: event.target.value,
+                    }))
+                  }
+                  placeholder="BK/PG, RB522/51-54..."
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recording Number</span>
+                <input
+                  value={bookEntryDraft.recordingNumber}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      recordingNumber: event.target.value,
+                    }))
+                  }
+                  placeholder="22005433..."
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recorded At</span>
+                <input
+                  type="datetime-local"
+                  value={bookEntryDraft.recordedAt}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      recordedAt: event.target.value,
+                    }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recorded Document Type</span>
+                <input
+                  value={bookEntryDraft.recordingDocumentType}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      recordingDocumentType: event.target.value,
+                    }))
+                  }
+                  placeholder="Warranty deed, oath of consideration..."
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recorder Name</span>
+                <input
+                  value={bookEntryDraft.recorderName}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      recorderName: event.target.value,
+                    }))
+                  }
+                  placeholder="Lori Jones..."
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
                 <span>Book-Entry Identifier</span>
                 <input
                   value={bookEntryDraft.bookEntryIdentifier}
@@ -993,7 +1123,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span>Upload Support</span>
+                <span>Upload Sticker / Support</span>
                 <input
                   type="file"
                   onChange={(event) =>
@@ -1015,6 +1145,29 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 />
               </label>
             </div>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Sticker Fee Breakdown</span>
+              <textarea
+                value={bookEntryDraft.feeBreakdownText}
+                onChange={(event) =>
+                  setBookEntryDraft((prev) => ({
+                    ...prev,
+                    feeBreakdownText: event.target.value,
+                  }))
+                }
+                rows={3}
+                placeholder="Transfer tax, recording fee, archive fee, total..."
+                style={{
+                  width: '100%',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: 'rgba(10, 11, 24, 0.78)',
+                  color: '#fff6fd',
+                  padding: '10px 12px',
+                  fontSize: 14,
+                }}
+              />
+            </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span>Notes</span>
               <textarea
@@ -1936,6 +2089,14 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                       ? `${asset.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${asset.bookEntryReserveProfile?.depositoryReference || asset.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
                       : 'Not linked',
                 },
+                {
+                  label: 'Recorder Sticker',
+                  value:
+                    asset.bookEntryReserveProfile?.recordingStickerReference ||
+                    asset.bookEntryReserveProfile?.recordingNumber
+                      ? `${asset.bookEntryReserveProfile?.recordingStickerReference || 'no ref'} | ${asset.bookEntryReserveProfile?.recordingNumber || 'no recording #'}`
+                      : 'Not captured',
+                },
                 { label: 'Liquidity', value: asset.liquidityProfile || 'Not reviewed' },
                 { label: 'Rating', value: asset.creditRating || 'Not tracked' },
                 { label: 'Market Value', value: asset.marketValue?.toLocaleString() || 'Not tracked' },
@@ -1993,6 +2154,14 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     instrument.bookEntryReserveProfile?.depositoryReference
                       ? `${instrument.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${instrument.bookEntryReserveProfile?.depositoryReference || instrument.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
                       : 'Not linked',
+                },
+                {
+                  label: 'Recorder Sticker',
+                  value:
+                    instrument.bookEntryReserveProfile?.recordingStickerReference ||
+                    instrument.bookEntryReserveProfile?.recordingNumber
+                      ? `${instrument.bookEntryReserveProfile?.recordingStickerReference || 'no ref'} | ${instrument.bookEntryReserveProfile?.recordingNumber || 'no recording #'}`
+                      : 'Not captured',
                 },
                 { label: 'Liquidity', value: instrument.liquidityProfile || 'Not reviewed' },
                 { label: 'Rating', value: instrument.creditRating || 'Not tracked' },
