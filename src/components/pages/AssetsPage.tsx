@@ -1,11 +1,13 @@
+import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { CoreDataBundle } from '../../types/core';
+import type { AssetRecord, CoreDataBundle, InstrumentRecord } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
 import { buildCollateralConversionRailViews } from '../../services/collateralConversionRails.service';
 import { getConversionConnectorCatalog } from '../../services/conversionConnectorCatalog.service';
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
+import { saveDocumentFile } from '../../services/documentVault.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import { buildTreasuryPresentmentMailTodos } from '../../services/treasuryPresentmentMail.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
@@ -40,7 +42,202 @@ function statusPillStyle(active: boolean): React.CSSProperties {
   };
 }
 
+type DepositorySource = NonNullable<
+  NonNullable<AssetRecord['bookEntryReserveProfile']>['depositorySource']
+>;
+
+interface BookEntrySecurityDraft {
+  entityId: string;
+  registrarOffice: string;
+  county: string;
+  state: string;
+  recorderBook: string;
+  recorderPage: string;
+  bookEntryIdentifier: string;
+  securityPoolName: string;
+  issuerName: string;
+  identifierCode: string;
+  isinCode: string;
+  marketSector: NonNullable<AssetRecord['marketSector']> | '';
+  taxTreatment: NonNullable<AssetRecord['taxTreatment']> | '';
+  liquidityProfile: NonNullable<AssetRecord['liquidityProfile']> | '';
+  couponRate: string;
+  maturityDate: string;
+  parValue: string;
+  marketValue: string;
+  units: string;
+  depositorySource: DepositorySource;
+  depositoryReference: string;
+  notes: string;
+  createInstrument: boolean;
+  selectedCandidateId: string;
+  uploadedFile: File | null;
+}
+
+interface BookEntrySecurityCandidate {
+  id: string;
+  kind: 'asset' | 'instrument' | 'new';
+  assetId?: string;
+  instrumentId?: string;
+  label: string;
+  subtitle: string;
+  matchReason: string;
+  score: number;
+}
+
+function buildInitialBookEntrySecurityDraft(defaultEntityId?: string): BookEntrySecurityDraft {
+  return {
+    entityId: defaultEntityId || '',
+    registrarOffice: '',
+    county: '',
+    state: '',
+    recorderBook: '',
+    recorderPage: '',
+    bookEntryIdentifier: '',
+    securityPoolName: '',
+    issuerName: '',
+    identifierCode: '',
+    isinCode: '',
+    marketSector: 'municipal',
+    taxTreatment: '',
+    liquidityProfile: '',
+    couponRate: '',
+    maturityDate: '',
+    parValue: '',
+    marketValue: '',
+    units: '',
+    depositorySource: 'dtcc',
+    depositoryReference: '',
+    notes: '',
+    createInstrument: true,
+    selectedCandidateId: 'new',
+    uploadedFile: null,
+  };
+}
+
+function normalizeBookEntryText(...parts: Array<string | undefined | null>) {
+  return parts
+    .map((part) => (part || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function buildBookEntrySecurityCandidates(
+  data: CoreDataBundle,
+  draft: BookEntrySecurityDraft,
+): BookEntrySecurityCandidate[] {
+  const identifier = draft.identifierCode.trim().toLowerCase();
+  const bookEntryIdentifier = draft.bookEntryIdentifier.trim().toLowerCase();
+  const issuer = draft.issuerName.trim().toLowerCase();
+  const pool = draft.securityPoolName.trim().toLowerCase();
+
+  const evaluateScore = (input: {
+    identifierCode?: string;
+    issuerName?: string;
+    titleOrName?: string;
+    bookEntryIdentifier?: string;
+    poolName?: string;
+  }) => {
+    let score = 0;
+    const reasons: string[] = [];
+    if (identifier && input.identifierCode?.trim().toLowerCase() === identifier) {
+      score += 120;
+      reasons.push('exact identifier');
+    }
+    if (
+      bookEntryIdentifier &&
+      input.bookEntryIdentifier?.trim().toLowerCase() === bookEntryIdentifier
+    ) {
+      score += 110;
+      reasons.push('exact book-entry id');
+    }
+    if (pool && normalizeBookEntryText(input.poolName, input.titleOrName).includes(pool)) {
+      score += 55;
+      reasons.push('pool name');
+    }
+    if (issuer && normalizeBookEntryText(input.issuerName).includes(issuer)) {
+      score += 35;
+      reasons.push('issuer');
+    }
+    return {
+      score,
+      reason: reasons.join(' + '),
+    };
+  };
+
+  const assetCandidates = data.assets
+    .map((asset) => {
+      const match = evaluateScore({
+        identifierCode: asset.identifierCode,
+        issuerName: asset.issuerName,
+        titleOrName: asset.name,
+        bookEntryIdentifier: asset.bookEntryReserveProfile?.bookEntryIdentifier,
+        poolName: asset.bookEntryReserveProfile?.securityPoolName,
+      });
+      if (match.score === 0) {
+        return null;
+      }
+      return {
+        id: `asset:${asset.id}`,
+        kind: 'asset' as const,
+        assetId: asset.id,
+        label: asset.name,
+        subtitle: `${asset.marketSector || asset.category} | ${asset.identifierCode || 'no identifier'}`,
+        matchReason: match.reason || 'reserve asset match',
+        score: match.score,
+      };
+    })
+    .filter((item): item is BookEntrySecurityCandidate => Boolean(item));
+
+  const instrumentCandidates = data.instruments
+    .map((instrument) => {
+      const match = evaluateScore({
+        identifierCode: instrument.identifierCode,
+        issuerName: instrument.issuerName,
+        titleOrName: instrument.title,
+        bookEntryIdentifier: instrument.bookEntryReserveProfile?.bookEntryIdentifier,
+        poolName: instrument.bookEntryReserveProfile?.securityPoolName,
+      });
+      if (match.score === 0) {
+        return null;
+      }
+      return {
+        id: `instrument:${instrument.id}`,
+        kind: 'instrument' as const,
+        instrumentId: instrument.id,
+        label: instrument.title,
+        subtitle: `${instrument.marketSector || instrument.sourceClass || instrument.instrumentType} | ${instrument.identifierCode || 'no identifier'}`,
+        matchReason: match.reason || 'instrument match',
+        score: match.score,
+      };
+    })
+    .filter((item): item is BookEntrySecurityCandidate => Boolean(item));
+
+  const manualCandidate: BookEntrySecurityCandidate = {
+    id: 'new',
+    kind: 'new',
+    label:
+      draft.securityPoolName.trim() ||
+      draft.issuerName.trim() ||
+      draft.identifierCode.trim() ||
+      'Create new reserve security',
+    subtitle: `${draft.depositorySource.toUpperCase()} | create fresh reserve holding`,
+    matchReason: 'new reserve asset',
+    score: 1,
+  };
+
+  return [...assetCandidates, ...instrumentCandidates]
+    .sort((left, right) => right.score - left.score)
+    .concat(manualCandidate);
+}
+
 export default function AssetsPage({ data, setData }: AssetsPageProps) {
+  const [isBookEntryModalOpen, setIsBookEntryModalOpen] = useState(false);
+  const [bookEntryNotice, setBookEntryNotice] = useState('');
+  const [isBookEntrySubmitting, setIsBookEntrySubmitting] = useState(false);
+  const [bookEntryDraft, setBookEntryDraft] = useState<BookEntrySecurityDraft>(() =>
+    buildInitialBookEntrySecurityDraft(''),
+  );
   const marketableAssets = data.assets.filter(
     (asset) =>
       asset.marketSector === 'municipal' ||
@@ -80,15 +277,960 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const preciousMetalAssets = data.assets.filter(
     (asset) => asset.category === 'metal' || Boolean(asset.preciousMetalProfile),
   );
+  const dtccConnector = conversionConnectors.find((item) => item.key === 'dtcc-api-marketplace');
+  const bookEntryCandidates = useMemo(
+    () => buildBookEntrySecurityCandidates(data, bookEntryDraft),
+    [data, bookEntryDraft],
+  );
+
+  useEffect(() => {
+    if (!isBookEntryModalOpen) {
+      return;
+    }
+    if (!bookEntryDraft.entityId && data.entities[0]?.id) {
+      setBookEntryDraft((prev) => ({ ...prev, entityId: data.entities[0]?.id || '' }));
+    }
+  }, [bookEntryDraft.entityId, data.entities, isBookEntryModalOpen]);
+
+  useEffect(() => {
+    if (!isBookEntryModalOpen) {
+      return;
+    }
+    if (!bookEntryCandidates.some((candidate) => candidate.id === bookEntryDraft.selectedCandidateId)) {
+      setBookEntryDraft((prev) => ({
+        ...prev,
+        selectedCandidateId: bookEntryCandidates[0]?.id || 'new',
+      }));
+    }
+  }, [bookEntryCandidates, bookEntryDraft.selectedCandidateId, isBookEntryModalOpen]);
+
+  const openBookEntryModal = () => {
+    setBookEntryNotice('');
+    setBookEntryDraft(buildInitialBookEntrySecurityDraft(data.entities[0]?.id));
+    setIsBookEntryModalOpen(true);
+  };
+
+  const handleBookEntrySubmit = async () => {
+    if (!bookEntryDraft.entityId || isBookEntrySubmitting) {
+      return;
+    }
+
+    const hasMinimumIdentity = Boolean(
+      bookEntryDraft.identifierCode.trim() ||
+        bookEntryDraft.bookEntryIdentifier.trim() ||
+        bookEntryDraft.securityPoolName.trim() ||
+        bookEntryDraft.issuerName.trim(),
+    );
+    if (!hasMinimumIdentity) {
+      setBookEntryNotice(
+        'Add at least one identifier, pool name, issuer, or book-entry reference before saving this security intake.',
+      );
+      return;
+    }
+
+    const targetEntity = data.entities.find((entity) => entity.id === bookEntryDraft.entityId);
+    if (!targetEntity) {
+      setBookEntryNotice('Choose the entity that should own this reserve security before saving.');
+      return;
+    }
+
+    setIsBookEntrySubmitting(true);
+    const stamp = Date.now();
+    const today = new Date().toISOString().slice(0, 10);
+    const selectedCandidate =
+      bookEntryCandidates.find((candidate) => candidate.id === bookEntryDraft.selectedCandidateId) ||
+      bookEntryCandidates[0];
+    const matchedInstrument =
+      selectedCandidate?.kind === 'instrument'
+        ? data.instruments.find((item) => item.id === selectedCandidate.instrumentId)
+        : null;
+    const matchedAsset =
+      selectedCandidate?.kind === 'asset'
+        ? data.assets.find((item) => item.id === selectedCandidate.assetId)
+        : matchedInstrument?.linkedAssetIds?.length
+          ? data.assets.find((item) => item.id === matchedInstrument.linkedAssetIds?.[0])
+          : null;
+    const nextAssetId = matchedAsset?.id || `asset-book-entry-${stamp}`;
+    const nextInstrumentId =
+      selectedCandidate?.kind === 'instrument'
+        ? selectedCandidate.instrumentId
+        : bookEntryDraft.createInstrument
+          ? `inst-book-entry-${stamp}`
+          : null;
+
+    try {
+      const uploadedFileMetadata = bookEntryDraft.uploadedFile
+        ? await saveDocumentFile(`book-entry-security-${stamp}`, bookEntryDraft.uploadedFile)
+        : null;
+      const documentId = `doc-book-entry-${stamp}`;
+      const securityName =
+        bookEntryDraft.securityPoolName.trim() ||
+        matchedAsset?.name ||
+        matchedInstrument?.title ||
+        bookEntryDraft.issuerName.trim() ||
+        bookEntryDraft.identifierCode.trim() ||
+        'Reserve security';
+      const numericParValue = Number(bookEntryDraft.parValue || 0);
+      const numericMarketValue = Number(bookEntryDraft.marketValue || 0);
+      const numericCouponRate = Number(bookEntryDraft.couponRate || 0);
+      const nextDocument = {
+        id: documentId,
+        entityId: targetEntity.id,
+        title: `${securityName} Book-Entry Support`,
+        category: 'financial' as const,
+        date: today,
+        status: 'final' as const,
+        outputStatus: 'ready' as const,
+        summary:
+          'County registrar and book-entry reserve intake retained for identifier matching, depository reference, and reserve posting.',
+        fileName: uploadedFileMetadata?.fileName,
+        mimeType: uploadedFileMetadata?.mimeType,
+        sizeBytes: uploadedFileMetadata?.sizeBytes,
+        uploadedAt: uploadedFileMetadata?.uploadedAt,
+        sourceFileId: uploadedFileMetadata?.sourceFileId,
+        sourceRecordType: 'document' as const,
+        sourceRecordId: nextAssetId,
+        linkedAssetIds: [nextAssetId],
+        linkedInstrumentIds: nextInstrumentId ? [nextInstrumentId] : undefined,
+        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nDepository Source: ${bookEntryDraft.depositorySource.toUpperCase()}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
+        storageOwner: 'user_owned' as const,
+        retentionClass: 'financial_evidence' as const,
+        externalStorageTarget: 'google_drive' as const,
+        externalStorageStatus: 'ready' as const,
+        storageNotes:
+          'Retained for reserve security support, depository lookup evidence, and book-entry source tracing.',
+      };
+
+      setData((prev) => {
+        const nextDocuments = [nextDocument, ...(prev.documents ?? [])];
+        const nextAssets = [...prev.assets];
+        const nextInstruments = [...prev.instruments];
+        const linkedDocumentIds = Array.from(
+          new Set([documentId, ...(matchedAsset?.linkedDocumentIds ?? []), ...(matchedInstrument?.linkedDocumentIds ?? [])]),
+        );
+        const nextBookEntryProfile = {
+          registrarOffice: bookEntryDraft.registrarOffice.trim() || undefined,
+          county: bookEntryDraft.county.trim() || undefined,
+          state: bookEntryDraft.state.trim() || undefined,
+          recorderBook: bookEntryDraft.recorderBook.trim() || undefined,
+          recorderPage: bookEntryDraft.recorderPage.trim() || undefined,
+          bookEntryIdentifier: bookEntryDraft.bookEntryIdentifier.trim() || undefined,
+          securityPoolName: bookEntryDraft.securityPoolName.trim() || securityName,
+          depositorySource: bookEntryDraft.depositorySource,
+          depositoryReference: bookEntryDraft.depositoryReference.trim() || undefined,
+          isinCode: bookEntryDraft.isinCode.trim() || undefined,
+          reserveApplicationStatus: 'reserve_added' as const,
+          sourceDocumentId: documentId,
+          lastMatchedAt: new Date().toISOString(),
+        };
+
+        const nextAsset: AssetRecord = {
+          ...(matchedAsset || {
+            id: nextAssetId,
+            entityId: targetEntity.id,
+            name: securityName,
+            category: 'security',
+            status: 'active',
+            bookValue: numericParValue || numericMarketValue || 0,
+          }),
+          entityId: targetEntity.id,
+          name: securityName,
+          category: 'security',
+          status: matchedAsset?.status || 'active',
+          bookValue:
+            numericParValue ||
+            numericMarketValue ||
+            matchedAsset?.bookValue ||
+            matchedInstrument?.denominationValue ||
+            0,
+          marketValue: numericMarketValue || matchedAsset?.marketValue,
+          paymentMedium: matchedAsset?.paymentMedium || 'fiat',
+          marketSector:
+            bookEntryDraft.marketSector || matchedAsset?.marketSector || matchedInstrument?.marketSector,
+          identifierCode:
+            bookEntryDraft.identifierCode.trim() ||
+            matchedAsset?.identifierCode ||
+            matchedInstrument?.identifierCode,
+          issuerName:
+            bookEntryDraft.issuerName.trim() ||
+            matchedAsset?.issuerName ||
+            matchedInstrument?.issuerName,
+          couponRate:
+            numericCouponRate || matchedAsset?.couponRate || matchedInstrument?.couponRate,
+          maturityDate:
+            bookEntryDraft.maturityDate || matchedAsset?.maturityDate || matchedInstrument?.maturityDate,
+          taxTreatment:
+            bookEntryDraft.taxTreatment || matchedAsset?.taxTreatment || matchedInstrument?.taxTreatment,
+          liquidityProfile:
+            bookEntryDraft.liquidityProfile ||
+            matchedAsset?.liquidityProfile ||
+            matchedInstrument?.liquidityProfile ||
+            'dealer_market',
+          linkedDocumentIds,
+          bookEntryReserveProfile: {
+            ...matchedAsset?.bookEntryReserveProfile,
+            ...nextBookEntryProfile,
+          },
+          notes: [matchedAsset?.notes, bookEntryDraft.notes.trim()]
+            .filter(Boolean)
+            .join('\n\n'),
+        };
+
+        const existingAssetIndex = nextAssets.findIndex((item) => item.id === nextAsset.id);
+        if (existingAssetIndex >= 0) {
+          nextAssets[existingAssetIndex] = nextAsset;
+        } else {
+          nextAssets.unshift(nextAsset);
+        }
+
+        if (nextInstrumentId) {
+          const nextInstrument: InstrumentRecord = {
+            ...(matchedInstrument || {
+              id: nextInstrumentId,
+              entityId: targetEntity.id,
+              title: securityName,
+              instrumentType: 'custody_record',
+            }),
+            entityId: targetEntity.id,
+            title: securityName,
+            instrumentType: matchedInstrument?.instrumentType || 'custody_record',
+            sourceClass: matchedInstrument?.sourceClass || 'bond',
+            marketSector:
+              bookEntryDraft.marketSector || matchedInstrument?.marketSector || 'municipal',
+            identifierCode:
+              bookEntryDraft.identifierCode.trim() || matchedInstrument?.identifierCode,
+            issuerName: bookEntryDraft.issuerName.trim() || matchedInstrument?.issuerName,
+            issueDate: matchedInstrument?.issueDate || today,
+            maturityDate: bookEntryDraft.maturityDate || matchedInstrument?.maturityDate,
+            denominationValue:
+              numericParValue || matchedInstrument?.denominationValue || nextAsset.bookValue,
+            couponRate: numericCouponRate || matchedInstrument?.couponRate,
+            taxTreatment:
+              bookEntryDraft.taxTreatment || matchedInstrument?.taxTreatment,
+            liquidityProfile:
+              bookEntryDraft.liquidityProfile ||
+              matchedInstrument?.liquidityProfile ||
+              'dealer_market',
+            linkedAssetIds: Array.from(
+              new Set([nextAsset.id, ...(matchedInstrument?.linkedAssetIds ?? [])]),
+            ),
+            linkedDocumentIds: Array.from(
+              new Set([documentId, ...(matchedInstrument?.linkedDocumentIds ?? [])]),
+            ),
+            issuanceStatus: matchedInstrument?.issuanceStatus || 'allocated',
+            bookEntryReserveProfile: {
+              ...matchedInstrument?.bookEntryReserveProfile,
+              ...nextBookEntryProfile,
+            },
+            notes: [matchedInstrument?.notes, bookEntryDraft.notes.trim()]
+              .filter(Boolean)
+              .join('\n\n'),
+          };
+
+          const existingInstrumentIndex = nextInstruments.findIndex(
+            (item) => item.id === nextInstrument.id,
+          );
+          if (existingInstrumentIndex >= 0) {
+            nextInstruments[existingInstrumentIndex] = nextInstrument;
+          } else {
+            nextInstruments.unshift(nextInstrument);
+          }
+        }
+
+        return {
+          ...prev,
+          assets: nextAssets,
+          instruments: nextInstruments,
+          documents: nextDocuments,
+        };
+      });
+
+      setBookEntryNotice(
+        `Saved ${securityName} into asset reserve${selectedCandidate?.kind === 'asset' ? ' by updating the matched reserve asset' : selectedCandidate?.kind === 'instrument' ? ' by linking the matched instrument to reserve' : ' as a new reserve security'}.`,
+      );
+      setIsBookEntryModalOpen(false);
+    } catch (error) {
+      setBookEntryNotice(
+        error instanceof Error ? error.message : 'The book-entry reserve security could not be saved.',
+      );
+    } finally {
+      setIsBookEntrySubmitting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      {isBookEntryModalOpen ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            zIndex: 1200,
+          }}
+        >
+          <div
+            style={{
+              width: 'min(980px, 100%)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              borderRadius: 20,
+              border: '1px solid rgba(126,242,255,0.22)',
+              background: 'linear-gradient(180deg, rgba(18,24,47,0.98), rgba(11,16,34,0.98))',
+              boxShadow: '0 28px 80px rgba(0,0,0,0.45)',
+              padding: 22,
+              display: 'grid',
+              gap: 16,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>Book-Entry Security Intake</div>
+              <div style={{ color: '#cbd5e1', marginTop: 6, lineHeight: 1.6 }}>
+                Upload county registrar or depository support, match the security pool, then push the holding into asset reserve with its evidence attached.
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Entity</span>
+                <select
+                  value={bookEntryDraft.entityId}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, entityId: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="">Select entity</option>
+                  {data.entities.map((entity) => (
+                    <option key={entity.id} value={entity.id}>
+                      {entity.displayName || entity.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Registrar Office</span>
+                <input
+                  value={bookEntryDraft.registrarOffice}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, registrarOffice: event.target.value }))
+                  }
+                  placeholder="County registrar, transfer agent..."
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>County</span>
+                <input
+                  value={bookEntryDraft.county}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, county: event.target.value }))
+                  }
+                  placeholder="County"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>State</span>
+                <input
+                  value={bookEntryDraft.state}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, state: event.target.value }))
+                  }
+                  placeholder="State"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recorder Book</span>
+                <input
+                  value={bookEntryDraft.recorderBook}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, recorderBook: event.target.value }))
+                  }
+                  placeholder="Book / volume"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Recorder Page</span>
+                <input
+                  value={bookEntryDraft.recorderPage}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, recorderPage: event.target.value }))
+                  }
+                  placeholder="Page"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Book-Entry Identifier</span>
+                <input
+                  value={bookEntryDraft.bookEntryIdentifier}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      bookEntryIdentifier: event.target.value,
+                    }))
+                  }
+                  placeholder="Registrar / book-entry identifier"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Security Pool Name</span>
+                <input
+                  value={bookEntryDraft.securityPoolName}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      securityPoolName: event.target.value,
+                    }))
+                  }
+                  placeholder="Bond or pool name"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Issuer</span>
+                <input
+                  value={bookEntryDraft.issuerName}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, issuerName: event.target.value }))
+                  }
+                  placeholder="Issuer / obligor"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Identifier Code</span>
+                <input
+                  value={bookEntryDraft.identifierCode}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, identifierCode: event.target.value }))
+                  }
+                  placeholder="CUSIP / internal identifier"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>ISIN</span>
+                <input
+                  value={bookEntryDraft.isinCode}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, isinCode: event.target.value }))
+                  }
+                  placeholder="ISIN"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Market Sector</span>
+                <select
+                  value={bookEntryDraft.marketSector}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      marketSector: event.target.value as BookEntrySecurityDraft['marketSector'],
+                    }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="municipal">Municipal</option>
+                  <option value="corporate">Corporate</option>
+                  <option value="sovereign">Sovereign</option>
+                  <option value="private">Private</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Depository Source</span>
+                <select
+                  value={bookEntryDraft.depositorySource}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      depositorySource: event.target.value as DepositorySource,
+                    }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="dtcc">DTCC</option>
+                  <option value="emma">EMMA</option>
+                  <option value="openfigi">OpenFIGI</option>
+                  <option value="treasurydirect">TreasuryDirect</option>
+                  <option value="manual">Manual</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Depository Reference</span>
+                <input
+                  value={bookEntryDraft.depositoryReference}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      depositoryReference: event.target.value,
+                    }))
+                  }
+                  placeholder="DTCC / EMMA / transfer reference"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Coupon Rate</span>
+                <input
+                  value={bookEntryDraft.couponRate}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, couponRate: event.target.value }))
+                  }
+                  placeholder="5.25"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Maturity Date</span>
+                <input
+                  type="date"
+                  value={bookEntryDraft.maturityDate}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, maturityDate: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Par Value</span>
+                <input
+                  value={bookEntryDraft.parValue}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, parValue: event.target.value }))
+                  }
+                  placeholder="100000"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Market Value</span>
+                <input
+                  value={bookEntryDraft.marketValue}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, marketValue: event.target.value }))
+                  }
+                  placeholder="99000"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Units</span>
+                <input
+                  value={bookEntryDraft.units}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({ ...prev, units: event.target.value }))
+                  }
+                  placeholder="1"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Upload Support</span>
+                <input
+                  type="file"
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      uploadedFile: event.target.files?.[0] || null,
+                    }))
+                  }
+                  accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.doc,.docx"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </div>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Notes</span>
+              <textarea
+                value={bookEntryDraft.notes}
+                onChange={(event) =>
+                  setBookEntryDraft((prev) => ({ ...prev, notes: event.target.value }))
+                }
+                rows={4}
+                placeholder="County reference, pool notes, servicing remarks, or reserve treatment details"
+                style={{
+                  width: '100%',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: 'rgba(10, 11, 24, 0.78)',
+                  color: '#fff6fd',
+                  padding: '10px 12px',
+                  fontSize: 14,
+                }}
+              />
+            </label>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#e5e7eb' }}>
+              <input
+                type="checkbox"
+                checked={bookEntryDraft.createInstrument}
+                onChange={(event) =>
+                  setBookEntryDraft((prev) => ({
+                    ...prev,
+                    createInstrument: event.target.checked,
+                  }))
+                }
+              />
+              Also maintain a linked security instrument record for this reserve holding
+            </label>
+            <div
+              style={{
+                borderRadius: 16,
+                border: '1px solid rgba(126,242,255,0.18)',
+                background: 'rgba(54,215,255,0.06)',
+                padding: 14,
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>Pool Match Selection</div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.55 }}>
+                Select the matched bond or security pool before adding it into reserve. Existing reserve assets and bond-like instruments are ranked first when the identifier, issuer, or pool name lines up.
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {bookEntryCandidates.map((candidate) => (
+                  <label
+                    key={candidate.id}
+                    style={{
+                      display: 'grid',
+                      gap: 4,
+                      padding: 12,
+                      borderRadius: 12,
+                      border:
+                        bookEntryDraft.selectedCandidateId === candidate.id
+                          ? '1px solid rgba(126,242,255,0.34)'
+                          : '1px solid rgba(148,163,184,0.18)',
+                      background:
+                        bookEntryDraft.selectedCandidateId === candidate.id
+                          ? 'rgba(54,215,255,0.12)'
+                          : 'rgba(15,23,42,0.36)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <input
+                        type="radio"
+                        checked={bookEntryDraft.selectedCandidateId === candidate.id}
+                        onChange={() =>
+                          setBookEntryDraft((prev) => ({
+                            ...prev,
+                            selectedCandidateId: candidate.id,
+                          }))
+                        }
+                      />
+                      <strong>{candidate.label}</strong>
+                    </span>
+                    <span style={{ color: '#cbd5e1', fontSize: 13 }}>{candidate.subtitle}</span>
+                    <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                      Match reason: {candidate.matchReason}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div
+              style={{
+                borderRadius: 16,
+                border: '1px solid rgba(96,165,250,0.18)',
+                background: 'rgba(37,99,235,0.08)',
+                padding: 14,
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>DTCC Connector Posture</div>
+              <div style={{ color: '#cbd5e1', lineHeight: 1.55 }}>
+                {dtccConnector?.conversionRole ||
+                  'DTCC lookup posture is not loaded in the connector catalog.'}
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                {dtccConnector?.nextSetupStep || 'Complete DTCC client onboarding and product mapping for live depository search.'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setIsBookEntryModalOpen(false)}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(148,163,184,0.22)',
+                  background: 'rgba(15,23,42,0.46)',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBookEntrySubmit()}
+                style={{
+                  padding: '10px 14px',
+                  minHeight: 42,
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  opacity: isBookEntrySubmitting ? 0.82 : 1,
+                }}
+              >
+                {isBookEntrySubmitting ? 'Saving Security...' : 'Add To Asset Reserve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div>
         <h1 style={{ marginTop: 0, fontSize: 30 }}>Assets & Reserve</h1>
         <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
           Traditional assets, digital assets, treasury-linked wallets, and smart-contract positions.
         </p>
       </div>
+
+      <PageSection
+        title="Book-Entry Securities Rail"
+        description="Upload registrar or depository evidence, select the matched bond or pool, and place the resulting holding into asset reserve with linked source support."
+      >
+        <div style={{ display: 'grid', gap: 14 }}>
+          {bookEntryNotice ? (
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(96,165,250,0.24)',
+                background: 'rgba(30,41,59,0.4)',
+                color: '#bfdbfe',
+                lineHeight: 1.55,
+              }}
+            >
+              {bookEntryNotice}
+            </div>
+          ) : null}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <WorkbenchRecordCard
+              title="Reserve Intake"
+              subtitle="County registrar, transfer-agent, or depository support"
+              actionSlot={
+                <button
+                  type="button"
+                  onClick={openBookEntryModal}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54,215,255,0.12)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                  }}
+                >
+                  Upload Book-Entry Security
+                </button>
+              }
+            >
+              Capture registrar book-entry identifiers, pool details, CUSIP or ISIN references, and depository evidence before the security is placed into reserve.
+            </WorkbenchRecordCard>
+            <WorkbenchRecordCard
+              title="DTCC Mapping"
+              subtitle={dtccConnector?.label || 'DTCC connector'}
+              summaryItems={[
+                { label: 'Access', value: dtccConnector?.access || 'not set' },
+                { label: 'Posture', value: dtccConnector?.executionPosture || 'not set' },
+                { label: 'Category', value: dtccConnector?.category || 'not set' },
+              ]}
+            >
+              {dtccConnector?.bestUse ||
+                'Use this rail for depository and post-trade context once live client onboarding is in place.'}
+            </WorkbenchRecordCard>
+          </div>
+        </div>
+      </PageSection>
 
       <PageSection
         title="Reserve Command Strip"
@@ -786,6 +1928,14 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     ? `${asset.couponRate}% | ${asset.maturityDate || 'No maturity'}`
                     : asset.maturityDate || 'Not set',
                 },
+                {
+                  label: 'Book Entry / Depository',
+                  value:
+                    asset.bookEntryReserveProfile?.bookEntryIdentifier ||
+                    asset.bookEntryReserveProfile?.depositoryReference
+                      ? `${asset.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${asset.bookEntryReserveProfile?.depositoryReference || asset.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
+                      : 'Not linked',
+                },
                 { label: 'Liquidity', value: asset.liquidityProfile || 'Not reviewed' },
                 { label: 'Rating', value: asset.creditRating || 'Not tracked' },
                 { label: 'Market Value', value: asset.marketValue?.toLocaleString() || 'Not tracked' },
@@ -835,6 +1985,14 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                   value: instrument.couponRate
                     ? `${instrument.couponRate}% | ${instrument.maturityDate || 'No maturity'}`
                     : instrument.maturityDate || 'Not set',
+                },
+                {
+                  label: 'Book Entry / Depository',
+                  value:
+                    instrument.bookEntryReserveProfile?.bookEntryIdentifier ||
+                    instrument.bookEntryReserveProfile?.depositoryReference
+                      ? `${instrument.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${instrument.bookEntryReserveProfile?.depositoryReference || instrument.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
+                      : 'Not linked',
                 },
                 { label: 'Liquidity', value: instrument.liquidityProfile || 'Not reviewed' },
                 { label: 'Rating', value: instrument.creditRating || 'Not tracked' },

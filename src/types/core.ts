@@ -865,6 +865,21 @@ export interface AssetRecord {
     lastReviewDate?: string;
     notes?: string;
   };
+  bookEntryReserveProfile?: {
+    registrarOffice?: string;
+    county?: string;
+    state?: string;
+    recorderBook?: string;
+    recorderPage?: string;
+    bookEntryIdentifier?: string;
+    securityPoolName?: string;
+    depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';
+    depositoryReference?: string;
+    isinCode?: string;
+    reserveApplicationStatus?: 'not_applied' | 'reserve_added' | 'watch' | 'manual_review';
+    sourceDocumentId?: string;
+    lastMatchedAt?: string;
+  };
   notes?: string;
 }
 
@@ -1007,6 +1022,21 @@ export interface InstrumentRecord {
     securitiesRiskLevel?: 'low' | 'watch' | 'high';
     securitiesRiskNotes?: string;
     linkedComplianceTagIds?: string[];
+  };
+  bookEntryReserveProfile?: {
+    registrarOffice?: string;
+    county?: string;
+    state?: string;
+    recorderBook?: string;
+    recorderPage?: string;
+    bookEntryIdentifier?: string;
+    securityPoolName?: string;
+    depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';
+    depositoryReference?: string;
+    isinCode?: string;
+    reserveApplicationStatus?: 'not_applied' | 'reserve_added' | 'watch' | 'manual_review';
+    sourceDocumentId?: string;
+    lastMatchedAt?: string;
   };
   notes?: string;
 }
