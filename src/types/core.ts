@@ -878,6 +878,9 @@ export interface AssetRecord {
     recorderName?: string;
     feeBreakdownText?: string;
     bookEntryIdentifier?: string;
+    certificateNumber?: string;
+    custodyForm?: 'book_entry' | 'physical_certificate';
+    custodyLocation?: string;
     securityPoolName?: string;
     depositorySource?:
       | 'internal_bonded_pool'
@@ -885,12 +888,23 @@ export interface AssetRecord {
       | 'emma'
       | 'openfigi'
       | 'treasurydirect'
+      | 'treasury_fiscal_data'
+      | 'finra_trace'
       | 'fidelity'
       | 'henion_walsh'
       | 'court_cris'
       | 'tops'
       | 'court_docket'
+      | 'pacer_case_locator'
+      | 'ginnie_mae_disclosure'
+      | 'freddie_mac_debt'
+      | 'freddie_mac_clarity'
+      | 'fannie_mae_debt'
+      | 'mers_servicerid'
+      | 'mers_eregistry'
+      | 'fedwire_securities'
       | 'sec_edgar'
+      | 'physical_custody'
       | 'manual';
     depositoryReference?: string;
     isinCode?: string;
@@ -1054,6 +1068,9 @@ export interface InstrumentRecord {
     recorderName?: string;
     feeBreakdownText?: string;
     bookEntryIdentifier?: string;
+    certificateNumber?: string;
+    custodyForm?: 'book_entry' | 'physical_certificate';
+    custodyLocation?: string;
     securityPoolName?: string;
     depositorySource?:
       | 'internal_bonded_pool'
@@ -1061,12 +1078,23 @@ export interface InstrumentRecord {
       | 'emma'
       | 'openfigi'
       | 'treasurydirect'
+      | 'treasury_fiscal_data'
+      | 'finra_trace'
       | 'fidelity'
       | 'henion_walsh'
       | 'court_cris'
       | 'tops'
       | 'court_docket'
+      | 'pacer_case_locator'
+      | 'ginnie_mae_disclosure'
+      | 'freddie_mac_debt'
+      | 'freddie_mac_clarity'
+      | 'fannie_mae_debt'
+      | 'mers_servicerid'
+      | 'mers_eregistry'
+      | 'fedwire_securities'
       | 'sec_edgar'
+      | 'physical_custody'
       | 'manual';
     depositoryReference?: string;
     isinCode?: string;

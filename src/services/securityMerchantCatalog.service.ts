@@ -6,12 +6,23 @@ export type SecurityMerchantSourceKey =
   | 'emma'
   | 'openfigi'
   | 'treasurydirect'
+  | 'treasury_fiscal_data'
+  | 'finra_trace'
   | 'fidelity'
   | 'henion_walsh'
   | 'court_cris'
   | 'tops'
   | 'court_docket'
+  | 'pacer_case_locator'
+  | 'ginnie_mae_disclosure'
+  | 'freddie_mac_debt'
+  | 'freddie_mac_clarity'
+  | 'fannie_mae_debt'
+  | 'mers_servicerid'
+  | 'mers_eregistry'
+  | 'fedwire_securities'
   | 'sec_edgar'
+  | 'physical_custody'
   | 'manual';
 
 export type SecurityMerchantIdentifierType =
@@ -28,7 +39,13 @@ export type SecurityMerchantIdentifierType =
   | 'court_ticket'
   | 'cris_reference'
   | 'tops_reference'
-  | 'contract_number';
+  | 'contract_number'
+  | 'min_number'
+  | 'pool_number'
+  | 'fha_case_number'
+  | 'rd_case_number'
+  | 'pacer_case_number'
+  | 'certificate_number';
 
 export interface SecurityMerchantSourceDefinition {
   key: SecurityMerchantSourceKey;
@@ -149,6 +166,34 @@ const securityMerchantCatalog: SecurityMerchantSourceDefinition[] = [
     officialUrl: 'https://www.treasurydirect.gov/marketable-securities/',
   },
   {
+    key: 'treasury_fiscal_data',
+    label: 'Treasury Fiscal Data',
+    category: 'registry',
+    searchPosture: 'public_search',
+    supportedIdentifierTypes: ['cusip', 'issuer_name', 'pool_reference', 'statement_number'],
+    supportedRecordKinds: ['reserve_security', 'municipal_bond', 'corporate_note', 'general_security'],
+    description:
+      'Public Treasury dataset path for auctioned marketable securities, CUSIP-level reference data, and broader federal debt context.',
+    officialUrl: 'https://fiscaldata.treasury.gov/datasets/treasury-securities-auctions-data/',
+  },
+  {
+    key: 'finra_trace',
+    label: 'FINRA TRACE / Fixed Income',
+    category: 'registry',
+    searchPosture: 'public_search',
+    supportedIdentifierTypes: ['cusip', 'issuer_name', 'pool_reference', 'statement_number'],
+    supportedRecordKinds: [
+      'reserve_security',
+      'municipal_bond',
+      'corporate_note',
+      'credit_card_statement',
+      'general_security',
+    ],
+    description:
+      'Public fixed-income search path for corporate, agency, 144A, and structured-product trade activity and security lookup.',
+    officialUrl: 'https://www.finra.org/finra-data/fixed-income',
+  },
+  {
     key: 'fidelity',
     label: 'Fidelity Fixed Income / Custody',
     category: 'brokerage',
@@ -201,6 +246,96 @@ const securityMerchantCatalog: SecurityMerchantSourceDefinition[] = [
       'Manual docket and citation search path for court-administered obligations, tickets, and clerk-record identifiers that need to be tied back to a receivable or pledged claim file.',
   },
   {
+    key: 'pacer_case_locator',
+    label: 'PACER Case Locator',
+    category: 'court_claims',
+    searchPosture: 'client_portal',
+    supportedIdentifierTypes: ['court_docket', 'pacer_case_number', 'recording_number'],
+    supportedRecordKinds: ['court_claim', 'serviced_contract', 'general_security'],
+    description:
+      'Federal court case lookup path for docket-number-linked obligations, filings, and nationwide case-index tracing.',
+    officialUrl: 'https://pacer.uscourts.gov/find-case/search-national-index',
+  },
+  {
+    key: 'ginnie_mae_disclosure',
+    label: 'Ginnie Mae Disclosure Search',
+    category: 'registry',
+    searchPosture: 'public_search',
+    supportedIdentifierTypes: ['cusip', 'pool_number', 'pool_reference', 'fha_case_number', 'rd_case_number'],
+    supportedRecordKinds: ['reserve_security', 'corporate_note', 'serviced_contract', 'general_security'],
+    description:
+      'Public disclosure search for Ginnie Mae MBS, HMBS, REMIC, Platinum pools, factors, and loan-level multifamily references.',
+    officialUrl:
+      'https://tst.ginniemae.gov/investors/investor_search_tools/Pages/DisclosureSearchTools.aspx',
+  },
+  {
+    key: 'freddie_mac_debt',
+    label: 'Freddie Mac Debt Search',
+    category: 'registry',
+    searchPosture: 'public_search',
+    supportedIdentifierTypes: ['cusip', 'isin', 'issuer_name', 'pool_reference'],
+    supportedRecordKinds: ['reserve_security', 'corporate_note', 'serviced_contract', 'general_security'],
+    description:
+      'Public Freddie Mac capital-markets search path for debt securities, CUSIP/ISIN lookup, and security-level review.',
+    officialUrl: 'https://capitalmarkets.freddiemac.com/debt',
+  },
+  {
+    key: 'freddie_mac_clarity',
+    label: 'Freddie Mac Clarity',
+    category: 'registry',
+    searchPosture: 'client_portal',
+    supportedIdentifierTypes: ['cusip', 'pool_number', 'pool_reference', 'issuer_name'],
+    supportedRecordKinds: ['reserve_security', 'corporate_note', 'serviced_contract', 'general_security'],
+    description:
+      'Freddie Mac MBS and CRT disclosure/data-intelligence path for issuance, portfolio, and historical performance review.',
+    officialUrl: 'https://capitalmarkets.freddiemac.com/clarity',
+  },
+  {
+    key: 'fannie_mae_debt',
+    label: 'Fannie Mae Debt Search',
+    category: 'registry',
+    searchPosture: 'public_search',
+    supportedIdentifierTypes: ['cusip', 'issuer_name', 'pool_reference', 'statement_number'],
+    supportedRecordKinds: ['reserve_security', 'corporate_note', 'serviced_contract', 'general_security'],
+    description:
+      'Public Fannie Mae debt-document path for CUSIP-backed pricing supplements, outstanding debt reports, and strip references.',
+    officialUrl:
+      'https://capitalmarkets.fanniemae.com/debt-securities/debt-disclosure-documents/document-search',
+  },
+  {
+    key: 'mers_servicerid',
+    label: 'MERS ServicerID',
+    category: 'registry',
+    searchPosture: 'client_portal',
+    supportedIdentifierTypes: ['min_number', 'account_number', 'issuer_name'],
+    supportedRecordKinds: ['serviced_contract', 'corporate_note', 'general_security'],
+    description:
+      'Authorized-user lookup path for mortgage servicer and investor identification using MIN, borrower, or property-linked servicing references.',
+    officialUrl: 'https://www.mersinc.org/homeowners/mers-servicerid',
+  },
+  {
+    key: 'mers_eregistry',
+    label: 'MERS eRegistry',
+    category: 'registry',
+    searchPosture: 'client_portal',
+    supportedIdentifierTypes: ['min_number', 'contract_number', 'pool_reference', 'issuer_name'],
+    supportedRecordKinds: ['serviced_contract', 'corporate_note', 'reserve_security', 'general_security'],
+    description:
+      'Participant registry for eNotes, controller/location status, authoritative-copy control, and eMortgage transfer tracing.',
+    officialUrl: 'https://www.mersinc.org/products-services/mers-esuite/eregistry',
+  },
+  {
+    key: 'fedwire_securities',
+    label: 'Fedwire Securities Service',
+    category: 'depository',
+    searchPosture: 'client_portal',
+    supportedIdentifierTypes: ['cusip', 'issuer_name', 'pool_reference', 'book_entry_identifier'],
+    supportedRecordKinds: ['reserve_security', 'municipal_bond', 'corporate_note', 'general_security'],
+    description:
+      'Federal Reserve book-entry securities settlement path for Treasury, agency, GSE, and other eligible securities transferred free or against payment.',
+    officialUrl: 'https://www.frbservices.org/financial-services/securities/',
+  },
+  {
     key: 'sec_edgar',
     label: 'SEC EDGAR',
     category: 'registry',
@@ -210,6 +345,28 @@ const securityMerchantCatalog: SecurityMerchantSourceDefinition[] = [
     description:
       'Filing and issuer-evidence search path for corporate notes, securitized contracts, and private/public security context.',
     officialUrl: 'https://www.sec.gov/edgar/search/',
+  },
+  {
+    key: 'physical_custody',
+    label: 'Physical Certificate / Held Instrument',
+    category: 'manual',
+    searchPosture: 'manual_only',
+    supportedIdentifierTypes: [
+      'certificate_number',
+      'book_entry_identifier',
+      'recording_number',
+      'issuer_name',
+      'contract_number',
+    ],
+    supportedRecordKinds: [
+      'reserve_security',
+      'municipal_bond',
+      'corporate_note',
+      'serviced_contract',
+      'general_security',
+    ],
+    description:
+      'Fallback for paper certificates, wet-ink notes, or other physically held instruments proved by uploaded photo or scan when no searchable registry match is available.',
   },
   {
     key: 'manual',
@@ -281,6 +438,43 @@ function detectTopsText(text: string) {
   return text.includes('tops') || text.includes('offset');
 }
 
+function detectMortgageText(text: string) {
+  return (
+    text.includes('mortgage') ||
+    text.includes('servicer') ||
+    text.includes('deed of trust') ||
+    text.includes('enote') ||
+    text.includes('m.e.r.s') ||
+    text.includes('mers') ||
+    text.includes('pool id') ||
+    text.includes('pool number') ||
+    text.includes('remic') ||
+    text.includes('fha') ||
+    text.includes('va ') ||
+    text.includes('usda') ||
+    text.includes('ginnie') ||
+    text.includes('gnma') ||
+    text.includes('fannie') ||
+    text.includes('fnma') ||
+    text.includes('freddie') ||
+    text.includes('fhlmc')
+  );
+}
+
+function detectTreasuryText(text: string) {
+  return (
+    text.includes('treasury') ||
+    text.includes('t-bill') ||
+    text.includes('t bill') ||
+    text.includes('t-note') ||
+    text.includes('t note') ||
+    text.includes('t-bond') ||
+    text.includes('t bond') ||
+    text.includes('tips') ||
+    text.includes('frn')
+  );
+}
+
 export function buildSecurityMerchantSuggestions(input: {
   data: CoreDataBundle;
   bill?: BillRecord | null;
@@ -324,6 +518,13 @@ export function buildSecurityMerchantSuggestions(input: {
   if (vendor?.counterpartyTermsProfile?.organizationClass === 'servicer') {
     kindHints.add('serviced_contract');
   }
+
+  const mortgageContext = detectMortgageText(text);
+  const treasuryContext = detectTreasuryText(text);
+  const ginnieContext =
+    text.includes('ginnie') || text.includes('gnma') || text.includes('fha') || text.includes('usda');
+  const freddieContext = text.includes('freddie') || text.includes('fhlmc');
+  const fannieContext = text.includes('fannie') || text.includes('fnma');
 
   const internalBondedPoolMatches = [
     ...data.assets.filter((asset) => asset.category === 'security'),
@@ -389,6 +590,10 @@ export function buildSecurityMerchantSuggestions(input: {
       'Credit-account or large-bank obligations can be reviewed against custody or brokerage-side fixed-income and securitized account references.',
     );
     addSuggestion(
+      'finra_trace',
+      'TRACE can help validate corporate, agency, 144A, and structured-product security references tied to statement-backed obligations.',
+    );
+    addSuggestion(
       'dtcc',
       'Large-bank or card-linked obligations may require institutional post-trade or depository context when tied to securitized pools.',
     );
@@ -398,6 +603,10 @@ export function buildSecurityMerchantSuggestions(input: {
     addSuggestion(
       'court_cris',
       'Court, docket, ticket, or CRIS language was detected in the record, so court-registry identifiers should be searchable here.',
+    );
+    addSuggestion(
+      'pacer_case_locator',
+      'Federal docket or case-locator tracing may be needed when the obligation ties into a U.S. court filing or case number.',
     );
     addSuggestion(
       'court_docket',
@@ -421,8 +630,59 @@ export function buildSecurityMerchantSuggestions(input: {
 
   if (kindHints.has('corporate_note') || kindHints.has('serviced_contract')) {
     addSuggestion(
+      'finra_trace',
+      'Fixed-income trade and security lookup is useful when the note or contract points into corporate, agency, or structured debt paper.',
+    );
+    addSuggestion(
       'sec_edgar',
       'Corporate or serviced-contract posture can benefit from issuer filing and securitized-contract evidence review.',
+    );
+  }
+
+  if (mortgageContext) {
+    addSuggestion(
+      'mers_servicerid',
+      'Mortgage or servicing language was detected, so servicer and investor lookup should be available through MERS-linked identifiers.',
+    );
+    addSuggestion(
+      'mers_eregistry',
+      'eNote, MIN, or control-chain tracing belongs in the MERS eRegistry path when the contract should resolve to an authoritative-copy holder.',
+    );
+  }
+
+  if (ginnieContext) {
+    addSuggestion(
+      'ginnie_mae_disclosure',
+      'Government-insured mortgage language suggests a Ginnie Mae disclosure or pool search may identify the related security or collateral chain.',
+    );
+  }
+
+  if (freddieContext || mortgageContext) {
+    addSuggestion(
+      'freddie_mac_clarity',
+      'Mortgage pool or CRT-style context suggests a Freddie Mac MBS disclosure and performance search path.',
+    );
+    addSuggestion(
+      'freddie_mac_debt',
+      'Freddie Mac debt and security lookup can help connect contract references back to a public CUSIP or security record.',
+    );
+  }
+
+  if (fannieContext || mortgageContext) {
+    addSuggestion(
+      'fannie_mae_debt',
+      'Fannie Mae public debt and document search can help tie the obligation to a CUSIP-backed security or strip reference.',
+    );
+  }
+
+  if (treasuryContext) {
+    addSuggestion(
+      'treasury_fiscal_data',
+      'Treasury-language signals a good fit for public CUSIP, auction, and issue reference data from Fiscal Data.',
+    );
+    addSuggestion(
+      'fedwire_securities',
+      'Treasury and eligible agency securities ultimately settle through Fedwire Securities, so the book-entry settlement path belongs in the trace stack.',
     );
   }
 
@@ -438,5 +698,5 @@ export function buildSecurityMerchantSuggestions(input: {
     'Capture any merchant-specific identifier path that is not yet represented by a live catalog source.',
   );
 
-  return suggestions.slice(0, 6);
+  return suggestions.slice(0, 8);
 }

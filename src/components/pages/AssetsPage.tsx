@@ -64,6 +64,9 @@ interface BookEntrySecurityDraft {
   recorderName: string;
   feeBreakdownText: string;
   bookEntryIdentifier: string;
+  certificateNumber: string;
+  custodyForm: 'book_entry' | 'physical_certificate';
+  custodyLocation: string;
   securityPoolName: string;
   issuerName: string;
   identifierCode: string;
@@ -110,6 +113,9 @@ function buildInitialBookEntrySecurityDraft(defaultEntityId?: string): BookEntry
     recorderName: '',
     feeBreakdownText: '',
     bookEntryIdentifier: '',
+    certificateNumber: '',
+    custodyForm: 'book_entry',
+    custodyLocation: '',
     securityPoolName: '',
     issuerName: '',
     identifierCode: '',
@@ -396,13 +402,13 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
       const nextDocument = {
         id: documentId,
         entityId: targetEntity.id,
-        title: `${securityName} Book-Entry Support`,
+        title: `${securityName} Security Support`,
         category: 'financial' as const,
         date: today,
         status: 'final' as const,
         outputStatus: 'ready' as const,
         summary:
-          'County registrar and book-entry reserve intake retained for identifier matching, depository reference, and reserve posting.',
+          'Registrar, registry, or physical-custody reserve intake retained for identifier matching, source reference, and reserve posting.',
         fileName: uploadedFileMetadata?.fileName,
         mimeType: uploadedFileMetadata?.mimeType,
         sizeBytes: uploadedFileMetadata?.sizeBytes,
@@ -412,7 +418,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         sourceRecordId: nextAssetId,
         linkedAssetIds: [nextAssetId],
         linkedInstrumentIds: nextInstrumentId ? [nextInstrumentId] : undefined,
-        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nSticker Ref / BK-PG: ${bookEntryDraft.recordingStickerReference || 'Not provided'}\nRecording Number: ${bookEntryDraft.recordingNumber || 'Not provided'}\nRecorded At: ${bookEntryDraft.recordedAt || 'Not provided'}\nRecorded Document Type: ${bookEntryDraft.recordingDocumentType || 'Not provided'}\nRecorder Name: ${bookEntryDraft.recorderName || 'Not provided'}\nSticker Fee Breakdown: ${bookEntryDraft.feeBreakdownText || 'Not provided'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nSearch / Depository Source: ${depositorySourceLabel}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
+        generatedBody: `# Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nSticker Ref / BK-PG: ${bookEntryDraft.recordingStickerReference || 'Not provided'}\nRecording Number: ${bookEntryDraft.recordingNumber || 'Not provided'}\nRecorded At: ${bookEntryDraft.recordedAt || 'Not provided'}\nRecorded Document Type: ${bookEntryDraft.recordingDocumentType || 'Not provided'}\nRecorder Name: ${bookEntryDraft.recorderName || 'Not provided'}\nSticker Fee Breakdown: ${bookEntryDraft.feeBreakdownText || 'Not provided'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nCertificate Number: ${bookEntryDraft.certificateNumber || 'Not provided'}\nCustody Form: ${bookEntryDraft.custodyForm === 'physical_certificate' ? 'Physical certificate' : 'Book-entry'}\nCustody Location: ${bookEntryDraft.custodyLocation || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nSearch / Source Registry: ${depositorySourceLabel}\nRegistry / Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
         storageOwner: 'user_owned' as const,
         retentionClass: 'financial_evidence' as const,
         externalStorageTarget: 'google_drive' as const,
@@ -443,6 +449,13 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
           recorderName: bookEntryDraft.recorderName.trim() || undefined,
           feeBreakdownText: bookEntryDraft.feeBreakdownText.trim() || undefined,
           bookEntryIdentifier: bookEntryDraft.bookEntryIdentifier.trim() || undefined,
+          certificateNumber: bookEntryDraft.certificateNumber.trim() || undefined,
+          custodyForm:
+            bookEntryDraft.custodyForm ||
+            (bookEntryDraft.depositorySource === 'physical_custody'
+              ? 'physical_certificate'
+              : 'book_entry'),
+          custodyLocation: bookEntryDraft.custodyLocation.trim() || undefined,
           securityPoolName: bookEntryDraft.securityPoolName.trim() || securityName,
           depositorySource: bookEntryDraft.depositorySource,
           depositoryReference: bookEntryDraft.depositoryReference.trim() || undefined,
@@ -615,10 +628,32 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
               gap: 16,
             }}
           >
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>Book-Entry Security Intake</div>
-              <div style={{ color: '#cbd5e1', marginTop: 6, lineHeight: 1.6 }}>
-                Upload county registrar or depository support, match the security pool, then push the holding into asset reserve with its evidence attached.
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>
+                  Book-Entry / Physical Security Intake
+                </div>
+                <div style={{ color: '#cbd5e1', marginTop: 6, lineHeight: 1.6 }}>
+                  Upload registrar, depository, or physical-certificate proof, match the
+                  security pool when found, then push the holding into asset reserve with its
+                  evidence attached.
+                </div>
+              </div>
+              <div
+                style={{
+                  borderRadius: 14,
+                  border: '1px solid rgba(126,242,255,0.18)',
+                  background: 'rgba(54,215,255,0.08)',
+                  padding: '12px 14px',
+                  color: '#dff7ff',
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                If the security is held physically and not found in search, choose
+                <strong> Physical Certificate / Held Instrument</strong>, upload the photo or
+                scan, then enter certificate and custody details before saving it as a new
+                reserve holding.
               </div>
             </div>
             <div
@@ -881,6 +916,74 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
+                <span>Certificate Number</span>
+                <input
+                  value={bookEntryDraft.certificateNumber}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      certificateNumber: event.target.value,
+                    }))
+                  }
+                  placeholder="Physical certificate / note number"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Custody Form</span>
+                <select
+                  value={bookEntryDraft.custodyForm}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      custodyForm: event.target.value as BookEntrySecurityDraft['custodyForm'],
+                    }))
+                  }
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="book_entry">Book-entry</option>
+                  <option value="physical_certificate">Physical certificate</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Custody Location</span>
+                <input
+                  value={bookEntryDraft.custodyLocation}
+                  onChange={(event) =>
+                    setBookEntryDraft((prev) => ({
+                      ...prev,
+                      custodyLocation: event.target.value,
+                    }))
+                  }
+                  placeholder="Vault, trustee file, safe deposit, internal records"
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(10, 11, 24, 0.78)',
+                    color: '#fff6fd',
+                    padding: '10px 12px',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
                 <span>Security Pool Name</span>
                 <input
                   value={bookEntryDraft.securityPoolName}
@@ -987,13 +1090,17 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 </select>
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span>Search / Depository Source</span>
+                <span>Search / Source Registry</span>
                 <select
                   value={bookEntryDraft.depositorySource}
                   onChange={(event) =>
                     setBookEntryDraft((prev) => ({
                       ...prev,
                       depositorySource: event.target.value as DepositorySource,
+                      custodyForm:
+                        event.target.value === 'physical_custody'
+                          ? 'physical_certificate'
+                          : prev.custodyForm,
                     }))
                   }
                   style={{
@@ -1014,12 +1121,23 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                         'emma',
                         'openfigi',
                         'treasurydirect',
+                        'treasury_fiscal_data',
+                        'finra_trace',
                         'fidelity',
                         'henion_walsh',
                         'court_cris',
                         'tops',
                         'court_docket',
+                        'pacer_case_locator',
+                        'ginnie_mae_disclosure',
+                        'freddie_mac_debt',
+                        'freddie_mac_clarity',
+                        'fannie_mae_debt',
+                        'mers_servicerid',
+                        'mers_eregistry',
+                        'fedwire_securities',
                         'sec_edgar',
+                        'physical_custody',
                         'manual',
                       ].includes(source.key),
                     )
@@ -1027,11 +1145,29 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                       <option key={source.key} value={source.key}>
                         {source.label}
                       </option>
-                    ))}
+                  ))}
                 </select>
               </label>
+              {bookEntryDraft.depositorySource === 'physical_custody' ? (
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    borderRadius: 14,
+                    border: '1px solid rgba(251,191,36,0.22)',
+                    background: 'rgba(251,191,36,0.09)',
+                    padding: '12px 14px',
+                    color: '#fef3c7',
+                    lineHeight: 1.55,
+                    fontSize: 13,
+                  }}
+                >
+                  Physical-hold mode is active. Upload the certificate or wet-ink note image,
+                  enter the certificate number, and capture where the original is being held so
+                  the reserve entry stands on its own even without a registry match.
+                </div>
+              ) : null}
               <label style={{ display: 'grid', gap: 6 }}>
-                <span>Depository Reference</span>
+                <span>Registry / Reference</span>
                 <input
                   value={bookEntryDraft.depositoryReference}
                   onChange={(event) =>
@@ -1040,7 +1176,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                       depositoryReference: event.target.value,
                     }))
                   }
-                  placeholder="DTCC / EMMA / transfer reference"
+                  placeholder="Registry, settlement, or external reference"
                   style={{
                     width: '100%',
                     borderRadius: 12,
@@ -1148,7 +1284,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span>Upload Sticker / Support</span>
+                <span>Upload Sticker / Certificate / Support</span>
                 <input
                   type="file"
                   onChange={(event) =>
@@ -1347,7 +1483,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
 
       <PageSection
         title="Book-Entry Securities Rail"
-        description="Upload registrar or depository evidence, select the matched bond or pool, and place the resulting holding into asset reserve with linked source support."
+        description="Upload registrar, depository, or physical-certificate evidence, select the matched bond or pool when found, and place the resulting holding into asset reserve with linked source support."
       >
         <div style={{ display: 'grid', gap: 14 }}>
           {bookEntryNotice ? (
@@ -1388,11 +1524,11 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     fontWeight: 800,
                   }}
                 >
-                  Upload Book-Entry Security
+                  Upload Security / Certificate
                 </button>
               }
             >
-              Capture registrar book-entry identifiers, pool details, CUSIP or ISIN references, and depository evidence before the security is placed into reserve.
+              Capture registrar identifiers, pool details, CUSIP or ISIN references, physical certificate proof, and source evidence before the security is placed into reserve.
             </WorkbenchRecordCard>
             <WorkbenchRecordCard
               title="DTCC Mapping"
@@ -2107,11 +2243,12 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     : asset.maturityDate || 'Not set',
                 },
                 {
-                  label: 'Book Entry / Depository',
+                  label: 'Source / Custody',
                   value:
                     asset.bookEntryReserveProfile?.bookEntryIdentifier ||
+                    asset.bookEntryReserveProfile?.certificateNumber ||
                     asset.bookEntryReserveProfile?.depositoryReference
-                      ? `${asset.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${asset.bookEntryReserveProfile?.depositoryReference || asset.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
+                      ? `${asset.bookEntryReserveProfile?.bookEntryIdentifier || asset.bookEntryReserveProfile?.certificateNumber || 'no security id'} | ${asset.bookEntryReserveProfile?.depositoryReference || getSecurityMerchantSource(asset.bookEntryReserveProfile?.depositorySource || 'manual')?.label || (asset.bookEntryReserveProfile?.custodyForm === 'physical_certificate' ? 'Physical certificate' : 'Book-entry')}`
                       : 'Not linked',
                 },
                 {
@@ -2173,11 +2310,12 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     : instrument.maturityDate || 'Not set',
                 },
                 {
-                  label: 'Book Entry / Depository',
+                  label: 'Source / Custody',
                   value:
                     instrument.bookEntryReserveProfile?.bookEntryIdentifier ||
+                    instrument.bookEntryReserveProfile?.certificateNumber ||
                     instrument.bookEntryReserveProfile?.depositoryReference
-                      ? `${instrument.bookEntryReserveProfile?.bookEntryIdentifier || 'no book-entry id'} | ${instrument.bookEntryReserveProfile?.depositoryReference || instrument.bookEntryReserveProfile?.depositorySource || 'no depository ref'}`
+                      ? `${instrument.bookEntryReserveProfile?.bookEntryIdentifier || instrument.bookEntryReserveProfile?.certificateNumber || 'no security id'} | ${instrument.bookEntryReserveProfile?.depositoryReference || getSecurityMerchantSource(instrument.bookEntryReserveProfile?.depositorySource || 'manual')?.label || (instrument.bookEntryReserveProfile?.custodyForm === 'physical_certificate' ? 'Physical certificate' : 'Book-entry')}`
                       : 'Not linked',
                 },
                 {
@@ -2319,7 +2457,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
 
       <PageSection
         title="Security Source Search"
-        description="Search reserve, municipal, brokerage, court-claim, and securitized-contract sources by identifier type before posting or linking a holding into the ledger."
+        description="Search reserve, municipal, brokerage, court-claim, mortgage-registry, and securitized-contract sources by identifier type before posting or linking a holding into the ledger, with a physical-certificate fallback when no registry match exists."
       >
         <div
           style={{
