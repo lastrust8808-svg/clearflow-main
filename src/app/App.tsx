@@ -880,11 +880,15 @@ export default function App({
 
     const storedEntityId = loadActiveEntityForUser(currentUserId);
     const availableEntityIds = new Set(data.entities.map((entity) => entity.id));
-    const nextEntityId = storedEntityId && availableEntityIds.has(storedEntityId)
-      ? storedEntityId
-      : null;
+    setActiveEntityId((previous) => {
+      if (previous && availableEntityIds.has(previous)) {
+        return previous;
+      }
 
-    setActiveEntityId((previous) => (previous === nextEntityId ? previous : nextEntityId));
+      const nextEntityId =
+        storedEntityId && availableEntityIds.has(storedEntityId) ? storedEntityId : null;
+      return previous === nextEntityId ? previous : nextEntityId;
+    });
   }, [auth.authStatus, currentUserId, data.entities]);
 
   useEffect(() => {
