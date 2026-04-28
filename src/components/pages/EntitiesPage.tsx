@@ -28,6 +28,12 @@ interface EntitiesPageProps {
   onSetActiveEntity?: (entityId: string | null) => void;
 }
 
+interface EntityCreationSuccessState {
+  entityId: string;
+  entityName: string;
+  steps: string[];
+}
+
 function goToHash(hash: string) {
   if (typeof window !== 'undefined') {
     window.location.hash = hash;
@@ -45,6 +51,8 @@ export default function EntitiesPage({
   const auth = useAuth();
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const [isConnectionRailModalOpen, setIsConnectionRailModalOpen] = useState(false);
+  const [entityCreationSuccess, setEntityCreationSuccess] =
+    useState<EntityCreationSuccessState | null>(null);
   const [connectionRailPreset, setConnectionRailPreset] = useState<'general' | 'business_partner'>(
     'general',
   );
@@ -124,6 +132,15 @@ export default function EntitiesPage({
         });
       }, 60);
     }
+  };
+
+  const openEntityDashboardAfterSave = () => {
+    if (!entityCreationSuccess) {
+      return;
+    }
+    onSetActiveEntity?.(entityCreationSuccess.entityId);
+    setEntityCreationSuccess(null);
+    goToHash('#overview');
   };
 
   const releaseAuthorityHold = (entityId: string) => {
@@ -246,6 +263,75 @@ export default function EntitiesPage({
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      {entityCreationSuccess ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            zIndex: 1200,
+          }}
+        >
+          <div
+            style={{
+              width: 'min(560px, 100%)',
+              borderRadius: 20,
+              border: '1px solid rgba(126,242,255,0.22)',
+              background: 'linear-gradient(180deg, rgba(18,24,47,0.98), rgba(11,16,34,0.98))',
+              boxShadow: '0 28px 80px rgba(0,0,0,0.45)',
+              padding: 22,
+              display: 'grid',
+              gap: 14,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>Entity Saved</div>
+              <div style={{ color: '#cbd5e1', marginTop: 6, lineHeight: 1.6 }}>
+                <strong>{entityCreationSuccess.entityName}</strong> was saved successfully. The next workspace view will open the dashboard instead of the editable entity screen.
+              </div>
+            </div>
+            <div
+              style={{
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.03)',
+                padding: 14,
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>Next Steps</div>
+              <div style={{ display: 'grid', gap: 6, color: '#dbeafe', lineHeight: 1.55 }}>
+                {entityCreationSuccess.steps.map((step) => (
+                  <div key={step}>• {step}</div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={openEntityDashboardAfterSave}
+                style={{
+                  minHeight: 44,
+                  padding: '0 16px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                }}
+              >
+                OK, Open Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <EntityQuickAddModal
         open={isEntityModalOpen}
         currentUserEmail={currentUser?.email}
@@ -300,6 +386,32 @@ export default function EntitiesPage({
                 ),
             ),
           );
+          const storageEmail =
+            payload.googleStorageEmail.trim() || payload.primaryEmail.trim() || currentUser?.email || '';
+          const needsEntityGoogleSwitch =
+            payload.storageMode === 'entity_google' &&
+            Boolean(storageEmail) &&
+            storageEmail.trim().toLowerCase() !== currentUser?.email?.trim().toLowerCase();
+          const needsStorageConnection =
+            payload.storageMode !== 'internal_only' &&
+            (!hasDriveAccess || needsEntityGoogleSwitch);
+          const nextSteps = requiresAuthorityReview || requiredAdditionalPartyNames.length
+            ? [
+                'Finish authority review before releasing bank setup and live transaction movement.',
+                requiredAdditionalPartyNames.length
+                  ? `Add or confirm these named parties: ${requiredAdditionalPartyNames.join(', ')}.`
+                  : 'Open the authority desk from the dashboard and clear the entity hold.',
+                needsStorageConnection
+                  ? `Connect Google Drive${payload.storageMode === 'entity_google' && storageEmail ? ` as ${storageEmail}` : ''} if this board should route files into external storage.`
+                  : 'After authority clears, upload accounting docs or enter the first operating records.',
+              ]
+            : [
+                'Upload initial accounting docs or enter the first bill, invoice, receipt, or journal.',
+                'Connect bank, Mercury, or another provider to open live rails and account mapping.',
+                needsStorageConnection
+                  ? `Connect Google Drive${payload.storageMode === 'entity_google' && storageEmail ? ` as ${storageEmail}` : ''} for smoother file routing.`
+                  : 'Use the dashboard required actions to continue setup for this entity.',
+              ];
           const dispatchIdentity = payload.generateDispatchIdentity
             ? buildEntityDispatchIdentity({
                 entityId,
@@ -515,7 +627,11 @@ export default function EntitiesPage({
           });
           setIsEntityModalOpen(false);
           onSetActiveEntity?.(entityId);
-          goToHash('#entities');
+          setEntityCreationSuccess({
+            entityId,
+            entityName: entityDisplayName,
+            steps: nextSteps,
+          });
         }}
       />
       <EntityConnectionRailModal
