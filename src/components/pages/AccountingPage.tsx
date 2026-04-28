@@ -43,6 +43,7 @@ import {
 import { syncBankFeedToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
+import { buildSecurityMerchantSuggestions } from '../../services/securityMerchantCatalog.service';
 import { scopeBundleToEntity } from '../../services/entityBundleScope.service';
 import {
   canUseInjectedWalletExecution,
@@ -8579,51 +8580,122 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ]}
               renderDetails={(record) => (
                 <div style={{ display: 'grid', gap: 8, color: '#d1d5db', lineHeight: 1.6 }}>
-                  <div>
-                    Vendor {vendors.find((item) => item.id === record.vendorId)?.name || record.extractedVendorName || 'Pending'} | bill number {record.billNumber || 'Pending'} | due {record.dueDate || 'Not set'}
-                  </div>
-                  <div>
-                    Payment state{' '}
-                    {(() => {
-                      const linkedPayments = payments.filter((item) => item.linkedBillIds?.includes(record.id));
-                      if (!linkedPayments.length) {
-                        return 'Not submitted';
-                      }
+                  {(() => {
+                    const linkedVendor =
+                      vendors.find((item) => item.id === record.vendorId) || null;
+                    const securitySourceSuggestions = buildSecurityMerchantSuggestions({
+                      data: scopedData,
+                      bill: record,
+                      vendor: linkedVendor,
+                    });
 
-                      const applied = linkedPayments.find(
-                        (item) =>
-                          item.settlementExecution?.externalStatus === 'applied' ||
-                          item.externalRecognitionStatus === 'recognized_by_saved_terms',
-                      );
-                      if (applied) {
-                        return `Applied${applied.id ? ` | ${applied.id}` : ''}`;
-                      }
+                    return (
+                      <>
+                        <div>
+                          Vendor {linkedVendor?.name || record.extractedVendorName || 'Pending'} | bill number {record.billNumber || 'Pending'} | due {record.dueDate || 'Not set'}
+                        </div>
+                        <div>
+                          Payment state{' '}
+                          {(() => {
+                            const linkedPayments = payments.filter((item) => item.linkedBillIds?.includes(record.id));
+                            if (!linkedPayments.length) {
+                              return 'Not submitted';
+                            }
 
-                      const settled = linkedPayments.find(
-                        (item) =>
-                          item.status === 'settled' ||
-                          item.settlementExecution?.externalStatus === 'settled',
-                      );
-                      if (settled) {
-                        return `Settled${settled.id ? ` | ${settled.id}` : ''}`;
-                      }
+                            const applied = linkedPayments.find(
+                              (item) =>
+                                item.settlementExecution?.externalStatus === 'applied' ||
+                                item.externalRecognitionStatus === 'recognized_by_saved_terms',
+                            );
+                            if (applied) {
+                              return `Applied${applied.id ? ` | ${applied.id}` : ''}`;
+                            }
 
-                      const processing = linkedPayments.find(
-                        (item) =>
-                          item.settlementExecution?.externalStatus === 'processing' ||
-                          item.settlementExecution?.externalStatus === 'accepted' ||
-                          item.releaseStatus === 'released',
-                      );
-                      if (processing) {
-                        return `Submitted${processing.id ? ` | ${processing.id}` : ''}`;
-                      }
+                            const settled = linkedPayments.find(
+                              (item) =>
+                                item.status === 'settled' ||
+                                item.settlementExecution?.externalStatus === 'settled',
+                            );
+                            if (settled) {
+                              return `Settled${settled.id ? ` | ${settled.id}` : ''}`;
+                            }
 
-                      return `Queued${linkedPayments[0]?.id ? ` | ${linkedPayments[0].id}` : ''}`;
-                    })()}
-                  </div>
-                  <div>
-                    Source docs {record.linkedDocumentIds?.length ?? 0} | extraction {record.extractionSummary || 'No extraction notes saved'}
-                  </div>
+                            const processing = linkedPayments.find(
+                              (item) =>
+                                item.settlementExecution?.externalStatus === 'processing' ||
+                                item.settlementExecution?.externalStatus === 'accepted' ||
+                                item.releaseStatus === 'released',
+                            );
+                            if (processing) {
+                              return `Submitted${processing.id ? ` | ${processing.id}` : ''}`;
+                            }
+
+                            return `Queued${linkedPayments[0]?.id ? ` | ${linkedPayments[0].id}` : ''}`;
+                          })()}
+                        </div>
+                        <div>
+                          Source docs {record.linkedDocumentIds?.length ?? 0} | extraction {record.extractionSummary || 'No extraction notes saved'}
+                        </div>
+                        {securitySourceSuggestions.length ? (
+                          <div
+                            style={{
+                              borderRadius: 12,
+                              border: '1px solid rgba(126,242,255,0.14)',
+                              background: 'rgba(54,215,255,0.06)',
+                              padding: 12,
+                              display: 'grid',
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ fontWeight: 800 }}>Security / Bonded-Pool Source Hints</div>
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              {securitySourceSuggestions.map((suggestion) => (
+                                <div
+                                  key={suggestion.key}
+                                  style={{
+                                    padding: 10,
+                                    borderRadius: 10,
+                                    border: '1px solid rgba(148,163,184,0.16)',
+                                    background: 'rgba(15,23,42,0.32)',
+                                    display: 'grid',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                    <strong>{suggestion.label}</strong>
+                                    <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                                      {suggestion.searchPosture.replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>{suggestion.reason}</div>
+                                  {suggestion.identifierHints.length ? (
+                                    <div style={{ color: '#94a3b8', fontSize: 12 }}>
+                                      Identifiers: {suggestion.identifierHints.join(' | ')}
+                                    </div>
+                                  ) : null}
+                                  {suggestion.officialUrl ? (
+                                    <a
+                                      href={suggestion.officialUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        color: '#7dd3fc',
+                                        fontSize: 12,
+                                        textDecoration: 'none',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Open source
+                                    </a>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    );
+                  })()}
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -8640,6 +8712,24 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                       }}
                     >
                       Pay This Bill
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.hash = '#assets';
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        minHeight: 42,
+                        borderRadius: 10,
+                        border: '1px solid rgba(126,242,255,0.28)',
+                        background: 'rgba(54,215,255,0.1)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Review Bonded Pool Sources
                     </button>
                   </div>
                 </div>

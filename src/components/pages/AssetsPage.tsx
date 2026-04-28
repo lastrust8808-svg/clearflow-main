@@ -8,6 +8,10 @@ import { getConversionConnectorCatalog } from '../../services/conversionConnecto
 import { buildRealEstateSecuritizationSummary } from '../../services/realEstateSecuritization.service';
 import { buildRealPropertyAcquisitionRailViews } from '../../services/realPropertyAcquisitionRails.service';
 import { saveDocumentFile } from '../../services/documentVault.service';
+import {
+  getSecurityMerchantCatalog,
+  getSecurityMerchantSource,
+} from '../../services/securityMerchantCatalog.service';
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import { buildTreasuryPresentmentMailTodos } from '../../services/treasuryPresentmentMail.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
@@ -283,6 +287,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
   const assetAcquisitionViews = buildAssetAcquisitionRailViews(data);
   const collateralConversionViews = buildCollateralConversionRailViews(data);
   const conversionConnectors = getConversionConnectorCatalog();
+  const securityMerchantCatalog = getSecurityMerchantCatalog();
   const realPropertyAcquisitionViews = buildRealPropertyAcquisitionRailViews(data);
   const trustFundingViews = buildTrustFundingViews(data);
   const treasuryPresentmentMailTodos = buildTreasuryPresentmentMailTodos(data);
@@ -382,6 +387,9 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         bookEntryDraft.issuerName.trim() ||
         bookEntryDraft.identifierCode.trim() ||
         'Reserve security';
+      const depositorySourceLabel =
+        getSecurityMerchantSource(bookEntryDraft.depositorySource)?.label ||
+        bookEntryDraft.depositorySource;
       const numericParValue = Number(bookEntryDraft.parValue || 0);
       const numericMarketValue = Number(bookEntryDraft.marketValue || 0);
       const numericCouponRate = Number(bookEntryDraft.couponRate || 0);
@@ -404,7 +412,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
         sourceRecordId: nextAssetId,
         linkedAssetIds: [nextAssetId],
         linkedInstrumentIds: nextInstrumentId ? [nextInstrumentId] : undefined,
-        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nSticker Ref / BK-PG: ${bookEntryDraft.recordingStickerReference || 'Not provided'}\nRecording Number: ${bookEntryDraft.recordingNumber || 'Not provided'}\nRecorded At: ${bookEntryDraft.recordedAt || 'Not provided'}\nRecorded Document Type: ${bookEntryDraft.recordingDocumentType || 'Not provided'}\nRecorder Name: ${bookEntryDraft.recorderName || 'Not provided'}\nSticker Fee Breakdown: ${bookEntryDraft.feeBreakdownText || 'Not provided'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nDepository Source: ${bookEntryDraft.depositorySource.toUpperCase()}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
+        generatedBody: `# Book-Entry Security Intake\n\nEntity: ${targetEntity.displayName || targetEntity.name}\nSecurity / Pool: ${securityName}\nRegistrar Office: ${bookEntryDraft.registrarOffice || 'Not provided'}\nCounty / State: ${bookEntryDraft.county || 'Not provided'}${bookEntryDraft.state ? `, ${bookEntryDraft.state}` : ''}\nRecorder Book / Page: ${bookEntryDraft.recorderBook || 'n/a'} / ${bookEntryDraft.recorderPage || 'n/a'}\nSticker Ref / BK-PG: ${bookEntryDraft.recordingStickerReference || 'Not provided'}\nRecording Number: ${bookEntryDraft.recordingNumber || 'Not provided'}\nRecorded At: ${bookEntryDraft.recordedAt || 'Not provided'}\nRecorded Document Type: ${bookEntryDraft.recordingDocumentType || 'Not provided'}\nRecorder Name: ${bookEntryDraft.recorderName || 'Not provided'}\nSticker Fee Breakdown: ${bookEntryDraft.feeBreakdownText || 'Not provided'}\nBook-Entry Identifier: ${bookEntryDraft.bookEntryIdentifier || 'Not provided'}\nIdentifier Code: ${bookEntryDraft.identifierCode || 'Not provided'}\nISIN: ${bookEntryDraft.isinCode || 'Not provided'}\nSearch / Depository Source: ${depositorySourceLabel}\nDepository Reference: ${bookEntryDraft.depositoryReference || 'Not provided'}\nIssuer: ${bookEntryDraft.issuerName || 'Not provided'}\nCoupon: ${numericCouponRate || 0}\nMaturity: ${bookEntryDraft.maturityDate || 'Not provided'}\nPar Value: ${numericParValue || 0}\nMarket Value: ${numericMarketValue || 0}\nMatched Candidate: ${selectedCandidate?.label || 'New reserve security'}\n\nNotes\n${bookEntryDraft.notes || 'No additional notes entered.'}`,
         storageOwner: 'user_owned' as const,
         retentionClass: 'financial_evidence' as const,
         externalStorageTarget: 'google_drive' as const,
@@ -979,7 +987,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                 </select>
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span>Depository Source</span>
+                <span>Search / Depository Source</span>
                 <select
                   value={bookEntryDraft.depositorySource}
                   onChange={(event) =>
@@ -998,11 +1006,28 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
                     fontSize: 14,
                   }}
                 >
-                  <option value="dtcc">DTCC</option>
-                  <option value="emma">EMMA</option>
-                  <option value="openfigi">OpenFIGI</option>
-                  <option value="treasurydirect">TreasuryDirect</option>
-                  <option value="manual">Manual</option>
+                  {securityMerchantCatalog
+                    .filter((source) =>
+                      [
+                        'internal_bonded_pool',
+                        'dtcc',
+                        'emma',
+                        'openfigi',
+                        'treasurydirect',
+                        'fidelity',
+                        'henion_walsh',
+                        'court_cris',
+                        'tops',
+                        'court_docket',
+                        'sec_edgar',
+                        'manual',
+                      ].includes(source.key),
+                    )
+                    .map((source) => (
+                      <option key={source.key} value={source.key}>
+                        {source.label}
+                      </option>
+                    ))}
                 </select>
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
@@ -2294,7 +2319,7 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
 
       <PageSection
         title="Security Source Search"
-        description="Launch research sources for municipal, Treasury, and broader fixed-income/security intake before posting a holding into the ledger."
+        description="Search reserve, municipal, brokerage, court-claim, and securitized-contract sources by identifier type before posting or linking a holding into the ledger."
       >
         <div
           style={{
@@ -2303,35 +2328,54 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
             gap: 12,
           }}
         >
-          {[
-            { label: 'MSRB EMMA', url: 'https://emma.msrb.org/' },
-            { label: 'SEC EDGAR', url: 'https://www.sec.gov/edgar/search/' },
-            { label: 'OpenFIGI', url: 'https://www.openfigi.com/search' },
-            { label: 'TreasuryDirect', url: 'https://www.treasurydirect.gov/marketable-securities/' },
-            { label: 'FINRA Fixed Income', url: 'https://www.finra.org/finra-data/fixed-income' },
-          ].map((source) => (
-            <a
-              key={source.label}
-              href={source.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '14px 16px',
-                borderRadius: 14,
-                border: '1px solid rgba(126, 242, 255, 0.16)',
-                background: 'rgba(10, 22, 35, 0.72)',
-                color: '#e5e7eb',
-                textDecoration: 'none',
-                fontWeight: 700,
-              }}
-            >
-              <span>{source.label}</span>
-              <span style={{ color: 'var(--cf-muted)' }}>Open</span>
-            </a>
-          ))}
+          {securityMerchantCatalog.map((source) => {
+            const content = (
+              <>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <span>{source.label}</span>
+                  <span style={{ color: 'var(--cf-muted)', fontSize: 12, lineHeight: 1.45 }}>
+                    {source.supportedIdentifierTypes.join(', ')}
+                  </span>
+                  <span style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.45 }}>
+                    {source.description}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--cf-muted)' }}>
+                  {source.officialUrl ? 'Open' : source.searchPosture.replace(/_/g, ' ')}
+                </span>
+              </>
+            );
+
+            const sharedStyle = {
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 10,
+              padding: '14px 16px',
+              borderRadius: 14,
+              border: '1px solid rgba(126, 242, 255, 0.16)',
+              background: 'rgba(10, 22, 35, 0.72)',
+              color: '#e5e7eb',
+              textDecoration: 'none',
+              fontWeight: 700,
+            } as const;
+
+            return source.officialUrl ? (
+              <a
+                key={source.key}
+                href={source.officialUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={sharedStyle}
+              >
+                {content}
+              </a>
+            ) : (
+              <div key={source.key} style={sharedStyle}>
+                {content}
+              </div>
+            );
+          })}
         </div>
       </PageSection>
 

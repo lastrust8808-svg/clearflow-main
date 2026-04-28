@@ -879,7 +879,19 @@ export interface AssetRecord {
     feeBreakdownText?: string;
     bookEntryIdentifier?: string;
     securityPoolName?: string;
-    depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';
+    depositorySource?:
+      | 'internal_bonded_pool'
+      | 'dtcc'
+      | 'emma'
+      | 'openfigi'
+      | 'treasurydirect'
+      | 'fidelity'
+      | 'henion_walsh'
+      | 'court_cris'
+      | 'tops'
+      | 'court_docket'
+      | 'sec_edgar'
+      | 'manual';
     depositoryReference?: string;
     isinCode?: string;
     reserveApplicationStatus?: 'not_applied' | 'reserve_added' | 'watch' | 'manual_review';
@@ -1043,7 +1055,19 @@ export interface InstrumentRecord {
     feeBreakdownText?: string;
     bookEntryIdentifier?: string;
     securityPoolName?: string;
-    depositorySource?: 'dtcc' | 'emma' | 'openfigi' | 'treasurydirect' | 'manual';
+    depositorySource?:
+      | 'internal_bonded_pool'
+      | 'dtcc'
+      | 'emma'
+      | 'openfigi'
+      | 'treasurydirect'
+      | 'fidelity'
+      | 'henion_walsh'
+      | 'court_cris'
+      | 'tops'
+      | 'court_docket'
+      | 'sec_edgar'
+      | 'manual';
     depositoryReference?: string;
     isinCode?: string;
     reserveApplicationStatus?: 'not_applied' | 'reserve_added' | 'watch' | 'manual_review';
