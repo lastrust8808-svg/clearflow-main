@@ -150,14 +150,15 @@ const subnavGroups: Array<{
 ];
 
 const sectionButtonStyle = (isActive: boolean): CSSProperties => ({
-  padding: '10px 14px',
-  minHeight: 44,
+  padding: '9px 12px',
+  minHeight: 40,
   borderRadius: 10,
   border: isActive ? '1px solid #60a5fa' : '1px solid rgba(148,163,184,0.25)',
   background: isActive ? 'rgba(37,99,235,0.22)' : 'rgba(15,23,42,0.4)',
   color: '#e5e7eb',
   cursor: 'pointer',
   fontWeight: isActive ? 700 : 500,
+  fontSize: 13,
 });
 
 function parseAccountingSubsectionHash(hashValue: string): AccountingSection | null {
@@ -324,6 +325,12 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const openAccountingSubsection = (subsection: AccountingSection) => {
     setActiveSubsection(subsection);
     replaceAccountingHash(`#accounting:${subsection}`);
+  };
+  const returnToAccountingDashboard = (notice?: string) => {
+    openAccountingSubsection('dashboard');
+    if (typeof notice === 'string') {
+      setOperationsNotice(notice);
+    }
   };
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
@@ -2303,9 +2310,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    setOperationsNotice(`Saved invoice ${savedInvoiceNumber} into the active entity accounting records.`);
-    setActiveSubsection('invoices');
     setIsInvoiceModalOpen(false);
+    returnToAccountingDashboard(
+      `Saved invoice ${savedInvoiceNumber} into the active entity accounting records.`,
+    );
   };
 
   const handleBillSubmit = async (payload: BillSubmitPayload) => {
@@ -2603,9 +2611,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    setActiveSubsection('bills');
     setIsBillModalOpen(false);
-    setOperationsNotice(`Saved the bill into ${savedEntityLabel || 'the active entity'} accounting records.`);
+    returnToAccountingDashboard(
+      `Saved the bill into ${savedEntityLabel || 'the active entity'} accounting records.`,
+    );
   };
 
   const handleBulkAccountingDocumentUpload = async (files: FileList | null) => {
@@ -2658,14 +2667,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       ...prev,
       documents: [...savedDocuments, ...(prev.documents ?? [])],
     }));
-    setActiveSubsection('bills');
-    setOperationsNotice(
+    returnToAccountingDashboard(
       `Saved ${savedDocuments.length} bulk accounting intake document${savedDocuments.length === 1 ? '' : 's'} for the active entity. Review them from Documents or convert them into bills, receipts, expenses, or journals when ready.`,
     );
   };
 
   const handleReceiptSubmit = async (payload: ReceiptSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
+    const targetEntityId = activeEntityId ?? defaultEntity?.id ?? data.entities[0]?.id;
+    if (!targetEntityId) {
+      setOperationsNotice('Select or create an entity before saving a receipt.');
+      return;
+    }
     const extraction = await analyzeAccountingUpload('receipt', payload.uploadedFile, {
       accountId: auth.currentUser?.id,
     });
@@ -2673,7 +2686,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       payload.receiptDate || extraction.date || new Date().toISOString().slice(0, 10);
     const receiptId = `receipt-${Date.now()}`;
     const documentRecord = await persistUploadDocument({
-      entityId: receipts[0]?.entityId ?? data.entities[0]?.id ?? 'entity-unknown',
+      entityId: targetEntityId,
       folder: 'receipts',
       title: `${payload.merchantName || extraction.vendorOrMerchantName || 'Merchant'} Receipt Source`,
       summary:
@@ -2687,10 +2700,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       date: entryDate,
     });
 
+    let didSaveReceipt = false;
+    let savedReceiptNotice = '';
+
     setData((prev) => {
-      const base = prev.receipts?.[0];
-      if (!base) return prev;
-      const entity = prev.entities[0];
+      const base = prev.receipts.find((item) => item.entityId === targetEntityId);
+      const entity =
+        prev.entities.find((item) => item.id === targetEntityId) || prev.entities[0];
       if (!entity) return prev;
       const merchantName = payload.merchantName || extraction.vendorOrMerchantName;
       const { vendorId, vendors: nextVendors } = ensureVendorRecord(prev, entity.id, {
@@ -2706,12 +2722,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       );
       const expenseId = `exp-${Date.now()}`;
       const nextRecord = {
-        ...base,
+        ...(base ?? {}),
         id: receiptId,
         entityId: entity.id,
         vendorId,
         receiptDate: entryDate,
         fileName: payload.uploadedFileName || payload.uploadedFile?.name || `receipt-${Date.now()}.jpg`,
+        currency:
+          base?.currency ||
+          entity.operationalDefaults?.baseCurrency ||
+          prev.workspaceSettings.baseCurrency,
         totalAmount: resolvedAmount,
         status: matchedBill ? 'matched' : 'reviewed',
         linkedBillId: matchedBill?.id,
@@ -2724,10 +2744,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         extractedCategoryHint: extraction.categoryHint,
         notes: payload.description || payload.parsedNotes || extraction.summary,
         linkedDocumentIds: documentRecord
-          ? [documentRecord.id, ...(base.linkedDocumentIds ?? [])]
-          : base.linkedDocumentIds,
-        vaultPath: documentRecord?.vaultPath ?? base.vaultPath,
+          ? [documentRecord.id, ...(base?.linkedDocumentIds ?? [])]
+          : base?.linkedDocumentIds,
+        vaultPath: documentRecord?.vaultPath ?? base?.vaultPath,
       };
+      didSaveReceipt = true;
+      savedReceiptNotice = matchedBill
+        ? `Saved the receipt and matched it to bill ${matchedBill.billNumber || matchedBill.id}.`
+        : `Saved the receipt into ${entity.displayName || entity.name} accounting records.`;
 
       return {
         ...prev,
@@ -2769,8 +2793,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
-    setActiveSubsection('receipts');
+    if (!didSaveReceipt) {
+      setOperationsNotice('Select or create an entity before saving a receipt.');
+      return;
+    }
+
     setIsReceiptModalOpen(false);
+    returnToAccountingDashboard(savedReceiptNotice);
   };
 
   const handleCouponPresentmentSubmit = async (payload: CouponPresentmentSubmitPayload) => {
@@ -3459,12 +3488,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
-    setActiveSubsection('presentments');
     setIsCouponPresentmentModalOpen(false);
     setPresentmentModalDraft(null);
     clearSessionDraft(presentmentDraftStorageKey);
     setHasSavedPresentmentDraft(false);
-    setOperationsNotice(
+    returnToAccountingDashboard(
       activeEntityAuthorityReleaseHoldReason
         ? `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
             resolvedAmount,
@@ -3475,7 +3503,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         : `Submitted coupon presentment for ${submittedReceiverName} in the amount of ${formatCurrency(
             resolvedAmount,
             'USD'
-          )}. Review it below in Presentments and the linked remittance records in Remittance Desk.`
+          )}. It now appears in the dashboard overview and linked remittance records.`
     );
   };
 
@@ -3484,8 +3512,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     setPresentmentModalDraft(draft);
     setHasSavedPresentmentDraft(true);
     setIsCouponPresentmentModalOpen(false);
-    setActiveSubsection('presentments');
-    setOperationsNotice('Saved the presentment draft. Use Resume Draft Presentment to continue later.');
+    returnToAccountingDashboard(
+      'Saved the presentment draft. Use Resume Draft Presentment from the dashboard when ready.',
+    );
   };
 
   const handlePresentmentDraftChange = (draft: PresentmentModalDraft | null) => {
@@ -3635,7 +3664,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
-    setActiveSubsection(counterpartyModalMode === 'customer' ? 'customers' : 'vendors');
+    const nextCounterpartyMode = counterpartyModalMode;
     if (counterpartyModalMode === 'vendor') {
       setOperationsNotice(
         authorityReviewOpen
@@ -3650,6 +3679,19 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       );
     }
     setCounterpartyModalMode(null);
+    returnToAccountingDashboard(
+      nextCounterpartyMode === 'customer'
+        ? `Saved customer profile for ${payload.name || 'the customer'}.`
+        : authorityReviewOpen
+          ? `Vendor profile saved for ${payload.name || 'the vendor'} under ${
+              entity.displayName || entity.name
+            }, but external onboarding should stay staged until authority review is cleared.`
+          : linkedTermsDocumentId || linkedAdminProcessDocumentId
+            ? extractedTermsProfile?.summary
+              ? `Vendor terms were attached and contract clauses were autofilled for ${payload.name || 'the vendor'}.`
+              : 'Vendor terms and admin process controls were attached to the counterparty profile.'
+            : 'Vendor profile saved.',
+    );
   };
 
   const handlePaymentSubmit = async (payload: PaymentSubmitPayload) => {
@@ -4968,8 +5010,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
-    setActiveSubsection('payments');
     setIsPaymentModalOpen(false);
+    returnToAccountingDashboard(
+      `Saved ${payload.direction === 'incoming' ? 'incoming' : 'outgoing'} payment for ${formatCurrency(
+        amount,
+        entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
+      )}.`,
+    );
   };
 
   const handleApproveOutgoingPayment = (paymentId: string) => {
@@ -6038,8 +6085,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setIsPlaidModalOpen(false);
     setSelectedBankFeedAccountId(null);
-    setActiveSubsection('bankFeed');
-    setOperationsNotice(
+    returnToAccountingDashboard(
       selectedBankFeedAccountId
         ? 'Reconnected the selected financial account and refreshed its live provider profile.'
         : 'Connected live institution accounts and saved them as permanent workspace accounts in the chart of accounts.'
@@ -6165,8 +6211,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     });
 
     setIsConnectedFinancialAccountModalOpen(false);
-    setActiveSubsection('bankFeed');
-    setOperationsNotice(
+    returnToAccountingDashboard(
       `Saved ${payload.accountName.trim()} as a permanent ${provider.label} account inside the workspace chart of accounts.`,
     );
   };
@@ -6235,7 +6280,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     });
 
     setIsManualBankAccountModalOpen(false);
-    setActiveSubsection('bankFeed');
+    returnToAccountingDashboard(
+      `Saved ${payload.accountName.trim()} as a manual bank account in the chart of accounts.`,
+    );
   };
 
   const handleAddManualBankTransaction = (payload: ManualBankTransactionSubmitPayload) => {
@@ -6415,7 +6462,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     });
 
     setIsManualBankTransactionModalOpen(false);
-    setActiveSubsection('bankFeed');
+    returnToAccountingDashboard(
+      `Saved manual bank transaction for ${formatCurrency(
+        absoluteAmount,
+        entity.operationalDefaults?.baseCurrency || data.workspaceSettings.baseCurrency,
+      )}.`,
+    );
   };
 
   const handleCreateBankFeedRule = (payload: BankFeedRuleSubmitPayload) => {
@@ -6485,7 +6537,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     }));
 
     setIsEmployeeModalOpen(false);
-    setActiveSubsection('payroll');
+    returnToAccountingDashboard(`Saved employee profile for ${payload.fullName.trim()}.`);
   };
 
   const handleDirectDepositRequestSubmit = async (payload: DirectDepositRequestSubmitPayload) => {
@@ -6624,13 +6676,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       tokens: [requestToken, ...(prev.tokens ?? [])],
     }));
 
-    setOperationsNotice(
+    setIsDirectDepositModalOpen(false);
+    returnToAccountingDashboard(
       payload.uploadedFile
         ? `Retained signed direct deposit form for ${employee.fullName} and linked it into payroll.`
         : `Prepared a direct deposit authorization request for ${employee.fullName}.`
     );
-    setIsDirectDepositModalOpen(false);
-    setActiveSubsection('payroll');
   };
 
   const handleToggleBankFeedRule = (ruleId: string) => {
@@ -7782,19 +7833,26 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       ],
     }));
 
-    setActiveSubsection('dashboard');
     setIsJournalModalOpen(false);
+    returnToAccountingDashboard('Saved journal entry into the accounting overview and posted moves.');
   };
 
   const handleQuoteSubmit = (payload: QuoteSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
+    const targetEntityId = activeEntityId ?? defaultEntity?.id ?? data.entities[0]?.id;
+    if (!targetEntityId) {
+      setOperationsNotice('Select or create an entity before saving a quote.');
+      return;
+    }
+
+    let savedQuoteNumber = '';
 
     setData((prev) => {
-      const base = prev.invoices?.[0];
-      if (!base) return prev;
-      const entity = prev.entities[0];
+      const base = prev.invoices.find((item) => item.entityId === targetEntityId);
+      const entity =
+        prev.entities.find((item) => item.id === targetEntityId) || prev.entities[0];
       if (!entity) return prev;
-      const issueDate = resolveIssueDate(base.issueDate);
+      const issueDate = resolveIssueDate(base?.issueDate);
       const quoteId = `quote-${Date.now()}`;
       const quoteNumber =
         payload.quoteNumberMode === 'manual'
@@ -7823,21 +7881,43 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         summary: `Quote for ${payload.customerName || 'customer'}: ${payload.projectTitle}.`,
       });
 
-      const nextRecord = {
-        ...base,
+      const nextRecord: InvoiceRecord = {
+        ...(base ?? {}),
         id: quoteId,
         entityId: entity.id,
+        customerId: base?.customerId || `quote-customer-${quoteId}`,
         invoiceNumber: quoteNumber,
         issueDate,
+        dueDate: undefined,
         totalAmount: numericAmount,
         balanceDue: numericAmount,
         status: 'draft',
+        currency:
+          base?.currency ||
+          entity.operationalDefaults?.baseCurrency ||
+          prev.workspaceSettings.baseCurrency,
+        subtotal: numericAmount,
+        taxAmount: 0,
         brandingSnapshot,
+        deliveryMethod: 'manual',
+        deliveryStatus: 'draft',
+        linkedLineItems: [
+          {
+            id: `quote-line-${quoteId}`,
+            description: payload.projectTitle.trim() || 'Quote line item',
+            quantity: 1,
+            unitAmount: numericAmount,
+            incomeAccountId: base?.linkedLineItems?.[0]?.incomeAccountId,
+          },
+        ],
         linkedDocumentIds: [nextDocument.id],
+        linkedPaymentIds: undefined,
+        linkedTransactionIds: undefined,
         linkedTokenIds: token ? [token.id] : undefined,
         verificationRequired: token !== null,
-        notes: `${payload.projectTitle}${payload.notes ? ` | ${payload.notes}` : ''}`,
+        notes: `${payload.projectTitle}${payload.notes ? ` | ${payload.notes}` : ''}` || undefined,
       };
+      savedQuoteNumber = quoteNumber;
 
       return {
         ...prev,
@@ -7853,8 +7933,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
-    setActiveSubsection('quotes');
+    if (!savedQuoteNumber) {
+      setOperationsNotice('Select or create an entity before saving a quote.');
+      return;
+    }
+
     setIsQuoteModalOpen(false);
+    returnToAccountingDashboard(`Saved quote ${savedQuoteNumber} into the accounting overview.`);
   };
 
   const handleIntercompanySubmit = (payload: InterEntityTransferSubmitPayload) => {
@@ -8162,8 +8247,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       ],
     }});
 
-    setActiveSubsection('intercompany');
     setIsIntercompanyModalOpen(false);
+    returnToAccountingDashboard(
+      `Saved intercompany transfer for ${formatCurrency(amount, 'USD')} and reflected it in the overview.`,
+    );
   };
 
   const renderSubsection = () => {
@@ -9562,47 +9649,70 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       <div style={shellStyle}>
         <PageSection
           title="Accounting"
-          description="ERP accounting workspace for receivables, payables, journal workflow, intake, and reconciliation."
+          description="Receivables, payables, journals, bank activity, and reconciliation in one ERP workspace."
         >
           <div style={{ display: 'grid', gap: 12 }}>
             <div
               style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 12,
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                borderRadius: 14,
-                border: '1px solid rgba(148,163,184,0.14)',
-                background: 'rgba(15,23,42,0.22)',
+                display: 'grid',
+                gap: 10,
+                padding: '12px 14px',
+                borderRadius: 16,
+                border: '1px solid rgba(148,163,184,0.16)',
+                background: 'rgba(15,23,42,0.2)',
               }}
             >
-              <div style={{ minWidth: 220 }}>
-                <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                  Active accounting view
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>{activeSubnavLabel}</div>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {[
-                  ['Vendors', 'vendors'],
-                  ['Bills', 'bills'],
-                  ['Bank Feed', 'bankFeed'],
-                  ['Reconcile', 'reconciliation'],
-                  ['COA', 'chartOfAccounts'],
-                ].map(([label, id]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => openAccountingSubsection(id as AccountingSection)}
-                    style={sectionButtonStyle(activeSubsection === id)}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ minWidth: 220 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.9,
+                    }}
                   >
-                    {label}
-                  </button>
-                ))}
+                    ERP Workspace
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>
+                    {activeSubnavLabel}
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 13, marginTop: 4 }}>
+                    {defaultEntity?.displayName || defaultEntity?.name || 'No entity selected'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {[
+                    ['Dashboard', 'dashboard'],
+                    ['Vendors', 'vendors'],
+                    ['Bills', 'bills'],
+                    ['Bank Feed', 'bankFeed'],
+                    ['Reconcile', 'reconciliation'],
+                    ['COA', 'coa'],
+                  ].map(([label, id]) => {
+                    const routeItem = subnavItems.find((item) => item.id === id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => openAccountingSubsection(id as AccountingSection)}
+                        style={sectionButtonStyle(activeSubsection === id)}
+                        title={routeItem?.description || `Open ${label}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
             <AccountingToolbar
               onAddInvoice={() => setIsInvoiceModalOpen(true)}
@@ -9613,6 +9723,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               onResumePresentmentDraft={resumeSavedPresentmentDraft}
               hasSavedPresentmentDraft={hasSavedPresentmentDraft}
             />
+            </div>
 
             {operationsNotice ? (
               <div
@@ -9629,37 +9740,19 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               </div>
             ) : null}
 
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(148,163,184,0.16)',
-                background: 'rgba(15,23,42,0.22)',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 10,
-                alignItems: 'center',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#94a3b8',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.8,
-                }}
-              >
-                Accounting view
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#e5e7eb' }}>{activeSubnavLabel}</div>
-              <div style={{ color: '#cbd5e1', lineHeight: 1.45, flex: '1 1 320px' }}>
-                Work inside Accounting here; use the left sidebar only to switch major dashboards.
-              </div>
-            </div>
-
             <div style={{ display: 'grid', gap: 14 }}>
               {subnavGroups.map((group) => (
-                <div key={group.title} style={{ display: 'grid', gap: 8 }}>
+                <div
+                  key={group.title}
+                  style={{
+                    display: 'grid',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 14,
+                    border: '1px solid rgba(148,163,184,0.12)',
+                    background: 'rgba(15,23,42,0.14)',
+                  }}
+                >
                   <div
                     style={{
                       fontSize: 12,
@@ -9683,6 +9776,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                           type="button"
                           onClick={() => openAccountingSubsection(item.id)}
                           style={sectionButtonStyle(item.id === activeSubsection)}
+                          title={item.description}
                         >
                           {item.label}
                         </button>

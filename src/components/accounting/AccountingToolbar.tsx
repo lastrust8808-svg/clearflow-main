@@ -30,15 +30,44 @@ export default function AccountingToolbar({
   onResumePresentmentDraft,
   hasSavedPresentmentDraft = false,
 }: AccountingToolbarProps) {
+  const actions = [
+    { label: '+ Add Invoice', helper: 'Create a receivable invoice and return to the dashboard overview.', onClick: onAddInvoice },
+    { label: '+ Add Bill', helper: 'Capture a payable bill and return to the dashboard overview.', onClick: onAddBill },
+    { label: '+ Add Remittance', helper: 'Start a remittance or coupon presentment workflow.', onClick: onAddPresentment },
+    { label: '+ Send Funds', helper: 'Create a payment, release, or settlement instruction.', onClick: onRecordPayment },
+    { label: '+ Manual Journal', helper: 'Post a journal entry directly into the books.', onClick: onAddJournalEntry },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-      <button type="button" onClick={onAddInvoice} style={buttonStyle}>+ Add Invoice</button>
-      <button type="button" onClick={onAddBill} style={buttonStyle}>+ Add Bill</button>
-      <button type="button" onClick={onAddPresentment} style={buttonStyle}>+ Add Remittance</button>
-      <button type="button" onClick={onRecordPayment} style={buttonStyle}>+ Send Funds</button>
-      <button type="button" onClick={onAddJournalEntry} style={buttonStyle}>+ Manual Journal</button>
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 10,
+        padding: '10px 12px',
+        borderRadius: 14,
+        border: '1px solid rgba(148,163,184,0.14)',
+        background: 'rgba(15,23,42,0.18)',
+      }}
+    >
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={action.onClick}
+          style={buttonStyle}
+          title={action.helper}
+        >
+          {action.label}
+        </button>
+      ))}
       {hasSavedPresentmentDraft && onResumePresentmentDraft ? (
-        <button type="button" onClick={onResumePresentmentDraft} style={buttonStyle}>
+        <button
+          type="button"
+          onClick={onResumePresentmentDraft}
+          style={buttonStyle}
+          title="Reopen the saved presentment draft and continue where you left off."
+        >
           Resume Draft Presentment
         </button>
       ) : null}
