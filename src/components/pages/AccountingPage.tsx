@@ -2151,14 +2151,23 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
   const handleInvoiceSubmit = (payload: InvoiceSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
+    const targetEntityId = activeEntityId ?? defaultEntity?.id ?? data.entities[0]?.id;
+    if (!targetEntityId) {
+      setOperationsNotice('Select or create an entity before saving an invoice.');
+      return;
+    }
+
+    let savedInvoiceNumber = '';
 
     setData((prev) => {
-      const base = prev.invoices?.[0];
-      if (!base) return prev;
-      const entity = prev.entities[0];
+      const entity =
+        prev.entities.find((item) => item.id === targetEntityId) || prev.entities[0];
       if (!entity) return prev;
-      const issueDate = resolveIssueDate(payload.issueDate || base.issueDate);
-      const dueDate = resolveDueDate(issueDate, payload.paymentTerms, payload.dueDate || base.dueDate);
+      const base = prev.invoices.find(
+        (item) => item.entityId === entity.id && !isQuoteRecord(item),
+      );
+      const issueDate = resolveIssueDate(payload.issueDate || base?.issueDate);
+      const dueDate = resolveDueDate(issueDate, payload.paymentTerms, payload.dueDate || base?.dueDate);
       const invoiceId = `invoice-${Date.now()}`;
       const invoiceNumber =
         payload.invoiceNumberMode === 'manual'
@@ -2177,7 +2186,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       const verificationRequired =
         acceptsDigitalAssets || prev.workspaceSettings.digitalAssetVerificationRequired;
       const shouldIssueToken = shouldAutoIssueTokens(entity, prev.workspaceSettings);
-      const customerName = payload.customerName.trim();
+      const customerName =
+        payload.customerName.trim() || payload.recipientEmail.trim() || 'Customer TBD';
       const { customerId, customers: nextCustomers } = ensureCustomerRecord(prev, entity.id, {
         name: customerName,
         email: payload.recipientEmail,
@@ -2205,19 +2215,38 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         sourceRecordId: invoiceId,
         summary: `Invoice for ${customerName || 'customer'} with ${paymentRailPreference} settlement preference.`,
       });
-
-      const nextRecord = {
-        ...base,
+      const taxAmount =
+        payload.taxMode === 'state'
+          ? numericAmount *
+            ({
+              MI: 0.06,
+              TN: 0.07,
+              OH: 0.0575,
+              IN: 0.07,
+              FL: 0.06,
+              TX: 0.0625,
+              CA: 0.0725,
+              NY: 0.04,
+            }[payload.jurisdiction] ?? 0)
+          : 0;
+      const nextRecord: InvoiceRecord = {
         id: invoiceId,
         entityId: entity.id,
         customerId,
         invoiceNumber,
-        totalAmount: numericAmount,
-        balanceDue: numericAmount,
+        issueDate,
+        dueDate,
         status: 'draft',
+        currency:
+          base?.currency ||
+          entity.operationalDefaults?.baseCurrency ||
+          prev.workspaceSettings.baseCurrency,
+        subtotal: numericAmount,
+        taxAmount,
+        totalAmount: numericAmount + taxAmount,
+        balanceDue: numericAmount + taxAmount,
         deliveryMethod: payload.deliveryMethod,
-        deliveryStatus:
-          payload.deliveryMethod === 'manual' ? 'draft' : 'ready_to_send',
+        deliveryStatus: payload.deliveryMethod === 'manual' ? 'draft' : 'ready_to_send',
         recipientEmail: payload.recipientEmail || undefined,
         internalDeliveryTarget: payload.internalDeliveryTarget || undefined,
         paymentRailPreference,
@@ -2231,29 +2260,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         verificationRequired,
         defaultSettlementPath,
         brandingSnapshot,
-        linkedTokenIds: token ? [token.id] : undefined,
+        linkedLineItems: [
+          {
+            id: `inv-line-${invoiceId}`,
+            description:
+              payload.lineDescription.trim() ||
+              payload.templateName.trim() ||
+              'Invoice line item',
+            quantity: 1,
+            unitAmount: numericAmount,
+            incomeAccountId: base?.linkedLineItems?.[0]?.incomeAccountId,
+            taxCodeId:
+              payload.taxMode === 'state' ? base?.linkedLineItems?.[0]?.taxCodeId : undefined,
+          },
+        ],
         linkedDocumentIds: [nextDocument.id],
-        notes: payload.notes || brandingSnapshot.footerNote,
-        issueDate,
-        dueDate,
-        subtotal: numericAmount,
-        taxAmount:
-          payload.taxMode === 'state'
-            ? numericAmount *
-              ({
-                MI: 0.06,
-                TN: 0.07,
-                OH: 0.0575,
-                IN: 0.07,
-                FL: 0.06,
-                TX: 0.0625,
-                CA: 0.0725,
-                NY: 0.04,
-              }[payload.jurisdiction] ?? 0)
-            : 0,
+        linkedPaymentIds: undefined,
+        linkedTransactionIds: undefined,
+        linkedTokenIds: token ? [token.id] : undefined,
+        notes: payload.notes || brandingSnapshot.footerNote || undefined,
       };
-      nextRecord.totalAmount = nextRecord.subtotal + nextRecord.taxAmount;
-      nextRecord.balanceDue = nextRecord.totalAmount;
+
+      savedInvoiceNumber = invoiceNumber;
 
       return {
         ...prev,
@@ -2270,6 +2298,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     });
 
+    if (!savedInvoiceNumber) {
+      setOperationsNotice('Select or create an entity before saving an invoice.');
+      return;
+    }
+
+    setOperationsNotice(`Saved invoice ${savedInvoiceNumber} into the active entity accounting records.`);
     setActiveSubsection('invoices');
     setIsInvoiceModalOpen(false);
   };
