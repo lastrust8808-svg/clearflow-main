@@ -34,6 +34,8 @@ interface EntityCreationSuccessState {
   steps: string[];
 }
 
+type EntitiesLane = 'profiles' | 'authority' | 'rails' | 'studios';
+
 function goToHash(hash: string) {
   if (typeof window !== 'undefined') {
     window.location.hash = hash;
@@ -51,6 +53,7 @@ export default function EntitiesPage({
   const auth = useAuth();
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const [isConnectionRailModalOpen, setIsConnectionRailModalOpen] = useState(false);
+  const [activeLane, setActiveLane] = useState<EntitiesLane>('profiles');
   const [entityCreationSuccess, setEntityCreationSuccess] =
     useState<EntityCreationSuccessState | null>(null);
   const [connectionRailPreset, setConnectionRailPreset] = useState<'general' | 'business_partner'>(
@@ -239,6 +242,7 @@ export default function EntitiesPage({
       }
 
       if (window.location.hash === '#entities:new') {
+        setActiveLane('profiles');
         setIsEntityModalOpen(true);
         window.history.replaceState(
           null,
@@ -246,6 +250,7 @@ export default function EntitiesPage({
           `${window.location.pathname}${window.location.search}#entities`,
         );
       } else if (window.location.hash === '#entities:connections') {
+        setActiveLane('rails');
         setConnectionRailPreset('general');
         setIsConnectionRailModalOpen(true);
         window.history.replaceState(
@@ -253,6 +258,12 @@ export default function EntitiesPage({
           '',
           `${window.location.pathname}${window.location.search}#entities`,
         );
+      } else if (window.location.hash === '#entities:authority') {
+        setActiveLane('authority');
+      } else if (window.location.hash === '#entities:resources' || window.location.hash === '#entities:execution') {
+        setActiveLane('studios');
+      } else if (window.location.hash === '#entities:rails') {
+        setActiveLane('rails');
       }
     };
 
@@ -263,6 +274,13 @@ export default function EntitiesPage({
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      <div>
+        <h1 style={{ marginTop: 0, fontSize: 30 }}>Entities</h1>
+        <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
+          Set up each entity as its own operating board, then move through focused lanes for authority, rails, and execution instead of hunting through one long page.
+        </p>
+      </div>
+
       {entityCreationSuccess ? (
         <div
           style={{
@@ -1352,6 +1370,71 @@ export default function EntitiesPage({
       </div>
 
       <PageSection
+        title="Entity Work Lanes"
+        description="Move between focused setup lanes instead of scrolling through every entity tool at once."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {[
+            {
+              id: 'profiles' as const,
+              title: 'Profiles',
+              detail: 'Identity, storage, seal, and accounting defaults.',
+            },
+            {
+              id: 'authority' as const,
+              title: 'Authority',
+              detail: 'Proof review, signer acceptance, and bank onboarding.',
+            },
+            {
+              id: 'rails' as const,
+              title: 'Rails',
+              detail: 'Connection rails, reserve links, and settlement posture.',
+            },
+            {
+              id: 'studios' as const,
+              title: 'Studios',
+              detail: 'Resource creation and linked execution bundles.',
+            },
+          ].map((lane) => {
+            const isActiveLane = activeLane === lane.id;
+            return (
+              <button
+                key={lane.id}
+                type="button"
+                onClick={() => setActiveLane(lane.id)}
+                title={lane.detail}
+                style={{
+                  textAlign: 'left',
+                  padding: '14px 16px',
+                  borderRadius: 16,
+                  border: '1px solid rgba(126,242,255,0.18)',
+                  background: isActiveLane
+                    ? 'linear-gradient(135deg, rgba(54,215,255,0.16), rgba(37,99,235,0.16))'
+                    : 'rgba(15,23,42,0.34)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  display: 'grid',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontWeight: 800 }}>{lane.title}</span>
+                <span style={{ color: 'var(--cf-muted)', lineHeight: 1.55, fontSize: 13 }}>
+                  {lane.detail}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </PageSection>
+
+      {activeLane === 'authority' ? (
+      <PageSection
         title="Authority Control"
         description="Keep representative authority, attestation posture, and onboarding readiness visible before banks, vendors, and counterparties depend on the entity."
       >
@@ -1452,13 +1535,25 @@ export default function EntitiesPage({
           </WorkbenchRecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'profiles' ? (
       <PageSection
         title="Entity Records"
         description="Edit legal identity, numbering, branding, and default settlement behavior without touching raw JSON."
       >
         <div style={{ display: 'grid', gap: 16 }}>
-          {orderedEntities.map((entity) => (
+          {orderedEntities.map((entity) => {
+            const setupPacket = resolveEntitySetupDocument(entity.id);
+            const hasBankOrTreasuryLink =
+              data.bankAccounts.some((account) => account.entityId === entity.id) ||
+              data.treasuryAccounts.some((account) => account.entityId === entity.id);
+            const hasReserveLink = Boolean(
+              entity.branding?.sealReserveTreasuryAccountId ||
+                entity.branding?.sealReserveDigitalAssetId,
+            );
+            const hasSettlementRail = data.creditRails.some((rail) => rail.ownerEntityId === entity.id);
+            return (
             <div key={entity.id}>
               <EntityProfileCard
                 entity={entity}
@@ -1646,10 +1741,10 @@ export default function EntitiesPage({
                     >
                       Add / Review Authorization Info
                     </button>
-                    {resolveEntitySetupDocument(entity.id) ? (
+                    {setupPacket ? (
                       <button
                         type="button"
-                        onClick={() => goToHash(`#documents:${resolveEntitySetupDocument(entity.id)?.id}`)}
+                        onClick={() => goToHash(`#documents:${setupPacket.id}`)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: 10,
@@ -1696,24 +1791,88 @@ export default function EntitiesPage({
                   </div>
                 </div>
               ) : null}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                {resolveEntitySetupDocument(entity.id) ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                  marginTop: 10,
+                }}
+              >
+                {[
+                  {
+                    title: 'Authority & Signers',
+                    detail:
+                      entity.authorityTransactionsPaused ||
+                      authorityReviewTags.some((tag) => tag.entityId === entity.id) ||
+                      entity.authorityProofRequiredPartyNames?.length
+                        ? 'Needs review before this entity can transact.'
+                        : 'Representative authority and signer posture look ready.',
+                    actionLabel: 'Open authority desk',
+                    onClick: () => openAuthorityWorkspace(entity.id),
+                  },
+                  {
+                    title: 'Banking & Ledger',
+                    detail: hasBankOrTreasuryLink
+                      ? 'Bank or treasury accounts are already tied to this entity.'
+                      : 'No bank or provider connection has been linked yet.',
+                    actionLabel: hasBankOrTreasuryLink ? 'Open bank feed' : 'Connect bank or provider',
+                    onClick: () => {
+                      onSetActiveEntity?.(entity.id);
+                      goToHash('#accounting:bankFeed');
+                    },
+                  },
+                  {
+                    title: 'Reserve & Rails',
+                    detail: hasReserveLink || hasSettlementRail
+                      ? 'Reserve links or settlement rails are already in place.'
+                      : 'Reserve links and settlement rails still need setup.',
+                    actionLabel: hasReserveLink || hasSettlementRail ? 'Open reserve desk' : 'Set up reserve and rails',
+                    onClick: () => {
+                      onSetActiveEntity?.(entity.id);
+                      goToHash('#assets');
+                    },
+                  },
+                  {
+                    title: 'Records & Intake',
+                    detail: setupPacket
+                      ? 'A setup packet is already retained for this entity.'
+                      : 'Upload the authority, tax, and operating records for this board.',
+                    actionLabel: setupPacket ? 'Open setup packet' : 'Upload entity records',
+                    onClick: () =>
+                      setupPacket
+                        ? goToHash(`#documents:${setupPacket.id}`)
+                        : goToHash('#documents:upload'),
+                  },
+                ].map((card) => (
                   <button
+                    key={card.title}
                     type="button"
-                    onClick={() => goToHash(`#documents:${resolveEntitySetupDocument(entity.id)?.id}`)}
+                    onClick={card.onClick}
+                    title={card.detail}
                     style={{
-                      padding: '8px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(96,165,250,0.4)',
-                      background: 'rgba(37,99,235,0.18)',
-                      color: '#e5e7eb',
+                      textAlign: 'left',
+                      padding: '14px 16px',
+                      borderRadius: 16,
+                      border: '1px solid rgba(126,242,255,0.18)',
+                      background: 'rgba(15,23,42,0.34)',
+                      color: '#effcff',
                       cursor: 'pointer',
-                      fontWeight: 700,
+                      display: 'grid',
+                      gap: 6,
                     }}
                   >
-                    Open Setup Packet
+                    <span style={{ fontWeight: 800 }}>{card.title}</span>
+                    <span style={{ color: 'var(--cf-muted)', lineHeight: 1.55, fontSize: 13 }}>
+                      {card.detail}
+                    </span>
+                    <span style={{ color: '#8cebff', fontSize: 12, fontWeight: 700 }}>
+                      {card.actionLabel}
+                    </span>
                   </button>
-                ) : null}
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                 <button
                   type="button"
                   onClick={() => goToHash('#documents:upload')}
@@ -1776,10 +1935,12 @@ export default function EntitiesPage({
                 </button>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'rails' ? (
       <PageSection
         title="Connection Rails"
         description="Control multi-entity links, user-to-user credit posture, reserve-backed settlement permissions, and validation standards from one desk."
@@ -1886,7 +2047,9 @@ export default function EntitiesPage({
           ) : null}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'rails' ? (
       <PageSection
         title="Private Wealth Banking Rail Board"
         description="See how each rail is being used operationally: internal controlled book-entry only, private instrument tracking, or partner-bank-required external presentment."
@@ -1926,7 +2089,9 @@ export default function EntitiesPage({
           ) : null}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'studios' || activeLane === 'authority' ? (
       <div id="entity-authority-workspace">
         <PageSection
           title="Entity Resource Studio"
@@ -1935,14 +2100,18 @@ export default function EntitiesPage({
           <EntityResourceStudio data={data} setData={setData} />
         </PageSection>
       </div>
+      ) : null}
 
+      {activeLane === 'studios' ? (
       <PageSection
         title="Entity Execution Studio"
         description="Launch linked setup bundles for formation, signers, banking, governing documents, and compliance kickoff."
       >
         <EntityExecutionStudio data={data} setData={setData} />
       </PageSection>
+      ) : null}
 
+      {activeLane === 'authority' ? (
       <PageSection
         title="Signer Acceptance Desk"
         description="Track signer assignments, acceptance state, and verification readiness."
@@ -2046,7 +2215,9 @@ export default function EntitiesPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'authority' ? (
       <PageSection
         title="Bank Onboarding Desk"
         description="Work the onboarding checklist and use linked document slots to complete the package."
@@ -2228,6 +2399,7 @@ export default function EntitiesPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
     </div>
   );
 }

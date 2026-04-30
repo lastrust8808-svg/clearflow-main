@@ -164,6 +164,14 @@ export default function EntityProfileCard({
         : currentEmail && currentEmail === targetEmail
           ? 'Connected to current Google session'
           : 'Needs Google account switch for entity storage';
+  const storageLabel =
+    storageMode === 'internal_only'
+      ? 'This entity is using ClearFlow internal retention only for now.'
+      : !storageEmail
+        ? 'Add the entity email you want to use for storage, then connect Google access once.'
+        : currentEmail && currentEmail === targetEmail
+          ? `Google Drive is connected as ${storageEmail}.`
+          : `Google Drive is currently signed in as ${currentGoogleEmail || 'another account'}. Switch to ${storageEmail} to route directly into the entity Drive.`;
   const savedSealSvg = draft.branding?.entitySealSvg || liveSealSvg;
   const activeDocumentSeal =
     draft.branding?.documentSealSource === 'uploaded' && draft.branding?.customSealDataUrl
@@ -310,6 +318,110 @@ export default function EntityProfileCard({
         </div>
       </div>
 
+      <div
+        style={{
+          borderRadius: 14,
+          border: '1px solid rgba(126,242,255,0.18)',
+          background: 'rgba(15,23,42,0.34)',
+          padding: 14,
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 800 }}>Board identity and storage</div>
+          <div style={{ color: 'var(--cf-muted)', marginTop: 6, lineHeight: 1.55 }}>
+            Set the entity email and storage posture here. This stays visible because it is part of first-time setup, not an advanced option.
+          </div>
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Entity Email For Storage</span>
+            <input
+              style={inputStyle}
+              type="email"
+              value={entityEmail}
+              onChange={(event) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  primaryEmail: event.target.value || undefined,
+                  entityAccess: {
+                    ...prev.entityAccess,
+                    googleStorageEmail: event.target.value || undefined,
+                  },
+                }))
+              }
+            />
+            <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
+              Use this when the entity has its own email or Drive account. The signed-in operator remains{' '}
+              {currentGoogleEmail || 'the current ClearFlow user'}.
+            </small>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Entity Storage Mode</span>
+            <select
+              style={inputStyle}
+              value={storageMode}
+              onChange={(event) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  entityAccess: {
+                    ...prev.entityAccess,
+                    storageMode: event.target.value as NonNullable<EntityRecord['entityAccess']>['storageMode'],
+                  },
+                }))
+              }
+            >
+              <option value="operator_google">Operator Google Drive</option>
+              <option value="entity_google">Entity Google Drive</option>
+              <option value="internal_only">Internal only</option>
+            </select>
+          </label>
+          <div
+            style={{
+              alignSelf: 'end',
+              display: 'grid',
+              gap: 6,
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid rgba(126,242,255,0.14)',
+              background: 'rgba(54,215,255,0.06)',
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Google Drive Access</div>
+            <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
+              {storageMode === 'entity_google' && storageEmail && currentGoogleEmail?.trim().toLowerCase() !== storageEmail.trim().toLowerCase()
+                ? `To route this entity into its own Drive, connect Google as ${storageEmail}.`
+                : storageLabel}
+            </small>
+            {onRequestDriveAccess ? (
+              <button
+                type="button"
+                onClick={() => void onRequestDriveAccess()}
+                style={{
+                  justifySelf: 'start',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(126,242,255,0.28)',
+                  background: 'rgba(54,215,255,0.12)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                }}
+              >
+                {storageMode === 'entity_google' && storageEmail ? 'Connect Entity Google Drive' : 'Connect Google Drive'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <details
         open={showAdvancedDefaults}
         onToggle={(event) => setShowAdvancedDefaults(event.currentTarget.open)}
@@ -335,84 +447,6 @@ export default function EntityProfileCard({
           marginTop: 12,
         }}
       >
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Entity Email / Storage Email</span>
-          <input
-            style={inputStyle}
-            type="email"
-            value={entityEmail}
-            onChange={(event) =>
-              setDraft((prev) => ({
-                ...prev,
-                primaryEmail: event.target.value || undefined,
-                entityAccess: {
-                  ...prev.entityAccess,
-                  googleStorageEmail: event.target.value || undefined,
-                },
-              }))
-            }
-          />
-          <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
-            Optional. Use this when the entity has its own email or Drive account. The signed-in operator remains{' '}
-            {currentGoogleEmail || 'the current ClearFlow user'}.
-          </small>
-        </label>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Entity Storage Mode</span>
-          <select
-            style={inputStyle}
-            value={storageMode}
-            onChange={(event) =>
-              setDraft((prev) => ({
-                ...prev,
-                entityAccess: {
-                  ...prev.entityAccess,
-                  storageMode: event.target.value as NonNullable<EntityRecord['entityAccess']>['storageMode'],
-                },
-              }))
-            }
-          >
-            <option value="operator_google">Operator Google Drive</option>
-            <option value="entity_google">Entity Google Drive</option>
-            <option value="internal_only">Internal only</option>
-          </select>
-        </label>
-        <div
-          style={{
-            alignSelf: 'end',
-            display: 'grid',
-            gap: 6,
-            padding: 12,
-            borderRadius: 12,
-            border: '1px solid rgba(126,242,255,0.14)',
-            background: 'rgba(54,215,255,0.06)',
-          }}
-        >
-          <div style={{ fontWeight: 800 }}>Google Drive Access</div>
-          <small style={{ color: 'var(--cf-muted)', lineHeight: 1.45 }}>
-            {storageMode === 'entity_google' && storageEmail && currentGoogleEmail?.trim().toLowerCase() !== storageEmail.trim().toLowerCase()
-              ? `To route this entity into its own Drive, connect Google as ${storageEmail}.`
-              : storageLabel}
-          </small>
-          {onRequestDriveAccess ? (
-            <button
-              type="button"
-              onClick={() => void onRequestDriveAccess()}
-              style={{
-                justifySelf: 'start',
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: '1px solid rgba(126,242,255,0.28)',
-                background: 'rgba(54,215,255,0.12)',
-                color: '#effcff',
-                cursor: 'pointer',
-                fontWeight: 800,
-              }}
-            >
-              {storageMode === 'entity_google' && storageEmail ? 'Connect Entity Google Drive' : 'Connect Google Drive'}
-            </button>
-          ) : null}
-        </div>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Share In Collective Overview</span>
           <select
@@ -970,7 +1004,6 @@ export default function EntityProfileCard({
           />
         </label>
       </div>
-      </details>
 
       <div
         style={{
@@ -1294,6 +1327,7 @@ export default function EntityProfileCard({
           </select>
         </label>
       </div>
+      </details>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button

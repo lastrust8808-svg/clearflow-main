@@ -730,49 +730,6 @@ export default function AppShell({
             background: 'var(--cf-panel-soft)',
             border: '1px solid var(--cf-border)',
             boxShadow: 'var(--cf-shadow)',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: 1.6,
-              color: 'var(--cf-accent-soft)',
-              marginBottom: 8,
-            }}
-          >
-            Current Desk
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>{activeItem.label}</div>
-          <div style={{ color: 'var(--cf-muted)', marginTop: 6, lineHeight: 1.55, fontSize: 13 }}>
-            {activeItem.hint}
-          </div>
-          <div
-            style={{
-              marginTop: 10,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '7px 10px',
-              borderRadius: 999,
-              background: 'rgba(54, 215, 255, 0.08)',
-              border: '1px solid rgba(126, 242, 255, 0.18)',
-              fontSize: 12,
-              color: 'var(--cf-accent-soft)',
-              fontWeight: 700,
-            }}
-          >
-            Refresh-safe route memory
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 18,
-            background: 'var(--cf-panel-soft)',
-            border: '1px solid var(--cf-border)',
-            boxShadow: 'var(--cf-shadow)',
             display: 'grid',
             gap: 10,
           }}
@@ -884,6 +841,7 @@ export default function AppShell({
                     <button
                       key={item.id}
                       onClick={() => onSectionChange(item.id)}
+                      title={item.hint}
                       style={{
                         textAlign: 'left',
                         padding: '13px 14px',
@@ -898,20 +856,23 @@ export default function AppShell({
                         fontSize: 14,
                         fontWeight: isActive ? 700 : 500,
                         boxShadow: isActive ? '0 14px 28px rgba(7, 17, 31, 0.24)' : 'none',
-                        display: 'grid',
-                        gap: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                         transition: 'background 160ms ease, border-color 160ms ease, transform 160ms ease',
                       }}
                     >
                       <span>{item.label}</span>
                       <span
                         style={{
-                          fontSize: 12,
-                          color: isActive ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.6)',
-                          fontWeight: 500,
+                          fontSize: 11,
+                          color: isActive ? 'var(--cf-accent-soft)' : 'rgba(255,255,255,0.45)',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: 1,
                         }}
                       >
-                        {item.hint}
+                        Go
                       </span>
                     </button>
                   );

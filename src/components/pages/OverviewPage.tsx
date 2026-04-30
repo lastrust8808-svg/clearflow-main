@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import type { User } from '../../types/app.models';
 import {
@@ -27,6 +28,8 @@ interface OverviewPageProps {
   hasDriveAccess?: boolean;
 }
 
+type OverviewLane = 'workspace' | 'operations' | 'controls' | 'growth';
+
 export default function OverviewPage({
   data,
   currentUser,
@@ -35,6 +38,7 @@ export default function OverviewPage({
   hasDriveAccess = false,
 }: OverviewPageProps) {
   const auth = useAuth();
+  const [activeLane, setActiveLane] = useState<OverviewLane>('workspace');
   const navigate = (hash: string) => {
     if (typeof window !== 'undefined') {
       window.location.hash = hash;
@@ -205,14 +209,104 @@ export default function OverviewPage({
         (item) => item.sourceOfFundsRecordStatus !== 'complete',
       ),
     ].length + settlementReviewItems;
+  const laneStats = useMemo<Record<OverviewLane, Array<{ label: string; value: string | number }>>>(
+    () => ({
+      workspace: [
+        { label: 'Entities', value: data.entities.length },
+        { label: 'Drive Routed', value: driveRoutedCount },
+        { label: 'Retained Records', value: retainedRecordCount },
+        { label: 'Review Items', value: reviewItems },
+        { label: 'Recent Outputs', value: recentOutputs.length },
+        { label: 'Collective Boards', value: sharedEntityCount },
+        { label: 'Active Board Assets', value: activeEntityAssets.length },
+        { label: 'Active Board Payments', value: activeEntityPayments.length },
+      ],
+      operations: [
+        { label: 'Liquid Cash Ready', value: liquidCashReadyCount },
+        { label: 'Auto Reconciled', value: autoReconciledCount },
+        { label: 'Rail Exceptions', value: remittanceRailControls.filter((item) => item.overallStatus === 'exception').length },
+        { label: 'Held Payments', value: complianceHeldPayments.length },
+        { label: 'Recurring Cycles', value: recurringObligationCount },
+        { label: 'Treasury Accounts', value: data.treasuryAccounts.length },
+        { label: 'Active Credit Rails', value: activeCreditRails },
+        { label: 'Partner-Bank Required', value: partnerBankRequiredCount },
+      ],
+      controls: [
+        { label: 'Authority Reviews', value: authorityReviewItems.length },
+        { label: 'KYC / KYB Reviews', value: activeKybReviews },
+        { label: 'Watchlist Items', value: watchlistItems },
+        { label: 'AML Cases', value: amlCasesOpen },
+        { label: 'Tax Filing Queue', value: filingQueueCount },
+        { label: 'Proof Chains', value: sealedProofChainCount },
+        {
+          label: 'EFTPS Profile',
+          value:
+            data.workspaceSettings.eftpsEnabled
+              ? data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'
+              : 'off',
+        },
+        {
+          label: 'USPS Gateway',
+          value:
+            data.workspaceSettings.uspsGatewayEnabled
+              ? data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'
+              : 'off',
+        },
+      ],
+      growth: [
+        { label: 'Net Worth', value: `$${wealthManagerSummary.netWorthEstimate.toLocaleString()}` },
+        { label: 'Reserve Value', value: `$${wealthManagerSummary.reserveValue.toLocaleString()}` },
+        { label: 'Credits', value: rewardsSummary.balance },
+        { label: 'Rewards Tier', value: rewardsSummary.tier },
+        { label: 'Revenue-Ready Accounts', value: revenueSummary.connectedRevenueAccountCount },
+        { label: 'Yield-Ready Reserves', value: revenueSummary.yieldReadyReserveCount },
+        { label: 'Invoice Volume', value: `$${revenueSummary.monetizableInvoiceVolume.toLocaleString()}` },
+        { label: 'Payment Volume', value: `$${revenueSummary.monetizablePaymentVolume.toLocaleString()}` },
+      ],
+    }),
+    [
+      activeEntityAssets.length,
+      activeEntityPayments.length,
+      activeKybReviews,
+      authorityReviewItems.length,
+      amlCasesOpen,
+      autoReconciledCount,
+      complianceHeldPayments.length,
+      data.entities.length,
+      data.treasuryAccounts.length,
+      data.workspaceSettings.eftpsEnabled,
+      data.workspaceSettings.eftpsEnrollmentStatus,
+      data.workspaceSettings.uspsGatewayEnabled,
+      data.workspaceSettings.uspsGatewayStatus,
+      driveRoutedCount,
+      filingQueueCount,
+      liquidCashReadyCount,
+      partnerBankRequiredCount,
+      recentOutputs.length,
+      retainedRecordCount,
+      reviewItems,
+      rewardsSummary.balance,
+      rewardsSummary.tier,
+      revenueSummary.connectedRevenueAccountCount,
+      revenueSummary.monetizableInvoiceVolume,
+      revenueSummary.monetizablePaymentVolume,
+      revenueSummary.yieldReadyReserveCount,
+      recurringObligationCount,
+      remittanceRailControls,
+      sealedProofChainCount,
+      sharedEntityCount,
+      watchlistItems,
+      wealthManagerSummary.netWorthEstimate,
+      wealthManagerSummary.reserveValue,
+    ],
+  );
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div>
-        <h1 style={{ marginTop: 0, fontSize: 30 }}>Overview</h1>
+        <h1 style={{ marginTop: 0, fontSize: 30 }}>ClearFlow Command Center</h1>
         <p style={{ color: 'var(--cf-muted)', marginBottom: 0 }}>
-          Core operating snapshot across entities, assets, on-chain activity, compliance, and
-          records, with settlement-to-cash controls now folded into the same operating view.
+          Core operating snapshot across entities, assets, accounting, controls, and settlement-to-cash work, organized into focused lanes so the dashboard stays useful instead of overwhelming.
         </p>
       </div>
 
@@ -368,6 +462,71 @@ export default function OverviewPage({
       </PageSection>
 
       <PageSection
+        title="Command Lanes"
+        description="Use a focused lane to keep the command center compact while still retaining the full platform underneath."
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {[
+            {
+              id: 'workspace' as const,
+              title: 'Workspace',
+              detail: 'Entity boards, storage, recent outputs, and launch paths.',
+            },
+            {
+              id: 'operations' as const,
+              title: 'Operations',
+              detail: 'Accounting flow, treasury posture, recurring work, and rail execution.',
+            },
+            {
+              id: 'controls' as const,
+              title: 'Controls',
+              detail: 'Authority, tax, postal, proof chains, and review queues.',
+            },
+            {
+              id: 'growth' as const,
+              title: 'Growth',
+              detail: 'Wealth guidance, rewards, monetization, and strategy.',
+            },
+          ].map((lane) => {
+            const isActiveLane = activeLane === lane.id;
+            return (
+              <button
+                key={lane.id}
+                type="button"
+                onClick={() => setActiveLane(lane.id)}
+                title={lane.detail}
+                style={{
+                  textAlign: 'left',
+                  padding: '14px 16px',
+                  borderRadius: 16,
+                  border: '1px solid rgba(126,242,255,0.18)',
+                  background: isActiveLane
+                    ? 'linear-gradient(135deg, rgba(54,215,255,0.16), rgba(37,99,235,0.16))'
+                    : 'rgba(15,23,42,0.34)',
+                  color: '#effcff',
+                  cursor: 'pointer',
+                  display: 'grid',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontWeight: 800 }}>{lane.title}</span>
+                <span style={{ color: 'var(--cf-muted)', lineHeight: 1.55, fontSize: 13 }}>
+                  {lane.detail}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </PageSection>
+
+      {activeLane === 'workspace' ? (
+      <PageSection
         title="Operator Workspace"
         description="Your login opens into a personal operator view first, then fans out into connected entity boards and a collective oversight layer."
       >
@@ -504,7 +663,9 @@ export default function OverviewPage({
           </div>
         ) : null}
       </PageSection>
+      ) : null}
 
+      {activeLane === 'growth' ? (
       <PageSection
         title="AI Wealth Manager"
         description="Mandate-driven private wealth guidance across reserves, liquidity, trusts, obligations, metals, and collateral."
@@ -581,7 +742,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Connected Entity Boards"
         description="Keep one operator login while mapping each entity to its own email and preferred Google Drive storage posture."
@@ -635,7 +798,9 @@ export default function OverviewPage({
           )}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'growth' ? (
       <PageSection
         title="ClearFlow Credits"
         description="Internal utility rewards earned from real workspace activity and kept distinct from cash, deposits, treasury balances, and outside settlement rails."
@@ -703,7 +868,12 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      <PageSection
+        title="Current Snapshot"
+        description="Lane-specific numbers keep the front page useful without turning the dashboard into a wall of metrics."
+      >
       <div
         style={{
           display: 'grid',
@@ -711,65 +881,13 @@ export default function OverviewPage({
           gap: 16,
         }}
       >
-        <StatCard label="Entities" value={data.entities.length} />
-        <StatCard label="Ledger Accounts" value={data.ledgerAccounts.length} />
-        <StatCard label="Asset Book Value" value={`$${totalAssetBookValue.toLocaleString()}`} />
-        <StatCard
-          label="Digital Asset Estimated Value"
-          value={`$${totalDigitalEstimatedValue.toLocaleString()}`}
-        />
-        <StatCard label="Wallets" value={data.wallets.length} />
-        <StatCard label="Treasury Accounts" value={data.treasuryAccounts.length} />
-        <StatCard label="Private Treasury Only" value={privateTreasuryCount} />
-        <StatCard label="Borrowing Facilities" value={data.borrowingFacilities.length} />
-        <StatCard label="Collateral Holdings" value={data.collateralHoldings.length} />
-        <StatCard label="Futures Strategies" value={data.futuresStrategies.length} />
-        <StatCard label="Liquidation Plans" value={data.liquidationPlans.length} />
-        <StatCard label="Instrument Discharges" value={instrumentDischargeCount} />
-        <StatCard label="Liquid Cash Ready" value={liquidCashReadyCount} />
-        <StatCard label="Auto Reconciled" value={autoReconciledCount} />
-        <StatCard label="Employees" value={employeeCount} />
-        <StatCard label="Tax Filing Queue" value={filingQueueCount} />
-        <StatCard label="Direct Deposit Returns" value={directDepositCount} />
-        <StatCard label="KYC / KYB Reviews" value={activeKybReviews} />
-        <StatCard label="Watchlist Items" value={watchlistItems} />
-        <StatCard label="AML Cases" value={amlCasesOpen} />
-        <StatCard label="Retained Records" value={retainedRecordCount} />
-        <StatCard label="Sealed Proof Chains" value={sealedProofChainCount} />
-        <StatCard label="Entity Connections" value={activeEntityConnections} />
-        <StatCard label="Active Credit Rails" value={activeCreditRails} />
-        <StatCard label="Watched Credit Rails" value={watchedCreditRails} />
-        <StatCard label="Partner-Bank Required" value={partnerBankRequiredCount} />
-        <StatCard label="Authority Reviews" value={authorityReviewItems.length} />
-        <StatCard label="ClearFlow Credits" value={rewardsSummary.balance} />
-        <StatCard label="Rewards Tier" value={rewardsSummary.tier} />
-        <StatCard label="Revenue-Ready Accounts" value={revenueSummary.connectedRevenueAccountCount} />
-        <StatCard label="Yield-Ready Reserves" value={revenueSummary.yieldReadyReserveCount} />
-        <StatCard
-          label="EFTPS Profile"
-          value={
-            data.workspaceSettings.eftpsEnabled
-              ? data.workspaceSettings.eftpsEnrollmentStatus?.replace(/_/g, ' ') || 'enabled'
-              : 'off'
-          }
-        />
-        <StatCard
-          label="USPS Gateway"
-          value={
-            data.workspaceSettings.uspsGatewayEnabled
-              ? data.workspaceSettings.uspsGatewayStatus?.replace(/_/g, ' ') || 'enabled'
-              : 'off'
-          }
-        />
-        <StatCard
-          label="Rail Exceptions"
-          value={
-            remittanceRailControls.filter((item) => item.overallStatus === 'exception').length
-          }
-        />
-        <StatCard label="Review Items" value={reviewItems} />
+        {laneStats[activeLane].map((item) => (
+          <StatCard key={item.label} label={item.label} value={item.value} />
+        ))}
       </div>
+      </PageSection>
 
+      {activeLane === 'growth' ? (
       <PageSection
         title="Revenue & Yield"
         description="Embedded-finance readiness, monetizable flow, and reserve-yield posture derived from live accounts, cards, processors, payments, invoices, and treasury structure."
@@ -816,7 +934,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'controls' ? (
       <PageSection
         title="Authority Watch"
         description="Representative authority posture now feeds the operating overview so entity setup quality is visible before execution work starts."
@@ -877,7 +997,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'operations' ? (
       <PageSection
         title="Capital Strategy"
         description="Borrowing, collateral, futures overlays, and liquidation planning now sit alongside treasury and settlement in the operating view."
@@ -948,7 +1070,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'controls' ? (
       <PageSection
         title="Tax & Postal Connections"
         description="Treasury tax-payment and postal-operation profiles tied back into the workspace so operators can keep them active and evidenced."
@@ -1037,7 +1161,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'controls' ? (
       <PageSection
         title="Proof Chain Posture"
         description="Encrypted movement and verification chains tied to transactions, settlements, identifiers, and tokens."
@@ -1088,7 +1214,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'operations' ? (
       <PageSection
         title="Connection Rail Posture"
         description="Watch the multi-entity and cross-user operating links that power internal credit, reserve-backed transfers, and controlled settlement."
@@ -1140,7 +1268,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'operations' ? (
       <PageSection
         title="Private Wealth Banking Use"
         description="A control view of which rails are internal-book only, instrument-tracking only, or still require a partner bank or outside rail for presentment."
@@ -1175,7 +1305,9 @@ export default function OverviewPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'operations' ? (
       <PageSection
         title="Recent Remittance Activity"
         description="Latest presentments and settlement postings so a newly submitted remittance becomes visible across the workspace right away."
@@ -1232,7 +1364,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Current System Scope"
         description="ClearFlow Core OS is now structured around unified asset, transaction, document, and compliance records."
@@ -1326,7 +1460,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Storage & Retention"
         description="Visibility into what belongs to the user workspace versus what ClearFlow must keep internally."
@@ -1378,7 +1514,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'operations' ? (
       <PageSection
         title="Operations Inbox"
         description="Live queues for the next accounting, settlement, payroll, and filing actions."
@@ -1575,7 +1713,9 @@ export default function OverviewPage({
           </RecordCard>
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Recent Workflow Outputs"
         description="Newest packets, returned forms, and accounting-linked records ready for the next desk."
@@ -1648,7 +1788,9 @@ export default function OverviewPage({
           )}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Operator Hotspots"
         description="Keep the front page focused on the main desks instead of repeating every launch path."
@@ -1712,7 +1854,9 @@ export default function OverviewPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
 
+      {activeLane === 'workspace' ? (
       <PageSection
         title="Quick Launch"
         description="Only the highest-traffic create actions stay here. Deeper setup lives in the desks."
@@ -1754,6 +1898,7 @@ export default function OverviewPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
     </div>
   );
 }
