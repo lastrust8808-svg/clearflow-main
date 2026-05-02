@@ -42,6 +42,8 @@ function goToHash(hash: string) {
   }
 }
 
+const ENTITY_CREATE_NOTICE_STORAGE_KEY = 'clearflow-entity-create-notice';
+
 export default function EntitiesPage({
   data,
   setData,
@@ -140,6 +142,16 @@ export default function EntitiesPage({
   const openEntityDashboardAfterSave = () => {
     if (!entityCreationSuccess) {
       return;
+    }
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(
+        ENTITY_CREATE_NOTICE_STORAGE_KEY,
+        JSON.stringify({
+          entityId: entityCreationSuccess.entityId,
+          entityName: entityCreationSuccess.entityName,
+          savedAt: new Date().toISOString(),
+        }),
+      );
     }
     onSetActiveEntity?.(entityCreationSuccess.entityId);
     setEntityCreationSuccess(null);

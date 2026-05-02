@@ -29,6 +29,7 @@ interface OverviewPageProps {
 }
 
 type OverviewLane = 'workspace' | 'operations' | 'controls' | 'growth';
+const ENTITY_CREATE_NOTICE_STORAGE_KEY = 'clearflow-entity-create-notice';
 
 export default function OverviewPage({
   data,
@@ -39,6 +40,22 @@ export default function OverviewPage({
 }: OverviewPageProps) {
   const auth = useAuth();
   const [activeLane, setActiveLane] = useState<OverviewLane>('workspace');
+  const [entityCreateNotice, setEntityCreateNotice] = useState<{
+    entityId: string;
+    entityName: string;
+    savedAt?: string;
+  } | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(ENTITY_CREATE_NOTICE_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as { entityId: string; entityName: string; savedAt?: string }) : null;
+    } catch {
+      return null;
+    }
+  });
   const navigate = (hash: string) => {
     if (typeof window !== 'undefined') {
       window.location.hash = hash;
@@ -309,6 +326,68 @@ export default function OverviewPage({
           Core operating snapshot across entities, assets, accounting, controls, and settlement-to-cash work, organized into focused lanes so the dashboard stays useful instead of overwhelming.
         </p>
       </div>
+
+      {entityCreateNotice ? (
+        <div
+          style={{
+            padding: '14px 16px',
+            borderRadius: 16,
+            border: '1px solid rgba(74,222,128,0.26)',
+            background: 'rgba(21,128,61,0.14)',
+            display: 'grid',
+            gap: 10,
+          }}
+        >
+          <div style={{ fontWeight: 800, color: '#dcfce7' }}>
+            Entity saved: {entityCreateNotice.entityName}
+          </div>
+          <div style={{ color: '#d1fae5', lineHeight: 1.55 }}>
+            This entity was retained in the workspace and set as the active board. Open the entity board if you want to confirm the profile, authority items, or next setup steps directly.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                onSelectActiveEntity?.(entityCreateNotice.entityId);
+                navigate('#entities');
+              }}
+              style={{
+                minHeight: 40,
+                padding: '0 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(74,222,128,0.3)',
+                background: 'rgba(34,197,94,0.14)',
+                color: '#f0fdf4',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Open Entity Board
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEntityCreateNotice(null);
+                if (typeof window !== 'undefined') {
+                  window.sessionStorage.removeItem(ENTITY_CREATE_NOTICE_STORAGE_KEY);
+                }
+              }}
+              style={{
+                minHeight: 40,
+                padding: '0 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.04)',
+                color: '#e5e7eb',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <PageSection
         title="Required Actions"
