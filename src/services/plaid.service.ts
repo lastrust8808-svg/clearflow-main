@@ -1,5 +1,9 @@
 import { PlaidSignalResponse, PlaidAuthResponse, PlaidVerificationStatus, PlaidIdentityData, PlaidIdentityMatchScores, PlaidConnectionPayload, PlaidTransaction } from '../types/app.models';
-import { getApiBaseUrl } from './runtimeConfig.service';
+import {
+  getApiBaseCandidates,
+  getConfiguredApiBaseUrl,
+  setApiBaseOverride,
+} from './runtimeConfig.service';
 
 // In a real app, these would be more detailed models
 interface PlaidUser { [key: string]: any; }
@@ -15,32 +19,91 @@ interface SignalEvaluatePayload {
   device?: PlaidDevice;
 }
 
-const RUNTIME_API_BASE = getApiBaseUrl();
-
-const PLAID_API_BASE = `${RUNTIME_API_BASE.replace(/\/$/, '')}/api/plaid`;
 class PlaidService {
-  private isBackendConfigured(): boolean {
-    return !!RUNTIME_API_BASE && !RUNTIME_API_BASE.includes('YOUR_NGROK');
+  private isLocalRuntime(): boolean {
+    if (typeof window === 'undefined' || !window.location?.origin) {
+      return false;
+    }
+
+    return window.location.origin.includes('localhost');
+  }
+
+  private shouldUseMockBackend(): boolean {
+    return !getConfiguredApiBaseUrl() && this.isLocalRuntime();
+  }
+
+  private async requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+    const failures: string[] = [];
+
+    for (const baseUrl of getApiBaseCandidates()) {
+      try {
+        const response = await fetch(`${baseUrl}${path}`, init);
+        const contentType = response.headers.get('content-type') || '';
+
+        if (!response.ok) {
+          let detail = `${response.status} ${response.statusText}`.trim();
+
+          try {
+            if (contentType.includes('application/json')) {
+              const payload = await response.json();
+              detail =
+                payload?.error ||
+                payload?.message ||
+                payload?.detail ||
+                detail;
+            } else {
+              const text = (await response.text()).trim();
+              if (text) {
+                detail = text.slice(0, 180);
+              }
+            }
+          } catch {
+            // keep status text detail
+          }
+
+          failures.push(`${baseUrl}: ${detail}`);
+          continue;
+        }
+
+        if (!contentType.includes('application/json')) {
+          failures.push(`${baseUrl}: non-JSON response returned from API route.`);
+          continue;
+        }
+
+        const payload = (await response.json()) as T;
+        setApiBaseOverride(baseUrl);
+        return payload;
+      } catch (error) {
+        failures.push(
+          `${baseUrl}: ${error instanceof Error ? error.message : 'request failed'}`
+        );
+      }
+    }
+
+    throw new Error(
+      failures.length
+        ? `ClearFlow could not reach the live banking service. ${failures[0]}`
+        : 'ClearFlow could not reach the live banking service.'
+    );
   }
 
   // ============== REAL API IMPLEMENTATIONS ==============
 
   async createLinkToken(userId: string): Promise<{ link_token: string }> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
       console.warn('Backend not configured, using mock link token.');
       return Promise.resolve({ link_token: `link-sandbox-mock-${Date.now()}`});
     }
-    const response = await fetch(`${PLAID_API_BASE}/link_token`, {
+
+    return this.requestJson<{ link_token: string }>('/api/plaid/link_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
     });
-    if (!response.ok) throw new Error('Failed to create link token');
-    return response.json();
   }
 
   async exchangePublicToken(publicToken: string, userId: string, userName: string): Promise<PlaidConnectionPayload> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
        console.warn('Backend not configured, using mock exchange.');
        const authResponse = await this.getMockAuth('mock-token');
        const identityData = await this.getMockIdentity('mock-token', userName);
@@ -48,120 +111,87 @@ class PlaidService {
        const identityMatchScores = await this.getMockMatchIdentity(userName, bankOwnerName);
        return { authResponse, identityData, identityMatchScores, itemId: `mock-item-${Date.now()}` };
     }
-    const response = await fetch(`${PLAID_API_BASE}/exchange_public_token`, {
+
+    return this.requestJson<PlaidConnectionPayload>('/api/plaid/exchange_public_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ public_token: publicToken, userId, userName })
     });
-    if (!response.ok) {
-       const err = await response.json();
-       throw new Error(err.error || 'Failed to exchange public token');
-    }
-    return response.json();
   }
 
   async getTransactions(itemId: string): Promise<PlaidTransaction[]> {
-     if (!this.isBackendConfigured()) return Promise.resolve([]);
-     const response = await fetch(`${PLAID_API_BASE}/transactions/${itemId}`);
-     if (!response.ok) throw new Error('Failed to fetch transactions');
-     return response.json();
+     if (this.shouldUseMockBackend()) return Promise.resolve([]);
+     return this.requestJson<PlaidTransaction[]>(`/api/plaid/transactions/${itemId}`);
   }
   
   async syncTransactions(itemId: string): Promise<PlaidTransaction[]> {
-    if (!this.isBackendConfigured()) return Promise.resolve([]);
-    const response = await fetch(`${PLAID_API_BASE}/transactions/sync`, {
+    if (this.shouldUseMockBackend()) return Promise.resolve([]);
+    return this.requestJson<PlaidTransaction[]>('/api/plaid/transactions/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId })
     });
-    if (!response.ok) throw new Error('Failed to sync transactions');
-    return response.json();
   }
 
 
   async getAuth(itemId: string, initialAmount?: number): Promise<PlaidAuthResponse> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for getAuth.');
       return this.getMockAuth(itemId, initialAmount);
     }
-    const response = await fetch(`${PLAID_API_BASE}/auth/get`, {
+    return this.requestJson<PlaidAuthResponse>('/api/plaid/auth/get', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId, initialAmount })
     });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to fetch Plaid Auth data');
-    }
-    return response.json();
   }
 
   async getIdentity(itemId: string, userName: string): Promise<PlaidIdentityData> {
-     if (!this.isBackendConfigured()) {
+     if (this.shouldUseMockBackend()) {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for getIdentity.');
       return this.getMockIdentity(itemId, userName);
     }
-     const response = await fetch(`${PLAID_API_BASE}/identity/get`, {
+     return this.requestJson<PlaidIdentityData>('/api/plaid/identity/get', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId, userName })
     });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to fetch Plaid Identity data');
-    }
-    return response.json();
   }
 
   async matchIdentity(userName: string, bankName: string): Promise<PlaidIdentityMatchScores> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for matchIdentity.');
       return this.getMockMatchIdentity(userName, bankName);
     }
-    const response = await fetch(`${PLAID_API_BASE}/identity/match`, {
+    return this.requestJson<PlaidIdentityMatchScores>('/api/plaid/identity/match', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userName, bankName }) // bankName is used for simulation on backend
     });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to fetch Plaid Identity Match data');
-    }
-    return response.json();
   }
 
   async signalPrepare(itemId: string): Promise<{ status: string }> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for signalPrepare.');
       return this.getMockSignalPrepare(itemId);
     }
-    const response = await fetch(`${PLAID_API_BASE}/signal/prepare`, {
+    return this.requestJson<{ status: string }>('/api/plaid/signal/prepare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId })
     });
-     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to prepare Plaid Signal');
-    }
-    return response.json();
   }
 
   async signalEvaluate(payload: SignalEvaluatePayload): Promise<PlaidSignalResponse> {
-    if (!this.isBackendConfigured()) {
+    if (this.shouldUseMockBackend()) {
       console.warn('REACT_APP_API_BASE_URL not set. Using mocked Plaid service for signalEvaluate.');
       return this.getMockSignalEvaluate(payload);
     }
-     const response = await fetch(`${PLAID_API_BASE}/signal/evaluate`, {
+     return this.requestJson<PlaidSignalResponse>('/api/plaid/signal/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to evaluate Plaid Signal');
-    }
-    return response.json();
   }
 
   // ============== MOCK IMPLEMENTATIONS (FALLBACK) ==============

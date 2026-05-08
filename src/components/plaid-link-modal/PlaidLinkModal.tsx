@@ -16,22 +16,31 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
   const [isProcessing, setIsProcessing] = useState(false);
   const isMockMode = !!linkToken?.startsWith('link-sandbox-mock-');
 
-  useEffect(() => {
-    const createToken = async () => {
-      if (!currentUser) {
-        setError("User not authenticated.");
-        return;
-      }
-      try {
-        const { link_token } = await plaidService.createLinkToken(currentUser.id);
-        setLinkToken(link_token);
-      } catch (err) {
-        setError("Could not create a Plaid Link token. Please try again later.");
-        console.error(err);
-      }
-    };
-    createToken();
+  const createToken = useCallback(async () => {
+    if (!currentUser) {
+      setError('User not authenticated.');
+      return;
+    }
+
+    setError(null);
+    setLinkToken(null);
+
+    try {
+      const { link_token } = await plaidService.createLinkToken(currentUser.id);
+      setLinkToken(link_token);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not create a Plaid Link token. Please try again later.'
+      );
+      console.error(err);
+    }
   }, [currentUser]);
+
+  useEffect(() => {
+    void createToken();
+  }, [createToken]);
 
   const onSuccess = useCallback(async (public_token: string, metadata?: any) => {
     if (!currentUser) return;
@@ -92,7 +101,12 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                  <h3 className="mt-3 text-lg font-semibold text-red-300">Connection Failed</h3>
                  <p className="text-sm text-slate-400 mt-2">{error}</p>
-                 <button onClick={onClose} className="w-full mt-6 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700">Close</button>
+                 <div className="mt-6 grid gap-3">
+                   <button onClick={() => void createToken()} className="w-full py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">
+                     Retry Connection
+                   </button>
+                   <button onClick={onClose} className="w-full py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700">Close</button>
+                 </div>
              </div>
         );
     }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import type { User } from '../../types/app.models';
 import {
@@ -40,6 +40,8 @@ export default function OverviewPage({
 }: OverviewPageProps) {
   const auth = useAuth();
   const [activeLane, setActiveLane] = useState<OverviewLane>('workspace');
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [showExpandedOverview, setShowExpandedOverview] = useState(false);
   const [entityCreateNotice, setEntityCreateNotice] = useState<{
     entityId: string;
     entityName: string;
@@ -56,6 +58,34 @@ export default function OverviewPage({
       return null;
     }
   });
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 900px)');
+    const syncViewport = () => setIsCompactViewport(mediaQuery.matches);
+    syncViewport();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncViewport);
+      return () => mediaQuery.removeEventListener('change', syncViewport);
+    }
+
+    mediaQuery.addListener(syncViewport);
+    return () => mediaQuery.removeListener(syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isCompactViewport) {
+      setShowExpandedOverview(false);
+    }
+  }, [isCompactViewport]);
+
+  useEffect(() => {
+    setShowExpandedOverview(false);
+  }, [activeLane]);
+
   const navigate = (hash: string) => {
     if (typeof window !== 'undefined') {
       window.location.hash = hash;
@@ -317,6 +347,14 @@ export default function OverviewPage({
       wealthManagerSummary.reserveValue,
     ],
   );
+  const visibleLaneStats =
+    isCompactViewport && !showExpandedOverview
+      ? laneStats[activeLane].slice(0, 4)
+      : laneStats[activeLane];
+  const visibleEntityWorkspaceViews =
+    isCompactViewport && !showExpandedOverview
+      ? entityWorkspaceViews.slice(0, 2)
+      : entityWorkspaceViews;
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -455,6 +493,7 @@ export default function OverviewPage({
               </div>
             </RecordCard>
 
+            {!isCompactViewport || showExpandedOverview ? (
             <RecordCard title="How To Use These Desks" subtitle="Plain-language routing">
               <div style={{ display: 'grid', gap: 10, color: '#d1d5db', lineHeight: 1.65 }}>
                 {workspaceGuidance.deskGuides.slice(0, 4).map((guide) => (
@@ -493,9 +532,11 @@ export default function OverviewPage({
                 ))}
               </div>
             </RecordCard>
+            ) : null}
           </div>
 
-          {workspaceGuidance.entityChecklists.length > 0 ? (
+          {workspaceGuidance.entityChecklists.length > 0 &&
+          (!isCompactViewport || showExpandedOverview) ? (
             <div
               style={{
                 display: 'grid',
@@ -840,7 +881,7 @@ export default function OverviewPage({
               Add an entity after your operator profile is complete. Each entity can carry its own primary email, Google storage email, and collective sharing posture.
             </RecordCard>
           ) : (
-            entityWorkspaceViews.map((workspace) => (
+            visibleEntityWorkspaceViews.map((workspace) => (
               <RecordCard
                 key={workspace.entityId}
                 title={workspace.entityLabel}
@@ -960,12 +1001,53 @@ export default function OverviewPage({
           gap: 16,
         }}
       >
-        {laneStats[activeLane].map((item) => (
+        {visibleLaneStats.map((item) => (
           <StatCard key={item.label} label={item.label} value={item.value} />
         ))}
       </div>
       </PageSection>
 
+      {isCompactViewport ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            padding: '14px 16px',
+            borderRadius: 16,
+            border: '1px solid rgba(126,242,255,0.16)',
+            background: 'rgba(15,23,42,0.34)',
+          }}
+        >
+          <div style={{ fontWeight: 700, color: '#effcff' }}>
+            {showExpandedOverview ? 'Full lane detail is open.' : 'Compact mobile mode is active.'}
+          </div>
+          <div style={{ color: 'var(--cf-muted)', lineHeight: 1.6 }}>
+            {showExpandedOverview
+              ? 'Collapse the extra sections if you want to get back to a shorter dashboard view.'
+              : 'Only the most important cards are showing right now so the dashboard stays short and usable on mobile.'}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowExpandedOverview((current) => !current)}
+            style={{
+              justifySelf: 'start',
+              padding: '9px 12px',
+              minHeight: 40,
+              borderRadius: 10,
+              border: '1px solid rgba(126,242,255,0.28)',
+              background: 'rgba(54, 215, 255, 0.1)',
+              color: '#effcff',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            {showExpandedOverview ? 'Collapse Extra Sections' : 'Show Full Lane Detail'}
+          </button>
+        </div>
+      ) : null}
+
+      {!isCompactViewport || showExpandedOverview ? (
+      <>
       {activeLane === 'growth' ? (
       <PageSection
         title="Revenue & Yield"
@@ -1977,6 +2059,8 @@ export default function OverviewPage({
           ))}
         </div>
       </PageSection>
+      ) : null}
+      </>
       ) : null}
     </div>
   );
