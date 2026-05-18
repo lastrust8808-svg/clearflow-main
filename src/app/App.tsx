@@ -1103,7 +1103,13 @@ export default function App({
       case 'documents':
         return <DocumentsPage data={scopedData} setData={setData} />;
       case 'aiStudio':
-        return <AIStudioPage data={scopedData} setData={setData} />;
+        return (
+          <AIStudioPage
+            data={scopedData}
+            setData={setData}
+            onActiveEntityChange={setActiveEntityId}
+          />
+        );
       case 'settings':
         return (
           <SettingsPage

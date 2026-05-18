@@ -8,6 +8,7 @@ const router = express.Router();
 const itemStore = new Map();
 const accountIndex = new Map();
 const transactionCursorStore = new Map();
+const SUPPORTED_PLAID_ENVIRONMENTS = new Set(['sandbox', 'development', 'production']);
 
 async function loadPersistedConnections(userId) {
   if (!userId) {
@@ -95,12 +96,36 @@ function isPlaidConfigured() {
   return Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
 }
 
+function getPlaidEnvironment() {
+  const normalized = String(process.env.PLAID_ENV || 'sandbox')
+    .trim()
+    .toLowerCase();
+  return SUPPORTED_PLAID_ENVIRONMENTS.has(normalized) ? normalized : 'sandbox';
+}
+
+function getPlaidWebhookUrl() {
+  const raw = String(process.env.PLAID_WEBHOOK_URL || '').trim();
+  if (!raw || raw.toLowerCase() === 'value') {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function getPlaidClient() {
   if (!isPlaidConfigured()) {
     return null;
   }
 
-  const environment = process.env.PLAID_ENV || 'sandbox';
+  const environment = getPlaidEnvironment();
   return new PlaidApi(
     new Configuration({
       basePath: PlaidEnvironments[environment],
@@ -238,6 +263,41 @@ function normalizePlaidTransactions(plaidTransactions = []) {
   }));
 }
 
+async function createLinkTokenWithFallbacks(plaidClient, payload) {
+  const productSets = [
+    [Products.Auth, Products.Transactions],
+    [Products.Auth],
+    [Products.Transactions],
+  ];
+  let lastError = null;
+
+  for (const products of productSets) {
+    try {
+      const response = await plaidClient.linkTokenCreate({
+        ...payload,
+        products,
+      });
+      return { response, products };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function getIdentityDataOrFallback(plaidClient, accessToken, userName) {
+  try {
+    const response = await plaidClient.identityGet({ access_token: accessToken });
+    return response.data;
+  } catch (error) {
+    console.warn('Plaid identity product unavailable for connected item; falling back to inferred identity.', {
+      error: error.response?.data?.error_message || error.message,
+    });
+    return buildMockIdentity(userName);
+  }
+}
+
 router.post('/link_token', async (req, res) => {
   const userId = req.body.userId || req.body.user_id;
   if (!userId) {
@@ -250,13 +310,12 @@ router.post('/link_token', async (req, res) => {
   }
 
   try {
-    const response = await plaidClient.linkTokenCreate({
+    const { response } = await createLinkTokenWithFallbacks(plaidClient, {
       user: { client_user_id: String(userId) },
       client_name: 'ClearFlow',
-      products: [Products.Auth, Products.Identity, Products.Transactions, Products.Signal],
       country_codes: [CountryCode.Us],
       language: 'en',
-      webhook: process.env.PLAID_WEBHOOK_URL || undefined,
+      webhook: getPlaidWebhookUrl(),
     });
 
     return res.json({ link_token: response.data.link_token });
@@ -315,14 +374,14 @@ router.post('/exchange_public_token', async (req, res) => {
     const itemId = exchange.data.item_id;
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
     const authResponse = await plaidClient.authGet({ access_token: accessToken });
-    const identityResponse = await plaidClient.identityGet({ access_token: accessToken });
+    const identityData = await getIdentityDataOrFallback(plaidClient, accessToken, userName);
 
     itemStore.set(itemId, {
       userId,
       accessToken,
       itemId,
       authResponse: authResponse.data,
-      identityData: identityResponse.data,
+      identityData,
       accounts: accountsResponse.data.accounts,
     });
 
@@ -332,11 +391,11 @@ router.post('/exchange_public_token', async (req, res) => {
     await savePersistedConnections(userId);
 
     const bankOwnerName =
-      identityResponse.data.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
+      identityData.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
 
     return res.json({
       authResponse: authResponse.data,
-      identityData: identityResponse.data,
+      identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
     });
@@ -386,9 +445,13 @@ router.post('/identity/get', async (req, res) => {
 
   try {
     const item = await getStoredItem(itemId);
-    const response = await plaidClient.identityGet({ access_token: item.accessToken });
-    item.identityData = response.data;
-    return res.json(response.data);
+    const identityData = await getIdentityDataOrFallback(
+      plaidClient,
+      item.accessToken,
+      userName
+    );
+    item.identityData = identityData;
+    return res.json(identityData);
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       error: error.response?.data?.error_message || error.message || 'Failed to fetch identity data.',

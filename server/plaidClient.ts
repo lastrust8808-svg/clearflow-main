@@ -7,7 +7,11 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 dotenv.config();
 
-const PLAID_ENV = process.env.PLAID_ENV || 'sandbox';
+const SUPPORTED_PLAID_ENVIRONMENTS = new Set(['sandbox', 'development', 'production']);
+const rawPlaidEnv = String(process.env.PLAID_ENV || 'sandbox')
+  .trim()
+  .toLowerCase();
+const PLAID_ENV = SUPPORTED_PLAID_ENVIRONMENTS.has(rawPlaidEnv) ? rawPlaidEnv : 'sandbox';
 
 if (!process.env.PLAID_CLIENT_ID) {
   console.error("PLAID_CLIENT_ID is not set.");
