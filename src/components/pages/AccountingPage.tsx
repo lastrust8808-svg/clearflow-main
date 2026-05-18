@@ -6218,8 +6218,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
   const handleAddManualBankAccount = (payload: ManualBankAccountSubmitPayload) => {
     const entity = defaultEntity;
-    if (!entity || !payload.institutionName.trim() || !payload.accountName.trim()) {
-      return;
+    if (!entity) {
+      return {
+        success: false,
+        error: 'Select or create an entity before adding a manual bank account.',
+      };
+    }
+
+    if (!payload.institutionName.trim() || !payload.accountName.trim()) {
+      return {
+        success: false,
+        error: 'Institution name and account name are required.',
+      };
     }
 
     setData((prev) => {
@@ -6283,6 +6293,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     returnToAccountingDashboard(
       `Saved ${payload.accountName.trim()} as a manual bank account in the chart of accounts.`,
     );
+    return { success: true };
   };
 
   const handleAddManualBankTransaction = (payload: ManualBankTransactionSubmitPayload) => {

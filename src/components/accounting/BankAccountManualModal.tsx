@@ -7,7 +7,9 @@ interface BankAccountManualModalProps {
   ledgerAccounts: LedgerAccountRecord[];
   defaultCurrency: string;
   onClose: () => void;
-  onSubmit: (payload: ManualBankAccountSubmitPayload) => void;
+  onSubmit: (
+    payload: ManualBankAccountSubmitPayload
+  ) => { success: boolean; error?: string } | Promise<{ success: boolean; error?: string }>;
 }
 
 const overlayStyle = {
@@ -85,12 +87,55 @@ export default function BankAccountManualModal({
   onSubmit,
 }: BankAccountManualModalProps) {
   const [form, setForm] = useState<ManualBankAccountSubmitPayload>(buildInitialForm(defaultCurrency));
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const trimmedInstitutionName = form.institutionName.trim();
+  const trimmedAccountName = form.accountName.trim();
+  const canSubmit = Boolean(trimmedInstitutionName && trimmedAccountName) && !isSaving;
 
   useEffect(() => {
     if (isOpen) {
       setForm(buildInitialForm(defaultCurrency));
+      setError('');
+      setIsSaving(false);
     }
   }, [defaultCurrency, isOpen]);
+
+  const handleSubmit = async () => {
+    if (!trimmedInstitutionName || !trimmedAccountName) {
+      setError('Enter both the institution name and account name before saving.');
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const result = await onSubmit({
+        ...form,
+        institutionName: trimmedInstitutionName,
+        accountName: trimmedAccountName,
+        currency: form.currency.trim() || defaultCurrency,
+        routingNumber: form.routingNumber?.trim() || '',
+        accountNumber: form.accountNumber?.trim() || '',
+        linkedLedgerAccountId: form.linkedLedgerAccountId?.trim() || '',
+        openingBalance: form.openingBalance?.trim() || '',
+      });
+
+      if (!result.success) {
+        setError(result.error || 'The bank account could not be saved yet.');
+        setIsSaving(false);
+      }
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'The bank account could not be saved yet.'
+      );
+      setIsSaving(false);
+    }
+  };
 
   if (!isOpen) {
     return null;
@@ -98,7 +143,18 @@ export default function BankAccountManualModal({
 
   return (
     <div style={overlayStyle}>
-      <div style={modalStyle}>
+      <div
+        style={modalStyle}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            const tagName = (event.target as HTMLElement)?.tagName;
+            if (tagName !== 'TEXTAREA') {
+              event.preventDefault();
+              void handleSubmit();
+            }
+          }
+        }}
+      >
         <div>
           <div style={{ fontSize: 24, fontWeight: 800 }}>Add Bank Account Manually</div>
           <div style={{ color: '#94a3b8', marginTop: 6 }}>
@@ -238,21 +294,36 @@ export default function BankAccountManualModal({
           </label>
         </div>
 
+        <div style={{ display: 'grid', gap: 6 }}>
+          {!canSubmit ? (
+            <div style={{ color: '#fbbf24', fontSize: 13 }}>
+              Institution and account name are required before this can save.
+            </div>
+          ) : (
+            <div style={{ color: '#94a3b8', fontSize: 13 }}>
+              Save will add this account to the active entity and return to the accounting dashboard.
+            </div>
+          )}
+          {error ? (
+            <div style={{ color: '#fda4af', fontSize: 13 }}>{error}</div>
+          ) : null}
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          <button type="button" onClick={onClose} style={secondaryButtonStyle}>
+          <button type="button" onClick={onClose} style={secondaryButtonStyle} disabled={isSaving}>
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (!form.institutionName.trim() || !form.accountName.trim()) {
-                return;
-              }
-              onSubmit(form);
+            onClick={() => void handleSubmit()}
+            style={{
+              ...primaryButtonStyle,
+              opacity: canSubmit ? 1 : 0.7,
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
             }}
-            style={primaryButtonStyle}
+            disabled={!canSubmit}
           >
-            Add Bank Account
+            {isSaving ? 'Saving...' : 'Add Bank Account'}
           </button>
         </div>
       </div>
