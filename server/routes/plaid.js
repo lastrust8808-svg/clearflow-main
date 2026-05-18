@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHash } from 'node:crypto';
 import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from 'plaid';
 import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accountStorage.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
@@ -118,6 +119,15 @@ function getPlaidWebhookUrl() {
   } catch {
     return undefined;
   }
+}
+
+function buildPlaidClientUserId(userId) {
+  const normalized = String(userId || '').trim().toLowerCase();
+  const digest = createHash('sha256')
+    .update(`clearflow:${normalized}`)
+    .digest('hex')
+    .slice(0, 40);
+  return `cf-${digest}`;
 }
 
 function getPlaidClient() {
@@ -311,7 +321,7 @@ router.post('/link_token', async (req, res) => {
 
   try {
     const { response } = await createLinkTokenWithFallbacks(plaidClient, {
-      user: { client_user_id: String(userId) },
+      user: { client_user_id: buildPlaidClientUserId(userId) },
       client_name: 'ClearFlow',
       country_codes: [CountryCode.Us],
       language: 'en',
