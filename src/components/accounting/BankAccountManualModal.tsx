@@ -158,7 +158,7 @@ export default function BankAccountManualModal({
         <div>
           <div style={{ fontSize: 24, fontWeight: 800 }}>Add Bank Account Manually</div>
           <div style={{ color: '#94a3b8', marginTop: 6 }}>
-            Create a bank account shell for the entity even before a live feed is connected.
+            Create a bank account shell for the current profile even before a live feed is connected.
           </div>
         </div>
 
@@ -301,7 +301,7 @@ export default function BankAccountManualModal({
             </div>
           ) : (
             <div style={{ color: '#94a3b8', fontSize: 13 }}>
-              Save will add this account to the active entity and return to the accounting dashboard.
+              Save will add this account to the current profile. If no entity exists yet, ClearFlow will create a personal profile first and return to the accounting dashboard.
             </div>
           )}
           {error ? (

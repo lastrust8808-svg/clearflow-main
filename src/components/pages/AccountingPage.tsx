@@ -5880,13 +5880,97 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     };
   };
 
-  const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
-    if (!defaultEntity) {
-      setIsPlaidModalOpen(false);
-      return;
+  const ensureAccountingOwnerEntity = (bundle: CoreDataBundle) => {
+    const resolvedExistingEntity =
+      (activeEntityId
+        ? bundle.entities.find((entity) => entity.id === activeEntityId)
+        : undefined) || bundle.entities[0];
+
+    if (resolvedExistingEntity) {
+      return {
+        entity: resolvedExistingEntity,
+        entities: bundle.entities,
+        created: false,
+      };
     }
 
+    const stamp = Date.now();
+    const operatorName =
+      auth.currentUser?.name?.trim() ||
+      auth.currentUser?.email?.trim() ||
+      auth.currentUser?.phone?.trim() ||
+      'Personal Workspace';
+    const operatorEmail = auth.currentUser?.email?.trim() || undefined;
+    const personalEntityId = `entity-personal-${stamp}`;
+    const personalEntity = {
+      id: personalEntityId,
+      name: `${operatorName} Personal`,
+      displayName: `${operatorName} Personal`,
+      type: 'individual' as const,
+      jurisdiction: 'United States',
+      country: 'United States',
+      formationDate: new Date().toISOString().slice(0, 10),
+      status: 'active' as const,
+      ownerDisplay: operatorName,
+      representativeName: operatorName,
+      representativeRole: 'Owner',
+      authorityAttestedAt: new Date().toISOString(),
+      authorityAttestationStatement:
+        'Personal consumer account profile created from the signed-in operator session for direct banking and ledger setup.',
+      authorityProofStatus: 'matched' as const,
+      authorityProofSummary:
+        'Personal owner profile is treated as the direct operating party for consumer banking setup.',
+      authorityTransactionsPaused: false,
+      primaryEmail: operatorEmail,
+      entityAccess: {
+        googleStorageEmail: operatorEmail,
+        storageMode: auth.hasDriveAccess ? 'operator_google' : 'internal_only',
+        driveConnectionStatus: auth.hasDriveAccess ? 'connected' : 'internal_only',
+        shareInCollectiveOverview: true,
+        shareInOperatorDashboard: true,
+      },
+      branding: {
+        accentColor: bundle.workspaceSettings.preferredAccentColor || '#36d7ff',
+        documentLogoText: `${operatorName} Personal`,
+        emailFromName: `${operatorName} Personal`,
+        replyToEmail: operatorEmail,
+        invoiceFooterNote: 'Personal finance records generated through ClearFlow.',
+      },
+      numbering: {
+        invoicePrefix: 'INV',
+        quotePrefix: 'QTE',
+        billPrefix: 'BILL',
+        receiptPrefix: 'RCPT',
+        journalPrefix: 'JE',
+        nextInvoiceSequence: 1,
+        nextQuoteSequence: 1,
+        nextBillSequence: 1,
+        nextReceiptSequence: 1,
+        nextJournalSequence: 1,
+      },
+      operationalDefaults: {
+        baseCurrency: bundle.workspaceSettings.baseCurrency,
+        fiscalYearStartMonth: 1,
+        defaultSettlementPath: bundle.workspaceSettings.defaultSettlementPath,
+        interEntitySettlementMode: bundle.workspaceSettings.defaultInterEntitySettlementMode,
+        autoIssueVerificationTokens: bundle.workspaceSettings.autoIssueVerificationTokens,
+        autoReconcileLedgerLinks: bundle.workspaceSettings.autoReconcileJournalEntries,
+      },
+    };
+
+    return {
+      entity: personalEntity,
+      entities: [personalEntity, ...bundle.entities],
+      created: true,
+    };
+  };
+
+  const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
+    let createdPersonalEntity = false;
     setData((prev) => {
+      const entityResolution = ensureAccountingOwnerEntity(prev);
+      const entity = entityResolution.entity;
+      createdPersonalEntity = entityResolution.created;
       const linkedAccounts = payload.linkedAccounts?.length
         ? payload.linkedAccounts
         : [
@@ -5899,12 +5983,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             },
           ];
       const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
-        entity: defaultEntity,
+        entity,
       });
 
       if (selectedBankFeedAccountId) {
         return {
           ...prev,
+          entities: entityResolution.entities,
           bankAccounts: prev.bankAccounts.map((account) =>
             account.id === selectedBankFeedAccountId
               ? {
@@ -5974,7 +6059,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           if (nextIndex >= 0) {
             const ensuredLedger = ensureConnectedLedgerAccount({
               existingLedgerAccountId: nextBankAccounts[nextIndex].linkedLedgerAccountId,
-              entityId: defaultEntity.id,
+              entityId: entity.id,
               code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
               name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
               currency: prev.workspaceSettings.baseCurrency,
@@ -6020,7 +6105,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
         const ensuredLedger = ensureConnectedLedgerAccount({
           existingLedgerAccountId: undefined,
-          entityId: defaultEntity.id,
+          entityId: entity.id,
           code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
           name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
           currency: prev.workspaceSettings.baseCurrency,
@@ -6033,7 +6118,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
         nextBankAccounts.unshift({
           id: `bank-${Date.now()}-${index}`,
-          entityId: defaultEntity.id,
+          entityId: entity.id,
           institutionName: payload.institutionName || 'Connected institution',
           accountName: linkedAccount.name || `${payload.institutionName || 'Connected'} Account`,
           last4: linkedAccount.mask || undefined,
@@ -6078,6 +6163,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       return {
         ...prev,
+        entities: entityResolution.entities,
         bankAccounts: nextBankAccounts,
         ledgerAccounts: nextLedgerAccounts,
       };
@@ -6088,20 +6174,30 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     returnToAccountingDashboard(
       selectedBankFeedAccountId
         ? 'Reconnected the selected financial account and refreshed its live provider profile.'
-        : 'Connected live institution accounts and saved them as permanent workspace accounts in the chart of accounts.'
+        : createdPersonalEntity
+          ? 'Connected live institution accounts, created a personal profile automatically, and saved the accounts into the chart of accounts.'
+          : 'Connected live institution accounts and saved them as permanent workspace accounts in the chart of accounts.'
     );
   };
 
   const handleAddConnectedFinancialAccount = (
     payload: ConnectedFinancialAccountSubmitPayload,
   ) => {
-    const entity = defaultEntity;
     const provider = getFinancialConnectionProvider(payload.providerKey);
-    if (!entity || !provider || !payload.institutionName.trim() || !payload.accountName.trim()) {
-      return;
+    if (!provider || !payload.institutionName.trim() || !payload.accountName.trim()) {
+      return {
+        success: false,
+        error: !provider
+          ? 'The selected provider could not be resolved.'
+          : 'Institution name and account name are required.',
+      };
     }
 
+    let createdPersonalEntity = false;
     setData((prev) => {
+      const entityResolution = ensureAccountingOwnerEntity(prev);
+      const entity = entityResolution.entity;
+      createdPersonalEntity = entityResolution.created;
       const stamp = Date.now();
       const openingBalance = Number(payload.openingBalance || 0);
       const persistentConnectionKey = `${provider.providerKey}:${payload.externalAccountId?.trim() || payload.accountName.trim().toLowerCase().replace(/\s+/g, '-')}`;
@@ -6128,6 +6224,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       return {
         ...prev,
+        entities: entityResolution.entities,
         bankAccounts: existingConnectedAccount
           ? (prev.bankAccounts ?? []).map((account) =>
               account.id === existingConnectedAccount.id
@@ -6212,19 +6309,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setIsConnectedFinancialAccountModalOpen(false);
     returnToAccountingDashboard(
-      `Saved ${payload.accountName.trim()} as a permanent ${provider.label} account inside the workspace chart of accounts.`,
+      createdPersonalEntity
+        ? `Created a personal profile and saved ${payload.accountName.trim()} as a permanent ${provider.label} account inside the workspace chart of accounts.`
+        : `Saved ${payload.accountName.trim()} as a permanent ${provider.label} account inside the workspace chart of accounts.`,
     );
+    return { success: true };
   };
 
   const handleAddManualBankAccount = (payload: ManualBankAccountSubmitPayload) => {
-    const entity = defaultEntity;
-    if (!entity) {
-      return {
-        success: false,
-        error: 'Select or create an entity before adding a manual bank account.',
-      };
-    }
-
     if (!payload.institutionName.trim() || !payload.accountName.trim()) {
       return {
         success: false,
@@ -6232,7 +6324,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       };
     }
 
+    let createdPersonalEntity = false;
     setData((prev) => {
+      const entityResolution = ensureAccountingOwnerEntity(prev);
+      const entity = entityResolution.entity;
+      createdPersonalEntity = entityResolution.created;
       const stamp = Date.now();
       const openingBalance = Number(payload.openingBalance || 0);
       const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
@@ -6254,6 +6350,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       return {
         ...prev,
+        entities: entityResolution.entities,
         bankAccounts: [
           {
             id: bankAccountId,
@@ -6291,7 +6388,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setIsManualBankAccountModalOpen(false);
     returnToAccountingDashboard(
-      `Saved ${payload.accountName.trim()} as a manual bank account in the chart of accounts.`,
+      createdPersonalEntity
+        ? `Created a personal profile and saved ${payload.accountName.trim()} as a manual bank account in the chart of accounts.`
+        : `Saved ${payload.accountName.trim()} as a manual bank account in the chart of accounts.`,
     );
     return { success: true };
   };
