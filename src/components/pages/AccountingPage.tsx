@@ -70,6 +70,7 @@ import InvoiceQuickAddModal from '../accounting/InvoiceQuickAddModal';
 import JournalEntryModal from '../accounting/JournalEntryModal';
 import ManualBankTransactionModal from '../accounting/ManualBankTransactionModal';
 import PaymentRecordModal from '../accounting/PaymentRecordModal';
+import PlaidConnectionSetupModal from '../accounting/PlaidConnectionSetupModal';
 import PayrollWorkspace from '../accounting/PayrollWorkspace';
 import QuoteBuilderModal from '../accounting/QuoteBuilderModal';
 import ReconciliationWorkspace from '../accounting/ReconciliationWorkspace';
@@ -199,6 +200,27 @@ type PresentmentModalDraft = NonNullable<
   ComponentProps<typeof CouponPresentmentModal>['draft']
 >;
 
+type PlaidPostConnectMode =
+  | 'connect_only'
+  | 'manual_review_forward'
+  | 'auto_categorize_forward';
+
+interface PendingPlaidSetupAccount {
+  bankAccountId: string;
+  accountName: string;
+  institutionName: string;
+  currentBalance?: number;
+  availableBalance?: number;
+  last4?: string;
+  externalAccountId?: string;
+  plaidItemId: string;
+}
+
+interface PendingPlaidSetup {
+  accounts: PendingPlaidSetupAccount[];
+  createdPersonalEntity: boolean;
+}
+
 function consumeSessionDraft<T>(key: string): T | null {
   if (typeof window === 'undefined') {
     return null;
@@ -251,6 +273,12 @@ function clearSessionDraft(key: string) {
   }
 
   window.sessionStorage.removeItem(key);
+}
+
+function buildNextFeedStartDate() {
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  return next.toISOString().slice(0, 10);
 }
 
 function parseAccountingActionHash(hashValue: string): AccountingHashAction | null {
@@ -312,6 +340,7 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
     () => Boolean(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey))
   );
   const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
+  const [pendingPlaidSetup, setPendingPlaidSetup] = useState<PendingPlaidSetup | null>(null);
 
   const replaceAccountingHash = (hash: string) => {
     if (typeof window === 'undefined') {
@@ -5967,6 +5996,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
   const handlePlaidConnected = (payload: PlaidConnectionPayload) => {
     let createdPersonalEntity = false;
+    const connectedAccounts: PendingPlaidSetupAccount[] = [];
+    const connectedAtIso = new Date().toISOString();
+    const connectedStartDate = buildNextFeedStartDate();
     setData((prev) => {
       const entityResolution = ensureAccountingOwnerEntity(prev);
       const entity = entityResolution.entity;
@@ -5980,6 +6012,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               mask: payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || '',
               subtype: payload.authResponse.accounts[0]?.verification_status || '',
               type: 'depository',
+              currentBalance: undefined,
+              availableBalance: undefined,
             },
           ];
       const defaultFundsRightsClassification = resolveDefaultFundsRightsClassification({
@@ -5987,6 +6021,28 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       });
 
       if (selectedBankFeedAccountId) {
+        const reconnectedAccount = prev.bankAccounts.find(
+          (account) => account.id === selectedBankFeedAccountId,
+        );
+        const nextCurrentBalance =
+          typeof linkedAccounts[0]?.currentBalance === 'number'
+            ? linkedAccounts[0].currentBalance
+            : reconnectedAccount?.currentBalance;
+        if (reconnectedAccount) {
+          connectedAccounts.push({
+            bankAccountId: reconnectedAccount.id,
+            accountName: linkedAccounts[0]?.name || reconnectedAccount.accountName,
+            institutionName: payload.institutionName || reconnectedAccount.institutionName,
+            currentBalance: nextCurrentBalance,
+            availableBalance: linkedAccounts[0]?.availableBalance,
+            last4:
+              linkedAccounts[0]?.mask ||
+              payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) ||
+              reconnectedAccount.last4,
+            externalAccountId: linkedAccounts[0]?.accountId,
+            plaidItemId: payload.itemId,
+          });
+        }
         return {
           ...prev,
           entities: entityResolution.entities,
@@ -6000,6 +6056,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                   liveFeedStatus: 'connected',
                   liveConnectionProvider: 'plaid',
                   plaidItemId: payload.itemId,
+                  currentBalance: nextCurrentBalance,
+                  feedStartDate: account.feedStartDate || connectedStartDate,
                   last4:
                     linkedAccounts[0]?.mask ||
                     payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) ||
@@ -6021,8 +6079,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                     supportsTransactionImport: true,
                     supportsSettlementInitiation: true,
                     availabilityStatus: 'live',
-                    connectedAt: new Date().toISOString(),
-                    lastProviderSyncAt: new Date().toISOString(),
+                    connectedAt: account.connectedProfile?.connectedAt || connectedAtIso,
+                    lastProviderSyncAt: connectedAtIso,
                   },
                 }
               : account
@@ -6057,13 +6115,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         if (matchedExisting) {
           const nextIndex = nextBankAccounts.findIndex((item) => item.id === matchedExisting.id);
           if (nextIndex >= 0) {
+            const openingBalance = Number(
+              linkedAccount.currentBalance ?? nextBankAccounts[nextIndex].currentBalance ?? 0,
+            );
             const ensuredLedger = ensureConnectedLedgerAccount({
               existingLedgerAccountId: nextBankAccounts[nextIndex].linkedLedgerAccountId,
               entityId: entity.id,
               code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
               name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
               currency: prev.workspaceSettings.baseCurrency,
-              openingBalance: nextBankAccounts[nextIndex].currentBalance ?? 0,
+              openingBalance,
               accountType,
               providerCategory: 'bank',
               ledgerAccounts: nextLedgerAccounts,
@@ -6075,6 +6136,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               accountName: linkedAccount.name || nextBankAccounts[nextIndex].accountName,
               last4: linkedAccount.mask || nextBankAccounts[nextIndex].last4,
               accountType,
+              currentBalance: openingBalance,
               connectionType: 'plaid_connected',
               liveFeedEnabled: true,
               liveFeedStatus: 'connected',
@@ -6082,6 +6144,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               plaidItemId: payload.itemId,
               linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
               onboardingStatus: 'connected',
+              feedStartDate:
+                nextBankAccounts[nextIndex].feedStartDate || connectedStartDate,
+              autoCategorizeFeedTransactions:
+                nextBankAccounts[nextIndex].autoCategorizeFeedTransactions ?? false,
               connectedProfile: {
                 providerKey: 'plaid',
                 providerLabel: 'Plaid Institution Login',
@@ -6095,28 +6161,39 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 supportsSettlementInitiation: true,
                 availabilityStatus: 'live',
                 connectedAt:
-                  nextBankAccounts[nextIndex].connectedProfile?.connectedAt || new Date().toISOString(),
-                lastProviderSyncAt: new Date().toISOString(),
+                  nextBankAccounts[nextIndex].connectedProfile?.connectedAt || connectedAtIso,
+                lastProviderSyncAt: connectedAtIso,
               },
             };
+            connectedAccounts.push({
+              bankAccountId: nextBankAccounts[nextIndex].id,
+              accountName: nextBankAccounts[nextIndex].accountName,
+              institutionName: nextBankAccounts[nextIndex].institutionName,
+              currentBalance: nextBankAccounts[nextIndex].currentBalance,
+              availableBalance: linkedAccount.availableBalance,
+              last4: nextBankAccounts[nextIndex].last4,
+              externalAccountId: linkedAccount.accountId,
+              plaidItemId: payload.itemId,
+            });
           }
           return;
         }
 
+        const openingBalance = Number(linkedAccount.currentBalance ?? 0);
         const ensuredLedger = ensureConnectedLedgerAccount({
           existingLedgerAccountId: undefined,
           entityId: entity.id,
           code: `10${String((prev.bankAccounts.length + nextBankAccounts.length + index) % 90 + 20).padStart(2, '0')}`,
           name: `${linkedAccount.name || payload.institutionName || 'Connected'} ${accountType === 'credit_card' ? 'Payable' : 'Cash'}`,
           currency: prev.workspaceSettings.baseCurrency,
-          openingBalance: 0,
+          openingBalance,
           accountType,
           providerCategory: 'bank',
           ledgerAccounts: nextLedgerAccounts,
         });
         nextLedgerAccounts = ensuredLedger.ledgerAccounts;
 
-        nextBankAccounts.unshift({
+        const nextBankAccount = {
           id: `bank-${Date.now()}-${index}`,
           entityId: entity.id,
           institutionName: payload.institutionName || 'Connected institution',
@@ -6125,7 +6202,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           accountType,
           currency: prev.workspaceSettings.baseCurrency,
           status: 'active',
-          currentBalance: 0,
+          currentBalance: openingBalance,
+          feedStartDate: connectedStartDate,
+          autoCategorizeFeedTransactions: false,
           linkedLedgerAccountId: ensuredLedger.ledgerAccount.id,
           onboardingStatus: 'connected',
           connectionType: 'plaid_connected',
@@ -6133,18 +6212,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           liveFeedStatus: 'connected',
           liveConnectionProvider: 'plaid',
           plaidItemId: payload.itemId,
-          lastFeedSyncAt: new Date().toISOString(),
+          lastFeedSyncAt: connectedAtIso,
           autoReconcileEnabled: true,
           statementImportPolicy: 'auto_post_under_threshold',
-                  statementAutoPostThreshold: 5000,
-                  fundsRightsClassification: defaultFundsRightsClassification,
-                  achOriginationEnabled: accountType !== 'credit_card',
-            wireEnabled: accountType !== 'credit_card',
-            checkDraftEnabled: accountType !== 'credit_card',
-            positivePayEnabled: accountType !== 'credit_card',
-            overdraftPolicy: 'manual_review',
-            connectedProfile: {
-              providerKey: 'plaid',
+          statementAutoPostThreshold: 5000,
+          fundsRightsClassification: defaultFundsRightsClassification,
+          achOriginationEnabled: accountType !== 'credit_card',
+          wireEnabled: accountType !== 'credit_card',
+          checkDraftEnabled: accountType !== 'credit_card',
+          positivePayEnabled: accountType !== 'credit_card',
+          overdraftPolicy: 'manual_review',
+          connectedProfile: {
+            providerKey: 'plaid',
             providerLabel: 'Plaid Institution Login',
             connectionRail: 'plaid_link',
             sourceInstitutionName: payload.institutionName || 'Connected institution',
@@ -6155,9 +6234,20 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             supportsTransactionImport: true,
             supportsSettlementInitiation: true,
             availabilityStatus: 'live',
-            connectedAt: new Date().toISOString(),
-            lastProviderSyncAt: new Date().toISOString(),
+            connectedAt: connectedAtIso,
+            lastProviderSyncAt: connectedAtIso,
           },
+        };
+        nextBankAccounts.unshift(nextBankAccount);
+        connectedAccounts.push({
+          bankAccountId: nextBankAccount.id,
+          accountName: nextBankAccount.accountName,
+          institutionName: nextBankAccount.institutionName,
+          currentBalance: nextBankAccount.currentBalance,
+          availableBalance: linkedAccount.availableBalance,
+          last4: nextBankAccount.last4,
+          externalAccountId: linkedAccount.accountId,
+          plaidItemId: payload.itemId,
         });
       });
 
@@ -6171,12 +6261,66 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     setIsPlaidModalOpen(false);
     setSelectedBankFeedAccountId(null);
-    returnToAccountingDashboard(
-      selectedBankFeedAccountId
-        ? 'Reconnected the selected financial account and refreshed its live provider profile.'
-        : createdPersonalEntity
-          ? 'Connected live institution accounts, created a personal profile automatically, and saved the accounts into the chart of accounts.'
-          : 'Connected live institution accounts and saved them as permanent workspace accounts in the chart of accounts.'
+    if (selectedBankFeedAccountId) {
+      returnToAccountingDashboard(
+        'Reconnected the selected financial account, refreshed its live provider profile, and updated the reported balance.',
+      );
+      return;
+    }
+
+    setPendingPlaidSetup({
+      accounts: connectedAccounts,
+      createdPersonalEntity,
+    });
+    openAccountingSubsection('bankFeed');
+    setSelectedBankFeedAccountId(connectedAccounts[0]?.bankAccountId ?? null);
+    setOperationsNotice(
+      createdPersonalEntity
+        ? 'Connected live institution accounts, created a personal profile automatically, and loaded the reported starting balances. Choose how ClearFlow should import transactions going forward.'
+        : 'Connected live institution accounts and loaded the reported starting balances. Choose how ClearFlow should import transactions going forward.',
+    );
+  };
+
+  const handleApplyPlaidConnectionSetup = async (mode: PlaidPostConnectMode) => {
+    const setup = pendingPlaidSetup;
+    if (!setup || setup.accounts.length === 0) {
+      setPendingPlaidSetup(null);
+      return;
+    }
+
+    const startDate = buildNextFeedStartDate();
+
+    setData((prev) => {
+      const setupAccountIds = new Set(setup.accounts.map((account) => account.bankAccountId));
+      return {
+        ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          setupAccountIds.has(account.id)
+            ? {
+                ...account,
+                feedStartDate: startDate,
+                autoCategorizeFeedTransactions: mode === 'auto_categorize_forward',
+                autoReconcileEnabled: mode === 'auto_categorize_forward',
+                statementImportPolicy:
+                  mode === 'auto_categorize_forward'
+                    ? 'auto_post_under_threshold'
+                    : 'review_all',
+                statementAutoPostThreshold: account.statementAutoPostThreshold ?? 5000,
+              }
+            : account,
+        ),
+      };
+    });
+
+    setPendingPlaidSetup(null);
+    setSelectedBankFeedAccountId(setup.accounts[0]?.bankAccountId ?? null);
+    openAccountingSubsection('bankFeed');
+    setOperationsNotice(
+      mode === 'connect_only'
+        ? `Connected account balances are now in the chart of accounts. Feed import is paused until the user chooses to review or auto-categorize activity after ${startDate}.`
+        : mode === 'manual_review_forward'
+          ? `Connected account balances are in the chart of accounts, and new bank-feed activity after ${startDate} will land in manual reconciliation review.`
+          : `Connected account balances are in the chart of accounts, and new bank-feed activity after ${startDate} will auto-categorize with journal entries and reconciliation support.`
     );
   };
 
@@ -9698,6 +9842,24 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             setSelectedBankFeedAccountId(null);
           }}
           onConnected={handlePlaidConnected}
+        />
+      ) : null}
+
+      {pendingPlaidSetup ? (
+        <PlaidConnectionSetupModal
+          open={Boolean(pendingPlaidSetup)}
+          accounts={pendingPlaidSetup.accounts}
+          onClose={() => {
+            setPendingPlaidSetup(null);
+            openAccountingSubsection('bankFeed');
+            setSelectedBankFeedAccountId(
+              pendingPlaidSetup.accounts[0]?.bankAccountId ?? null,
+            );
+            setOperationsNotice(
+              'Connected account balances were saved. Feed import is paused until the user chooses manual review or auto-categorize settings.',
+            );
+          }}
+          onSubmit={handleApplyPlaidConnectionSetup}
         />
       ) : null}
 

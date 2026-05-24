@@ -375,6 +375,17 @@ router.post('/exchange_public_token', async (req, res) => {
       identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
+      linkedAccounts: [
+        {
+          accountId: authResponse.accounts[0].account_id,
+          name: 'Mock Checking',
+          mask: authResponse.numbers.ach[0].account.slice(-4),
+          type: 'depository',
+          subtype: 'checking',
+          currentBalance: 2500,
+          availableBalance: 2500,
+        },
+      ],
     });
   }
 
@@ -408,6 +419,19 @@ router.post('/exchange_public_token', async (req, res) => {
       identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
+      linkedAccounts: accountsResponse.data.accounts.map((account) => ({
+        accountId: account.account_id,
+        name: account.name || account.official_name || 'Connected account',
+        mask: account.mask,
+        type: account.type,
+        subtype: account.subtype,
+        currentBalance:
+          typeof account.balances?.current === 'number' ? account.balances.current : undefined,
+        availableBalance:
+          typeof account.balances?.available === 'number'
+            ? account.balances.available
+            : undefined,
+      })),
     });
   } catch (error) {
     return res.status(500).json({

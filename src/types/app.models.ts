@@ -279,6 +279,8 @@ export interface PlaidConnectionPayload {
     mask?: string;
     type?: string;
     subtype?: string;
+    currentBalance?: number;
+    availableBalance?: number;
   }>;
 }
 

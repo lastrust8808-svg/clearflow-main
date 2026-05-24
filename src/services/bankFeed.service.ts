@@ -146,6 +146,87 @@ function buildMemo(rule: BankFeedRuleRecord | undefined, description: string) {
   return rule.memoTemplate.replace(/\{merchant\}/gi, description);
 }
 
+function ensureAutoCategorizeLedgerAccount(input: {
+  ledgerAccounts: LedgerAccountRecord[];
+  entityId: string;
+  direction: 'credit' | 'debit';
+  currency: string;
+}) {
+  const template =
+    input.direction === 'debit'
+      ? {
+          code: '6850',
+          name: 'Bank Feed Expense Clearing',
+          accountType: 'expense' as const,
+        }
+      : {
+          code: '2300',
+          name: 'Unapplied Cash',
+          accountType: 'liability' as const,
+        };
+
+  const existing = input.ledgerAccounts.find(
+    (account) =>
+      account.entityId === input.entityId &&
+      (account.code === template.code || account.name === template.name),
+  );
+
+  if (existing) {
+    return {
+      ledgerAccount: existing,
+      ledgerAccounts: input.ledgerAccounts,
+    };
+  }
+
+  const nextLedgerAccount: LedgerAccountRecord = {
+    id: buildId('led', `${input.entityId}-${template.code}`),
+    entityId: input.entityId,
+    code: template.code,
+    name: template.name,
+    accountType: template.accountType,
+    currency: input.currency,
+    balance: 0,
+    remittanceEligible: false,
+    remittanceClassification: 'other',
+  };
+
+  return {
+    ledgerAccount: nextLedgerAccount,
+    ledgerAccounts: [nextLedgerAccount, ...input.ledgerAccounts],
+  };
+}
+
+function applyLedgerAmount(
+  ledgerAccounts: LedgerAccountRecord[],
+  ledgerAccountId: string | undefined,
+  side: 'debit' | 'credit',
+  amount: number,
+) {
+  if (!ledgerAccountId || !amount) {
+    return ledgerAccounts;
+  }
+
+  return ledgerAccounts.map((account) => {
+    if (account.id !== ledgerAccountId) {
+      return account;
+    }
+
+    const signedAmount =
+      account.accountType === 'asset' || account.accountType === 'expense'
+        ? side === 'debit'
+          ? amount
+          : -amount
+        : side === 'credit'
+          ? amount
+          : -amount;
+
+    return {
+      ...account,
+      balance: Number((account.balance + signedAmount).toFixed(2)),
+    };
+  });
+}
+
 function ensureWorkingReconciliation(
   data: CoreDataBundle,
   bankAccount: BankAccountRecord
@@ -202,6 +283,12 @@ export function syncBankFeedToLedger(input: {
     input.plaidTransactions && input.plaidTransactions.length > 0
       ? input.plaidTransactions
       : buildFallbackPlaidTransactions(bankAccount);
+  const feedStartDate =
+    bankAccount.feedStartDate ||
+    bankAccount.connectedProfile?.connectedAt?.slice(0, 10);
+  const filteredTransactions = feedStartDate
+    ? sourceTransactions.filter((transaction) => toIsoDate(transaction.date) >= feedStartDate)
+    : sourceTransactions;
 
   const existingExternalIds = new Set(
     (data.bankFeedEntries ?? [])
@@ -237,7 +324,7 @@ export function syncBankFeedToLedger(input: {
     ? data.ledgerAccounts.find((account) => account.id === bankAccount.linkedLedgerAccountId)
     : undefined;
 
-  for (const plaidTransaction of sourceTransactions) {
+  for (const plaidTransaction of filteredTransactions) {
     if (existingExternalIds.has(plaidTransaction.transaction_id)) {
       continue;
     }
@@ -258,7 +345,28 @@ export function syncBankFeedToLedger(input: {
     const ruleLedgerAccount = rule?.defaultLedgerAccountId
       ? nextLedgerAccounts.find((account) => account.id === rule.defaultLedgerAccountId)
       : undefined;
-    const shouldAutoPost = Boolean(rule?.autoPost && (ruleLedgerAccount || bankLedgerAccount));
+    const shouldUseFallbackCounterparty = Boolean(
+      !ruleLedgerAccount &&
+        bankLedgerAccount &&
+        (bankAccount.autoCategorizeFeedTransactions || rule?.autoPost),
+    );
+    const fallbackCounterparty = shouldUseFallbackCounterparty
+      ? ensureAutoCategorizeLedgerAccount({
+          ledgerAccounts: nextLedgerAccounts,
+          entityId: bankAccount.entityId,
+          direction: normalized.direction,
+          currency: bankAccount.currency,
+        })
+      : null;
+    if (fallbackCounterparty) {
+      nextLedgerAccounts = fallbackCounterparty.ledgerAccounts;
+    }
+    const postingLedgerAccount = ruleLedgerAccount || fallbackCounterparty?.ledgerAccount;
+    const shouldAutoPost = Boolean(
+      bankLedgerAccount &&
+        ((rule?.autoPost && (postingLedgerAccount || bankLedgerAccount)) ||
+          (bankAccount.autoCategorizeFeedTransactions && postingLedgerAccount)),
+    );
     const verificationStatus =
       rule?.verificationMode === 'manual_review' ? 'pending' : 'verified';
 
@@ -280,11 +388,15 @@ export function syncBankFeedToLedger(input: {
         status: 'posted',
         linkedLedgerAccountIds: [
           bankAccount.linkedLedgerAccountId,
-          ruleLedgerAccount?.id,
+          postingLedgerAccount?.id,
         ].filter(Boolean) as string[],
         notes:
           `Auto-posted from live bank feed sync for ${bankAccount.accountName}.` +
-          (rule ? ` Rule applied: ${rule.name}.` : ''),
+          (rule
+            ? ` Rule applied: ${rule.name}.`
+            : bankAccount.autoCategorizeFeedTransactions
+              ? ` Auto-categorized from Plaid category ${plaidTransaction.category?.join(' / ') || 'uncategorized'}.`
+              : ''),
       };
 
       const journalRecord: JournalEntryRecord = {
@@ -295,18 +407,21 @@ export function syncBankFeedToLedger(input: {
         memo: transactionRecord.title,
         debitAccount:
           normalized.direction === 'debit'
-            ? ruleLedgerAccount?.name || 'Bank Feed Expense Clearing'
+            ? postingLedgerAccount?.name || 'Bank Feed Expense Clearing'
             : bankLedgerAccount?.name || bankAccount.accountName,
         creditAccount:
           normalized.direction === 'debit'
             ? bankLedgerAccount?.name || bankAccount.accountName
-            : ruleLedgerAccount?.name || 'Bank Feed Income Clearing',
+            : postingLedgerAccount?.name || 'Unapplied Cash',
         amount: normalized.absoluteAmount,
         status: 'posted',
         source: 'system',
         linkedTransactionIds: [transactionId],
         autoReconcileStatus:
-          rule?.autoReconcile && verificationStatus === 'verified' ? 'matched' : 'pending',
+          (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+          verificationStatus === 'verified'
+            ? 'matched'
+            : 'pending',
       };
 
       nextTransactions = [transactionRecord, ...nextTransactions];
@@ -333,16 +448,18 @@ export function syncBankFeedToLedger(input: {
         createdTokenIds = [token.id];
       }
 
-      if (bankLedgerAccount) {
-        nextLedgerAccounts = nextLedgerAccounts.map((account) =>
-          account.id === bankLedgerAccount.id
-            ? {
-                ...account,
-                balance: Number((account.balance + normalized.signedAmount).toFixed(2)),
-              }
-            : account
-        );
-      }
+      nextLedgerAccounts = applyLedgerAmount(
+        nextLedgerAccounts,
+        bankLedgerAccount?.id,
+        normalized.direction === 'debit' ? 'credit' : 'debit',
+        normalized.absoluteAmount,
+      );
+      nextLedgerAccounts = applyLedgerAmount(
+        nextLedgerAccounts,
+        postingLedgerAccount?.id,
+        normalized.direction === 'debit' ? 'debit' : 'credit',
+        normalized.absoluteAmount,
+      );
     }
 
     const reconciliationLine: ReconciliationStatementLineRecord = {
@@ -354,18 +471,22 @@ export function syncBankFeedToLedger(input: {
       reference: plaidTransaction.transaction_id,
       rawAmountText: String(plaidTransaction.amount),
       matchStatus:
-        createdTransactionId && rule?.autoReconcile && verificationStatus === 'verified'
+        createdTransactionId &&
+        (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+        verificationStatus === 'verified'
           ? 'matched'
           : createdTransactionId
             ? 'suggested'
             : 'unreviewed',
       suggestedTransactionIds: createdTransactionId ? [createdTransactionId] : undefined,
-      notes:
-        rule?.verificationMode === 'manual_review'
-          ? 'Rule matched, but manual review is required before full auto-reconcile.'
-          : rule
-            ? `Bank feed rule applied: ${rule.name}.`
-            : 'Imported from connected bank feed. No auto-post rule matched yet.',
+        notes:
+          rule?.verificationMode === 'manual_review'
+            ? 'Rule matched, but manual review is required before full auto-reconcile.'
+            : rule
+              ? `Bank feed rule applied: ${rule.name}.`
+              : bankAccount.autoCategorizeFeedTransactions
+                ? `Auto-categorized from Plaid feed category ${plaidTransaction.category?.join(' / ') || 'uncategorized'}.`
+              : 'Imported from connected bank feed. No auto-post rule matched yet.',
     };
 
     nextReconciliations = nextReconciliations.map((record) =>
@@ -376,19 +497,25 @@ export function syncBankFeedToLedger(input: {
             statementReviewStatus: 'needs_review',
             parsedStatementLines: [reconciliationLine, ...(record.parsedStatementLines ?? [])],
             clearedTransactionIds:
-              createdTransactionId && rule?.autoReconcile && verificationStatus === 'verified'
+              createdTransactionId &&
+              (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+              verificationStatus === 'verified'
                 ? Array.from(
                     new Set([...(record.clearedTransactionIds ?? []), createdTransactionId])
                   )
                 : record.clearedTransactionIds,
             matchedStatementLineIds:
-              createdTransactionId && rule?.autoReconcile && verificationStatus === 'verified'
+              createdTransactionId &&
+              (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+              verificationStatus === 'verified'
                 ? Array.from(
                     new Set([...(record.matchedStatementLineIds ?? []), reconciliationLine.id])
                   )
                 : record.matchedStatementLineIds,
             unmatchedStatementLineIds:
-              createdTransactionId && rule?.autoReconcile && verificationStatus === 'verified'
+              createdTransactionId &&
+              (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+              verificationStatus === 'verified'
                 ? (record.unmatchedStatementLineIds ?? []).filter(
                     (lineId) => lineId !== reconciliationLine.id
                   )
@@ -414,7 +541,9 @@ export function syncBankFeedToLedger(input: {
         category: plaidTransaction.category?.join(' / '),
         importedAt: new Date().toISOString(),
         status:
-          createdTransactionId && rule?.autoReconcile && verificationStatus === 'verified'
+          createdTransactionId &&
+          (rule ? rule.autoReconcile : bankAccount.autoReconcileEnabled !== false) &&
+          verificationStatus === 'verified'
             ? 'reconciled'
             : createdTransactionId
               ? 'posted'
@@ -431,6 +560,8 @@ export function syncBankFeedToLedger(input: {
           rule?.counterpartyLabel ||
           (rule
             ? `Rule ${rule.name} applied during sync.`
+            : bankAccount.autoCategorizeFeedTransactions
+              ? 'Auto-categorized from connected Plaid feed using the live bank category.'
             : 'Imported into the operational feed queue with no rule match yet.'),
       },
       ...nextFeedEntries,
@@ -440,9 +571,10 @@ export function syncBankFeedToLedger(input: {
       account.id === bankAccountId
         ? {
             ...account,
-            currentBalance: Number(
-              ((account.currentBalance ?? 0) + normalized.signedAmount).toFixed(2)
-            ),
+            currentBalance:
+              bankAccount.connectionType === 'plaid_connected'
+                ? account.currentBalance
+                : Number(((account.currentBalance ?? 0) + normalized.signedAmount).toFixed(2)),
           }
         : account
     );

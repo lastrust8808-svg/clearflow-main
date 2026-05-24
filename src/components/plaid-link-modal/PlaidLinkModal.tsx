@@ -47,17 +47,32 @@ export const PlaidLinkModal: React.FC<PlaidLinkModalProps> = ({ onClose, onConne
     setIsProcessing(true);
     try {
       const payload = await plaidService.exchangePublicToken(public_token, currentUser.id, currentUser.name);
+      const payloadLinkedAccounts = payload.linkedAccounts ?? [];
+      const payloadLinkedAccountMap = new Map(
+        payloadLinkedAccounts.map((account) => [account.accountId, account])
+      );
+      const mergedLinkedAccounts =
+        metadata?.accounts?.map((account: any) => {
+          const accountId = account.id || account.account_id || '';
+          const linkedPayloadAccount = payloadLinkedAccountMap.get(accountId);
+          return {
+            accountId,
+            name:
+              account.name ||
+              account.official_name ||
+              linkedPayloadAccount?.name ||
+              'Connected account',
+            mask: account.mask || linkedPayloadAccount?.mask || '',
+            type: account.type || linkedPayloadAccount?.type || '',
+            subtype: account.subtype || linkedPayloadAccount?.subtype || '',
+            currentBalance: linkedPayloadAccount?.currentBalance,
+            availableBalance: linkedPayloadAccount?.availableBalance,
+          };
+        }) || payload.linkedAccounts;
       onConnected({
         ...payload,
         institutionName: metadata?.institution?.name || payload.institutionName,
-        linkedAccounts:
-          metadata?.accounts?.map((account: any) => ({
-            accountId: account.id || account.account_id || '',
-            name: account.name || account.official_name || 'Connected account',
-            mask: account.mask || '',
-            type: account.type || '',
-            subtype: account.subtype || '',
-          })) || payload.linkedAccounts,
+        linkedAccounts: mergedLinkedAccounts,
       });
     } catch (err) {
       setError("Failed to connect your bank account. Please try again.");

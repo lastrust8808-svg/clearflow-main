@@ -2531,6 +2531,8 @@ export interface BankAccountRecord {
   currency: string;
   status: 'active' | 'inactive';
   currentBalance?: number;
+  feedStartDate?: string;
+  autoCategorizeFeedTransactions?: boolean;
   linkedLedgerAccountId?: string;
   linkedDocumentIds?: string[];
   onboardingStatus?: 'draft' | 'collecting' | 'ready' | 'submitted' | 'connected';

@@ -475,6 +475,17 @@ export default function BankFeedWorkspace({
               Feed status: <strong>{account.liveFeedStatus ?? 'disconnected'}</strong>
               <br />
               Connection: <strong>{account.liveConnectionProvider ?? account.connectionType ?? 'manual'}</strong>
+              <br />
+              Balance:{' '}
+              <strong>
+                {typeof account.currentBalance === 'number'
+                  ? new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: account.currency || 'USD',
+                      maximumFractionDigits: 2,
+                    }).format(account.currentBalance)
+                  : 'not loaded'}
+              </strong>
               {account.connectedProfile?.providerLabel ? (
                 <>
                   <br />
@@ -486,6 +497,12 @@ export default function BankFeedWorkspace({
               <br />
               Statement policy:{' '}
               <strong>{account.statementImportPolicy ?? 'review_all'}</strong>
+              <br />
+              Feed start:{' '}
+              <strong>{account.feedStartDate || 'not set'}</strong>
+              <br />
+              Auto categorize:{' '}
+              <strong>{account.autoCategorizeFeedTransactions ? 'on' : 'manual review'}</strong>
               <br />
               Last sync:{' '}
               <strong>{account.lastFeedSyncAt ? new Date(account.lastFeedSyncAt).toLocaleString() : 'not yet'}</strong>
