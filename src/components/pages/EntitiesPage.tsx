@@ -42,6 +42,10 @@ function goToHash(hash: string) {
   }
 }
 
+function normalizeAuthorityPartyName(value?: string | null) {
+  return value?.trim().replace(/\s+/g, ' ').toLowerCase() || '';
+}
+
 const ENTITY_CREATE_NOTICE_STORAGE_KEY = 'clearflow-entity-create-notice';
 
 export default function EntitiesPage({
@@ -111,27 +115,37 @@ export default function EntitiesPage({
       Boolean(entity.authorityProofRequiredPartyNames?.length),
   );
   const firstHeldEntity = authorityHeldEntities[0];
-  const visibleAuthorityRecords = data.authorityRecords.filter((record, index, records) => {
-    const makeKey = (item: typeof record) =>
-      [item.entityId, item.personName.trim().toLowerCase(), item.recordType, item.signerEmail?.trim().toLowerCase() || ''].join('|');
-    return index === records.findIndex((candidate) => makeKey(candidate) === makeKey(record));
-  });
-
   const resolveEntitySetupDocument = (entityId: string) =>
     data.documents.find(
       (document) =>
         document.entityId === entityId &&
         (document.templateKey === 'formation_packet' || document.category === 'authority_record'),
     );
+  const focusedAuthorityEntity =
+    orderedEntities.find((entity) => entity.id === activeEntityId) || firstHeldEntity || orderedEntities[0] || null;
+  const focusedAuthorityNeedsReview = focusedAuthorityEntity
+    ? focusedAuthorityEntity.authorityTransactionsPaused ||
+      authorityReviewTags.some((tag) => tag.entityId === focusedAuthorityEntity.id) ||
+      Boolean(focusedAuthorityEntity.authorityProofRequiredPartyNames?.length)
+    : false;
+  const focusedAuthoritySetupPacket = focusedAuthorityEntity
+    ? resolveEntitySetupDocument(focusedAuthorityEntity.id)
+    : undefined;
+  const visibleAuthorityRecords = data.authorityRecords.filter((record, index, records) => {
+    const makeKey = (item: typeof record) =>
+      [item.entityId, item.personName.trim().toLowerCase(), item.recordType, item.signerEmail?.trim().toLowerCase() || ''].join('|');
+    return index === records.findIndex((candidate) => makeKey(candidate) === makeKey(record));
+  });
 
   const openAuthorityWorkspace = (entityId?: string | null) => {
     if (entityId) {
       onSetActiveEntity?.(entityId);
     }
+    setActiveLane('authority');
     if (typeof window !== 'undefined') {
       window.location.hash = '#entities:authority';
       window.setTimeout(() => {
-        document.getElementById('entity-authority-workspace')?.scrollIntoView({
+        document.getElementById('entity-authority-focus')?.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
         });
@@ -1450,6 +1464,101 @@ export default function EntitiesPage({
         title="Authority Control"
         description="Keep representative authority, attestation posture, and onboarding readiness visible before banks, vendors, and counterparties depend on the entity."
       >
+        {focusedAuthorityEntity ? (
+          <div
+            id="entity-authority-focus"
+            style={{
+              marginBottom: 16,
+              padding: 16,
+              borderRadius: 18,
+              border: focusedAuthorityNeedsReview
+                ? '1px solid rgba(251,191,36,0.3)'
+                : '1px solid rgba(74,222,128,0.24)',
+              background: focusedAuthorityNeedsReview
+                ? 'rgba(120,53,15,0.16)'
+                : 'rgba(21,128,61,0.12)',
+              display: 'grid',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 800 }}>
+                  {focusedAuthorityEntity.displayName || focusedAuthorityEntity.name}
+                </div>
+                <div style={{ color: focusedAuthorityNeedsReview ? '#fde68a' : '#bbf7d0', lineHeight: 1.55 }}>
+                  {focusedAuthorityNeedsReview
+                    ? focusedAuthorityEntity.authorityProofSummary ||
+                      'Authority still needs review before bank onboarding or outside movement.'
+                    : 'Authority is clear for this entity. You can continue into banking and ledger setup.'}
+                </div>
+              </div>
+              <div style={{ color: '#cbd5f5', fontSize: 13 }}>
+                Active lane: authority
+              </div>
+            </div>
+            {focusedAuthorityEntity.authorityProofRequiredPartyNames?.length ? (
+              <div style={{ color: '#fde68a', fontSize: 13, lineHeight: 1.55 }}>
+                Remaining named parties: {focusedAuthorityEntity.authorityProofRequiredPartyNames.join(', ')}.
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {focusedAuthorityNeedsReview ? (
+                <button
+                  type="button"
+                  onClick={() => releaseAuthorityHold(focusedAuthorityEntity.id)}
+                  style={{
+                    padding: '9px 13px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(74,222,128,0.28)',
+                    background: 'rgba(34,197,94,0.16)',
+                    color: '#dcfce7',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                  }}
+                >
+                  Confirm Authority And Continue To Banking
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSetActiveEntity?.(focusedAuthorityEntity.id);
+                    goToHash('#accounting:bankFeed');
+                  }}
+                  style={{
+                    padding: '9px 13px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(126,242,255,0.28)',
+                    background: 'rgba(54,215,255,0.16)',
+                    color: '#effcff',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                  }}
+                >
+                  Continue To Banking
+                </button>
+              )}
+              {focusedAuthoritySetupPacket ? (
+                <button
+                  type="button"
+                  onClick={() => goToHash(`#documents:${focusedAuthoritySetupPacket.id}`)}
+                  style={{
+                    padding: '9px 13px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(96,165,250,0.4)',
+                    background: 'rgba(37,99,235,0.18)',
+                    color: '#e5e7eb',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Open Authority Packet
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
           <WorkbenchRecordCard
             title="Authority Ready"
@@ -2157,41 +2266,21 @@ export default function EntitiesPage({
                   <button
                     key={status}
                     type="button"
-                    onClick={() =>
-                      setData((prev) => ({
-                        ...prev,
-                        authorityRecords: prev.authorityRecords.map((item) =>
+                    onClick={() => {
+                      const acceptedAt = new Date().toISOString();
+                      const acceptedDateLabel = acceptedAt.slice(0, 10);
+                      setData((prev) => {
+                        const nextAuthorityRecords = prev.authorityRecords.map((item) =>
                           item.id === record.id
                             ? {
                                 ...item,
                                 approvalStatus: status,
-                                acceptedAt:
-                                  status === 'accepted'
-                                    ? new Date().toISOString()
-                                    : item.acceptedAt,
-                                acceptedBy:
-                                  status === 'accepted'
-                                    ? item.personName
-                                    : item.acceptedBy,
+                                acceptedAt: status === 'accepted' ? acceptedAt : item.acceptedAt,
+                                acceptedBy: status === 'accepted' ? item.personName : item.acceptedBy,
                               }
                             : item
-                        ),
-                        entities:
-                          status === 'accepted' && record.entityId
-                            ? prev.entities.map((entity) =>
-                                entity.id === record.entityId
-                                  ? {
-                                      ...entity,
-                                      authorityTransactionsPaused: false,
-                                      authorityProofStatus:
-                                        entity.authorityProofStatus === 'matched'
-                                          ? entity.authorityProofStatus
-                                          : 'similar_match',
-                                    }
-                                  : entity,
-                              )
-                            : prev.entities,
-                        complianceTags:
+                        );
+                        const nextComplianceTags =
                           status === 'accepted'
                             ? prev.complianceTags.map((tag) =>
                                 tag.category === 'authority' &&
@@ -2200,13 +2289,70 @@ export default function EntitiesPage({
                                   ? {
                                       ...tag,
                                       status: 'ok',
-                                      notes: `${tag.notes || tag.label} Cleared automatically after signer acceptance on ${new Date().toISOString().slice(0, 10)}.`,
+                                      notes: `${tag.notes || tag.label} Cleared automatically after signer acceptance on ${acceptedDateLabel}.`,
                                     }
                                   : tag,
                               )
-                            : prev.complianceTags,
-                      }))
-                    }
+                            : prev.complianceTags;
+                        const nextEntities =
+                          status === 'accepted' && record.entityId
+                            ? prev.entities.map((entity) => {
+                                if (entity.id !== record.entityId) {
+                                  return entity;
+                                }
+                                const acceptedSignerNames = new Set(
+                                  nextAuthorityRecords
+                                    .filter(
+                                      (item) =>
+                                        item.entityId === entity.id &&
+                                        item.approvalStatus === 'accepted',
+                                    )
+                                    .map((item) => normalizeAuthorityPartyName(item.personName))
+                                    .filter(Boolean),
+                                );
+                                const remainingRequiredPartyNames =
+                                  entity.authorityProofRequiredPartyNames?.filter(
+                                    (name) =>
+                                      !acceptedSignerNames.has(normalizeAuthorityPartyName(name)),
+                                  ) || [];
+                                const hasOpenAuthorityReview = nextComplianceTags.some(
+                                  (tag) =>
+                                    tag.category === 'authority' &&
+                                    tag.entityId === entity.id &&
+                                    tag.status === 'review',
+                                );
+                                const shouldRemainPaused =
+                                  entity.authorityProofStatus === 'missing' ||
+                                  entity.authorityProofStatus === 'mismatch' ||
+                                  hasOpenAuthorityReview ||
+                                  Boolean(remainingRequiredPartyNames.length);
+
+                                return {
+                                  ...entity,
+                                  authorityTransactionsPaused: shouldRemainPaused,
+                                  authorityProofRequiredPartyNames: remainingRequiredPartyNames,
+                                  authorityProofStatus: shouldRemainPaused
+                                    ? entity.authorityProofStatus
+                                    : entity.authorityProofStatus === 'matched'
+                                      ? entity.authorityProofStatus
+                                      : 'similar_match',
+                                  authorityProofSummary:
+                                    remainingRequiredPartyNames.length <
+                                    (entity.authorityProofRequiredPartyNames?.length || 0)
+                                      ? `${entity.authorityProofSummary || 'Authority reviewed.'} Accepted signer ${record.personName} on ${acceptedDateLabel}.`
+                                      : entity.authorityProofSummary,
+                                };
+                              })
+                            : prev.entities;
+
+                        return {
+                          ...prev,
+                          authorityRecords: nextAuthorityRecords,
+                          entities: nextEntities,
+                          complianceTags: nextComplianceTags,
+                        };
+                      });
+                    }}
                     style={{
                       padding: '8px 12px',
                       borderRadius: 10,
