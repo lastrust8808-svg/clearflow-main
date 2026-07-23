@@ -1,8 +1,9 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
+import ReserveLedgerAccountModal from '../ledger/ReserveLedgerAccountModal';
 
 interface LedgerPageProps {
   data: CoreDataBundle;
@@ -10,6 +11,7 @@ interface LedgerPageProps {
 }
 
 export default function LedgerPage({ data, setData }: LedgerPageProps) {
+  const [reserveEditorAccountId, setReserveEditorAccountId] = useState<string | null>(null);
   const visibleTreasuryAccounts = data.treasuryAccounts.filter(
     (item) => !item.name.startsWith('ClearFlow '),
   );
@@ -28,6 +30,8 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
       )
     )
     .slice(0, 5);
+  const reserveEditorAccount =
+    visibleLedgerAccounts.find((item) => item.id === reserveEditorAccountId) || null;
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -170,30 +174,92 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
 
       <PageSection title="Ledger Accounts" description="Books, reserve sources, memo accounts, and remittance-capable balances.">
         <div style={{ display: 'grid', gap: 16 }}>
-          {visibleLedgerAccounts.map((account) => (
-            <WorkbenchRecordCard
-              key={account.id}
-              title={`${account.code} | ${account.name}`}
-              subtitle={`${account.accountType} | ${account.currency ?? '-'}`}
-              summaryItems={[
-                { label: 'Entity', value: data.entities.find((item) => item.id === account.entityId)?.displayName || account.entityId },
-                { label: 'Balance', value: account.balance.toLocaleString() },
-                { label: 'Remittance', value: account.remittanceEligible ? account.remittanceClassification || 'eligible' : 'not eligible' },
-                { label: 'Wallet Links', value: account.linkedWalletIds?.length || 0 },
-              ]}
-              record={account}
-              onSave={(nextRecord) =>
-                setData((prev) => ({
-                  ...prev,
-                  ledgerAccounts: prev.ledgerAccounts.map((item) =>
-                    item.id === account.id ? nextRecord : item
+          {visibleLedgerAccounts.map((account) => {
+            const accountLinkedAssetIds = new Set(account.linkedAssetIds || []);
+            const linkedAssetCount = data.assets.filter(
+              (item) =>
+                item.linkedLedgerAccountId === account.id || accountLinkedAssetIds.has(item.id),
+            ).length;
+            const linkedWalletCount = data.wallets.filter(
+              (item) =>
+                item.linkedLedgerAccountId === account.id ||
+                Boolean(account.linkedWalletIds?.includes(item.id)),
+            ).length;
+            const linkedInstrumentCount = data.instruments.filter(
+              (item) =>
+                item.entityId === account.entityId &&
+                Boolean(
+                  item.linkedAssetIds?.some((assetId) =>
+                    accountLinkedAssetIds.has(assetId) ||
+                    data.assets.some(
+                      (asset) => asset.id === assetId && asset.linkedLedgerAccountId === account.id,
+                    ),
                   ),
-                }))
-              }
-            >
-              Use advanced edit to manage linked assets, wallet maps, and remittance classifications.
-            </WorkbenchRecordCard>
-          ))}
+                ),
+            ).length;
+            const isReserveEditable =
+              account.remittanceClassification === 'reserve' ||
+              /reserve|mark|custody|wallet/i.test(account.name) ||
+              (account.accountType !== 'income' && account.accountType !== 'expense');
+
+            return (
+              <WorkbenchRecordCard
+                key={account.id}
+                title={`${account.code} | ${account.name}`}
+                subtitle={`${account.accountType} | ${account.currency ?? '-'}`}
+                summaryItems={[
+                  {
+                    label: 'Entity',
+                    value:
+                      data.entities.find((item) => item.id === account.entityId)?.displayName ||
+                      account.entityId,
+                  },
+                  { label: 'Balance', value: account.balance.toLocaleString() },
+                  {
+                    label: 'Remittance',
+                    value: account.remittanceEligible
+                      ? account.remittanceClassification || 'eligible'
+                      : 'not eligible',
+                  },
+                  { label: 'Reserve Assets', value: linkedAssetCount },
+                  { label: 'Wallet Links', value: linkedWalletCount },
+                  { label: 'Notes / Paper', value: linkedInstrumentCount },
+                ]}
+                actionSlot={
+                  isReserveEditable ? (
+                    <button
+                      type="button"
+                      onClick={() => setReserveEditorAccountId(account.id)}
+                      style={{
+                        padding: '9px 12px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(126, 242, 255, 0.28)',
+                        background: 'rgba(54, 215, 255, 0.09)',
+                        color: '#effcff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Reserve Setup
+                    </button>
+                  ) : null
+                }
+                record={account}
+                onSave={(nextRecord) =>
+                  setData((prev) => ({
+                    ...prev,
+                    ledgerAccounts: prev.ledgerAccounts.map((item) =>
+                      item.id === account.id ? nextRecord : item,
+                    ),
+                  }))
+                }
+              >
+                {isReserveEditable
+                  ? 'Open Reserve Setup to link or add UCC filings, notes held, metal reserves, and crypto wallets without editing code.'
+                  : 'Use advanced edit to manage linked assets, wallet maps, and remittance classifications.'}
+              </WorkbenchRecordCard>
+            );
+          })}
         </div>
       </PageSection>
 
@@ -232,6 +298,13 @@ export default function LedgerPage({ data, setData }: LedgerPageProps) {
           )}
         </div>
       </PageSection>
+      <ReserveLedgerAccountModal
+        open={Boolean(reserveEditorAccount)}
+        account={reserveEditorAccount}
+        data={data}
+        setData={setData}
+        onClose={() => setReserveEditorAccountId(null)}
+      />
     </div>
   );
 }
