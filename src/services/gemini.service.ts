@@ -1,28 +1,40 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import { AnalysisResult, IdAnalysisResult, JournalEntry } from '../types/app.models';
 import { GOVERNANCE_DOCUMENTS_RAW } from '../data/governance-docs';
-import { getGeminiApiKey } from './runtimeConfig.service';
+import { getApiBaseUrl } from './runtimeConfig.service';
 
 class GeminiService {
-  private ai: GoogleGenAI | null = null;
   readonly isConfigured: boolean = true;
   readonly configurationIssue: 'missing_api_key' | 'unresolved_placeholder' | null = null;
 
-  constructor() {
-    const apiKey = getGeminiApiKey().trim();
-    const looksUnresolvedPlaceholder =
-      apiKey.startsWith('%') && apiKey.endsWith('%');
-    if (!apiKey || apiKey === 'MOCK_API_KEY_FOR_GEMINI') {
-      console.warn('API_KEY environment variable not set. Gemini Service will not work.');
-      this.isConfigured = false;
-      this.configurationIssue = 'missing_api_key';
-    } else if (looksUnresolvedPlaceholder) {
-      console.warn('Gemini API key placeholder was not resolved. Gemini Service will not work.');
-      this.isConfigured = false;
-      this.configurationIssue = 'unresolved_placeholder';
-    } else {
-      this.ai = new GoogleGenAI({ apiKey });
+  private async generateContent(request: {
+    model: string;
+    contents: unknown;
+    config?: unknown;
+  }): Promise<{ text?: string | null }> {
+    const response = await fetch(`${getApiBaseUrl()}/api/gemini/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(request),
+    });
+
+    let payload: { success?: boolean; text?: string | null; error?: string } | null = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Preserve a useful status-based error when the backend returns non-JSON.
     }
+
+    if (!response.ok || !payload?.success) {
+      throw new Error(
+        payload?.error || `Gemini service request failed with status ${response.status}.`
+      );
+    }
+
+    return { text: payload.text ?? null };
   }
 
   private fileToGenerativePart(file: File): Promise<{ inlineData: { data: string; mimeType: string; } }> {
@@ -43,9 +55,6 @@ class GeminiService {
   }
   
   async analyzeFinancialDocumentForJournalEntry(file: File, context: string): Promise<JournalEntry> {
-    if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The analysis feature is disabled.');
-    }
     try {
       const filePart = await this.fileToGenerativePart(file);
       const textPart = {
@@ -84,7 +93,7 @@ Instructions:
         required: ['id', 'date', 'description', 'lines']
       };
       
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
@@ -119,10 +128,7 @@ Instructions:
 
 
   async analyzeDocument(file: File): Promise<AnalysisResult> {
-     if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The analysis feature is disabled.');
-    }
-    try {
+     try {
       const filePart = await this.fileToGenerativePart(file);
       const textPart = {
         text: `Analyze the provided financial document (e.g., bank statement, IRS form like CP575, ledger, bill coupon, utility statement). Extract key information and return it as a JSON object matching the specified schema. The summary should be a concise overview of the document's purpose and contents. If the document is a bill or remittance coupon, also extract any visible remit address, customer-service phone, account reference, payment processing code, and short payment-instruction summary when those fields are visible.`
@@ -178,7 +184,7 @@ Instructions:
         },
       };
 
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
@@ -204,9 +210,6 @@ Instructions:
   }
 
   async analyzeIdDocument(file: File): Promise<IdAnalysisResult> {
-    if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The analysis feature is disabled.');
-    }
     try {
       const filePart = await this.fileToGenerativePart(file);
       const textPart = {
@@ -223,7 +226,7 @@ Instructions:
         },
       };
 
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash-lite',
         contents: { parts: [textPart, filePart] },
         config: {
@@ -249,9 +252,6 @@ Instructions:
   }
 
   async analyzeTransaction(description: string): Promise<{ date: string; description: string; entries: { account: string; debit: number; credit: number }[] }> {
-    if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The analysis feature is disabled.');
-    }
     try {
       const textPart = {
         text: `You are an expert bookkeeper. Analyze the following natural language transaction description and convert it into a standard double-entry journal entry.
@@ -286,7 +286,7 @@ Return a single JSON object that strictly follows this schema. Do not include an
         required: ['date', 'description', 'entries']
       };
 
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [textPart] },
         config: {
@@ -313,9 +313,6 @@ Return a single JSON object that strictly follows this schema. Do not include an
   }
 
   async queryDocuments(question: string): Promise<string> {
-    if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The Q&A feature is disabled.');
-    }
     try {
       const systemInstruction = `You are an expert assistant for Clear-Flow Integrated Financial Management, LLC. Your role is to answer questions based *only* on the content of the official company documents provided below. Do not use any external knowledge. If the answer cannot be found in the documents, state that clearly.
 
@@ -325,7 +322,7 @@ Return a single JSON object that strictly follows this schema. Do not include an
       ---
       `;
 
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash',
         contents: question,
         config: {
@@ -346,9 +343,6 @@ Return a single JSON object that strictly follows this schema. Do not include an
   }
 
   async analyzeSystemHealth(statuses: any[]): Promise<any> {
-    if (!this.ai) {
-      throw new Error('Configuration Error: API Key is missing. The system health analysis feature is disabled.');
-    }
     try {
       const textPart = {
         text: `You are a system reliability engineer. Analyze the following system statuses and provide a structured health report.
@@ -386,7 +380,7 @@ Return a single JSON object that strictly follows this schema. Do not include an
         required: ['overallScore', 'summary', 'recommendations', 'businessImpact']
       };
 
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [textPart] },
         config: {
