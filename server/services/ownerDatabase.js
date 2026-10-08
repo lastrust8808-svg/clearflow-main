@@ -120,6 +120,161 @@ export async function loadOwnerWorkspace(accountId) {
   return result.rows[0] || null;
 }
 
+
+function deepMergeEntity(base, patch) {
+  const nestedKeys = ['entityAccess', 'branding', 'numbering', 'operationalDefaults'];
+  const merged = {
+    ...(base || {}),
+    ...(patch || {}),
+  };
+
+  for (const key of nestedKeys) {
+    if (patch?.[key]) {
+      merged[key] = {
+        ...(base?.[key] || {}),
+        ...patch[key],
+      };
+    }
+  }
+
+  return merged;
+}
+
+function entityMatches(record, patch) {
+  const matchId = String(patch?.matchId || patch?.id || '').trim();
+  if (matchId && String(record?.id || '').trim() === matchId) {
+    return true;
+  }
+
+  const matchName = String(patch?.matchName || patch?.name || '')
+    .trim()
+    .toLowerCase();
+
+  if (!matchName) {
+    return false;
+  }
+
+  return [record?.name, record?.displayName]
+    .filter(Boolean)
+    .some((value) => String(value).trim().toLowerCase() === matchName);
+}
+
+function applyEntityPatches(records, patches, { allowCreate = false, deepMerge = false } = {}) {
+  let next = Array.isArray(records) ? [...records] : [];
+  let changed = false;
+  const touched = [];
+
+  for (const patch of Array.isArray(patches) ? patches : []) {
+    const index = next.findIndex((record) => entityMatches(record, patch));
+    const payload = patch?.value || patch?.patch || patch;
+
+    if (index >= 0) {
+      const current = next[index];
+      const updated = deepMerge
+        ? deepMergeEntity(current, payload)
+        : { ...current, ...payload };
+
+      if (JSON.stringify(current) !== JSON.stringify(updated)) {
+        next[index] = updated;
+        changed = true;
+      }
+
+      touched.push(String(updated?.id || current?.id || patch?.matchId || patch?.matchName || 'unknown'));
+      continue;
+    }
+
+    if (!allowCreate || patch?.createIfMissing !== true) {
+      continue;
+    }
+
+    const created = deepMerge ? deepMergeEntity({}, payload) : { ...payload };
+    if (!created.id || !created.name) {
+      throw new Error('Bootstrap entity creation requires id and name.');
+    }
+
+    next.unshift(created);
+    touched.push(String(created.id));
+    changed = true;
+  }
+
+  return { records: next, changed, touched };
+}
+
+export async function applyOwnerBootstrapPatchFromEnv() {
+  const raw = (process.env.CLEARFLOW_OWNER_BOOTSTRAP_PATCH || '').trim();
+  if (!raw) {
+    return { applied: false, reason: 'not_configured' };
+  }
+
+  if (!isOwnerDatabaseConfigured()) {
+    return { applied: false, reason: 'owner_database_not_configured' };
+  }
+
+  let patch;
+  try {
+    patch = JSON.parse(raw);
+  } catch {
+    throw new Error('CLEARFLOW_OWNER_BOOTSTRAP_PATCH must contain valid JSON.');
+  }
+
+  const accountId = ownerAccountIdFromEmail(getOwnerEmail());
+  const row = await loadOwnerWorkspace(accountId);
+  if (!row?.app_data) {
+    return { applied: false, reason: 'owner_workspace_missing' };
+  }
+
+  const coreResult = applyEntityPatches(
+    row.app_data?.coreDataSnapshot?.entities,
+    patch.coreEntities,
+    { allowCreate: true, deepMerge: true }
+  );
+  const legacyResult = applyEntityPatches(
+    row.app_data?.entities,
+    patch.legacyEntities,
+    { allowCreate: true, deepMerge: false }
+  );
+
+  if (!coreResult.changed && !legacyResult.changed) {
+    return {
+      applied: false,
+      reason: 'no_changes',
+      patchId: patch.id || null,
+      touchedEntityIds: Array.from(new Set([...coreResult.touched, ...legacyResult.touched])),
+    };
+  }
+
+  const nextAppData = {
+    ...row.app_data,
+    entities: legacyResult.records,
+    coreDataSnapshot: row.app_data.coreDataSnapshot
+      ? {
+          ...row.app_data.coreDataSnapshot,
+          entities: coreResult.records,
+        }
+      : row.app_data.coreDataSnapshot,
+  };
+
+  const result = await saveOwnerWorkspace({
+    accountId,
+    appData: nextAppData,
+    expectedVersion: row.version,
+    actor: 'clearflow_bootstrap',
+    action: 'owner_profile_bootstrap_applied',
+    details: {
+      patchId: patch.id || null,
+      coreEntityIds: coreResult.touched,
+      legacyEntityIds: legacyResult.touched,
+    },
+  });
+
+  return {
+    applied: true,
+    patchId: patch.id || null,
+    touchedEntityIds: Array.from(new Set([...coreResult.touched, ...legacyResult.touched])),
+    result,
+  };
+}
+
 export async function saveOwnerWorkspace({
   accountId,
   appData,

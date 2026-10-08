@@ -10,6 +10,7 @@ import erpRoutes from './server/routes/erp.js';
 import storageRoutes from './server/routes/storage.js';
 import authRoutes from './server/routes/auth.js';
 import assistantRoutes from './server/routes/assistant.js';
+import { applyOwnerBootstrapPatchFromEnv } from './server/services/ownerDatabase.js';
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env.local' });
@@ -58,4 +59,16 @@ app.listen(PORT, () => {
   if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
     console.warn('WARNING: Plaid client ID or secret not configured. API calls will fail.');
   }
+
+  void applyOwnerBootstrapPatchFromEnv()
+    .then((result) => {
+      if (result.applied) {
+        console.log(
+          `Owner profile bootstrap applied: ${result.patchId || 'unnamed'} (${result.touchedEntityIds.join(', ')})`
+        );
+      }
+    })
+    .catch((error) => {
+      console.error('Owner profile bootstrap failed.', error);
+    });
 });
