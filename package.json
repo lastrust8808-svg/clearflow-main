@@ -31,7 +31,8 @@
     "react-plaid-link": "^3.5.0",
     "rxjs": "^7.8.2",
     "uuid": "^13.0.0",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.11",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.1",

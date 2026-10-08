@@ -1,5 +1,10 @@
 import { googleDriveService } from './google-drive.service';
 import { AppData } from '../types/app.models';
+import {
+    getAccountPersistenceMode,
+    loadAccountAppData,
+    saveAccountAppData,
+} from './accountPersistence.service';
 
 const FILE_NAME = 'clear-flow-app-data.json';
 const FILE_ID_INDEX_KEY = 'clear-flow-drive-file-id-index-v2';
@@ -7,6 +12,11 @@ const LEGACY_FILE_ID_KEY = 'clear-flow-drive-file-id';
 
 function normalizeEmail(email?: string | null) {
     return email?.trim().toLowerCase() || '';
+}
+
+function buildGoogleAccountId(email?: string | null) {
+    const normalizedEmail = normalizeEmail(email);
+    return normalizedEmail ? `google:${normalizedEmail}` : '';
 }
 
 function getPersistentStorage() {
@@ -71,6 +81,26 @@ class UserDataService {
     async loadUserData(accessToken: string, email?: string): Promise<AppData | null> {
         try {
             const scopedEmail = normalizeEmail(email) || this.activeEmail || null;
+            const googleAccountId = buildGoogleAccountId(scopedEmail);
+
+            if (googleAccountId) {
+                const persistenceMode = await getAccountPersistenceMode(googleAccountId);
+
+                if (persistenceMode === 'owner_database') {
+                    try {
+                        const durableData = await loadAccountAppData(googleAccountId);
+                        if (durableData) {
+                            return durableData;
+                        }
+                    } catch (error) {
+                        console.warn(
+                            'Owner database workspace was not available yet. Falling back to Google Drive seed.',
+                            error
+                        );
+                    }
+                }
+            }
+
             let fileId = this.getScopedFileId(scopedEmail);
 
             if (!fileId) {
@@ -84,7 +114,18 @@ class UserDataService {
                 return null; // File doesn't exist, new user.
             }
 
-            return await googleDriveService.getFileContent(accessToken, fileId);
+            const driveData = await googleDriveService.getFileContent(accessToken, fileId);
+
+            if (googleAccountId) {
+                const persistenceMode = await getAccountPersistenceMode(googleAccountId);
+                if (persistenceMode === 'owner_database') {
+                    void saveAccountAppData(googleAccountId, driveData).catch((error) => {
+                        console.warn('Failed to seed owner database from Google Drive.', error);
+                    });
+                }
+            }
+
+            return driveData;
         } catch (error) {
             console.error("Error loading user data, treating as new user.", error);
             this.clearCache(email);
@@ -95,6 +136,15 @@ class UserDataService {
     async saveUserData(accessToken: string, data: AppData): Promise<void> {
         const content = JSON.stringify(data, null, 2);
         const scopedEmail = normalizeEmail(data.user.email) || this.activeEmail || null;
+        const googleAccountId = buildGoogleAccountId(scopedEmail);
+
+        if (googleAccountId) {
+            const persistenceMode = await getAccountPersistenceMode(googleAccountId);
+            if (persistenceMode === 'owner_database') {
+                await saveAccountAppData(googleAccountId, data);
+            }
+        }
+
         let fileId = this.getScopedFileId(scopedEmail);
 
         if (fileId) {

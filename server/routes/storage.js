@@ -15,18 +15,59 @@ import {
 } from '../services/accountStorage.js';
 import { recordClearFlowAgreementDeposit } from '../services/clearflowInternalLedger.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
+import {
+  isConfiguredOwnerAccount,
+  loadOwnerWorkspace,
+  saveOwnerWorkspace,
+} from '../services/ownerDatabase.js';
 
 const router = express.Router();
 
+router.get('/accounts/:accountId/persistence-mode', async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    mode: isConfiguredOwnerAccount(req.params.accountId)
+      ? 'owner_database'
+      : 'legacy',
+  });
+});
+
 router.get('/accounts/:accountId/app-data', async (req, res) => {
   try {
+    if (isConfiguredOwnerAccount(req.params.accountId)) {
+      const ownerWorkspace = await loadOwnerWorkspace(req.params.accountId);
+
+      if (ownerWorkspace?.app_data) {
+        return res.status(200).json({
+          success: true,
+          appData: ownerWorkspace.app_data,
+          persistenceMode: 'owner_database',
+          version: ownerWorkspace.version,
+          updatedAt: ownerWorkspace.updated_at,
+        });
+      }
+    }
+
     const appData = await loadAccountAppData(req.params.accountId);
 
     if (!appData) {
-      return res.status(404).json({ success: false, error: 'Account data not found.' });
+      return res.status(404).json({
+        success: false,
+        error: 'Account data not found.',
+        persistenceMode: isConfiguredOwnerAccount(req.params.accountId)
+          ? 'owner_database'
+          : 'legacy',
+      });
     }
 
-    return res.status(200).json({ success: true, appData });
+    return res.status(200).json({
+      success: true,
+      appData,
+      persistenceMode: isConfiguredOwnerAccount(req.params.accountId)
+        ? 'owner_database'
+        : 'legacy',
+      version: null,
+    });
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -42,11 +83,29 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
 
   try {
     const result = await saveAccountAppData(req.params.accountId, req.body);
-    return res.status(200).json({ success: true, result });
+
+    let ownerResult = null;
+    if (isConfiguredOwnerAccount(req.params.accountId)) {
+      ownerResult = await saveOwnerWorkspace({
+        accountId: req.params.accountId,
+        appData: req.body,
+        actor: 'clearflow_app',
+        action: 'workspace_mirrored_from_app',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      result,
+      persistenceMode: ownerResult ? 'owner_database' : 'legacy',
+      version: ownerResult?.version ?? null,
+    });
   } catch (error) {
-    return res.status(500).json({
+    const message =
+      error instanceof Error ? error.message : 'Failed to save account data.';
+    return res.status(message.includes('version conflict') ? 409 : 500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to save account data.',
+      error: message,
     });
   }
 });

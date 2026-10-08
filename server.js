@@ -9,6 +9,7 @@ import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
 import storageRoutes from './server/routes/storage.js';
 import authRoutes from './server/routes/auth.js';
+import assistantRoutes from './server/routes/assistant.js';
 
 // Load environment variables from .env file
 dotenv.config({ path: '.env.local' });
@@ -33,6 +34,7 @@ app.use('/api/plaid', plaidApiRoutes);
 app.use('/api/erp', erpRoutes);
 app.use('/api/storage', storageRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {

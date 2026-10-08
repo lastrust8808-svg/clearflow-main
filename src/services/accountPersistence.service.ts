@@ -19,6 +19,10 @@ function buildAppDataUrl(accountId: string) {
   return `${STORAGE_API_BASE}/api/storage/accounts/${normalizeAccountId(accountId)}/app-data`;
 }
 
+function buildPersistenceModeUrl(accountId: string) {
+  return `${STORAGE_API_BASE}/api/storage/accounts/${normalizeAccountId(accountId)}/persistence-mode`;
+}
+
 function buildFileUrl(accountId: string, fileId?: string) {
   const base = `${STORAGE_API_BASE}/api/storage/accounts/${normalizeAccountId(accountId)}/files`;
   return fileId ? `${base}/${encodeURIComponent(fileId)}` : base;
@@ -50,6 +54,28 @@ function base64ToBlob(base64Data: string, mimeType: string) {
   }
 
   return new Blob([bytes], { type: mimeType });
+}
+
+export async function getAccountPersistenceMode(
+  accountId: string
+): Promise<'owner_database' | 'legacy'> {
+  const response = await fetch(buildPersistenceModeUrl(accountId), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    return 'legacy';
+  }
+
+  const payload = (await response.json()) as {
+    success: boolean;
+    mode?: 'owner_database' | 'legacy';
+  };
+
+  return payload.mode === 'owner_database' ? 'owner_database' : 'legacy';
 }
 
 export async function loadAccountAppData(accountId: string) {
