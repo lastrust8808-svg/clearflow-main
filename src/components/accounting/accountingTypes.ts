@@ -128,6 +128,8 @@ export interface BillSubmitPayload {
   dueDate: string;
   amount: string;
   description: string;
+  debitAccount: string;
+  payableAccount: string;
   uploadedFileName: string;
   uploadedFile?: File | null;
   parsedNotes: string;
