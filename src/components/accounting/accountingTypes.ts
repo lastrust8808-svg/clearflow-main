@@ -130,6 +130,14 @@ export interface BillSubmitPayload {
   description: string;
   debitAccount: string;
   payableAccount: string;
+  hasStatementCoupon: boolean;
+  couponAmount: string;
+  issuerSignaturePresent: boolean;
+  unconditionalPromiseOrOrder: boolean;
+  payableToOrderOrBearer: boolean;
+  payableOnDemandOrDefiniteTime: boolean;
+  securitizationReference: string;
+  claimedInterestOrGainCredit: string;
   uploadedFileName: string;
   uploadedFile?: File | null;
   parsedNotes: string;
