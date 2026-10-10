@@ -1,28 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { decideRail } from '../policy/railPolicy.js';
 import { isValidRoutingNumber } from '../utils/routingValidator.js';
+import {
+  isMercuryExecutionConfigured,
+  queueMercuryPaymentApproval,
+} from './mercuryExecution.js';
 
 function hasValue(value) {
   return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
-}
-
-function isPlaidTransferConfigured() {
-  return hasValue(process.env.PLAID_CLIENT_ID) && hasValue(process.env.PLAID_SECRET);
 }
 
 function getPlaidEnvironment() {
   return (process.env.PLAID_ENV || 'sandbox').toLowerCase();
 }
 
-function getExecutionMode() {
-  return getPlaidEnvironment() === 'production' ? 'live' : 'staged';
-}
-
-function detectProvider() {
-  if (isPlaidTransferConfigured()) {
-    return 'plaid';
-  }
-  return 'manual';
+function isMercurySource(sourceBankAccount) {
+  return String(sourceBankAccount?.institutionName || '')
+    .trim()
+    .toLowerCase()
+    .includes('mercury');
 }
 
 function detectPayeeType({ vendorInstruction, vendorReceiveMethod }) {
@@ -69,40 +65,38 @@ function resolveFundsApplicationClass({
 }
 
 export function buildExecutionCapabilities() {
-  const provider = detectProvider();
-  const plaidEnvironment = getPlaidEnvironment();
-  const executionMode = getExecutionMode();
-  const plaidLiveReady = provider === 'plaid' && plaidEnvironment === 'production';
+  const mercuryApprovalReady = isMercuryExecutionConfigured();
 
   return {
-    provider,
-    executionMode,
-    plaidEnvironment,
-    liveBankExecutionReady: plaidLiveReady,
-    achOriginationReady: plaidLiveReady,
-    wireOriginationReady: false,
+    provider: mercuryApprovalReady ? 'mercury' : 'manual',
+    executionMode: 'staged',
+    plaidEnvironment: getPlaidEnvironment(),
+    liveBankExecutionReady: false,
+    mercuryApprovalReady,
+    achOriginationReady: mercuryApprovalReady,
+    wireOriginationReady: mercuryApprovalReady,
     billerDirectReady: false,
     printableCheckReady: true,
     positivePayReady: true,
     supportedPayeeTypes: ['bank_payee', 'manual_payee', 'biller_direct'],
-    supportedMethods: plaidLiveReady ? ['ach', 'check'] : ['check'],
-    notes: plaidLiveReady
+    supportedMethods: mercuryApprovalReady ? ['ach', 'wire', 'check'] : ['check'],
+    notes: mercuryApprovalReady
       ? [
-          'Live bank aggregation is configured.',
-          'True bank-originated execution should still be treated as provider-scoped and trace-driven.',
-          'Printable check and Positive Pay support records can be generated as staged execution artifacts when the source account permits check issue.',
+          'Plaid is used for bank aggregation and transaction synchronization, not outbound payment origination.',
+          'Mercury outbound payments are queued through Mercury request-send-money and require a separate Mercury approval before funds move.',
+          'ACH, domestic wire, and check requests can be prepared when the selected source account and recipient can be matched to Mercury.',
           'Biller-direct utility execution still requires a dedicated biller or bank-bill-pay rail.',
         ]
       : [
-          'Execution is not in a fully live provider-backed mode.',
           'Bank feeds may be connected while outbound execution remains staged.',
-          'Printable check and Positive Pay support records can still be generated as staged execution artifacts when the source account permits check issue.',
-          'Biller-direct utility execution still requires a dedicated biller or bank-bill-pay rail.',
+          'Plaid is not treated as an outbound payment processor.',
+          'Configure a Mercury API token with the minimum read + request-send-money scopes to enable approval-based Mercury payment requests.',
+          'Printable check and Positive Pay support records can still be generated as staged execution artifacts.',
         ],
   };
 }
 
-export function buildSettlementExecution({
+export async function buildSettlementExecution({
   entityId,
   paymentId,
   settlementId,
@@ -118,8 +112,6 @@ export function buildSettlementExecution({
   fundsRightsClassification,
 }) {
   const capabilities = buildExecutionCapabilities();
-  const provider = capabilities.provider;
-  const executionMode = capabilities.executionMode;
   const payeeType = detectPayeeType({ vendorInstruction, vendorReceiveMethod });
   const fundsApplicationClass = resolveFundsApplicationClass({
     method,
@@ -144,6 +136,10 @@ export function buildSettlementExecution({
   let verificationMethod = 'manual_override';
   let externalStatus = 'draft';
   let liveExecution = false;
+  let simulatedProcessing = true;
+  let executionMode = 'staged';
+  let executionProvider = 'manual';
+  let executionReference = `SET-${Date.now()}`;
 
   if (
     sourceType === 'ledger_account' &&
@@ -169,6 +165,70 @@ export function buildSettlementExecution({
     externalStatus = 'manual_review';
     executionReason =
       'Payee is operating as a biller-direct or lockbox counterparty. ClearFlow retained the remittance and settlement controls, but this payee still needs a dedicated biller-direct or bank-bill-pay execution rail.';
+  } else if (
+    direction === 'outgoing' &&
+    sourceType === 'bank_account' &&
+    isMercurySource(sourceBankAccount) &&
+    ['ach', 'wire', 'check'].includes(method)
+  ) {
+    rail =
+      method === 'wire'
+        ? 'Fedwire'
+        : method === 'check'
+          ? 'CheckIssue'
+          : urgency === 'same_day'
+            ? 'SameDayACH'
+            : 'StandardACH';
+    verificationStatus = 'pending';
+    verificationMethod = 'bank_confirmation';
+    executionProvider = 'mercury';
+    simulatedProcessing = false;
+
+    const sourceMethodDisabled =
+      (method === 'ach' && sourceBankAccount?.achOriginationEnabled === false) ||
+      (method === 'wire' && sourceBankAccount?.wireEnabled === false) ||
+      (method === 'check' && sourceBankAccount?.checkDraftEnabled === false);
+
+    const needsVerifiedBankInstructions =
+      (method === 'ach' || method === 'wire') && !vendorInstructionVerified;
+
+    if (sourceMethodDisabled) {
+      processorStatus = 'requires_review';
+      externalStatus = 'manual_review';
+      executionReason = `The selected Mercury source account is not enabled for ${method.toUpperCase()} release in ClearFlow.`;
+    } else if (needsVerifiedBankInstructions) {
+      processorStatus = 'requires_review';
+      externalStatus = 'manual_review';
+      executionReason = 'Vendor bank instructions are incomplete or invalid.';
+    } else if (!capabilities.mercuryApprovalReady) {
+      processorStatus = 'requires_review';
+      externalStatus = 'manual_review';
+      executionReason =
+        'Mercury is the selected bank rail, but the server does not yet have a Mercury API token configured.';
+    } else {
+      try {
+        const queued = await queueMercuryPaymentApproval({
+          settlementId,
+          amount,
+          method,
+          sourceBankAccount,
+          vendorInstruction,
+        });
+        executionReference = queued.request.requestId || executionReference;
+        processorStatus = 'requires_review';
+        externalStatus = 'accepted';
+        executionReason =
+          `Mercury accepted payment request ${executionReference} for approval. ` +
+          'Funds will not move until an authorized Mercury user separately approves the request.';
+      } catch (error) {
+        processorStatus = 'requires_review';
+        externalStatus = 'manual_review';
+        executionReason =
+          error instanceof Error
+            ? error.message
+            : 'Mercury could not queue the payment request for approval.';
+      }
+    }
   } else if (direction === 'outgoing' && method === 'check' && sourceBankAccount) {
     rail = 'CheckIssue';
     processorStatus = sourceBankAccount.checkDraftEnabled === false ? 'requires_review' : 'queued';
@@ -179,16 +239,10 @@ export function buildSettlementExecution({
     executionReason =
       sourceBankAccount.checkDraftEnabled === false
         ? 'Source bank account is not approved for printable check issue yet.'
-        : `Printable check issue can be generated against ${sourceBankAccount.accountName}. ${
+        : `Printable check issue can be generated against ${sourceBankAccount.accountName}. ${ 
             sourceBankAccount.positivePayEnabled === false
               ? 'Positive Pay is not enabled on this account, so the check should stay in manual review before release.'
               : 'Positive Pay support can be prepared so the issued-check record can be matched when the item is presented.'
-          }${
-            sourceBankAccount.overdraftPolicy === 'bank_authorized'
-              ? ' This source account is marked as bank-authorized for overdraft-backed fulfillment.'
-              : sourceBankAccount.overdraftPolicy === 'controlled_sweep'
-                ? ' This source account is marked for controlled sweep / liquidity support before return risk.'
-                : ''
           } Delivery and presentment still require mail or a dedicated check processor.`;
   } else if (direction === 'outgoing' && (method === 'ach' || method === 'wire') && vendorInstructionVerified) {
     const policyDecision = decideRail({
@@ -225,30 +279,12 @@ export function buildSettlementExecution({
     executionReason =
       sourceType === 'ledger_account'
         ? `Ledger remittance proxy selected. ${policyDecision.reason}`
-        : policyDecision.reason;
+        : `${policyDecision.reason} No outbound bank provider is enabled for this non-Mercury source, so the settlement remains staged.`;
     verificationStatus = 'pending';
     verificationMethod =
       sourceType === 'ledger_account' ? 'internal_control_token' : 'bank_confirmation';
-
-    if (method === 'ach' && capabilities.achOriginationReady && sourceType === 'bank_account') {
-      processorStatus = 'queued';
-      externalStatus = 'submitted';
-      liveExecution = true;
-      executionReason = `${executionReason} Execution provider ${provider} accepted the ACH instruction for submission.`;
-    } else if (method === 'wire' && capabilities.wireOriginationReady && sourceType === 'bank_account') {
-      processorStatus = 'queued';
-      externalStatus = 'submitted';
-      liveExecution = true;
-      executionReason = `${executionReason} Execution provider ${provider} accepted the wire instruction for submission.`;
-    } else if (sourceType === 'ledger_account') {
-      processorStatus = 'queued';
-      externalStatus = 'staged';
-      executionReason = `${executionReason} Settlement is still staged through internal ledger control until an external rail is released.`;
-    } else {
-      processorStatus = 'requires_review';
-      externalStatus = 'manual_review';
-      executionReason = `${executionReason} A live external execution provider is not enabled for this rail yet.`;
-    }
+    processorStatus = sourceType === 'ledger_account' ? 'queued' : 'requires_review';
+    externalStatus = sourceType === 'ledger_account' ? 'staged' : 'manual_review';
   } else if (direction === 'outgoing' && (method === 'ach' || method === 'wire')) {
     rail = method === 'wire' ? 'Fedwire' : 'StandardACH';
     executionReason = 'Vendor bank instructions are incomplete or invalid.';
@@ -265,30 +301,6 @@ export function buildSettlementExecution({
     externalStatus = 'submitted';
   }
 
-  if (
-    sourceType === 'bank_account' &&
-    method === 'ach' &&
-    sourceBankAccount &&
-    sourceBankAccount.achOriginationEnabled === false
-  ) {
-    processorStatus = 'requires_review';
-    externalStatus = 'manual_review';
-    liveExecution = false;
-    executionReason = 'Source bank account is present but ACH origination is not enabled.';
-  }
-
-  if (
-    sourceType === 'bank_account' &&
-    method === 'wire' &&
-    sourceBankAccount &&
-    sourceBankAccount.wireEnabled === false
-  ) {
-    processorStatus = 'requires_review';
-    externalStatus = 'manual_review';
-    liveExecution = false;
-    executionReason = 'Source bank account is present but wire origination is not enabled.';
-  }
-
   return {
     id: randomUUID(),
     entityId,
@@ -301,15 +313,15 @@ export function buildSettlementExecution({
     verificationStatus,
     verificationMethod,
     executionReason,
-    executionReference: `SET-${Date.now()}`,
+    executionReference,
     fundsRightsClassification,
     fundsApplicationClass,
     sourceType,
     vendorInstructionVerified,
-    simulatedProcessing: !liveExecution,
+    simulatedProcessing,
     liveExecution,
     executionMode,
-    executionProvider: provider,
+    executionProvider,
     payeeType,
     externalStatus,
     createdAt: new Date().toISOString(),
