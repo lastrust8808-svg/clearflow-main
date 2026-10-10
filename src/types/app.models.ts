@@ -27,6 +27,15 @@ export interface User {
     signerName: string;
     identityEmail?: string;
     acceptanceMethod: 'typed_signature';
+    monthlyFee: number;
+    termMonths: number;
+    annualizedContractReferenceValue: number;
+    userCommitmentMemoValue: number;
+    clearflowServiceCommitmentMemoValue: number;
+    cashValue: number;
+    recognizedReceivableValue: number;
+    valueClassification: 'annualized_contract_reference';
+    poolEligibility: 'review_required' | 'eligible' | 'excluded';
     consents: {
       userTerms: true;
       privacy: true;
@@ -35,6 +44,11 @@ export interface User {
       authorityCertification: true;
     };
   };
+  clearflowAgreementValueDocumentId?: string;
+  clearflowInternalLedgerDepositReferenceValue?: number;
+  clearflowInternalLedgerDepositMonthlyFee?: number;
+  clearflowInternalLedgerDepositTermMonths?: number;
+  clearflowInternalLedgerDepositPoolEligibility?: 'review_required' | 'eligible' | 'excluded';
   clearflowInternalLedgerDepositId?: string;
   clearflowInternalLedgerDepositedAt?: string;
   clearflowInternalLedgerStatus?: 'pending' | 'recorded' | 'error';
