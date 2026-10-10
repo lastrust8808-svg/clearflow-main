@@ -120,17 +120,41 @@ async function loadAgreementDeposits() {
 }
 
 function buildAgreementDepositRecord(input) {
-  const monthlyFee = Number(input.monthlyFee);
-  const termMonths = Number(input.termMonths);
+  const configuredMonthlyFee = Number(
+    process.env.CLEARFLOW_MEMBERSHIP_MONTHLY_FEE || 150,
+  );
+  const configuredTermMonths = Number(
+    process.env.CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS || 12,
+  );
 
-  if (!Number.isFinite(monthlyFee) || monthlyFee <= 0 || monthlyFee > 100_000) {
-    throw new Error('Agreement monthly fee is outside the supported range.');
+  if (
+    !Number.isFinite(configuredMonthlyFee) ||
+    configuredMonthlyFee <= 0 ||
+    configuredMonthlyFee > 100_000
+  ) {
+    throw new Error('Configured ClearFlow membership monthly fee is invalid.');
   }
 
-  if (!Number.isInteger(termMonths) || termMonths <= 0 || termMonths > 120) {
-    throw new Error('Agreement term must be between 1 and 120 months.');
+  if (
+    !Number.isInteger(configuredTermMonths) ||
+    configuredTermMonths <= 0 ||
+    configuredTermMonths > 120
+  ) {
+    throw new Error('Configured ClearFlow membership contract term is invalid.');
   }
 
+  const submittedMonthlyFee = Number(input.monthlyFee);
+  const submittedTermMonths = Number(input.termMonths);
+  if (
+    !Number.isFinite(submittedMonthlyFee) ||
+    Math.abs(submittedMonthlyFee - configuredMonthlyFee) > 0.005 ||
+    submittedTermMonths !== configuredTermMonths
+  ) {
+    throw new Error('Agreement economics do not match the configured ClearFlow membership contract.');
+  }
+
+  const monthlyFee = Number(configuredMonthlyFee.toFixed(2));
+  const termMonths = configuredTermMonths;
   const annualizedContractReferenceValue = Number(
     (monthlyFee * termMonths).toFixed(2),
   );
