@@ -188,6 +188,7 @@ export default function OverviewPage({
       actions: [
         ['Documents', '#documents'],
         ['Compliance', '#compliance'],
+        ['Credit Building', '#credit'],
         ['Entities', '#entities'],
         ['Settings', '#settings'],
       ],
