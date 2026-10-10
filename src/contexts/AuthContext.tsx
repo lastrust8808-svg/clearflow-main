@@ -209,40 +209,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const getGoogleWorkspaceStatus = useCallback(
     (
       appData: AppData,
-      identity?: { email?: string | null; name?: string | null }
+      _identity?: { email?: string | null; name?: string | null }
     ): AuthStatus => {
-      if (hasAcceptedClearFlowTerms(appData)) {
+      if (hasAcceptedClearFlowTerms(appData) && hasClearFlowRetentionPackage(appData)) {
         return 'authenticated';
       }
 
-      const normalizedEmail =
-        normalizeIdentityEmail(identity?.email) ||
-        normalizeIdentityEmail(appData.user.email);
-      const storedAcceptance = normalizedEmail
-        ? storedTermsAcceptanceIndex[normalizedEmail]
-        : null;
-
-      return storedAcceptance?.acceptedAt ? 'authenticated' : 'pending-profile-setup';
+      return 'pending-profile-setup';
     },
-    [hasAcceptedClearFlowTerms, normalizeIdentityEmail, storedTermsAcceptanceIndex]
+    [hasAcceptedClearFlowTerms]
   );
 
   const canBypassProfileSetupForGoogleIdentity = useCallback(
-    (identity?: { email?: string | null; name?: string | null }, appData?: AppData | null) => {
-      if (hasAcceptedClearFlowTerms(appData)) {
-        return true;
-      }
-
-      const normalizedEmail =
-        normalizeIdentityEmail(identity?.email) ||
-        normalizeIdentityEmail(appData?.user.email);
-      const storedAcceptance = normalizedEmail
-        ? storedTermsAcceptanceIndex[normalizedEmail]
-        : null;
-
-      return Boolean(storedAcceptance?.acceptedAt);
+    (_identity?: { email?: string | null; name?: string | null }, appData?: AppData | null) => {
+      return Boolean(
+        appData &&
+        hasAcceptedClearFlowTerms(appData) &&
+        hasClearFlowRetentionPackage(appData)
+      );
     },
-    [hasAcceptedClearFlowTerms, normalizeIdentityEmail, storedTermsAcceptanceIndex]
+    [hasAcceptedClearFlowTerms]
   );
 
   const persistStoredTermsAcceptance = useCallback(
@@ -287,7 +273,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       appData: AppData,
       identity?: { email?: string | null; name?: string | null }
     ): AppData => {
-      if (appData.user.clearflowTermsAcceptedAt) {
+      if (
+        appData.user.clearflowTermsAcceptedAt ||
+        !appData.coreDataSnapshot
+      ) {
         return appData;
       }
 
@@ -988,6 +977,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
+
+        if (current.pendingGoogleMode !== 'new') {
+          return {
+            ...current,
+            status: 'unauthenticated',
+            gsiUser: null,
+            token: null,
+            apiAccessToken: null,
+            appData: null,
+            pendingGoogleMode: null,
+            authMessage:
+              'Existing-account sign-in did not complete. Retry Existing User Login; first-time users must choose Create New Account.',
+          };
+        }
+
         const fallbackUser =
           current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
 
@@ -999,19 +1003,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             token: null,
             apiAccessToken: null,
             appData: null,
+            pendingGoogleMode: null,
+            authMessage: 'New-account enrollment could not confirm your Google identity. Please retry.',
           };
         }
 
-        const nextAppData = mergeStoredTermsAcceptance(
-          current.appData || { user: fallbackUser, entities: [] },
-          current.gsiUser || lastKnownGoogleUser
-        );
-
         return {
           ...current,
-          status: getGoogleWorkspaceStatus(nextAppData, current.gsiUser || lastKnownGoogleUser),
-          appData: nextAppData,
+          status: 'pending-profile-setup',
+          appData: current.appData || { user: fallbackUser, entities: [] },
           gsiUser: null,
+          pendingGoogleMode: null,
+          authMessage: null,
         };
       });
     }, 5000);
@@ -1023,6 +1026,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     lastKnownGoogleUser,
     mergeStoredTermsAcceptance,
     state.status,
+    state.pendingGoogleMode,
   ]);
 
   useEffect(() => {
@@ -1886,6 +1890,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
+
+      if (current.pendingGoogleMode !== 'new') {
+        return {
+          ...current,
+          status: 'unauthenticated',
+          gsiUser: null,
+          token: null,
+          apiAccessToken: null,
+          appData: null,
+          pendingGoogleMode: null,
+          authMessage:
+            'ClearFlow could not confirm an existing account from this sign-in attempt. Retry Existing User Login or choose Create New Account.',
+        };
+      }
+
       const fallbackUser =
         current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
 
@@ -1897,19 +1916,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           token: null,
           apiAccessToken: null,
           appData: null,
+          pendingGoogleMode: null,
+          authMessage: 'New-account enrollment could not confirm an identity. Please retry.',
         };
       }
 
-      const nextAppData = mergeStoredTermsAcceptance(
-        current.appData || { user: fallbackUser, entities: [] },
-        fallbackIdentity
-      );
-
       return {
         ...current,
-        status: getGoogleWorkspaceStatus(nextAppData, fallbackIdentity),
-        appData: nextAppData,
+        status: 'pending-profile-setup',
+        appData: current.appData || { user: fallbackUser, entities: [] },
         gsiUser: null,
+        pendingGoogleMode: null,
+        authMessage: null,
       };
     });
   };
