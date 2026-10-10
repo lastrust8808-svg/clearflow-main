@@ -109,7 +109,13 @@ interface AuthContextType {
     password?: string,
     acceptedTerms?: boolean,
     signerName?: string,
-    wealthMandate?: WealthMandateProfile
+    wealthMandate?: WealthMandateProfile,
+    onboardingConsents?: {
+      privacy: boolean;
+      security: boolean;
+      eSign: boolean;
+      authority: boolean;
+    }
   ) => void;
   completeVerification: () => void;
   logout: () => void;
@@ -1489,7 +1495,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password?: string,
     acceptedTerms?: boolean,
     signerName?: string,
-    wealthMandate?: WealthMandateProfile
+    wealthMandate?: WealthMandateProfile,
+    onboardingConsents?: {
+      privacy: boolean;
+      security: boolean;
+      eSign: boolean;
+      authority: boolean;
+    }
   ) => {
     if (!state.appData) {
       logout();
@@ -1497,8 +1509,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const alreadyAcceptedTerms = Boolean(state.appData.user.clearflowTermsAcceptedAt);
-    if (!acceptedTerms && !alreadyAcceptedTerms) {
-      console.error('ClearFlow terms must be accepted before profile setup can complete.');
+    const explicitNewUserConsentsComplete = Boolean(
+      onboardingConsents?.privacy &&
+      onboardingConsents?.security &&
+      onboardingConsents?.eSign &&
+      onboardingConsents?.authority
+    );
+    if (!alreadyAcceptedTerms && (!acceptedTerms || !explicitNewUserConsentsComplete)) {
+      console.error(
+        'ClearFlow terms, privacy, security, electronic-record, and authority consents must be accepted before a new profile can complete.'
+      );
       return;
     }
 
@@ -1533,6 +1553,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       acceptedAt,
       termsVersion: CLEARFLOW_TERMS_VERSION,
       signerName: signerName || state.appData.user.clearflowTermsSignerName || name,
+      privacyAcceptedAt:
+        state.appData.user.clearflowPrivacyAcceptedAt ||
+        (onboardingConsents?.privacy ? acceptedAt : undefined),
+      securityAcceptedAt:
+        state.appData.user.clearflowSecurityAgreementAcceptedAt ||
+        (onboardingConsents?.security ? acceptedAt : undefined),
+      eSignAcceptedAt:
+        state.appData.user.clearflowESignConsentAcceptedAt ||
+        (onboardingConsents?.eSign ? acceptedAt : undefined),
+      authorityAcceptedAt:
+        state.appData.user.clearflowAuthorityCertificationAcceptedAt ||
+        (onboardingConsents?.authority ? acceptedAt : undefined),
     });
     persistStoredTermsAcceptance(finalAppData.user.email, {
       acceptedAt,
