@@ -3892,6 +3892,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? {
                 id: sourceBankAccount.id,
                 institutionName: sourceBankAccount.institutionName,
+                accountName: sourceBankAccount.accountName,
+                last4: sourceBankAccount.last4,
                 routingNumber: sourceBankAccount.routingNumber,
                 accountNumber: sourceBankAccount.accountNumber,
                 achOriginationEnabled: sourceBankAccount.achOriginationEnabled,
@@ -3925,6 +3927,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 routingNumber: selectedVendor.paymentInstructions.routingNumber,
                 accountNumber: selectedVendor.paymentInstructions.accountNumber,
                 railPreference: selectedVendor.paymentInstructions.railPreference,
+                remittanceEmail: selectedVendor.paymentInstructions.remittanceEmail || selectedVendor.email,
                 verificationStatus: selectedVendor.paymentInstructions.verificationStatus,
               }
             : null,
