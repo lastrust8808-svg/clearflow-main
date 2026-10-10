@@ -1,5 +1,6 @@
 import express from 'express';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey, timingSafeEqual } from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from 'plaid';
 import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accountStorage.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
@@ -44,6 +45,8 @@ async function savePersistedConnections(userId) {
       identityData: item.identityData,
       accounts: item.accounts,
       cursor: transactionCursorStore.get(item.itemId) || null,
+      pendingTransactions: item.pendingTransactions || [],
+      removedTransactionIds: item.removedTransactionIds || [],
     }))
   );
 
@@ -271,6 +274,128 @@ function normalizePlaidTransactions(plaidTransactions = []) {
         ].filter(Boolean)
       : transaction.category || [],
   }));
+}
+
+function allowBankingMocks() {
+  return String(process.env.CLEARFLOW_ALLOW_BANKING_MOCKS || '').trim().toLowerCase() === 'true';
+}
+
+function mergePendingTransactions(existing = [], incoming = []) {
+  const byId = new Map(
+    existing
+      .filter((transaction) => transaction?.transaction_id)
+      .map((transaction) => [transaction.transaction_id, transaction])
+  );
+
+  incoming.forEach((transaction) => {
+    if (transaction?.transaction_id) {
+      byId.set(transaction.transaction_id, transaction);
+    }
+  });
+
+  return Array.from(byId.values());
+}
+
+async function syncPlaidItemChanges(itemId) {
+  const plaidClient = getPlaidClient();
+  if (!plaidClient) {
+    const error = new Error('Plaid is not configured for live transaction sync.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const item = await getStoredItem(itemId);
+  let cursor = transactionCursorStore.get(itemId) || item.cursor || null;
+  let hasMore = true;
+  const added = [];
+  const modified = [];
+  const removedTransactionIds = [];
+
+  while (hasMore) {
+    const response = await plaidClient.transactionsSync({
+      access_token: item.accessToken,
+      cursor,
+    });
+
+    added.push(...(response.data.added || []));
+    modified.push(...(response.data.modified || []));
+    removedTransactionIds.push(
+      ...(response.data.removed || [])
+        .map((removed) => removed.transaction_id)
+        .filter(Boolean)
+    );
+    cursor = response.data.next_cursor;
+    hasMore = response.data.has_more;
+  }
+
+  transactionCursorStore.set(itemId, cursor);
+  item.cursor = cursor;
+
+  const normalizedAdded = normalizePlaidTransactions(added);
+  const normalizedModified = normalizePlaidTransactions(modified);
+  const removedSet = new Set([
+    ...(item.removedTransactionIds || []),
+    ...removedTransactionIds,
+  ]);
+
+  const pending = mergePendingTransactions(
+    item.pendingTransactions || [],
+    [...normalizedAdded, ...normalizedModified]
+  ).filter((transaction) => !removedSet.has(transaction.transaction_id));
+
+  item.pendingTransactions = pending;
+  item.removedTransactionIds = Array.from(removedSet);
+  await savePersistedConnections(item.userId);
+
+  return {
+    added: normalizedAdded,
+    modified: normalizedModified,
+    removedTransactionIds,
+  };
+}
+
+async function verifyPlaidWebhook(rawBody, verificationHeader, plaidClient) {
+  if (!Buffer.isBuffer(rawBody) || !verificationHeader || !plaidClient) {
+    return false;
+  }
+
+  const decoded = jwt.decode(verificationHeader, { complete: true });
+  const header = decoded?.header;
+  if (!header || header.alg !== 'ES256' || !header.kid) {
+    return false;
+  }
+
+  const response = await plaidClient.webhookVerificationKeyGet({
+    key_id: header.kid,
+  });
+  const publicKey = createPublicKey({
+    key: response.data.key,
+    format: 'jwk',
+  });
+
+  const payload = jwt.verify(verificationHeader, publicKey, {
+    algorithms: ['ES256'],
+    maxAge: '5m',
+  });
+
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    typeof payload.request_body_sha256 !== 'string'
+  ) {
+    return false;
+  }
+
+  const actualHash = createHash('sha256').update(rawBody).digest('hex');
+  const claimedHash = payload.request_body_sha256;
+  if (actualHash.length !== claimedHash.length) {
+    return false;
+  }
+
+  return timingSafeEqual(
+    Buffer.from(actualHash, 'utf8'),
+    Buffer.from(claimedHash, 'utf8')
+  );
 }
 
 async function createLinkTokenWithFallbacks(plaidClient, payload) {
@@ -555,7 +680,10 @@ router.get('/transactions/:itemId', async (req, res) => {
   const plaidClient = getPlaidClient();
 
   if (!plaidClient) {
-    return res.json(buildMockTransactions(itemId));
+    if (allowBankingMocks()) {
+      return res.json(buildMockTransactions(itemId));
+    }
+    return res.status(503).json({ error: 'Plaid live banking is not configured.' });
   }
 
   try {
@@ -585,30 +713,31 @@ router.post('/transactions/sync', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json(buildMockTransactions(itemId));
+    if (allowBankingMocks()) {
+      return res.json({
+        added: buildMockTransactions(itemId),
+        modified: [],
+        removedTransactionIds: [],
+      });
+    }
+    return res.status(503).json({ error: 'Plaid live banking is not configured.' });
   }
 
   try {
+    await syncPlaidItemChanges(itemId);
     const item = await getStoredItem(itemId);
-    let cursor = transactionCursorStore.get(itemId) || item.cursor || null;
-    let hasMore = true;
-    const added = [];
+    const pendingTransactions = item.pendingTransactions || [];
+    const removedTransactionIds = item.removedTransactionIds || [];
 
-    while (hasMore) {
-      const response = await plaidClient.transactionsSync({
-        access_token: item.accessToken,
-        cursor,
-      });
-
-      added.push(...response.data.added);
-      cursor = response.data.next_cursor;
-      hasMore = response.data.has_more;
-    }
-
-    transactionCursorStore.set(itemId, cursor);
-    item.cursor = cursor;
+    item.pendingTransactions = [];
+    item.removedTransactionIds = [];
     await savePersistedConnections(item.userId);
-    return res.json(normalizePlaidTransactions(added));
+
+    return res.json({
+      added: pendingTransactions,
+      modified: [],
+      removedTransactionIds,
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       error: error.response?.data?.error_message || error.message || 'Failed to sync transactions.',
@@ -617,7 +746,34 @@ router.post('/transactions/sync', async (req, res) => {
 });
 
 router.post('/webhook', async (req, res) => {
-  res.status(200).send('Webhook received.');
+  const plaidClient = getPlaidClient();
+  if (!plaidClient) {
+    return res.status(503).send('Plaid is not configured.');
+  }
+
+  const rawBody = req.body;
+  const verificationHeader = req.get('Plaid-Verification');
+
+  try {
+    const verified = await verifyPlaidWebhook(rawBody, verificationHeader, plaidClient);
+    if (!verified) {
+      return res.status(401).send('Invalid Plaid webhook signature.');
+    }
+
+    const payload = JSON.parse(rawBody.toString('utf8'));
+    if (
+      payload.webhook_type === 'TRANSACTIONS' &&
+      payload.webhook_code === 'SYNC_UPDATES_AVAILABLE' &&
+      payload.item_id
+    ) {
+      await syncPlaidItemChanges(payload.item_id);
+    }
+
+    return res.status(200).send('Webhook processed.');
+  } catch (error) {
+    console.error('Plaid webhook processing failed.', error);
+    return res.status(500).send('Webhook processing failed.');
+  }
 });
 
 export default router;
