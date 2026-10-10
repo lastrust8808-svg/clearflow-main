@@ -94,6 +94,24 @@ export async function ensureOwnerSchema() {
         ON clearflow_owner_audit_log (account_id, created_at DESC)
       `);
 
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS clearflow_owner_provider_events (
+          event_id TEXT PRIMARY KEY,
+          account_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          resource_type TEXT,
+          resource_id TEXT,
+          payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+          occurred_at TIMESTAMPTZ,
+          received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS clearflow_owner_provider_events_lookup_idx
+        ON clearflow_owner_provider_events (account_id, provider, resource_id, received_at DESC)
+      `);
+
       return true;
     })().catch((error) => {
       schemaReady = undefined;
@@ -415,6 +433,85 @@ export async function listOwnerAudit(accountId, limit = 100) {
      ORDER BY created_at DESC
      LIMIT $2`,
     [accountId, cappedLimit]
+  );
+
+  return result.rows;
+}
+
+
+export async function recordOwnerProviderEvent({
+  accountId,
+  provider,
+  eventId,
+  resourceType = null,
+  resourceId = null,
+  payload = {},
+  occurredAt = null,
+}) {
+  if (!isConfiguredOwnerAccount(accountId)) {
+    throw new Error('This account is not enabled for owner provider event storage.');
+  }
+
+  if (!eventId || !provider) {
+    throw new Error('Provider event id and provider are required.');
+  }
+
+  await ensureOwnerSchema();
+
+  await getPool().query(
+    `INSERT INTO clearflow_owner_provider_events
+      (event_id, account_id, provider, resource_type, resource_id, payload, occurred_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+     ON CONFLICT (event_id)
+     DO UPDATE SET
+       payload = EXCLUDED.payload,
+       resource_type = EXCLUDED.resource_type,
+       resource_id = EXCLUDED.resource_id,
+       occurred_at = EXCLUDED.occurred_at,
+       received_at = NOW()`,
+    [
+      String(eventId),
+      accountId,
+      String(provider),
+      resourceType ? String(resourceType) : null,
+      resourceId ? String(resourceId) : null,
+      JSON.stringify(payload || {}),
+      occurredAt || null,
+    ]
+  );
+}
+
+export async function listOwnerProviderEvents({
+  accountId,
+  provider,
+  resourceId = null,
+  limit = 100,
+}) {
+  if (!isConfiguredOwnerAccount(accountId)) {
+    return [];
+  }
+
+  await ensureOwnerSchema();
+  const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const params = [accountId, provider];
+  let resourceClause = '';
+
+  if (resourceId) {
+    params.push(resourceId);
+    resourceClause = ` AND resource_id = $${params.length}`;
+  }
+
+  params.push(cappedLimit);
+
+  const result = await getPool().query(
+    `SELECT event_id, account_id, provider, resource_type, resource_id, payload, occurred_at, received_at
+     FROM clearflow_owner_provider_events
+     WHERE account_id = $1
+       AND provider = $2
+       ${resourceClause}
+     ORDER BY received_at DESC
+     LIMIT $${params.length}`,
+    params
   );
 
   return result.rows;
