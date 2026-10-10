@@ -12,6 +12,8 @@ import type { MembershipIntakeDraft } from './onboarding.service';
 export const MEMBERSHIP_DRAFT_STORAGE_KEY = 'clearflow-membership-intake-draft';
 export const MEMBERSHIP_DRAFT_ID_STORAGE_KEY = 'clearflow-membership-intake-draft-id';
 export const CLEARFLOW_TERMS_VERSION = '2026.10';
+export const CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE = 150;
+export const CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS = 12;
 
 function buildPrefixSeed(value: string, fallback: string) {
   const cleaned = value.replace(/[^A-Za-z0-9]+/g, ' ').trim();
@@ -323,6 +325,7 @@ export function hasClearFlowRetentionPackage(appData: AppData): boolean {
     clearflowRetainedRecordDocumentId,
     clearflowSecurityAgreementDocumentId,
     clearflowPrivacyDocumentId,
+    clearflowAgreementValueDocumentId,
     clearflowTermsVersion,
   } = appData.user;
 
@@ -346,8 +349,10 @@ export function hasClearFlowRetentionPackage(appData: AppData): boolean {
   return Boolean(
     clearflowSecurityAgreementDocumentId &&
       clearflowPrivacyDocumentId &&
+      clearflowAgreementValueDocumentId &&
       snapshot.documents.some((item) => item.id === clearflowSecurityAgreementDocumentId) &&
-      snapshot.documents.some((item) => item.id === clearflowPrivacyDocumentId)
+      snapshot.documents.some((item) => item.id === clearflowPrivacyDocumentId) &&
+      snapshot.documents.some((item) => item.id === clearflowAgreementValueDocumentId)
   );
 }
 
@@ -367,6 +372,15 @@ export function applyClearFlowRetentionRecords(
   const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
   const signerName =
     input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
+  const configuredMonthlyRate =
+    Number(appData.membershipProfile?.effectiveMonthlyRate || 0) ||
+    Number(appData.membershipProfile?.monthlyRate || 0);
+  const monthlyFee =
+    Number.isFinite(configuredMonthlyRate) && configuredMonthlyRate > 0
+      ? Number(configuredMonthlyRate.toFixed(2))
+      : CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE;
+  const termMonths = CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS;
+  const annualizedContractReferenceValue = Number((monthlyFee * termMonths).toFixed(2));
 
   const acceptedUser = {
     ...appData.user,
@@ -383,6 +397,15 @@ export function applyClearFlowRetentionRecords(
       signerName,
       identityEmail: appData.user.email,
       acceptanceMethod: 'typed_signature' as const,
+      monthlyFee,
+      termMonths,
+      annualizedContractReferenceValue,
+      userCommitmentMemoValue: annualizedContractReferenceValue,
+      clearflowServiceCommitmentMemoValue: annualizedContractReferenceValue,
+      cashValue: 0,
+      recognizedReceivableValue: 0,
+      valueClassification: 'annualized_contract_reference' as const,
+      poolEligibility: 'review_required' as const,
       consents: {
         userTerms: true as const,
         privacy: true as const,
@@ -409,8 +432,12 @@ export function applyClearFlowRetentionRecords(
   const agreementDocumentId = `doc-clearflow-terms-${appData.user.id}`;
   const privacyDocumentId = `doc-clearflow-privacy-${appData.user.id}`;
   const securityDocumentId = `doc-clearflow-security-${appData.user.id}`;
+  const valueDocumentId = `doc-clearflow-contract-value-${appData.user.id}`;
   const retainedDocumentId = `doc-clearflow-retained-${appData.user.id}`;
   const agreementTokenId = `tok-clearflow-terms-${appData.user.id}`;
+  const contractMemoAssetAccountId = `acct-clearflow-contract-value-${appData.user.id}`;
+  const contractMemoOffsetAccountId = `acct-clearflow-service-commitment-${appData.user.id}`;
+  const contractMemoJournalId = `je-clearflow-contract-balance-${appData.user.id}`;
   const cleanedSnapshot: CoreDataBundle = {
     ...appData.coreDataSnapshot,
     ledgerAccounts: appData.coreDataSnapshot.ledgerAccounts.filter(
@@ -478,6 +505,37 @@ export function applyClearFlowRetentionRecords(
     externalStorageStatus: 'not_applicable',
   };
 
+  const contractValueDocument: DocumentRecord = {
+    id: valueDocumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow Membership Contract Value Schedule',
+    category: 'contract',
+    date: acceptedDate,
+    status: 'final',
+    linkedTokenIds: [agreementTokenId],
+    generatedBody: [
+      'ClearFlow Membership Contract Value Schedule',
+      `Signer: ${signerName}`,
+      `Monthly membership fee: ${monthlyFee.toFixed(2)}`,
+      `Contract term reference: ${termMonths} months`,
+      `Annualized contract reference value: ${annualizedContractReferenceValue.toFixed(2)}`,
+      `User commitment memorandum value: ${annualizedContractReferenceValue.toFixed(2)}`,
+      `ClearFlow service commitment memorandum value: ${annualizedContractReferenceValue.toFixed(2)}`,
+      'Cash value at signing: $0.00',
+      'Recognized receivable at signing: $0.00',
+      'Classification: non-cash annualized contract reference / memorandum record.',
+      'Pool status: review required before any assignment, borrowing-base use, financing, sale, or securitization.',
+      'This schedule records the signed contract economics and equal memorandum values. It does not by itself create cash, recognized revenue, a deposit account balance, or a freely transferable security.',
+    ].join('\n'),
+    summary:
+      `Membership agreement valued for internal contract-registry purposes at ${annualizedContractReferenceValue.toFixed(2)} (${monthlyFee.toFixed(2)} × ${termMonths}). Equal user-commitment and ClearFlow-service memorandum values are recorded; cash and recognized receivable value remain $0 at signing.`,
+    storageOwner: 'clearflow_retained',
+    retentionClass: 'agreement',
+    storageNotes:
+      'Retained contract-value schedule for internal recurring-revenue analytics, diligence, and future financing review. Not a cash asset or automatic receivable.',
+    externalStorageStatus: 'not_applicable',
+  };
+
   const retainedRecordDocument: DocumentRecord = {
     id: retainedDocumentId,
     entityId: primaryEntityId,
@@ -514,13 +572,55 @@ export function applyClearFlowRetentionRecords(
     documents: upsertById(
       upsertById(
         upsertById(
-          upsertById(cleanedSnapshot.documents, agreementDocument),
-          privacyDocument
+          upsertById(
+            upsertById(cleanedSnapshot.documents, agreementDocument),
+            privacyDocument
+          ),
+          securityDocument
         ),
-        securityDocument
+        contractValueDocument
       ),
       retainedRecordDocument
     ),
+    ledgerAccounts: upsertById(
+      upsertById(cleanedSnapshot.ledgerAccounts, {
+        id: contractMemoAssetAccountId,
+        entityId: primaryEntityId,
+        code: 'MEMO-CF-CONTRACT',
+        name: 'ClearFlow Membership Contract Value (Memo)',
+        accountType: 'memo',
+        currency: 'USD',
+        balance: annualizedContractReferenceValue,
+        remittanceEligible: false,
+        remittanceClassification: 'other',
+      }),
+      {
+        id: contractMemoOffsetAccountId,
+        entityId: primaryEntityId,
+        code: 'MEMO-CF-SERVICE',
+        name: 'ClearFlow Service Commitment Offset (Memo)',
+        accountType: 'memo',
+        currency: 'USD',
+        balance: annualizedContractReferenceValue,
+        remittanceEligible: false,
+        remittanceClassification: 'other',
+      }
+    ),
+    journalEntries: upsertById(cleanedSnapshot.journalEntries, {
+      id: contractMemoJournalId,
+      entityId: primaryEntityId,
+      entryNumber: `CF-CONTRACT-${appData.user.id.slice(-8)}`,
+      entryDate: acceptedDate,
+      memo: 'Balanced memorandum entry for signed ClearFlow membership contract reference value; non-cash and excluded from recognized receivables at signing.',
+      debitAccount: 'ClearFlow Membership Contract Value (Memo)',
+      creditAccount: 'ClearFlow Service Commitment Offset (Memo)',
+      amount: annualizedContractReferenceValue,
+      status: 'posted',
+      source: 'system',
+      linkedDocumentIds: [agreementDocumentId, valueDocumentId],
+      autoReconcileStatus: 'matched',
+      verificationRequired: false,
+    }),
     tokens: upsertById(cleanedSnapshot.tokens, agreementToken),
     workspaceSettings: {
       ...cleanedSnapshot.workspaceSettings,
@@ -537,6 +637,7 @@ export function applyClearFlowRetentionRecords(
       clearflowTermsDocumentId: agreementDocumentId,
       clearflowPrivacyDocumentId: privacyDocumentId,
       clearflowSecurityAgreementDocumentId: securityDocumentId,
+      clearflowAgreementValueDocumentId: valueDocumentId,
       clearflowRetainedRecordDocumentId: retainedDocumentId,
     },
     coreDataSnapshot: nextSnapshot,
