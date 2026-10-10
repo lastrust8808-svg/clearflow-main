@@ -613,7 +613,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       !state.appData?.user.clearflowTermsAcceptedAt ||
       !state.appData.user.clearflowTermsDocumentId ||
       !state.appData.user.clearflowRetainedRecordDocumentId ||
-      state.appData.user.clearflowInternalLedgerStatus === 'recorded' ||
+      (state.appData.user.clearflowInternalLedgerStatus === 'recorded' &&
+        Boolean(state.appData.user.clearflowInternalLedgerDepositReferenceValue)) ||
       state.appData.user.clearflowInternalLedgerStatus === 'error' ||
       clearflowLedgerDepositSyncRef.current
     ) {
@@ -632,7 +633,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       entityId: primaryEntityId,
       termsDocumentId: state.appData.user.clearflowTermsDocumentId,
       retainedRecordDocumentId: state.appData.user.clearflowRetainedRecordDocumentId,
+      contractValueDocumentId: state.appData.user.clearflowAgreementValueDocumentId,
       termsAcceptedAt: state.appData.user.clearflowTermsAcceptedAt,
+      monthlyFee:
+        state.appData.user.clearflowAgreementReceipt?.monthlyFee || 150,
+      termMonths:
+        state.appData.user.clearflowAgreementReceipt?.termMonths || 12,
     })
       .then((response) => {
         setState((current) => {
@@ -649,6 +655,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 clearflowInternalLedgerDepositId: response.result.depositId,
                 clearflowInternalLedgerDepositedAt: response.result.recordedAt,
                 clearflowInternalLedgerStatus: response.result.status,
+                clearflowInternalLedgerDepositReferenceValue:
+                  response.result.annualizedContractReferenceValue,
+                clearflowInternalLedgerDepositMonthlyFee:
+                  response.result.monthlyFee,
+                clearflowInternalLedgerDepositTermMonths:
+                  response.result.termMonths,
+                clearflowInternalLedgerDepositPoolEligibility:
+                  response.result.poolEligibility,
               },
             },
           };
@@ -680,7 +694,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.appData?.coreDataSnapshot,
     state.appData?.entities,
     state.appData?.user.clearflowInternalLedgerStatus,
+    state.appData?.user.clearflowInternalLedgerDepositReferenceValue,
     state.appData?.user.clearflowRetainedRecordDocumentId,
+    state.appData?.user.clearflowAgreementValueDocumentId,
+    state.appData?.user.clearflowAgreementReceipt?.monthlyFee,
+    state.appData?.user.clearflowAgreementReceipt?.termMonths,
     state.appData?.user.clearflowTermsAcceptedAt,
     state.appData?.user.clearflowTermsDocumentId,
     state.appData?.user.clearflowTermsSignerName,
