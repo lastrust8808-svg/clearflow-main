@@ -3046,9 +3046,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           }
         : null;
 
-      const dischargeCompletesPerformance =
-        payload.dischargeMethod === 'instrument_performance' ||
-        payload.dischargeMethod === 'internal_ledger_credit';
+      // A presentment to an external vendor/servicer is evidence of presentment, not proof
+      // of discharge by itself. Performance is completed only after external acceptance or
+      // independently verified settlement is recorded.
+      const dischargeCompletesPerformance = false;
       const authorityReleaseHoldReason =
         payload.dischargeMethod === 'bank_rail_payment' ||
         payload.dischargeMethod === 'mixed_discharge'
@@ -3081,9 +3082,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                     new Set([token.id, ...(existingInstrumentSettlement.linkedTokenIds ?? [])])
                   )
                 : existingInstrumentSettlement.linkedTokenIds,
-              performedAmount: Number(
-                (existingInstrumentSettlement.performedAmount + resolvedAmount).toFixed(2)
-              ),
+              performedAmount: existingInstrumentSettlement.performedAmount,
               performanceStatus:
                 dischargeCompletesPerformance &&
                 existingInstrumentSettlement.performedAmount + resolvedAmount >=
@@ -3112,9 +3111,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               linkedTokenIds: token ? [token.id] : undefined,
               dischargeMethod: payload.dischargeMethod,
               recognitionBasis: 'obligation_recognized_before_cash',
-              performanceStatus: dischargeCompletesPerformance ? 'performed' : 'presented',
+              performanceStatus: 'presented',
               faceAmount: linkedObligation?.amount || resolvedAmount,
-              performedAmount: dischargeCompletesPerformance ? resolvedAmount : 0,
+              performedAmount: 0,
               currency: 'USD',
               effectiveDate: presentmentDate,
               dueDate: payload.dueDate || extraction.date,
@@ -3162,7 +3161,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ? 'bank_backed'
               : 'informational_only',
         },
-        status: dischargeCompletesPerformance ? 'performed' : 'issued',
+        status: 'issued',
         notes:
           payload.parsedNotes ||
           extraction.summary ||
@@ -3184,10 +3183,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : ('other' as const),
         status:
           authorityReleaseHoldReason
-            ? ('pending' as const)
-            : payload.dischargeMethod === 'bank_rail_payment'
             ? ('initiated' as const)
-            : ('settled' as const),
+            : ('initiated' as const),
         linkedTransactionIds: [transactionId],
         linkedSettlementId: settlementId,
         linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
@@ -3204,14 +3201,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             : payload.dischargeMethod === 'bank_rail_payment'
             ? ('ready_to_release' as const)
             : ('released' as const),
-        releasedBy:
-          payload.dischargeMethod === 'bank_rail_payment'
-            ? undefined
-            : currentEntity.representativeName || 'ClearFlow Operator',
-        releasedAt:
-          payload.dischargeMethod === 'bank_rail_payment'
-            ? undefined
-            : new Date().toISOString(),
+        releasedBy: undefined,
+        releasedAt: undefined,
         releaseTokenId: token?.id,
         notes:
           [
@@ -3254,29 +3245,24 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           authorityReleaseHoldReason
             ? ('exception' as const)
             : payload.dischargeMethod === 'bank_rail_payment'
-            ? ('routing' as const)
-            : payload.dischargeMethod === 'mixed_discharge'
-              ? ('verifying' as const)
-              : ('settled' as const),
+              ? ('routing' as const)
+              : ('verifying' as const),
         liquidCashStage:
           payload.dischargeMethod === 'bank_rail_payment'
             ? ('liquid_cash_pending' as const)
-            : ('liquid_cash_released' as const),
+            : ('unfunded' as const),
         verificationMethod:
           payload.dischargeMethod === 'bank_rail_payment'
             ? ('bank_confirmation' as const)
             : ('internal_control_token' as const),
-        verificationStatus:
-          payload.dischargeMethod === 'bank_rail_payment'
-            ? ('pending' as const)
-            : ('verified' as const),
+        verificationStatus: 'pending' as const,
         verificationReference:
           payload.receiverAccountLabel ||
           `Coupon presentment issued to ${resolvedVendorName}.`,
         tokenizedProofId: token?.id,
         linkedTokenIds: token ? [token.id] : undefined,
         grossAmount: resolvedAmount,
-        settledAmount: resolvedAmount,
+        settledAmount: 0,
         currency: 'USD',
         initiatedAt: presentmentDate,
         expectedSettlementDate: payload.dueDate || extraction.date || presentmentDate,
@@ -3298,28 +3284,24 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           authorityReleaseHoldReason
             ? 'requires_review'
             : payload.dischargeMethod === 'bank_rail_payment'
-            ? 'processing'
-            : 'settled',
+              ? 'processing'
+              : 'requires_review',
         executionReason:
           authorityReleaseHoldReason
             ? authorityReleaseHoldReason
             : payload.dischargeMethod === 'instrument_performance'
-            ? 'Coupon performance posted against the linked obligation and instrument.'
-            : payload.dischargeMethod === 'internal_ledger_credit'
-              ? 'Coupon discharged internally through ledger and treasury remittance controls.'
-              : payload.dischargeMethod === 'mixed_discharge'
-                ? 'Coupon presentment issued pending mixed settlement completion.'
-                : 'Coupon presentment queued to bank rail.',
+              ? 'Instrument presentment recorded; creditor/servicer acceptance or other authoritative settlement evidence is still required before discharge.'
+              : payload.dischargeMethod === 'internal_ledger_credit'
+                ? 'Internal-credit presentment recorded for external counterparty review; no discharge is recognized until acceptance is evidenced.'
+                : payload.dischargeMethod === 'mixed_discharge'
+                  ? 'Coupon presentment issued pending mixed settlement completion.'
+                  : 'Coupon presentment queued to bank rail.',
         executionReference: payload.couponReference || `CPN-${stamp}`,
-        releasedAt: dischargeCompletesPerformance ? new Date().toISOString() : undefined,
-        releasedBy:
-          dischargeCompletesPerformance
-            ? currentEntity.representativeName || 'ClearFlow Operator'
-            : undefined,
+        releasedAt: undefined,
+        releasedBy: undefined,
         reserveBacked: selectedTreasuryAccount?.treasuryType === 'reserve',
         requiresManualReview: payload.dischargeMethod === 'mixed_discharge',
-        autoReconcileStatus:
-          payload.dischargeMethod === 'bank_rail_payment' ? 'pending' : 'matched',
+        autoReconcileStatus: 'pending',
         notes:
           [
             payload.parsedNotes,
@@ -3341,8 +3323,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         amount: resolvedAmount,
         currency: 'USD',
         date: presentmentDate,
-        status:
-          payload.dischargeMethod === 'bank_rail_payment' ? ('pending' as const) : ('posted' as const),
+        status: 'pending' as const,
         linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
         linkedSettlementId: settlementId,
         linkedPaymentIds: [paymentId],
@@ -3379,12 +3360,11 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               sourceBankAccount?.accountName ||
               '1000 Operating Cash',
         amount: resolvedAmount,
-        status: 'posted' as const,
+        status: 'draft' as const,
         source: 'system' as const,
         linkedTransactionIds: [transactionId],
         linkedSettlementIds: [settlementId],
-        autoReconcileStatus:
-          payload.dischargeMethod === 'bank_rail_payment' ? 'pending' : 'matched',
+        autoReconcileStatus: 'pending',
         linkedDocumentIds: sourceDocument ? [sourceDocument.id] : undefined,
         verificationRequired: payload.dischargeMethod !== 'bank_rail_payment',
       };
