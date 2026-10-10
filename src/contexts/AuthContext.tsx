@@ -118,6 +118,7 @@ interface AuthContextType {
       security: boolean;
       eSign: boolean;
       authority: boolean;
+      membershipCommitment: boolean;
     }
   ) => void;
   completeVerification: () => void;
@@ -1612,11 +1613,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       onboardingConsents?.privacy &&
       onboardingConsents?.security &&
       onboardingConsents?.eSign &&
-      onboardingConsents?.authority
+      onboardingConsents?.authority &&
+      onboardingConsents?.membershipCommitment
     );
     if (!alreadyAcceptedTerms && (!acceptedTerms || !explicitNewUserConsentsComplete)) {
       console.error(
-        'ClearFlow terms, privacy, security, electronic-record, and authority consents must be accepted before a new profile can complete.'
+        'ClearFlow terms, privacy, security, electronic-record, authority, and membership commitment consents must be accepted before a new profile can complete.'
       );
       return;
     }
