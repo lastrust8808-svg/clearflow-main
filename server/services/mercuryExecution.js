@@ -241,3 +241,30 @@ export async function queueMercuryPaymentApproval({
 export async function getMercuryApprovalRequest(requestId) {
   return mercuryRequest(`/request-send-money/${encodeURIComponent(requestId)}`);
 }
+
+
+export async function getMercuryTransactionById(transactionId) {
+  return mercuryRequest(`/transactions/${encodeURIComponent(transactionId)}`);
+}
+
+export async function getMercuryPaymentStatus(requestId) {
+  const approvalRequest = await getMercuryApprovalRequest(requestId);
+  let transactions = [];
+
+  if (approvalRequest?.accountId) {
+    const query = new URLSearchParams({
+      limit: '100',
+      order: 'desc',
+      requestId: String(requestId),
+    });
+    const payload = await mercuryRequest(
+      `/account/${encodeURIComponent(approvalRequest.accountId)}/transactions?${query.toString()}`
+    );
+    transactions = Array.isArray(payload?.transactions) ? payload.transactions : [];
+  }
+
+  return {
+    approvalRequest,
+    transactions,
+  };
+}
