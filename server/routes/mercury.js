@@ -107,6 +107,15 @@ router.get('/payment-status/:requestId', async (req, res) => {
 router.post('/webhook', async (req, res) => {
   const rawBody = req.body;
   const signatureHeader = req.get('Mercury-Signature');
+  const webhookSecret = String(process.env.MERCURY_WEBHOOK_SECRET || '').trim();
+
+  // Mercury verifies endpoint reachability before the new signing secret can be
+  // copied into Render. During that one-time bootstrap window, acknowledge the
+  // probe but do not parse, store, or act on the payload. Once the secret exists,
+  // every webhook must pass HMAC verification.
+  if (!webhookSecret) {
+    return res.status(200).send('Webhook endpoint ready for signing-secret bootstrap.');
+  }
 
   if (!verifyMercuryWebhook(rawBody, signatureHeader)) {
     return res.status(401).send('Invalid Mercury webhook signature.');
