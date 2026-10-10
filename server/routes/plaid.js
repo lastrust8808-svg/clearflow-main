@@ -45,7 +45,8 @@ async function savePersistedConnections(userId) {
       identityData: item.identityData,
       accounts: item.accounts,
       cursor: transactionCursorStore.get(item.itemId) || null,
-      pendingTransactions: item.pendingTransactions || [],
+      pendingAddedTransactions: item.pendingAddedTransactions || [],
+      pendingModifiedTransactions: item.pendingModifiedTransactions || [],
       removedTransactionIds: item.removedTransactionIds || [],
     }))
   );
@@ -338,12 +339,14 @@ async function syncPlaidItemChanges(itemId) {
     ...removedTransactionIds,
   ]);
 
-  const pending = mergePendingTransactions(
-    item.pendingTransactions || [],
-    [...normalizedAdded, ...normalizedModified]
+  item.pendingAddedTransactions = mergePendingTransactions(
+    item.pendingAddedTransactions || [],
+    normalizedAdded
   ).filter((transaction) => !removedSet.has(transaction.transaction_id));
-
-  item.pendingTransactions = pending;
+  item.pendingModifiedTransactions = mergePendingTransactions(
+    item.pendingModifiedTransactions || [],
+    normalizedModified
+  ).filter((transaction) => !removedSet.has(transaction.transaction_id));
   item.removedTransactionIds = Array.from(removedSet);
   await savePersistedConnections(item.userId);
 
@@ -726,16 +729,18 @@ router.post('/transactions/sync', async (req, res) => {
   try {
     await syncPlaidItemChanges(itemId);
     const item = await getStoredItem(itemId);
-    const pendingTransactions = item.pendingTransactions || [];
+    const pendingAddedTransactions = item.pendingAddedTransactions || [];
+    const pendingModifiedTransactions = item.pendingModifiedTransactions || [];
     const removedTransactionIds = item.removedTransactionIds || [];
 
-    item.pendingTransactions = [];
+    item.pendingAddedTransactions = [];
+    item.pendingModifiedTransactions = [];
     item.removedTransactionIds = [];
     await savePersistedConnections(item.userId);
 
     return res.json({
-      added: pendingTransactions,
-      modified: [],
+      added: pendingAddedTransactions,
+      modified: pendingModifiedTransactions,
       removedTransactionIds,
     });
   } catch (error) {
