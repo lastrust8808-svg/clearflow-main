@@ -674,11 +674,15 @@ export default function AppShell({
     >
       <aside
         style={{
-          position: 'relative',
+          position: isCompactLayout ? 'relative' : 'sticky',
+          top: 0,
+          alignSelf: 'start',
+          maxHeight: isCompactLayout ? 'none' : '100vh',
+          overflowY: isCompactLayout ? 'visible' : 'auto',
           zIndex: 1,
           borderRight: isCompactLayout ? 'none' : '1px solid var(--cf-border)',
           borderBottom: isCompactLayout ? '1px solid var(--cf-border)' : 'none',
-          padding: '24px 16px 28px',
+          padding: isCompactLayout ? '12px 14px' : '20px 14px 24px',
           background: themePalette.sidebarBackground,
           boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
           display: 'grid',
@@ -696,17 +700,18 @@ export default function AppShell({
             cursor: 'pointer',
             textAlign: 'left',
             display: 'grid',
-            gap: 10,
+            gap: isCompactLayout ? 4 : 10,
           }}
           aria-label="Open ClearFlow home"
         >
           <img
             src={clearFlowLogoDataUri}
             alt="ClearFlow"
-            style={{ width: 190, maxWidth: '100%', display: 'block' }}
+            style={{ width: isCompactLayout ? 145 : 190, maxWidth: '100%', display: 'block' }}
           />
           <span
             style={{
+              display: isCompactLayout ? 'none' : 'inline-flex',
               width: 'fit-content',
               padding: '7px 12px',
               borderRadius: 999,
@@ -730,7 +735,7 @@ export default function AppShell({
             background: 'var(--cf-panel-soft)',
             border: '1px solid var(--cf-border)',
             boxShadow: 'var(--cf-shadow)',
-            display: 'grid',
+            display: isCompactLayout ? 'none' : 'grid',
             gap: 10,
           }}
         >
@@ -811,7 +816,80 @@ export default function AppShell({
           ) : null}
         </div>
 
-        <nav style={{ display: 'grid', gap: 16 }}>
+        {isCompactLayout ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto',
+              gap: 8,
+              alignItems: 'center',
+            }}
+          >
+            <select
+              value={activeSection}
+              onChange={(event) => onSectionChange(event.target.value as AppSection)}
+              aria-label="Open workspace"
+              style={{
+                minWidth: 0,
+                minHeight: 42,
+                borderRadius: 11,
+                border: '1px solid var(--cf-border)',
+                background: 'rgba(10, 16, 28, 0.72)',
+                color: 'var(--cf-text)',
+                padding: '0 10px',
+                outline: 'none',
+              }}
+            >
+              {navGroups.flatMap((group) =>
+                group.items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                )),
+              )}
+            </select>
+            <select
+              value={activeEntityId ?? ''}
+              onChange={(event) => onActiveEntityChange(event.target.value || null)}
+              aria-label="Active entity board"
+              style={{
+                minWidth: 0,
+                minHeight: 42,
+                borderRadius: 11,
+                border: '1px solid var(--cf-border)',
+                background: 'rgba(10, 16, 28, 0.72)',
+                color: 'var(--cf-text)',
+                padding: '0 10px',
+                outline: 'none',
+              }}
+            >
+              <option value="">Collective</option>
+              {entities.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.displayName || entity.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              style={{
+                minHeight: 42,
+                borderRadius: 11,
+                border: '1px solid var(--cf-border)',
+                background: 'rgba(54, 215, 255, 0.08)',
+                color: 'var(--cf-accent-soft)',
+                padding: '0 12px',
+                cursor: 'pointer',
+                fontWeight: 800,
+              }}
+            >
+              Open
+            </button>
+          </div>
+        ) : null}
+
+        <nav style={{ display: isCompactLayout ? 'none' : 'grid', gap: 16 }}>
           {navGroups.map((group) => (
             <div key={group.title} style={{ display: 'grid', gap: 8 }}>
               <div
@@ -887,7 +965,7 @@ export default function AppShell({
         style={{
           position: 'relative',
           zIndex: 1,
-          padding: 24,
+          padding: isCompactLayout ? 12 : 24,
           background: 'transparent',
           minWidth: 0,
         }}

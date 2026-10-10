@@ -365,6 +365,7 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const [counterpartyModalMode, setCounterpartyModalMode] =
     useState<'customer' | 'vendor' | null>(null);
   const [operationsNotice, setOperationsNotice] = useState('');
+  const [showAllAccountingCategories, setShowAllAccountingCategories] = useState(false);
 
   const activeSubnavLabel =
     subnavItems.find((item) => item.id === activeSubsection)?.label || 'Accounting';
@@ -9805,10 +9806,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       />
 
       <div style={shellStyle}>
-        <PageSection
-          title="Accounting"
-          description="Receivables, payables, journals, bank activity, and reconciliation in one ERP workspace."
-        >
+        <PageSection title={`Accounting · ${activeSubnavLabel}`}>
           <div style={{ display: 'grid', gap: 12 }}>
             <div
               style={{
@@ -9822,128 +9820,176 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             >
               <div
                 style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 12,
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(180px, 1fr) minmax(220px, 320px) auto',
+                  gap: 10,
                   alignItems: 'center',
-                  justifyContent: 'space-between',
                 }}
               >
-                <div style={{ minWidth: 220 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.9,
-                    }}
-                  >
-                    ERP Workspace
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>
-                    {activeSubnavLabel}
-                  </div>
-                  <div style={{ color: '#cbd5e1', fontSize: 13, marginTop: 4 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     {defaultEntity?.displayName || defaultEntity?.name || 'No entity selected'}
                   </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
+                    {activeSubnavLabel}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {[
-                    ['Dashboard', 'dashboard'],
-                    ['Vendors', 'vendors'],
-                    ['Bills', 'bills'],
-                    ['Bank Feed', 'bankFeed'],
-                    ['Reconcile', 'reconciliation'],
-                    ['COA', 'coa'],
-                  ].map(([label, id]) => {
-                    const routeItem = subnavItems.find((item) => item.id === id);
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => openAccountingSubsection(id as AccountingSection)}
-                        style={sectionButtonStyle(activeSubsection === id)}
-                        title={routeItem?.description || `Open ${label}`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
+
+                <select
+                  value={activeSubsection}
+                  onChange={(event) =>
+                    openAccountingSubsection(event.target.value as AccountingSection)
+                  }
+                  aria-label="Accounting category"
+                  style={{
+                    width: '100%',
+                    minHeight: 42,
+                    borderRadius: 10,
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    background: 'rgba(15,23,42,0.5)',
+                    color: '#e5e7eb',
+                    padding: '0 10px',
+                  }}
+                >
+                  {subnavItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAllAccountingCategories((previous) => !previous)}
+                  style={sectionButtonStyle(showAllAccountingCategories)}
+                >
+                  {showAllAccountingCategories ? 'Hide Categories' : 'All Categories'}
+                </button>
               </div>
 
-            <AccountingToolbar
-              onAddInvoice={() => setIsInvoiceModalOpen(true)}
-              onRecordPayment={() => setIsPaymentModalOpen(true)}
-              onAddJournalEntry={() => setIsJournalModalOpen(true)}
-              onAddBill={() => setIsBillModalOpen(true)}
-              onAddPresentment={() => openPresentmentModal(null)}
-              onResumePresentmentDraft={resumeSavedPresentmentDraft}
-              hasSavedPresentmentDraft={hasSavedPresentmentDraft}
-            />
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
+              >
+                {[
+                  ['Dashboard', 'dashboard'],
+                  ['Bills', 'bills'],
+                  ['Payments', 'payments'],
+                  ['Bank Feed', 'bankFeed'],
+                  ['Reconcile', 'reconciliation'],
+                  ['Intercompany', 'intercompany'],
+                ].map(([label, id]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => openAccountingSubsection(id as AccountingSection)}
+                    style={sectionButtonStyle(activeSubsection === id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <AccountingToolbar
+                onAddInvoice={() => setIsInvoiceModalOpen(true)}
+                onRecordPayment={() => setIsPaymentModalOpen(true)}
+                onAddJournalEntry={() => setIsJournalModalOpen(true)}
+                onAddBill={() => setIsBillModalOpen(true)}
+                onAddPresentment={() => openPresentmentModal(null)}
+                onResumePresentmentDraft={resumeSavedPresentmentDraft}
+                hasSavedPresentmentDraft={hasSavedPresentmentDraft}
+              />
             </div>
+
+            {showAllAccountingCategories ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 10,
+                }}
+              >
+                {subnavGroups.map((group) => (
+                  <div
+                    key={group.title}
+                    style={{
+                      display: 'grid',
+                      gap: 8,
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      border: '1px solid rgba(148,163,184,0.12)',
+                      background: 'rgba(15,23,42,0.14)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#94a3b8',
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.8,
+                      }}
+                    >
+                      {group.title}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                      {group.items.map((subnavId) => {
+                        const item = subnavItems.find((candidate) => candidate.id === subnavId);
+                        if (!item) return null;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              openAccountingSubsection(item.id);
+                              setShowAllAccountingCategories(false);
+                            }}
+                            style={sectionButtonStyle(item.id === activeSubsection)}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {operationsNotice ? (
               <div
                 style={{
-                  padding: '12px 14px',
+                  padding: '10px 12px',
                   borderRadius: 12,
                   border: '1px solid rgba(45,212,191,0.25)',
                   background: 'rgba(15,118,110,0.16)',
                   color: '#d1fae5',
                   fontSize: 13,
+                  display: 'flex',
+                  gap: 10,
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                {operationsNotice}
-              </div>
-            ) : null}
-
-            <div style={{ display: 'grid', gap: 14 }}>
-              {subnavGroups.map((group) => (
-                <div
-                  key={group.title}
+                <span>{operationsNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setOperationsNotice('')}
                   style={{
-                    display: 'grid',
-                    gap: 8,
-                    padding: '10px 12px',
-                    borderRadius: 14,
-                    border: '1px solid rgba(148,163,184,0.12)',
-                    background: 'rgba(15,23,42,0.14)',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#d1fae5',
+                    cursor: 'pointer',
+                    fontWeight: 800,
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.8,
-                    }}
-                  >
-                    {group.title}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {group.items.map((subnavId) => {
-                      const item = subnavItems.find((candidate) => candidate.id === subnavId);
-                      if (!item) {
-                        return null;
-                      }
-
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => openAccountingSubsection(item.id)}
-                          style={sectionButtonStyle(item.id === activeSubsection)}
-                          title={item.description}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+                  ×
+                </button>
+              </div>
+            ) : null}
           </div>
         </PageSection>
 
