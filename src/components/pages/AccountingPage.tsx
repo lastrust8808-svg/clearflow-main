@@ -2479,6 +2479,37 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         payload.debitAccount.trim() || '6000 Expense / Cost or Asset';
       const recognitionCreditAccount =
         payload.payableAccount.trim() || '2000 Accounts Payable';
+      const article3Candidate =
+        payload.hasStatementCoupon &&
+        payload.issuerSignaturePresent &&
+        payload.unconditionalPromiseOrOrder &&
+        payload.payableToOrderOrBearer &&
+        payload.payableOnDemandOrDefiniteTime;
+      const statementCouponProfile = payload.hasStatementCoupon
+        ? {
+            detachableCoupon: true,
+            amountShown: Number(payload.couponAmount || resolvedAmount) || resolvedAmount,
+            classification: article3Candidate
+              ? ('article3_candidate' as const)
+              : ('remittance_advice' as const),
+            reviewStatus: article3Candidate
+              ? ('needs_review' as const)
+              : ('not_reviewed' as const),
+            issuerSignaturePresent: payload.issuerSignaturePresent,
+            unconditionalPromiseOrOrder: payload.unconditionalPromiseOrOrder,
+            payableToOrderOrBearer: payload.payableToOrderOrBearer,
+            payableOnDemandOrDefiniteTime: payload.payableOnDemandOrDefiniteTime,
+            creditorAcceptanceStatus: 'not_presented' as const,
+            tenderEvidenceStatus: 'document_only' as const,
+            securitizationReference: payload.securitizationReference.trim() || undefined,
+            claimedInterestOrGainCredit:
+              Number(payload.claimedInterestOrGainCredit || 0) > 0
+                ? Number(payload.claimedInterestOrGainCredit)
+                : undefined,
+            notes:
+              'Statement coupon retained as source evidence. No payment, principal reduction, cash, or discharge is recognized from the coupon or a claimed securitization/interest gain unless separately confirmed by the creditor, servicer, bank, or other authoritative settlement evidence.',
+          }
+        : undefined;
 
       const nextObligations: CoreDataBundle['obligations'] =
         creditProfile?.enabled
@@ -2612,6 +2643,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         linkedObligationId: billObligationId,
         recognitionDebitAccount,
         recognitionCreditAccount,
+        statementCouponProfile,
         intakeStatus: payload.uploadedFile ? extraction.status : 'manual',
         extractionSummary: extraction.summary,
         extractedVendorName: extraction.vendorOrMerchantName,
