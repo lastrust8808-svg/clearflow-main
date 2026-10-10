@@ -6984,23 +6984,52 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    let syncedTransactions = [] as Awaited<ReturnType<typeof plaidService.syncTransactions>>;
-
-    try {
-      if (bankAccount.connectionType === 'plaid_connected') {
-        syncedTransactions = await plaidService.syncTransactions(
-          bankAccount.plaidItemId || bankAccount.id
-        );
-      }
-    } catch (error) {
-      console.warn('Bank feed sync fell back to local simulation.', error);
+    if (bankAccount.connectionType !== 'plaid_connected') {
+      setData((prev) => ({
+        ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === bankAccountId
+            ? { ...account, liveFeedStatus: 'attention_needed' }
+            : account
+        ),
+      }));
+      setOperationsNotice(
+        `${bankAccount.accountName} is not connected to a live Plaid feed. No transactions were imported.`,
+      );
+      setActiveSubsection('bankFeed');
+      return;
     }
 
-    setData((prev) => syncBankFeedToLedger({
-      data: prev,
-      bankAccountId,
-      plaidTransactions: syncedTransactions,
-    }));
+    try {
+      const syncedTransactions = await plaidService.syncTransactions(
+        bankAccount.plaidItemId || bankAccount.id
+      );
+
+      setData((prev) => syncBankFeedToLedger({
+        data: prev,
+        bankAccountId,
+        plaidTransactions: syncedTransactions,
+      }));
+      setOperationsNotice(
+        syncedTransactions.length
+          ? `Imported ${syncedTransactions.length} live bank transaction${syncedTransactions.length === 1 ? '' : 's'} into the ClearFlow bank feed.`
+          : `${bankAccount.accountName} is current. Plaid returned no new transactions.`,
+      );
+    } catch (error) {
+      console.error('Live bank feed sync failed.', error);
+      setData((prev) => ({
+        ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === bankAccountId
+            ? { ...account, liveFeedStatus: 'attention_needed' }
+            : account
+        ),
+      }));
+      setOperationsNotice(
+        `Live bank sync failed for ${bankAccount.accountName}. ClearFlow did not create any fallback or simulated transactions.`,
+      );
+    }
+
     setActiveSubsection('bankFeed');
   };
 
