@@ -38,6 +38,7 @@ const navGroups: Array<{
       { id: 'transactions', label: 'Transactions', hint: 'Settlement and movement' },
       { id: 'compliance', label: 'Compliance & Reports', hint: 'Review, reporting, filings' },
       { id: 'documents', label: 'Documents & Vault', hint: 'Evidence and packets' },
+      { id: 'credit', label: 'Credit Building', hint: 'Credit reports, Metro 2 review, disputes, and build plans' },
     ],
   },
   {
@@ -119,6 +120,11 @@ const sectionQuickActions: Record<
     { label: 'Upload', hash: '#documents:upload', description: 'Add a new vault file' },
     { label: 'Accounting', hash: '#accounting:dashboard', description: 'Return to ERP workflow' },
     { label: 'Compliance', hash: '#compliance', description: 'Review linked control items' },
+  ],
+  credit: [
+    { label: 'Add Tradeline', hash: '#credit:new-tradeline', description: 'Enter a credit-report account for review' },
+    { label: 'Upload Credit Report', hash: '#documents:upload', description: 'Add report evidence to the vault' },
+    { label: 'Compliance', hash: '#compliance', description: 'Review dispute and client-service controls' },
   ],
   aiStudio: [
     { label: 'Settlement Audit', hash: '#aiStudio', description: 'Generate a rail audit packet' },

@@ -8,6 +8,7 @@ export type AppSection =
   | 'transactions'
   | 'compliance'
   | 'documents'
+  | 'credit'
   | 'aiStudio'
   | 'settings';
 
@@ -2719,6 +2720,88 @@ export interface JournalEntryRecord {
   verificationRequired?: boolean;
 }
 
+export type CreditProfileType = 'personal' | 'business';
+export type CreditBureauName = 'equifax' | 'experian' | 'transunion' | 'other';
+
+export interface CreditTradelineRecord {
+  id: string;
+  entityId?: string;
+  profileType: CreditProfileType;
+  bureau: CreditBureauName;
+  furnisherName: string;
+  accountLabel?: string;
+  accountMask?: string;
+  accountType:
+    | 'revolving'
+    | 'installment'
+    | 'mortgage'
+    | 'auto'
+    | 'student'
+    | 'collection'
+    | 'utility'
+    | 'other';
+  status: 'open' | 'closed' | 'collection' | 'charged_off' | 'other';
+  balance: number;
+  creditLimit?: number;
+  pastDueAmount?: number;
+  paymentStatus:
+    | 'current'
+    | '30_days'
+    | '60_days'
+    | '90_days'
+    | '120_plus'
+    | 'collection'
+    | 'charge_off'
+    | 'unknown';
+  openedAt?: string;
+  reportedAt?: string;
+  firstDelinquencyDate?: string;
+  isAuthorizedUser?: boolean;
+  source: 'manual' | 'credit_report_upload' | 'connected_report';
+  notes?: string;
+}
+
+export interface CreditReviewRecord {
+  id: string;
+  tradelineId: string;
+  entityId?: string;
+  reviewedAt: string;
+  reviewType: 'metro2_consistency' | 'utilization' | 'payment_history' | 'completeness';
+  status: 'clean' | 'review' | 'dispute_ready' | 'disputed' | 'resolved';
+  issueTypes: Array<
+    | 'balance_limit_conflict'
+    | 'status_payment_conflict'
+    | 'date_conflict'
+    | 'past_due_conflict'
+    | 'duplicate_reporting'
+    | 'missing_key_field'
+    | 'other'
+  >;
+  factualBasis?: string;
+  reviewSummary?: string;
+  evidenceDocumentIds?: string[];
+  bureauDisputeStatus?: 'not_started' | 'draft' | 'sent' | 'investigating' | 'resolved';
+  furnisherDisputeStatus?: 'not_started' | 'draft' | 'sent' | 'investigating' | 'resolved';
+  notes?: string;
+}
+
+export interface CreditBuildPlanRecord {
+  id: string;
+  entityId?: string;
+  profileType: CreditProfileType;
+  createdAt: string;
+  status: 'active' | 'completed' | 'archived';
+  targetUtilizationPercent?: number;
+  actions: Array<{
+    id: string;
+    label: string;
+    status: 'todo' | 'doing' | 'done' | 'skipped';
+    dueDate?: string;
+    notes?: string;
+  }>;
+  notes?: string;
+}
+
 export interface CoreDataBundle {
   entities: EntityRecord[];
   entityMarkUsageRecords: EntityMarkUsageRecord[];
@@ -2777,6 +2860,9 @@ export interface CoreDataBundle {
   aiWorkflows: AIWorkflowRecord[];
   bankFeedRules: BankFeedRuleRecord[];
   bankFeedEntries: BankFeedEntryRecord[];
+  creditTradelines: CreditTradelineRecord[];
+  creditReviews: CreditReviewRecord[];
+  creditBuildPlans: CreditBuildPlanRecord[];
   workspaceSettings: WorkspaceSettingsRecord;
 }
 

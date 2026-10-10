@@ -2362,6 +2362,10 @@ export const coreMockData: CoreDataBundle = {
     },
   ],
 
+  creditTradelines: [],
+  creditReviews: [],
+  creditBuildPlans: [],
+
   workspaceSettings: {
     workspaceName: 'ClearFlow Command Center',
     themeMode: 'ocean_luxe',
