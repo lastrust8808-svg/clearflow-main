@@ -24,6 +24,7 @@ const AssetsPage = lazy(() => import('../components/pages/AssetsPage'));
 const TransactionsPage = lazy(() => import('../components/pages/TransactionsPage'));
 const CompliancePage = lazy(() => import('../components/pages/ComplianceWorkbenchPage'));
 const DocumentsPage = lazy(() => import('../components/pages/DocumentsPage'));
+const CreditBuildingPage = lazy(() => import('../components/pages/CreditBuildingPage'));
 const AIStudioPage = lazy(() => import('../components/pages/AIStudioPage'));
 const SettingsPage = lazy(() => import('../components/pages/SettingsPage'));
 
@@ -129,6 +130,7 @@ const allowedSections: AppSection[] = [
   'transactions',
   'compliance',
   'documents',
+  'credit',
   'aiStudio',
   'settings',
 ];
@@ -263,6 +265,9 @@ function buildBlankBundle(seedEntities: EntityRecord[]): CoreDataBundle {
     aiWorkflows: coreMockData.aiWorkflows,
     bankFeedRules: [],
     bankFeedEntries: [],
+    creditTradelines: [],
+    creditReviews: [],
+    creditBuildPlans: [],
     workspaceSettings: coreMockData.workspaceSettings,
   };
 }
@@ -331,6 +336,9 @@ function stripDemoSeedData(raw: Partial<CoreDataBundle>): Partial<CoreDataBundle
     tokens: [],
     bankFeedRules: [],
     bankFeedEntries: [],
+    creditTradelines: [],
+    creditReviews: [],
+    creditBuildPlans: [],
   };
 }
 
@@ -411,6 +419,9 @@ function normalizeCoreDataBundle(raw: Partial<CoreDataBundle> | null | undefined
     aiWorkflows: candidate.aiWorkflows ?? base.aiWorkflows,
     bankFeedRules: candidate.bankFeedRules ?? base.bankFeedRules,
     bankFeedEntries: candidate.bankFeedEntries ?? base.bankFeedEntries,
+    creditTradelines: candidate.creditTradelines ?? base.creditTradelines,
+    creditReviews: candidate.creditReviews ?? base.creditReviews,
+    creditBuildPlans: candidate.creditBuildPlans ?? base.creditBuildPlans,
     workspaceSettings: {
       ...base.workspaceSettings,
       ...(candidate.workspaceSettings ?? {}),
@@ -680,6 +691,9 @@ function preloadWorkspaceSection(section: AppSection) {
       break;
     case 'documents':
       void import('../components/pages/DocumentsPage');
+      break;
+    case 'credit':
+      void import('../components/pages/CreditBuildingPage');
       break;
     case 'aiStudio':
       void import('../components/pages/AIStudioPage');
@@ -1102,6 +1116,14 @@ export default function App({
         return <CompliancePage data={scopedData} setData={setData} />;
       case 'documents':
         return <DocumentsPage data={scopedData} setData={setData} />;
+      case 'credit':
+        return (
+          <CreditBuildingPage
+            data={scopedData}
+            setData={setData}
+            activeEntityId={activeEntityId}
+          />
+        );
       case 'aiStudio':
         return (
           <AIStudioPage
