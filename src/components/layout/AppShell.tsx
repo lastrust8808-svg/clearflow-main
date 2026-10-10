@@ -122,7 +122,7 @@ const sectionQuickActions: Record<
     { label: 'Compliance', hash: '#compliance', description: 'Review linked control items' },
   ],
   credit: [
-    { label: 'Add Tradeline', hash: '#credit', description: 'Enter a credit-report account for review' },
+    { label: 'Add Tradeline', hash: '#credit:new-tradeline', description: 'Enter a credit-report account for review' },
     { label: 'Upload Credit Report', hash: '#documents:upload', description: 'Add report evidence to the vault' },
     { label: 'Compliance', hash: '#compliance', description: 'Review dispute and client-service controls' },
   ],
