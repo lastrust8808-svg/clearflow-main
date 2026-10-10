@@ -106,7 +106,7 @@ router.post('/invoice-exports', (req, res) => {
   return res.status(201).json({ success: true, job });
 });
 
-router.post('/settlements/execute', (req, res) => {
+router.post('/settlements/execute', async (req, res) => {
   const {
     entityId,
     paymentId,
@@ -128,7 +128,7 @@ router.post('/settlements/execute', (req, res) => {
       .json({ success: false, error: 'Missing settlement execution payload.' });
   }
 
-  const execution = buildSettlementExecution({
+  const execution = await buildSettlementExecution({
     entityId,
     paymentId,
     settlementId,
