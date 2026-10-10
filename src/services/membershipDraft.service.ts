@@ -11,7 +11,7 @@ import type { MembershipIntakeDraft } from './onboarding.service';
 
 export const MEMBERSHIP_DRAFT_STORAGE_KEY = 'clearflow-membership-intake-draft';
 export const MEMBERSHIP_DRAFT_ID_STORAGE_KEY = 'clearflow-membership-intake-draft-id';
-export const CLEARFLOW_TERMS_VERSION = '2026.10';
+export const CLEARFLOW_TERMS_VERSION = '2026.10.1';
 export const CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE = 150;
 export const CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS = 12;
 
@@ -412,6 +412,7 @@ export function applyClearFlowRetentionRecords(
         securityAndRetention: true as const,
         electronicRecordsAndSignature: true as const,
         authorityCertification: true as const,
+        membershipCommitment: true as const,
       },
     },
     clearflowInternalLedgerStatus:
