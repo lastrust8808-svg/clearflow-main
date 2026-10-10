@@ -303,9 +303,15 @@ export interface InterEntityTransferSubmitPayload {
   amount: string;
   effectiveDate: string;
   memo: string;
+  movementType: 'cash_transfer' | 'internal_credit' | 'note_instrument';
   settlementMode: 'mirrored_halves' | 'cross_entity_clearing';
   fromCashAccount: string;
   toCashAccount: string;
+  reserveBacked: boolean;
+  noteAction: 'issue_new' | 'assign_existing';
+  existingRegisterId?: string;
+  noteMaturityDate?: string;
+  noteInterestRate?: string;
 }
 
 export interface QuoteSubmitPayload {

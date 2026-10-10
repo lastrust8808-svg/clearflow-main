@@ -431,6 +431,7 @@ export type AcquisitionInstructionVerificationStatus =
 export type InterEntityLedgerSide = 'origin' | 'destination';
 
 export type InterEntitySettlementMode = 'mirrored_halves' | 'cross_entity_clearing';
+export type InterEntityMovementType = 'cash_transfer' | 'internal_credit' | 'note_instrument';
 export type EntityConnectionType =
   | 'internal_entity'
   | 'external_user'
@@ -1224,9 +1225,16 @@ export interface InterEntityTransferRecord {
   currency: string;
   effectiveDate: string;
   settlementMode: InterEntitySettlementMode;
+  movementType?: InterEntityMovementType;
+  noteAction?: 'issue_new' | 'assign_existing';
   status: 'draft' | 'posted' | 'settled';
   linkedEntityConnectionId?: string;
   linkedCreditRailId?: string;
+  linkedInstrumentId?: string;
+  linkedInstrumentRegisterId?: string;
+  linkedObligationId?: string;
+  reserveBacked?: boolean;
+  bankConfirmationRequired?: boolean;
   memo?: string;
 }
 
