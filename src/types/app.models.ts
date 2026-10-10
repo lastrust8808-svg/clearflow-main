@@ -21,6 +21,20 @@ export interface User {
   clearflowSecurityAgreementDocumentId?: string;
   clearflowPrivacyDocumentId?: string;
   clearflowRetainedRecordDocumentId?: string;
+  clearflowAgreementReceipt?: {
+    termsVersion: string;
+    acceptedAt: string;
+    signerName: string;
+    identityEmail?: string;
+    acceptanceMethod: 'typed_signature';
+    consents: {
+      userTerms: true;
+      privacy: true;
+      securityAndRetention: true;
+      electronicRecordsAndSignature: true;
+      authorityCertification: true;
+    };
+  };
   clearflowInternalLedgerDepositId?: string;
   clearflowInternalLedgerDepositedAt?: string;
   clearflowInternalLedgerStatus?: 'pending' | 'recorded' | 'error';
