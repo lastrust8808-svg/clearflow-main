@@ -8,97 +8,13 @@ interface WelcomeProps {
   onDevLogin: () => void;
   onStartNewMember: () => void;
   onStartExistingMember: () => void;
-  startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
+  startGoogleSignIn: (
+    mode?: 'new' | 'existing' | 'returning'
+  ) => Promise<{ success: boolean; error?: string }>;
   authMessage?: string | null;
 }
 
-const platformPillars = [
-  'Entity management and authority records',
-  'ERP accounting, receipts, invoices, and reconciliation',
-  'Asset registry, wallets, and settlement controls',
-  'Documents, compliance workflows, and AI generators',
-];
-
-const moduleLabels = [
-  'Overview',
-  'Entities',
-  'Accounting',
-  'Ledger',
-  'Assets',
-  'Transactions',
-  'Compliance',
-  'Documents',
-  'AI Studio',
-];
-
-const featureHighlights = [
-  'Multi-entity operating system for trusts, businesses, fiduciary boards, and reserve structures',
-  'ERP accounting with invoices, bills, remittances, bank feed, journals, and reconciliation',
-  'Treasury, settlement, bond, collateral, wallet, and reserve control layers in one workspace',
-  'Document vault, compliance review, AI generation, and retained proof chains built into every workflow',
-];
-
-const featureColumns = [
-  {
-    title: 'Operate',
-    points: ['Entity boards', 'Authority and proof', 'ERP accounting', 'Remittance flow'],
-  },
-  {
-    title: 'Control',
-    points: ['Treasury and reserve', 'Wallets and assets', 'Settlement posture', 'Document retention'],
-  },
-  {
-    title: 'Grow',
-    points: ['AI resource studio', 'Reporting and strategy', 'Rewards and referrals', 'Membership value stack'],
-  },
-];
-
-const membershipTiers = [
-  {
-    name: 'Steward',
-    price: '$39/mo',
-    autopayPrice: '$35.10/mo',
-    subtitle: 'For first boards and solo operators',
-    emphasis: 'Start with one entity, one operator, and a clean operating base.',
-    features: [
-      '30 days free',
-      'Core entity setup and authority flow',
-      'Accounting basics, documents, and AI learning hub',
-      'Rewards credits and referral link',
-    ],
-  },
-  {
-    name: 'Operator',
-    price: '$89/mo',
-    autopayPrice: '$80.10/mo',
-    subtitle: 'Best for active businesses and trust administration',
-    emphasis: 'This is the primary plan for most real users.',
-    featured: true,
-    features: [
-      '30 days free',
-      'Full ERP accounting and remittance flow',
-      'Bank feed, wallet, reserve, and settlement visibility',
-      'Multi-entity workflow, richer AI/reporting, and deeper resource access',
-    ],
-  },
-  {
-    name: 'Crown',
-    price: '$179/mo',
-    autopayPrice: '$161.10/mo',
-    subtitle: 'For treasury-heavy, fiduciary, and multi-entity operators',
-    emphasis: 'Advanced control, reporting, reserve, capital, and white-glove depth.',
-    features: [
-      '30 days free',
-      'Everything in Operator',
-      'Advanced treasury, reserve, bond, collateral, and strategy layers',
-      'Priority support and premium operating surfaces',
-    ],
-  },
-];
-
 export const Welcome: React.FC<WelcomeProps> = ({
-  initialView = 'landing',
-  initialIntent = 'existing',
   lastKnownGoogleUser,
   onDevLogin,
   onStartNewMember,
@@ -106,643 +22,276 @@ export const Welcome: React.FC<WelcomeProps> = ({
   startGoogleSignIn,
   authMessage,
 }) => {
-  const [entryView, setEntryView] = useState<'landing' | 'help'>(initialView);
-  const [signInIntent, setSignInIntent] = useState<'new' | 'existing'>(initialIntent);
-  const [googleLaunchError, setGoogleLaunchError] = useState('');
-  const [isLaunchingGoogle, setIsLaunchingGoogle] = useState(false);
+  const [launchMode, setLaunchMode] = useState<'new' | 'existing' | null>(null);
+  const [launchError, setLaunchError] = useState('');
   const [isCompact, setIsCompact] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 720
   );
+
   const canUseDevAccess =
     typeof window !== 'undefined' &&
     ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  const launchGoogle = async (intent: 'new' | 'existing' | 'returning') => {
-    setGoogleLaunchError('');
-    setSignInIntent(intent === 'new' ? 'new' : 'existing');
-    setIsLaunchingGoogle(true);
-
-    if (intent === 'new') {
-      onStartNewMember();
-    } else {
-      onStartExistingMember();
-    }
-
-    const result = await startGoogleSignIn(intent);
-    if (!result.success) {
-      setGoogleLaunchError(result.error || 'Google sign-in could not start right now.');
-      setIsLaunchingGoogle(false);
-      return;
-    }
-  };
 
   useEffect(() => {
-    if (entryView === 'landing') {
-      setIsLaunchingGoogle(false);
-    }
-  }, [entryView]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
+    if (typeof window === 'undefined') return;
     const handleResize = () => setIsCompact(window.innerWidth < 720);
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const launch = async (mode: 'new' | 'existing') => {
+    setLaunchError('');
+    setLaunchMode(mode);
+
+    if (mode === 'new') {
+      onStartNewMember();
+    } else {
+      onStartExistingMember();
+    }
+
+    const result = await startGoogleSignIn(
+      mode === 'new' ? 'new' : lastKnownGoogleUser ? 'returning' : 'existing'
+    );
+
+    if (!result.success) {
+      setLaunchError(result.error || 'Secure Google access could not start.');
+      setLaunchMode(null);
+    }
+  };
+
+  const cardStyle: React.CSSProperties = {
+    borderRadius: 24,
+    padding: isCompact ? 20 : 26,
+    border: '1px solid rgba(126,242,255,0.16)',
+    background:
+      'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))',
+    display: 'grid',
+    gap: 12,
+    minHeight: 210,
+    alignContent: 'space-between',
+  };
+
+  const buttonStyle = (primary = false): React.CSSProperties => ({
+    minHeight: 52,
+    borderRadius: 15,
+    border: primary
+      ? '1px solid rgba(126,242,255,0.3)'
+      : '1px solid rgba(255,255,255,0.12)',
+    background: primary
+      ? 'linear-gradient(135deg, rgba(33,194,198,0.95), rgba(88,141,255,0.86))'
+      : 'rgba(255,255,255,0.045)',
+    color: '#ffffff',
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontSize: 15,
+    padding: '0 16px',
+  });
+
   return (
     <div
       style={{
         minHeight: '100vh',
-        position: 'relative',
-        overflow: 'hidden',
         background:
-          'radial-gradient(circle at top left, rgba(54, 215, 255, 0.2), transparent 25%), radial-gradient(circle at 80% 10%, rgba(88, 141, 255, 0.16), transparent 24%), radial-gradient(circle at 20% 100%, rgba(247, 211, 123, 0.18), transparent 20%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
+          'radial-gradient(circle at top left, rgba(54,215,255,0.18), transparent 28%), radial-gradient(circle at 85% 15%, rgba(88,141,255,0.13), transparent 24%), linear-gradient(135deg, #120816 0%, #1b1026 45%, #0c1224 100%)',
         color: '#fff6fd',
         fontFamily: '"Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif',
+        padding: isCompact ? '20px 14px 30px' : '34px 20px 42px',
       }}
     >
       <div
-        aria-hidden="true"
         style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          opacity: 0.3,
-          backgroundImage:
-            'radial-gradient(rgba(255,255,255,0.34) 0.7px, transparent 0.7px), radial-gradient(rgba(54,215,255,0.16) 0.8px, transparent 0.8px)',
-          backgroundPosition: '0 0, 18px 18px',
-          backgroundSize: '36px 36px',
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 75%)',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          background:
-            'linear-gradient(90deg, transparent 0%, rgba(247,211,123,0.06) 50%, transparent 100%)',
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 85%)',
-        }}
-      />
-
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          maxWidth: 1220,
+          width: 'min(980px, 100%)',
           margin: '0 auto',
-          minHeight: '100vh',
           display: 'grid',
-          gap: 28,
-          padding: isCompact ? '20px 14px 28px' : '32px 20px',
+          gap: 24,
         }}
       >
-        <div
+        <header
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: isCompact ? 'stretch' : 'center',
-            gap: 16,
-            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 14,
+            padding: isCompact ? '4px 4px 10px' : '4px 8px 12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? 12 : 16, minWidth: 0 }}>
-            <Logo height={isCompact ? 52 : 64} />
-            <div>
-              <div style={{ fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', color: '#8cebff' }}>
-                ClearFlow Operating System
-              </div>
-              <div style={{ color: '#c5d7e3', fontSize: isCompact ? 13 : 14, lineHeight: 1.5 }}>
-                Integrated financial management, treasury, records, and execution control
-              </div>
-            </div>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: isCompact ? '1fr 1fr' : 'auto auto',
-              gap: 8,
-              width: isCompact ? '100%' : 'auto',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => void launchGoogle('new')}
-              style={{
-                minHeight: 46,
-                padding: '0 16px',
-                borderRadius: 14,
-                border: '1px solid rgba(126,242,255,0.3)',
-                background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
-                color: '#ffffff',
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-              disabled={isLaunchingGoogle}
-            >
-              {isLaunchingGoogle && signInIntent === 'new'
-                ? 'Starting...'
-                : 'Create New Account'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
-              style={{
-                minHeight: 46,
-                padding: '0 16px',
-                borderRadius: 14,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.04)',
-                color: '#eff6fb',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-              disabled={isLaunchingGoogle}
-            >
-              {isLaunchingGoogle && signInIntent === 'existing'
-                ? 'Opening Login...'
-                : 'Existing User Login'}
-            </button>
-          </div>
-        </div>
-
-        {authMessage ? (
-          <div
-            style={{
-              borderRadius: 16,
-              padding: '12px 14px',
-              border: '1px solid rgba(251,191,36,0.28)',
-              background: 'rgba(120,53,15,0.2)',
-              color: '#fde68a',
-              lineHeight: 1.5,
-            }}
-          >
-            {authMessage}
-          </div>
-        ) : null}
-
-        <section
-          style={{
-            borderRadius: isCompact ? 24 : 36,
-            padding: isCompact ? 22 : 36,
-            background: 'linear-gradient(180deg, rgba(24, 18, 42, 0.82), rgba(14, 16, 33, 0.8))',
-            border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 28px 100px rgba(9, 5, 17, 0.48)',
-            backdropFilter: 'blur(18px)',
-            display: 'grid',
-            gap: isCompact ? 20 : 28,
-          }}
-        >
-          <div style={{ display: 'grid', gap: 18 }}>
+          <Logo height={isCompact ? 54 : 66} />
+          <div>
             <div
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 14px',
-                borderRadius: 999,
-                background: 'rgba(54, 215, 255, 0.12)',
-                border: '1px solid rgba(126, 242, 255, 0.24)',
                 color: '#8cebff',
                 fontSize: 12,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
-                fontWeight: 700,
-                justifySelf: 'start',
+                fontWeight: 800,
               }}
             >
-              30 Days Free To Start
+              ClearFlow
             </div>
-            <div style={{ fontSize: isCompact ? 36 : 54, fontWeight: 800, lineHeight: 1, maxWidth: 980 }}>
-              The integrated operating system for trusts, businesses, treasury, records, and cash flow.
-            </div>
-            <div
-              style={{
-                fontSize: isCompact ? 16 : 19,
-                lineHeight: 1.8,
-                color: '#d9e7ef',
-                maxWidth: 900,
-              }}
-            >
-              ClearFlow brings accounting ERP, treasury controls, compliance workflow, retained
-              records, remittance operations, reserve management, wallet connectivity, and
-              AI-guided document organization into one coordinated operations platform.
+            <div style={{ color: '#c5d7e3', fontSize: 13 }}>
+              Secure operating system for entities, records, accounting, and treasury.
             </div>
           </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 14,
-            }}
-          >
-            {featureHighlights.map((item) => (
-              <div
-                key={item}
-                style={{
-                  borderRadius: 22,
-                  padding: '16px 18px',
-                  background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#edf6fb',
-                  lineHeight: 1.6,
-                }}
-              >
-                {item}
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 16,
-            }}
-          >
-            {featureColumns.map((column) => (
-              <div
-                key={column.title}
-                style={{
-                  borderRadius: 24,
-                  padding: 20,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(247,211,123,0.12)',
-                  display: 'grid',
-                  gap: 10,
-                }}
-              >
-                <div style={{ color: '#f7d37b', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 800 }}>
-                  {column.title}
-                </div>
-                <div style={{ display: 'grid', gap: 8, color: '#eef5fa', lineHeight: 1.55 }}>
-                  {column.points.map((point) => (
-                    <div key={point}>{point}</div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {moduleLabels.map((label) => (
-              <div
-                key={label}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(126, 242, 255, 0.14)',
-                  color: '#d8ecf6',
-                  fontSize: 13,
-                }}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-        </section>
+        </header>
 
         <section
           style={{
-            borderRadius: isCompact ? 24 : 34,
-            padding: isCompact ? 22 : 30,
-            background: 'linear-gradient(180deg, rgba(28, 19, 45, 0.9), rgba(16, 20, 37, 0.88))',
-            border: '1px solid rgba(126, 242, 255, 0.16)',
-            boxShadow: '0 24px 80px rgba(9, 5, 17, 0.45)',
-            backdropFilter: 'blur(20px)',
+            borderRadius: isCompact ? 26 : 34,
+            padding: isCompact ? 22 : 34,
+            background:
+              'linear-gradient(180deg, rgba(24,18,42,0.86), rgba(14,16,33,0.84))',
+            border: '1px solid rgba(126,242,255,0.16)',
+            boxShadow: '0 28px 100px rgba(9,5,17,0.46)',
             display: 'grid',
-            gap: isCompact ? 18 : 22,
+            gap: 22,
           }}
         >
-          <div>
+          <div style={{ display: 'grid', gap: 10 }}>
             <div
               style={{
-                fontSize: 14,
-                textTransform: 'uppercase',
-                letterSpacing: 2,
-                color: '#8cebff',
-                marginBottom: 10,
+                fontSize: isCompact ? 34 : 48,
+                fontWeight: 850,
+                lineHeight: 1.05,
               }}
             >
-              Memberships
+              Welcome to ClearFlow.
             </div>
-            <div style={{ fontSize: isCompact ? 28 : 34, fontWeight: 800, lineHeight: 1.1 }}>
-              Choose the operating tier that matches your workload
+            <div
+              style={{
+                color: '#d7e6ee',
+                fontSize: isCompact ? 16 : 18,
+                lineHeight: 1.65,
+                maxWidth: 760,
+              }}
+            >
+              Choose how you are entering. New clients complete secure onboarding and the
+              required membership agreements before the workspace is opened. Existing clients
+              sign in to the workspace already on file.
             </div>
-            <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-              Every plan starts with a free 30-day trial. Connect bank autopay after trial to save
-              10% on monthly billing.
+          </div>
+
+          {authMessage || launchError ? (
+            <div
+              style={{
+                borderRadius: 14,
+                padding: '12px 14px',
+                border: '1px solid rgba(251,191,36,0.25)',
+                background: 'rgba(120,53,15,0.18)',
+                color: '#fde68a',
+                lineHeight: 1.5,
+              }}
+            >
+              {launchError || authMessage}
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isCompact ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+              gap: 14,
+            }}
+          >
+            <div style={cardStyle}>
+              <div>
+                <div
+                  style={{
+                    color: '#8cebff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: 1.6,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  First Time Here
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 850, marginTop: 8 }}>
+                  New Client
+                </div>
+                <div style={{ color: '#c5d7e3', lineHeight: 1.55, marginTop: 8 }}>
+                  Establish your identity, sign the membership and security agreements, and
+                  create your ClearFlow workspace.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void launch('new')}
+                style={buttonStyle(true)}
+                disabled={launchMode !== null}
+              >
+                {launchMode === 'new' ? 'Opening Secure Onboarding…' : 'New Client'}
+              </button>
+            </div>
+
+            <div style={cardStyle}>
+              <div>
+                <div
+                  style={{
+                    color: '#f7d37b',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: 1.6,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Returning
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 850, marginTop: 8 }}>
+                  Existing Client
+                </div>
+                <div style={{ color: '#c5d7e3', lineHeight: 1.55, marginTop: 8 }}>
+                  {lastKnownGoogleUser
+                    ? `Continue securely as ${lastKnownGoogleUser.name || lastKnownGoogleUser.email}.`
+                    : 'Sign in to an existing ClearFlow account and load the retained workspace.'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void launch('existing')}
+                style={buttonStyle(false)}
+                disabled={launchMode !== null}
+              >
+                {launchMode === 'existing' ? 'Opening Secure Login…' : 'Existing Client'}
+              </button>
             </div>
           </div>
 
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 16,
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              color: '#9fb2bf',
+              fontSize: 12,
             }}
           >
-            {membershipTiers.map((tier) => (
-              <div
-                key={tier.name}
-                style={{
-                  borderRadius: 26,
-                  padding: 24,
-                  background: tier.featured
-                    ? 'linear-gradient(180deg, rgba(54, 215, 255, 0.18), rgba(88, 141, 255, 0.1))'
-                    : 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))',
-                  border: tier.featured
-                    ? '1px solid rgba(126, 242, 255, 0.24)'
-                    : '1px solid rgba(255,255,255,0.08)',
-                  display: 'grid',
-                  gap: 12,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {tier.featured ? (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 14,
-                      right: 14,
-                      padding: '6px 10px',
-                      borderRadius: 999,
-                      background: 'rgba(247,211,123,0.16)',
-                      border: '1px solid rgba(247,211,123,0.22)',
-                      color: '#f7d37b',
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: 1.4,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Best Value
-                  </div>
-                ) : null}
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{tier.name}</div>
-                  <div style={{ color: '#9fe8ff', fontWeight: 800, fontSize: 28 }}>{tier.price}</div>
-                  <div style={{ color: '#f7d37b', fontSize: 13 }}>
-                    {tier.autopayPrice} with connected bank autopay
-                  </div>
-                  <div style={{ color: '#d9e7ef', lineHeight: 1.6 }}>{tier.subtitle}</div>
-                  <div style={{ color: '#b9cbda', lineHeight: 1.6 }}>{tier.emphasis}</div>
-                </div>
-                <div style={{ display: 'grid', gap: 8, color: '#e8f2f8', lineHeight: 1.55 }}>
-                  {tier.features.map((feature) => (
-                    <div key={feature}>Included | {feature}</div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {entryView === 'landing' ? (
-            <>
-              <div>
-                <div
-                  style={{
-                    fontSize: 14,
-                    textTransform: 'uppercase',
-                    letterSpacing: 2,
-                    color: '#8cebff',
-                    marginBottom: 10,
-                  }}
-                >
-                  Free Trial Sign Up
-                </div>
-                <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
-                  Start your 30-day membership trial
-                </div>
-                <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                  New users start with Google, review the tiers, and enter ClearFlow free for 30
-                  days before paid billing begins.
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 16 }}>
-                <div
-                  style={{
-                    borderRadius: 24,
-                    padding: 22,
-                    background:
-                      'linear-gradient(180deg, rgba(54, 215, 255, 0.12), rgba(54, 215, 255, 0.05))',
-                    border: '1px solid rgba(126, 242, 255, 0.24)',
-                    display: 'grid',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>New Member Sign Up</div>
-                  <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Continue with Google to choose your membership, begin free for 30 days, and
-                    complete your operator profile.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void launchGoogle('new')}
-                    style={{
-                      minHeight: 50,
-                      borderRadius: 16,
-                      border: '1px solid rgba(126, 242, 255, 0.28)',
-                      background:
-                        'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
-                      color: '#fff',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      fontSize: 15,
-                    }}
-                    disabled={isLaunchingGoogle}
-                  >
-                    {isLaunchingGoogle && signInIntent === 'new'
-                      ? 'Starting Google...'
-                      : 'Start Free 30-Day Trial'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
-                    style={{
-                      minHeight: 48,
-                      borderRadius: 16,
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: '#eff6fb',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                    disabled={isLaunchingGoogle}
-                  >
-                    Existing User Login
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    borderRadius: 24,
-                    padding: 22,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    display: 'grid',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>Why membership matters</div>
-                  <div style={{ color: '#d9e7ef', lineHeight: 1.7 }}>
-                    Membership unlocks the full operating system: entity administration, ERP,
-                    reserve and wallet control, remittance flow, compliance records, AI tools, and
-                    the resource library in one place.
-                  </div>
-                  <div style={{ color: '#b9cbda', lineHeight: 1.6, fontSize: 14 }}>
-                    Referral rewards only unlock after referred members become retained paid users.
-                    Bank autopay discount begins after the trial period.
-                  </div>
-                  <div style={{ color: '#9fb4c4', lineHeight: 1.6, fontSize: 13 }}>
-                    If Google does not open right away on mobile, try again once the browser allows the popup window or use the existing-user login button first.
-                  </div>
-                </div>
-              </div>
-              {googleLaunchError ? (
-                <div
-                  style={{
-                    borderRadius: 18,
-                    padding: 16,
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    border: '1px solid rgba(248, 113, 113, 0.24)',
-                    color: '#fecaca',
-                    lineHeight: 1.6,
-                    fontSize: 14,
-                  }}
-                >
-                  {googleLaunchError}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingTop: 4,
-                }}
-              >
-                <a
-                  href="/privacy"
-                  style={{
-                    color: '#9fe8ff',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: 14,
-                  }}
-                >
-                  Privacy
-                </a>
-                <span style={{ color: 'rgba(255,255,255,0.22)' }}>|</span>
-                <a
-                  href="/terms"
-                  style={{
-                    color: '#9fe8ff',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: 14,
-                  }}
-                >
-                  Terms
-                </a>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      textTransform: 'uppercase',
-                      letterSpacing: 2,
-                      color: '#8cebff',
-                      marginBottom: 10,
-                    }}
-                  >
-                    Google Sign-In Help
-                  </div>
-                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
-                    Troubleshoot account access
-                  </div>
-                  <div style={{ marginTop: 12, color: '#c5d7e3', lineHeight: 1.7 }}>
-                    If Google sign-in is failing, use the same Google email already tied to your ClearFlow workspace. If you lost access to that email, request a temporary access handoff so the login email can be changed securely.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEntryView('landing')}
-                  style={{
-                    minHeight: 42,
-                    padding: '0 14px',
-                    borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.04)',
-                    color: '#eff6fb',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Back
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gap: 14 }}>
-                {[
-                  'Use the exact Google account originally used to enter ClearFlow.',
-                  'If you are brand new, return to Google sign-in and continue with the Google account you want tied to the workspace.',
-                  'If that Google account is no longer accessible, request temporary login support so the account email can be updated securely.',
-                ].map((item) => (
-                  <div
-                    key={item}
-                    style={{
-                      borderRadius: 20,
-                      padding: 18,
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      color: '#d9e7ef',
-                      lineHeight: 1.7,
-                    }}
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              <a
-                href="mailto:billing@clearflow.site?subject=ClearFlow%20Google%20Sign-In%20Help"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: 48,
-                  borderRadius: 16,
-                  border: '1px solid rgba(126, 242, 255, 0.24)',
-                  background:
-                    'linear-gradient(135deg, rgba(33, 194, 198, 0.9), rgba(88, 141, 255, 0.82))',
-                  color: '#fff',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  fontSize: 15,
-                  textDecoration: 'none',
-                }}
-              >
-                Request Temporary Access Help
+            <div>
+              <a href="/terms" style={{ color: '#9fe8ff' }}>
+                Terms
               </a>
-            </>
-          )}
+              {' · '}
+              <a href="/privacy" style={{ color: '#9fe8ff' }}>
+                Privacy
+              </a>
+            </div>
+            {canUseDevAccess ? (
+              <button
+                type="button"
+                onClick={onDevLogin}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                }}
+              >
+                Dev Access
+              </button>
+            ) : null}
+          </div>
         </section>
       </div>
     </div>
