@@ -60,49 +60,6 @@ function maskLast4(value?: string) {
   return value.slice(-4);
 }
 
-function buildFallbackPlaidTransactions(account: BankAccountRecord): PlaidTransaction[] {
-  const today = new Date();
-  const baseDate = new Date(today.getFullYear(), today.getMonth(), Math.max(today.getDate() - 3, 1));
-  const iso = (offset: number) => {
-    const next = new Date(baseDate);
-    next.setDate(baseDate.getDate() + offset);
-    return next.toISOString().slice(0, 10);
-  };
-
-  return [
-    {
-      transaction_id: `${account.id}-feed-001`,
-      account_id: account.id,
-      amount: 86.45,
-      date: iso(0),
-      name: `${account.institutionName} Treasury Service Fee`,
-      pending: false,
-      payment_channel: 'online',
-      category: ['Bank Fees'],
-    },
-    {
-      transaction_id: `${account.id}-feed-002`,
-      account_id: account.id,
-      amount: 1420,
-      date: iso(1),
-      name: 'Vendor ACH Settlement',
-      pending: false,
-      payment_channel: 'online',
-      category: ['Transfer'],
-    },
-    {
-      transaction_id: `${account.id}-feed-003`,
-      account_id: account.id,
-      amount: -2300,
-      date: iso(2),
-      name: 'Client Deposit',
-      pending: false,
-      payment_channel: 'online',
-      category: ['Deposit'],
-    },
-  ];
-}
-
 function pickMatchingRule(
   rules: BankFeedRuleRecord[],
   entry: { bankAccountId: string; description: string; merchantName?: string; direction: 'credit' | 'debit'; absoluteAmount: number }
@@ -279,10 +236,7 @@ export function syncBankFeedToLedger(input: {
     return data;
   }
 
-  const sourceTransactions =
-    input.plaidTransactions && input.plaidTransactions.length > 0
-      ? input.plaidTransactions
-      : buildFallbackPlaidTransactions(bankAccount);
+  const sourceTransactions = input.plaidTransactions ?? [];
   const feedStartDate =
     bankAccount.feedStartDate ||
     bankAccount.connectedProfile?.connectedAt?.slice(0, 10);
