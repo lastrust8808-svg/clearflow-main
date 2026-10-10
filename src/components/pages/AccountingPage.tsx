@@ -3347,7 +3347,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               sourceBankAccount?.accountName ||
               '1000 Operating Cash',
         amount: resolvedAmount,
-        status: 'posted' as const,
+        status: paymentStatus === 'settled' ? ('posted' as const) : ('draft' as const),
         source: 'system' as const,
         linkedTransactionIds: [transactionId],
         linkedSettlementIds: [settlementId],
@@ -4296,7 +4296,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         amount,
         currency: nextPayment.currency,
         date: nextPayment.paymentDate,
-        status: 'posted' as const,
+        status: paymentStatus === 'settled' ? ('posted' as const) : ('pending' as const),
         linkedAssetIds: selectedDigitalAsset ? [selectedDigitalAsset.id] : undefined,
         linkedWalletId: selectedWallet?.id,
         linkedOnChainRecordId: onChainTransactionId,
@@ -4476,7 +4476,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         tokenizedProofId: settlementToken?.id,
         linkedTokenIds: settlementToken ? [settlementToken.id] : undefined,
         grossAmount: amount,
-        settledAmount: amount,
+        settledAmount: paymentStatus === 'settled' ? amount : 0,
         currency: nextPayment.currency,
         initiatedAt: nextPayment.paymentDate,
         expectedSettlementDate: nextPayment.paymentDate,
@@ -4838,50 +4838,81 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             }
           : undefined;
 
+      const paymentSettledNow = paymentStatus === 'settled';
+
       const nextInvoices = linkedInvoice
-        ? prev.invoices.map((invoice) =>
-            invoice.id === linkedInvoice.id
-              ? {
-                  ...invoice,
-                  balanceDue: Math.max(0, invoice.balanceDue - amount),
-                  status:
-                    invoice.balanceDue - amount <= 0 ? 'paid' : 'partially_paid',
-                  linkedPaymentIds: [paymentId, ...(invoice.linkedPaymentIds ?? [])],
-                  linkedTransactionIds: [transactionId, ...(invoice.linkedTransactionIds ?? [])],
-                }
-              : invoice
-          )
+        ? prev.invoices.map((invoice) => {
+            if (invoice.id !== linkedInvoice.id) return invoice;
+            const nextBalance = paymentSettledNow
+              ? Math.max(0, invoice.balanceDue - amount)
+              : invoice.balanceDue;
+            return {
+              ...invoice,
+              balanceDue: nextBalance,
+              status: paymentSettledNow
+                ? nextBalance <= 0
+                  ? ('paid' as const)
+                  : ('partially_paid' as const)
+                : invoice.status,
+              linkedPaymentIds: Array.from(
+                new Set([paymentId, ...(invoice.linkedPaymentIds ?? [])]),
+              ),
+              linkedTransactionIds: Array.from(
+                new Set([transactionId, ...(invoice.linkedTransactionIds ?? [])]),
+              ),
+            };
+          })
         : prev.invoices;
 
       const nextBills = linkedBill
-        ? prev.bills.map((bill) =>
-            bill.id === linkedBill.id
-              ? {
-                  ...bill,
-                  balanceDue: Math.max(0, bill.balanceDue - amount),
-                  status:
-                    bill.balanceDue - amount <= 0 ? 'paid' : 'partially_paid',
-                  linkedPaymentIds: [paymentId, ...(bill.linkedPaymentIds ?? [])],
-                  linkedTransactionIds: [transactionId, ...(bill.linkedTransactionIds ?? [])],
-                }
-              : bill
-          )
+        ? prev.bills.map((bill) => {
+            if (bill.id !== linkedBill.id) return bill;
+            const nextBalance = paymentSettledNow
+              ? Math.max(0, bill.balanceDue - amount)
+              : bill.balanceDue;
+            return {
+              ...bill,
+              balanceDue: nextBalance,
+              status: paymentSettledNow
+                ? nextBalance <= 0
+                  ? ('paid' as const)
+                  : ('partially_paid' as const)
+                : bill.status,
+              linkedPaymentIds: Array.from(
+                new Set([paymentId, ...(bill.linkedPaymentIds ?? [])]),
+              ),
+              linkedTransactionIds: Array.from(
+                new Set([transactionId, ...(bill.linkedTransactionIds ?? [])]),
+              ),
+            };
+          })
         : prev.bills;
-      const nextVendorCreditBalance =
+
+      const currentVendorCreditBalance =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
         selectedVendor?.creditLineProfile?.enabled
-          ? Math.max(0, (selectedVendor.creditLineProfile.currentBalance ?? 0) - amount)
+          ? selectedVendor.creditLineProfile.currentBalance ?? 0
           : undefined;
+      const nextVendorCreditBalance =
+        currentVendorCreditBalance !== undefined && paymentSettledNow
+          ? Math.max(0, currentVendorCreditBalance - amount)
+          : currentVendorCreditBalance;
+
       const nextVendors =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
         resolvedVendorSeed?.creditLineProfile?.enabled
           ? (vendorResolution?.vendors ?? prev.vendors).map((vendor) => {
-              if (vendor.id !== resolvedVendorId) {
+              if (vendor.id !== resolvedVendorId || !vendor.creditLineProfile) {
                 return vendor;
               }
-              const nextLimit = vendor.creditLineProfile?.creditLimit;
+
+              if (!paymentSettledNow) {
+                return vendor;
+              }
+
+              const nextLimit = vendor.creditLineProfile.creditLimit;
               const creditPaydownEntry = {
                 id: `vcl-pay-${stamp}`,
                 entryDate: nextPayment.paymentDate,
@@ -4890,58 +4921,90 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 resultingBalance: nextVendorCreditBalance ?? 0,
                 linkedPaymentId: paymentId,
                 linkedBillId: payload.linkedBillId,
-                linkedObligationId: vendor.creditLineProfile?.linkedObligationId,
-                notes: 'Vendor payment reduced the tracked recurring account or line-of-credit balance.',
+                linkedObligationId: vendor.creditLineProfile.linkedObligationId,
+                notes:
+                  'Settled vendor payment reduced the tracked recurring account or line-of-credit balance.',
               };
 
               return {
                 ...vendor,
-                creditLineProfile: vendor.creditLineProfile
-                  ? {
-                      ...vendor.creditLineProfile,
-                      currentBalance: nextVendorCreditBalance,
-                      availableCredit:
-                        typeof nextLimit === 'number'
-                          ? Number((nextLimit - (nextVendorCreditBalance ?? 0)).toFixed(2))
-                          : vendor.creditLineProfile.availableCredit,
-                      lastActivityAt: nextPayment.paymentDate,
-                    }
-                  : vendor.creditLineProfile,
-                creditLineEntries: [creditPaydownEntry, ...(vendor.creditLineEntries ?? [])],
+                creditLineProfile: {
+                  ...vendor.creditLineProfile,
+                  currentBalance: nextVendorCreditBalance,
+                  availableCredit:
+                    typeof nextLimit === 'number'
+                      ? Number((nextLimit - (nextVendorCreditBalance ?? 0)).toFixed(2))
+                      : vendor.creditLineProfile.availableCredit,
+                  lastActivityAt: nextPayment.paymentDate,
+                },
+                creditLineEntries: [
+                  creditPaydownEntry,
+                  ...(vendor.creditLineEntries ?? []),
+                ],
               };
             })
           : vendorResolution?.vendors ?? prev.vendors;
+
+      const linkedBillObligationId =
+        linkedBill?.linkedObligationId ||
+        resolvedVendorSeed?.creditLineProfile?.linkedObligationId;
+
       const nextObligations =
         payload.direction === 'outgoing' &&
         payload.counterpartyType === 'vendor' &&
-        resolvedVendorSeed?.creditLineProfile?.linkedObligationId
-          ? prev.obligations.map((obligation) =>
-              obligation.id === resolvedVendorSeed.creditLineProfile?.linkedObligationId
-                ? {
-                    ...obligation,
-                    amount: nextVendorCreditBalance ?? obligation.amount,
-                    status:
-                      (nextVendorCreditBalance ?? 0) <= 0 ? ('satisfied' as const) : ('open' as const),
-                    lifecycleStage:
-                      (nextVendorCreditBalance ?? 0) <= 0
-                        ? ('discharged' as const)
-                        : ('presented' as const),
-                    linkedSettlementIds: Array.from(
-                      new Set([settlementId, ...(obligation.linkedSettlementIds ?? [])]),
-                    ),
-                    linkedRemittanceStatementIds: Array.from(
-                      new Set([nextRemittanceStatement.id, ...(obligation.linkedRemittanceStatementIds ?? [])]),
-                    ),
-                    enforcementMemo:
-                      (nextVendorCreditBalance ?? 0) <= 0
-                        ? 'Vendor account balance was fully cured through linked payment performance.'
-                        : `Vendor account balance was reduced to ${formatCurrency(
-                            nextVendorCreditBalance ?? 0,
-                            entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                          )} through linked payment performance.`,
-                  }
-                : obligation,
-            )
+        linkedBillObligationId
+          ? prev.obligations.map((obligation) => {
+              if (obligation.id !== linkedBillObligationId) {
+                return obligation;
+              }
+
+              const nextOutstanding = paymentSettledNow
+                ? Math.max(
+                    0,
+                    resolvedVendorSeed?.creditLineProfile?.linkedObligationId === obligation.id &&
+                    nextVendorCreditBalance !== undefined
+                      ? nextVendorCreditBalance
+                      : obligation.amount - amount,
+                  )
+                : obligation.amount;
+
+              return {
+                ...obligation,
+                amount: nextOutstanding,
+                status: paymentSettledNow
+                  ? nextOutstanding <= 0
+                    ? ('satisfied' as const)
+                    : ('open' as const)
+                  : obligation.status,
+                lifecycleStage: paymentSettledNow
+                  ? nextOutstanding <= 0
+                    ? ('discharged' as const)
+                    : ('presented' as const)
+                  : obligation.lifecycleStage,
+                linkedSettlementIds: Array.from(
+                  new Set([settlementId, ...(obligation.linkedSettlementIds ?? [])]),
+                ),
+                linkedRemittanceStatementIds: Array.from(
+                  new Set([
+                    nextRemittanceStatement.id,
+                    ...(obligation.linkedRemittanceStatementIds ?? []),
+                  ]),
+                ),
+                dischargedAt:
+                  paymentSettledNow && nextOutstanding <= 0
+                    ? nextPayment.paymentDate
+                    : obligation.dischargedAt,
+                enforcementMemo: paymentSettledNow
+                  ? nextOutstanding <= 0
+                    ? 'Linked payment settlement was confirmed and the obligation was fully discharged.'
+                    : `Linked payment settlement was confirmed and reduced the outstanding obligation to ${formatCurrency(
+                        nextOutstanding,
+                        entity.operationalDefaults?.baseCurrency ||
+                          prev.workspaceSettings.baseCurrency,
+                      )}.`
+                  : 'Payment was initiated but the obligation remains open until settlement is confirmed.',
+              };
+            })
           : prev.obligations;
 
       const nextBankAccounts = sourceBankAccount
@@ -4960,11 +5023,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                           ]),
                         )
                       : account.linkedDocumentIds,
-                  currentBalance: resolveLedgerBalance(
-                    account.currentBalance ?? 0,
-                    payload.direction,
-                    amount
-                  ),
+                  currentBalance: paymentSettledNow
+                    ? resolveLedgerBalance(
+                        account.currentBalance ?? 0,
+                        payload.direction,
+                        amount,
+                      )
+                    : account.currentBalance,
                 }
               : account
           )
@@ -4975,10 +5040,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
       const nextLedgerAccounts = prev.ledgerAccounts.map((account) => {
         if (sourceLedgerAccount && account.id === sourceLedgerAccount.id) {
-          return {
-            ...account,
-            balance: resolveLedgerBalance(account.balance, payload.direction, amount),
-          };
+          return paymentSettledNow
+            ? {
+                ...account,
+                balance: resolveLedgerBalance(account.balance, payload.direction, amount),
+              }
+            : account;
         }
 
         if (
