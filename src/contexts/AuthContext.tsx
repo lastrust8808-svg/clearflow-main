@@ -56,6 +56,8 @@ interface AuthState {
   status: AuthStatus;
   gsiUser: { name: string, email: string } | null;
   pendingCredentialAuth: LocalAuthChallenge | null;
+  pendingGoogleMode?: 'new' | 'existing' | 'returning' | null;
+  authMessage?: string | null;
 }
 
 interface AuthContextType {
@@ -68,6 +70,7 @@ interface AuthContextType {
   savingStatus: SavingStatus;
   appData: AppData | null;
   pendingCredentialAuth: LocalAuthChallenge | null;
+  authMessage: string | null;
   startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
   renderGoogleButton: (elementId: string) => void;
   mockLogin: (name: string, email: string) => void;
@@ -157,6 +160,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localAccountId: null,
     gsiUser: null,
     pendingCredentialAuth: null,
+    pendingGoogleMode: null,
+    authMessage: null,
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfigured] = useState(() => {
@@ -755,6 +760,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               appData: mergedAppData,
               localAccountId: current.localAccountId || googleDurableAccountId || current.localAccountId,
               gsiUser: null,
+              pendingGoogleMode: null,
+              authMessage: null,
             }));
           } else { // New user
             const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
@@ -786,14 +793,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               return;
             }
 
+            if (state.pendingGoogleMode !== 'new') {
+              const missingEmail = state.gsiUser.email;
+              setState((current) => ({
+                ...current,
+                status: 'unauthenticated',
+                token: null,
+                apiAccessToken: null,
+                appData: null,
+                gsiUser: null,
+                pendingGoogleMode: null,
+                authMessage:
+                  `No existing ClearFlow account was found for ${missingEmail}. Choose Create New Account to enroll and sign the required agreements.`,
+              }));
+              return;
+            }
+
             const newUser: User = {
               id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
               ...state.gsiUser,
               isVerified: false,
               primaryContactType: 'google',
             };
-            const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
-            setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
+            const newAppData = { user: newUser, entities: [] };
+            setState(current => ({
+              ...current,
+              status: 'pending-profile-setup',
+              appData: newAppData,
+              gsiUser: null,
+              pendingGoogleMode: null,
+              authMessage: null,
+            }));
           }
         } catch (error) {
           console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
@@ -822,19 +852,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
           }
 
+          if (state.pendingGoogleMode !== 'new') {
+            setState((current) => ({
+              ...current,
+              status: 'unauthenticated',
+              token: null,
+              apiAccessToken: null,
+              appData: null,
+              gsiUser: null,
+              pendingGoogleMode: null,
+              authMessage:
+                'ClearFlow could not verify an existing workspace. Retry Existing User Login, or choose Create New Account if this is your first enrollment.',
+            }));
+            return;
+          }
+
           const newUser: User = {
             id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
             ...state.gsiUser,
             isVerified: false,
             primaryContactType: 'google',
           };
-          const newAppData = mergeStoredTermsAcceptance({ user: newUser, entities: [] }, state.gsiUser);
-          setState(current => ({ ...current, status: getGoogleWorkspaceStatus(newAppData, state.gsiUser), appData: newAppData, gsiUser: null }));
+          const newAppData = { user: newUser, entities: [] };
+          setState(current => ({
+            ...current,
+            status: 'pending-profile-setup',
+            appData: newAppData,
+            gsiUser: null,
+            pendingGoogleMode: null,
+            authMessage: null,
+          }));
         }
       }
     };
     checkDrive();
-  }, [getGoogleWorkspaceStatus, mergeStoredTermsAcceptance, state.status, state.apiAccessToken, state.gsiUser]);
+  }, [
+    getGoogleWorkspaceStatus,
+    mergeStoredTermsAcceptance,
+    state.status,
+    state.apiAccessToken,
+    state.gsiUser,
+    state.pendingGoogleMode,
+  ]);
 
   useEffect(() => {
     if (state.status !== 'pending-drive-check' || !state.gsiUser) {
@@ -847,6 +906,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return current;
         }
 
+        if (current.pendingGoogleMode !== 'new') {
+          return {
+            ...current,
+            status: 'unauthenticated',
+            token: null,
+            apiAccessToken: null,
+            appData: null,
+            gsiUser: null,
+            pendingGoogleMode: null,
+            authMessage:
+              'Existing-account lookup timed out before a saved workspace was confirmed. Retry Existing User Login.',
+          };
+        }
+
         const newUser: User = {
           ...(current.appData?.user || {
             id: buildGoogleDurableAccountId(current.gsiUser.email) || crypto.randomUUID(),
@@ -856,22 +929,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }),
         };
 
-        const nextAppData = mergeStoredTermsAcceptance(
-          current.appData || { user: newUser, entities: [] },
-          current.gsiUser
-        );
-
         return {
           ...current,
-          status: getGoogleWorkspaceStatus(nextAppData, current.gsiUser),
-          appData: nextAppData,
+          status: 'pending-profile-setup',
+          appData: current.appData || { user: newUser, entities: [] },
           gsiUser: null,
+          pendingGoogleMode: null,
+          authMessage: null,
         };
       });
     }, 8000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [getGoogleWorkspaceStatus, state.status, state.gsiUser]);
+  }, [
+    getGoogleWorkspaceStatus,
+    state.status,
+    state.gsiUser,
+    state.pendingGoogleMode,
+  ]);
 
   useEffect(() => {
     if (!state.appData?.user.email || state.appData.user.primaryContactType !== 'google') {
@@ -1112,6 +1187,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: 'pending-gsi',
       gsiUser: null,
       pendingCredentialAuth: null,
+      pendingGoogleMode: mode,
+      authMessage: null,
     }));
 
       activeTokenClient.requestCode({
@@ -1779,6 +1856,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       appData: null,
       gsiUser: null,
       pendingCredentialAuth: null,
+      pendingGoogleMode: null,
+      authMessage: null,
     });
   };
 
@@ -1845,6 +1924,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     savingStatus: savingStatus,
     appData: state.appData,
     pendingCredentialAuth: state.pendingCredentialAuth,
+    authMessage: state.authMessage || null,
     startGoogleSignIn,
     renderGoogleButton,
     mockLogin,
