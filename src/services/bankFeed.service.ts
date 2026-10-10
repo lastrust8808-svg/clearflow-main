@@ -1,4 +1,5 @@
 import type { PlaidTransaction } from '../types/app.models';
+import type { PlaidTransactionSyncResult } from './plaid.service';
 import type {
   BankAccountRecord,
   BankFeedEntryRecord,
@@ -58,49 +59,6 @@ function maskLast4(value?: string) {
   }
 
   return value.slice(-4);
-}
-
-function buildFallbackPlaidTransactions(account: BankAccountRecord): PlaidTransaction[] {
-  const today = new Date();
-  const baseDate = new Date(today.getFullYear(), today.getMonth(), Math.max(today.getDate() - 3, 1));
-  const iso = (offset: number) => {
-    const next = new Date(baseDate);
-    next.setDate(baseDate.getDate() + offset);
-    return next.toISOString().slice(0, 10);
-  };
-
-  return [
-    {
-      transaction_id: `${account.id}-feed-001`,
-      account_id: account.id,
-      amount: 86.45,
-      date: iso(0),
-      name: `${account.institutionName} Treasury Service Fee`,
-      pending: false,
-      payment_channel: 'online',
-      category: ['Bank Fees'],
-    },
-    {
-      transaction_id: `${account.id}-feed-002`,
-      account_id: account.id,
-      amount: 1420,
-      date: iso(1),
-      name: 'Vendor ACH Settlement',
-      pending: false,
-      payment_channel: 'online',
-      category: ['Transfer'],
-    },
-    {
-      transaction_id: `${account.id}-feed-003`,
-      account_id: account.id,
-      amount: -2300,
-      date: iso(2),
-      name: 'Client Deposit',
-      pending: false,
-      payment_channel: 'online',
-      category: ['Deposit'],
-    },
-  ];
 }
 
 function pickMatchingRule(
@@ -272,6 +230,7 @@ export function syncBankFeedToLedger(input: {
   data: CoreDataBundle;
   bankAccountId: string;
   plaidTransactions?: PlaidTransaction[];
+  plaidSync?: PlaidTransactionSyncResult;
 }) {
   const { data, bankAccountId } = input;
   const bankAccount = data.bankAccounts.find((account) => account.id === bankAccountId);
@@ -279,10 +238,12 @@ export function syncBankFeedToLedger(input: {
     return data;
   }
 
-  const sourceTransactions =
-    input.plaidTransactions && input.plaidTransactions.length > 0
-      ? input.plaidTransactions
-      : buildFallbackPlaidTransactions(bankAccount);
+  const syncResult: PlaidTransactionSyncResult = input.plaidSync ?? {
+    added: input.plaidTransactions ?? [],
+    modified: [],
+    removedTransactionIds: [],
+  };
+  const sourceTransactions = syncResult.added;
   const feedStartDate =
     bankAccount.feedStartDate ||
     bankAccount.connectedProfile?.connectedAt?.slice(0, 10);
@@ -319,6 +280,50 @@ export function syncBankFeedToLedger(input: {
   let nextTokens = [...data.tokens];
   let nextFeedEntries = [...data.bankFeedEntries];
   let nextReconciliations = [...startingReconciliations];
+
+  const modifiedById = new Map(
+    syncResult.modified
+      .filter((transaction) => transaction.transaction_id)
+      .map((transaction) => [transaction.transaction_id, transaction])
+  );
+  if (modifiedById.size > 0) {
+    nextFeedEntries = nextFeedEntries.map((entry) => {
+      const modified = modifiedById.get(entry.externalTransactionId);
+      if (!modified || entry.bankAccountId !== bankAccountId) {
+        return entry;
+      }
+
+      const normalized = normalizePlaidAmount(Number(modified.amount ?? 0));
+      return {
+        ...entry,
+        postedDate: toIsoDate(modified.date),
+        description: modified.name,
+        merchantName: modified.name,
+        amount: normalized.signedAmount,
+        direction: normalized.direction,
+        category: modified.category?.join(' / '),
+        status: 'exception',
+        verificationStatus: 'pending',
+        notes:
+          'Plaid reported a modification to this previously imported transaction. Review before changing any posted ledger entry.',
+      };
+    });
+  }
+
+  if (syncResult.removedTransactionIds.length > 0) {
+    const removedSet = new Set(syncResult.removedTransactionIds);
+    nextFeedEntries = nextFeedEntries.map((entry) =>
+      entry.bankAccountId === bankAccountId && removedSet.has(entry.externalTransactionId)
+        ? {
+            ...entry,
+            status: 'exception' as const,
+            verificationStatus: 'pending' as const,
+            notes:
+              'Plaid reported this transaction as removed. ClearFlow preserved the existing accounting record and flagged it for review instead of silently reversing the books.',
+          }
+        : entry
+    );
+  }
 
   const bankLedgerAccount = bankAccount.linkedLedgerAccountId
     ? data.ledgerAccounts.find((account) => account.id === bankAccount.linkedLedgerAccountId)

@@ -17,7 +17,7 @@ type ProcessorStatus =
   | 'requires_review'
   | 'blocked';
 
-type ExecutionProvider = 'plaid' | 'manual';
+type ExecutionProvider = 'plaid' | 'mercury' | 'manual';
 type ExecutionMode = 'live' | 'staged';
 type ExecutionPayeeType = 'bank_payee' | 'biller_direct' | 'manual_payee';
 type ExternalExecutionStatus =
@@ -60,6 +60,8 @@ interface ExecuteSettlementPayload {
   sourceBankAccount?: {
     id: string;
     institutionName?: string;
+    accountName?: string;
+    last4?: string;
     routingNumber?: string;
     accountNumber?: string;
     achOriginationEnabled?: boolean;
@@ -81,6 +83,7 @@ interface ExecuteSettlementPayload {
     routingNumber?: string;
     accountNumber?: string;
     railPreference?: 'ach' | 'eft' | 'wire';
+    remittanceEmail?: string;
     verificationStatus?: 'unverified' | 'routing_valid' | 'verified' | 'invalid';
   } | null;
   vendorReceiveMethod?: 'ach' | 'wire' | 'paper_check' | 'lockbox_coupon' | 'digital_wallet' | 'manual_review';
@@ -121,6 +124,7 @@ export interface SettlementExecutionCapabilitiesResponse {
     executionMode: ExecutionMode;
     plaidEnvironment: string;
     liveBankExecutionReady: boolean;
+    mercuryApprovalReady?: boolean;
     achOriginationReady: boolean;
     wireOriginationReady: boolean;
     billerDirectReady: boolean;

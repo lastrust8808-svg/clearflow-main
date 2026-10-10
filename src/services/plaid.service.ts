@@ -19,6 +19,12 @@ interface SignalEvaluatePayload {
   device?: PlaidDevice;
 }
 
+export interface PlaidTransactionSyncResult {
+  added: PlaidTransaction[];
+  modified: PlaidTransaction[];
+  removedTransactionIds: string[];
+}
+
 class PlaidService {
   private isLocalRuntime(): boolean {
     if (typeof window === 'undefined' || !window.location?.origin) {
@@ -124,9 +130,11 @@ class PlaidService {
      return this.requestJson<PlaidTransaction[]>(`/api/plaid/transactions/${itemId}`);
   }
   
-  async syncTransactions(itemId: string): Promise<PlaidTransaction[]> {
-    if (this.shouldUseMockBackend()) return Promise.resolve([]);
-    return this.requestJson<PlaidTransaction[]>('/api/plaid/transactions/sync', {
+  async syncTransactions(itemId: string): Promise<PlaidTransactionSyncResult> {
+    if (this.shouldUseMockBackend()) {
+      return Promise.resolve({ added: [], modified: [], removedTransactionIds: [] });
+    }
+    return this.requestJson<PlaidTransactionSyncResult>('/api/plaid/transactions/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId })

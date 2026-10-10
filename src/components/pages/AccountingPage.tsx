@@ -3892,6 +3892,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? {
                 id: sourceBankAccount.id,
                 institutionName: sourceBankAccount.institutionName,
+                accountName: sourceBankAccount.accountName,
+                last4: sourceBankAccount.last4,
                 routingNumber: sourceBankAccount.routingNumber,
                 accountNumber: sourceBankAccount.accountNumber,
                 achOriginationEnabled: sourceBankAccount.achOriginationEnabled,
@@ -3925,6 +3927,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 routingNumber: selectedVendor.paymentInstructions.routingNumber,
                 accountNumber: selectedVendor.paymentInstructions.accountNumber,
                 railPreference: selectedVendor.paymentInstructions.railPreference,
+                remittanceEmail: selectedVendor.paymentInstructions.remittanceEmail || selectedVendor.email,
                 verificationStatus: selectedVendor.paymentInstructions.verificationStatus,
               }
             : null,
@@ -6984,23 +6987,56 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       return;
     }
 
-    let syncedTransactions = [] as Awaited<ReturnType<typeof plaidService.syncTransactions>>;
-
-    try {
-      if (bankAccount.connectionType === 'plaid_connected') {
-        syncedTransactions = await plaidService.syncTransactions(
-          bankAccount.plaidItemId || bankAccount.id
-        );
-      }
-    } catch (error) {
-      console.warn('Bank feed sync fell back to local simulation.', error);
+    if (bankAccount.connectionType !== 'plaid_connected') {
+      setData((prev) => ({
+        ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === bankAccountId
+            ? { ...account, liveFeedStatus: 'attention_needed' }
+            : account
+        ),
+      }));
+      setOperationsNotice(
+        `${bankAccount.accountName} is not connected to a live Plaid feed. No transactions were imported.`,
+      );
+      setActiveSubsection('bankFeed');
+      return;
     }
 
-    setData((prev) => syncBankFeedToLedger({
-      data: prev,
-      bankAccountId,
-      plaidTransactions: syncedTransactions,
-    }));
+    try {
+      const syncResult = await plaidService.syncTransactions(
+        bankAccount.plaidItemId || bankAccount.id
+      );
+
+      setData((prev) => syncBankFeedToLedger({
+        data: prev,
+        bankAccountId,
+        plaidSync: syncResult,
+      }));
+      const changeCount =
+        syncResult.added.length +
+        syncResult.modified.length +
+        syncResult.removedTransactionIds.length;
+      setOperationsNotice(
+        changeCount
+          ? `Processed ${changeCount} live bank change${changeCount === 1 ? '' : 's'} from Plaid. New transactions were imported; provider changes/removals were flagged for review rather than silently rewriting posted books.`
+          : `${bankAccount.accountName} is current. Plaid returned no new transaction changes.`,
+      );
+    } catch (error) {
+      console.error('Live bank feed sync failed.', error);
+      setData((prev) => ({
+        ...prev,
+        bankAccounts: prev.bankAccounts.map((account) =>
+          account.id === bankAccountId
+            ? { ...account, liveFeedStatus: 'attention_needed' }
+            : account
+        ),
+      }));
+      setOperationsNotice(
+        `Live bank sync failed for ${bankAccount.accountName}. ClearFlow did not create any fallback or simulated transactions.`,
+      );
+    }
+
     setActiveSubsection('bankFeed');
   };
 

@@ -94,6 +94,24 @@ export async function ensureOwnerSchema() {
         ON clearflow_owner_audit_log (account_id, created_at DESC)
       `);
 
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS clearflow_owner_provider_events (
+          event_id TEXT PRIMARY KEY,
+          account_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          resource_type TEXT,
+          resource_id TEXT,
+          payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+          occurred_at TIMESTAMPTZ,
+          received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS clearflow_owner_provider_events_lookup_idx
+        ON clearflow_owner_provider_events (account_id, provider, resource_id, received_at DESC)
+      `);
+
       return true;
     })().catch((error) => {
       schemaReady = undefined;
@@ -418,4 +436,311 @@ export async function listOwnerAudit(accountId, limit = 100) {
   );
 
   return result.rows;
+}
+
+
+export async function recordOwnerProviderEvent({
+  accountId,
+  provider,
+  eventId,
+  resourceType = null,
+  resourceId = null,
+  payload = {},
+  occurredAt = null,
+}) {
+  if (!isConfiguredOwnerAccount(accountId)) {
+    throw new Error('This account is not enabled for owner provider event storage.');
+  }
+
+  if (!eventId || !provider) {
+    throw new Error('Provider event id and provider are required.');
+  }
+
+  await ensureOwnerSchema();
+
+  await getPool().query(
+    `INSERT INTO clearflow_owner_provider_events
+      (event_id, account_id, provider, resource_type, resource_id, payload, occurred_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+     ON CONFLICT (event_id)
+     DO UPDATE SET
+       payload = EXCLUDED.payload,
+       resource_type = EXCLUDED.resource_type,
+       resource_id = EXCLUDED.resource_id,
+       occurred_at = EXCLUDED.occurred_at,
+       received_at = NOW()`,
+    [
+      String(eventId),
+      accountId,
+      String(provider),
+      resourceType ? String(resourceType) : null,
+      resourceId ? String(resourceId) : null,
+      JSON.stringify(payload || {}),
+      occurredAt || null,
+    ]
+  );
+}
+
+export async function listOwnerProviderEvents({
+  accountId,
+  provider,
+  resourceId = null,
+  limit = 100,
+}) {
+  if (!isConfiguredOwnerAccount(accountId)) {
+    return [];
+  }
+
+  await ensureOwnerSchema();
+  const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const params = [accountId, provider];
+  let resourceClause = '';
+
+  if (resourceId) {
+    params.push(resourceId);
+    resourceClause = ` AND resource_id = $${params.length}`;
+  }
+
+  params.push(cappedLimit);
+
+  const result = await getPool().query(
+    `SELECT event_id, account_id, provider, resource_type, resource_id, payload, occurred_at, received_at
+     FROM clearflow_owner_provider_events
+     WHERE account_id = $1
+       AND provider = $2
+       ${resourceClause}
+     ORDER BY received_at DESC
+     LIMIT $${params.length}`,
+    params
+  );
+
+  return result.rows;
+}
+
+
+function mapMercuryProviderState({ approvalRequest, transaction }) {
+  const approvalStatus = String(approvalRequest?.status || '');
+  const transactionStatus = String(transaction?.status || '');
+
+  if (transactionStatus === 'sent') {
+    return {
+      paymentStatus: 'settled',
+      settlementStatus: 'settled',
+      processorStatus: 'settled',
+      externalStatus: 'settled',
+      verificationStatus: 'verified',
+      liveExecution: true,
+      executionReason: 'Mercury confirms the payment was sent.',
+      settled: true,
+    };
+  }
+
+  if (transactionStatus === 'reversed') {
+    return {
+      paymentStatus: 'reversed',
+      settlementStatus: 'exception',
+      processorStatus: 'requires_review',
+      externalStatus: 'returned',
+      verificationStatus: 'exception',
+      liveExecution: true,
+      executionReason: 'Mercury reports that the payment was reversed.',
+      settled: false,
+    };
+  }
+
+  if (['failed', 'cancelled', 'blocked'].includes(transactionStatus)) {
+    return {
+      paymentStatus: 'failed',
+      settlementStatus: 'exception',
+      processorStatus: 'blocked',
+      externalStatus: 'failed',
+      verificationStatus: 'exception',
+      liveExecution: Boolean(transaction?.id),
+      executionReason: `Mercury reports payment status: ${transactionStatus}.`,
+      settled: false,
+    };
+  }
+
+  if (transactionStatus === 'pending') {
+    return {
+      paymentStatus: 'initiated',
+      settlementStatus: 'clearing',
+      processorStatus: 'processing',
+      externalStatus: 'processing',
+      verificationStatus: 'pending',
+      liveExecution: true,
+      executionReason: 'Mercury approved the request and the resulting transaction is pending.',
+      settled: false,
+    };
+  }
+
+  if (approvalStatus === 'approved') {
+    return {
+      paymentStatus: 'initiated',
+      settlementStatus: 'clearing',
+      processorStatus: 'processing',
+      externalStatus: 'processing',
+      verificationStatus: 'pending',
+      liveExecution: false,
+      executionReason: 'Mercury approval is complete; waiting for the resulting bank transaction.',
+      settled: false,
+    };
+  }
+
+  if (approvalStatus === 'rejected' || approvalStatus === 'cancelled') {
+    return {
+      paymentStatus: 'failed',
+      settlementStatus: 'exception',
+      processorStatus: 'blocked',
+      externalStatus: 'failed',
+      verificationStatus: 'exception',
+      liveExecution: false,
+      executionReason: `Mercury payment request was ${approvalStatus}.`,
+      settled: false,
+    };
+  }
+
+  return {
+    paymentStatus: 'initiated',
+    settlementStatus: 'verifying',
+    processorStatus: 'requires_review',
+    externalStatus: 'accepted',
+    verificationStatus: 'pending',
+    liveExecution: false,
+    executionReason: 'Mercury payment request is pending separate approval.',
+    settled: false,
+  };
+}
+
+export async function applyMercuryProviderUpdateToOwnerWorkspace({
+  accountId,
+  requestId,
+  approvalRequest = null,
+  transaction = null,
+  actor = 'mercury_provider',
+}) {
+  if (!isConfiguredOwnerAccount(accountId) || !requestId) {
+    return { applied: false, reason: 'not_applicable' };
+  }
+
+  const row = await loadOwnerWorkspace(accountId);
+  const snapshot = row?.app_data?.coreDataSnapshot;
+  if (!row?.app_data || !snapshot) {
+    return { applied: false, reason: 'workspace_missing' };
+  }
+
+  const providerState = mapMercuryProviderState({ approvalRequest, transaction });
+  const nowIso = new Date().toISOString();
+  const settlementDate =
+    transaction?.postedAt ||
+    transaction?.estimatedDeliveryDate ||
+    transaction?.createdAt ||
+    nowIso;
+
+  let changed = false;
+  const settlementIds = new Set();
+  const paymentIds = new Set();
+
+  const settlements = (snapshot.settlements || []).map((settlement) => {
+    if (
+      settlement?.executionProvider !== 'mercury' ||
+      String(settlement?.executionReference || '') !== String(requestId)
+    ) {
+      return settlement;
+    }
+
+    changed = true;
+    settlementIds.add(settlement.id);
+
+    return {
+      ...settlement,
+      status: providerState.settlementStatus,
+      processorStatus: providerState.processorStatus,
+      externalStatus: providerState.externalStatus,
+      verificationStatus: providerState.verificationStatus,
+      liveExecution: providerState.liveExecution,
+      executionReason: providerState.executionReason,
+      verificationReference: transaction?.id || settlement.verificationReference,
+      settledAmount: providerState.settled
+        ? Number(settlement.grossAmount || settlement.settledAmount || 0)
+        : settlement.settledAmount,
+      actualSettlementDate: providerState.settled
+        ? String(settlementDate).slice(0, 10)
+        : settlement.actualSettlementDate,
+      autoReconcileStatus: providerState.settled
+        ? 'pending'
+        : providerState.verificationStatus === 'exception'
+          ? 'exception'
+          : settlement.autoReconcileStatus,
+      notes: [
+        settlement.notes,
+        `Mercury status synchronized at ${nowIso}. Request ${requestId}.`,
+      ].filter(Boolean).join(' '),
+    };
+  });
+
+  const payments = (snapshot.payments || []).map((payment) => {
+    const executionReference = payment?.settlementExecution?.executionReference;
+    if (
+      payment?.settlementExecution?.executionProvider !== 'mercury' ||
+      String(executionReference || '') !== String(requestId)
+    ) {
+      return payment;
+    }
+
+    changed = true;
+    paymentIds.add(payment.id);
+
+    return {
+      ...payment,
+      status: providerState.paymentStatus,
+      releaseStatus: providerState.settled ? 'released' : payment.releaseStatus,
+      releasedAt: providerState.settled ? nowIso : payment.releasedAt,
+      settlementExecution: {
+        ...payment.settlementExecution,
+        processorStatus: providerState.processorStatus,
+        externalStatus: providerState.externalStatus,
+        liveExecution: providerState.liveExecution,
+        executionReason: providerState.executionReason,
+      },
+      notes: [
+        payment.notes,
+        `Mercury status synchronized at ${nowIso}. Request ${requestId}.`,
+      ].filter(Boolean).join(' '),
+    };
+  });
+
+  if (!changed) {
+    return { applied: false, reason: 'execution_not_found' };
+  }
+
+  const result = await saveOwnerWorkspace({
+    accountId,
+    appData: {
+      ...row.app_data,
+      coreDataSnapshot: {
+        ...snapshot,
+        settlements,
+        payments,
+      },
+    },
+    expectedVersion: row.version,
+    actor,
+    action: 'mercury_payment_status_synchronized',
+    details: {
+      requestId: String(requestId),
+      approvalStatus: approvalRequest?.status || null,
+      transactionId: transaction?.id || null,
+      transactionStatus: transaction?.status || null,
+      settlementIds: Array.from(settlementIds),
+      paymentIds: Array.from(paymentIds),
+    },
+  });
+
+  return {
+    applied: true,
+    result,
+    settlementIds: Array.from(settlementIds),
+    paymentIds: Array.from(paymentIds),
+  };
 }
