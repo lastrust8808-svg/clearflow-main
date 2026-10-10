@@ -1189,6 +1189,7 @@ export default function App({
           initialIntent={welcomeIntent}
           lastKnownGoogleUser={auth.lastKnownGoogleUser}
           startGoogleSignIn={auth.startGoogleSignIn}
+          authMessage={auth.authMessage}
           onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
           onStartNewMember={() => {
             setWelcomeIntent('new');
