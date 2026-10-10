@@ -14,6 +14,12 @@ export interface User {
   clearflowTermsVersion?: string;
   clearflowTermsSignerName?: string;
   clearflowTermsDocumentId?: string;
+  clearflowPrivacyAcceptedAt?: string;
+  clearflowSecurityAgreementAcceptedAt?: string;
+  clearflowESignConsentAcceptedAt?: string;
+  clearflowAuthorityCertificationAcceptedAt?: string;
+  clearflowSecurityAgreementDocumentId?: string;
+  clearflowPrivacyDocumentId?: string;
   clearflowRetainedRecordDocumentId?: string;
   clearflowInternalLedgerDepositId?: string;
   clearflowInternalLedgerDepositedAt?: string;
