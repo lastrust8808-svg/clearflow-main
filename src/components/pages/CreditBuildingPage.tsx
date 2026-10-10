@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type {
   CoreDataBundle,
@@ -123,6 +123,25 @@ export default function CreditBuildingPage({
     if (typeof window !== 'undefined') window.location.hash = hash;
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const applyHash = () => {
+      if (window.location.hash === '#credit:new-tradeline') {
+        setShowAddTradeline(true);
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}#credit`,
+        );
+      }
+    };
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
   const tradelines = useMemo(
     () =>
       data.creditTradelines.filter(
@@ -133,13 +152,14 @@ export default function CreditBuildingPage({
     [activeEntityId, data.creditTradelines, profileType],
   );
 
-  const reviews = useMemo(
-    () =>
-      data.creditReviews.filter(
-        (item) => !activeEntityId || item.entityId === activeEntityId,
-      ),
-    [activeEntityId, data.creditReviews],
-  );
+  const reviews = useMemo(() => {
+    const tradelineIds = new Set(tradelines.map((item) => item.id));
+    return data.creditReviews.filter(
+      (item) =>
+        tradelineIds.has(item.tradelineId) &&
+        (!activeEntityId || item.entityId === activeEntityId),
+    );
+  }, [activeEntityId, data.creditReviews, tradelines]);
 
   const plans = useMemo(
     () =>
