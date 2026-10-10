@@ -423,7 +423,10 @@ router.post('/internal/clearflow-ledger/agreement-deposits', async (req, res) =>
     entityId,
     termsDocumentId,
     retainedRecordDocumentId,
+    contractValueDocumentId,
     termsAcceptedAt,
+    monthlyFee,
+    termMonths,
   } = req.body || {};
 
   if (
@@ -431,7 +434,11 @@ router.post('/internal/clearflow-ledger/agreement-deposits', async (req, res) =>
     !userId ||
     !termsDocumentId ||
     !retainedRecordDocumentId ||
-    !termsAcceptedAt
+    !termsAcceptedAt ||
+    !Number.isFinite(Number(monthlyFee)) ||
+    Number(monthlyFee) <= 0 ||
+    !Number.isInteger(Number(termMonths)) ||
+    Number(termMonths) <= 0
   ) {
     return res.status(400).json({
       success: false,
@@ -448,7 +455,10 @@ router.post('/internal/clearflow-ledger/agreement-deposits', async (req, res) =>
       entityId,
       termsDocumentId,
       retainedRecordDocumentId,
+      contractValueDocumentId,
       termsAcceptedAt,
+      monthlyFee: Number(monthlyFee),
+      termMonths: Number(termMonths),
     });
 
     return res.status(200).json({
