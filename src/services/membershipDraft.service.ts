@@ -364,6 +364,9 @@ export function applyClearFlowRetentionRecords(
   }
 ): AppData {
   const acceptedDate = input.acceptedAt.slice(0, 10);
+  const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
+  const signerName =
+    input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
 
   const acceptedUser = {
     ...appData.user,
@@ -403,9 +406,6 @@ export function applyClearFlowRetentionRecords(
   }
 
 
-  const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
-  const signerName =
-    input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
   const agreementDocumentId = `doc-clearflow-terms-${appData.user.id}`;
   const privacyDocumentId = `doc-clearflow-privacy-${appData.user.id}`;
   const securityDocumentId = `doc-clearflow-security-${appData.user.id}`;
