@@ -3347,7 +3347,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               sourceBankAccount?.accountName ||
               '1000 Operating Cash',
         amount: resolvedAmount,
-        status: paymentStatus === 'settled' ? ('posted' as const) : ('draft' as const),
+        status: 'posted' as const,
         source: 'system' as const,
         linkedTransactionIds: [transactionId],
         linkedSettlementIds: [settlementId],
@@ -4619,7 +4619,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 ? selectedTreasuryAccount.name
               : '1000 Operating Cash',
         amount,
-        status: 'posted' as const,
+        status: paymentStatus === 'settled' ? ('posted' as const) : ('draft' as const),
         source: 'system' as const,
         linkedTransactionIds: [transactionId],
         linkedSettlementIds: [settlementId],
