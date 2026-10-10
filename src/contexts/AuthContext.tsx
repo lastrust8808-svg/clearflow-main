@@ -598,6 +598,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             signerName:
               current.appData.user.clearflowTermsSignerName ||
               current.appData.user.name,
+            membershipCommitmentAccepted: Boolean(
+              current.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment
+            ),
           }),
         };
       });
@@ -614,6 +617,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       !state.appData?.user.clearflowTermsAcceptedAt ||
       !state.appData.user.clearflowTermsDocumentId ||
       !state.appData.user.clearflowRetainedRecordDocumentId ||
+      !state.appData.user.clearflowAgreementValueDocumentId ||
+      !state.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment ||
       (state.appData.user.clearflowInternalLedgerStatus === 'recorded' &&
         Boolean(state.appData.user.clearflowInternalLedgerDepositReferenceValue)) ||
       state.appData.user.clearflowInternalLedgerStatus === 'error' ||
@@ -700,6 +705,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.appData?.user.clearflowAgreementValueDocumentId,
     state.appData?.user.clearflowAgreementReceipt?.monthlyFee,
     state.appData?.user.clearflowAgreementReceipt?.termMonths,
+    state.appData?.user.clearflowAgreementReceipt?.consents.membershipCommitment,
     state.appData?.user.clearflowTermsAcceptedAt,
     state.appData?.user.clearflowTermsDocumentId,
     state.appData?.user.clearflowTermsSignerName,
@@ -1666,6 +1672,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       authorityAcceptedAt:
         state.appData.user.clearflowAuthorityCertificationAcceptedAt ||
         (onboardingConsents?.authority ? acceptedAt : undefined),
+      membershipCommitmentAccepted:
+        Boolean(
+          state.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment
+        ) || Boolean(onboardingConsents?.membershipCommitment),
     });
     persistStoredTermsAcceptance(finalAppData.user.email, {
       acceptedAt,
