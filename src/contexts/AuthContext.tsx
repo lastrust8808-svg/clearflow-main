@@ -118,6 +118,7 @@ interface AuthContextType {
       security: boolean;
       eSign: boolean;
       authority: boolean;
+      membershipCommitment: boolean;
     }
   ) => void;
   completeVerification: () => void;
@@ -597,6 +598,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             signerName:
               current.appData.user.clearflowTermsSignerName ||
               current.appData.user.name,
+            membershipCommitmentAccepted: Boolean(
+              current.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment
+            ),
           }),
         };
       });
@@ -613,7 +617,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       !state.appData?.user.clearflowTermsAcceptedAt ||
       !state.appData.user.clearflowTermsDocumentId ||
       !state.appData.user.clearflowRetainedRecordDocumentId ||
-      state.appData.user.clearflowInternalLedgerStatus === 'recorded' ||
+      !state.appData.user.clearflowAgreementValueDocumentId ||
+      !state.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment ||
+      (state.appData.user.clearflowInternalLedgerStatus === 'recorded' &&
+        Boolean(state.appData.user.clearflowInternalLedgerDepositReferenceValue)) ||
       state.appData.user.clearflowInternalLedgerStatus === 'error' ||
       clearflowLedgerDepositSyncRef.current
     ) {
@@ -632,7 +639,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       entityId: primaryEntityId,
       termsDocumentId: state.appData.user.clearflowTermsDocumentId,
       retainedRecordDocumentId: state.appData.user.clearflowRetainedRecordDocumentId,
+      contractValueDocumentId: state.appData.user.clearflowAgreementValueDocumentId,
       termsAcceptedAt: state.appData.user.clearflowTermsAcceptedAt,
+      monthlyFee:
+        state.appData.user.clearflowAgreementReceipt?.monthlyFee || 150,
+      termMonths:
+        state.appData.user.clearflowAgreementReceipt?.termMonths || 12,
     })
       .then((response) => {
         setState((current) => {
@@ -649,6 +661,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 clearflowInternalLedgerDepositId: response.result.depositId,
                 clearflowInternalLedgerDepositedAt: response.result.recordedAt,
                 clearflowInternalLedgerStatus: response.result.status,
+                clearflowInternalLedgerDepositReferenceValue:
+                  response.result.annualizedContractReferenceValue,
+                clearflowInternalLedgerDepositMonthlyFee:
+                  response.result.monthlyFee,
+                clearflowInternalLedgerDepositTermMonths:
+                  response.result.termMonths,
+                clearflowInternalLedgerDepositPoolEligibility:
+                  response.result.poolEligibility,
               },
             },
           };
@@ -680,7 +700,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.appData?.coreDataSnapshot,
     state.appData?.entities,
     state.appData?.user.clearflowInternalLedgerStatus,
+    state.appData?.user.clearflowInternalLedgerDepositReferenceValue,
     state.appData?.user.clearflowRetainedRecordDocumentId,
+    state.appData?.user.clearflowAgreementValueDocumentId,
+    state.appData?.user.clearflowAgreementReceipt?.monthlyFee,
+    state.appData?.user.clearflowAgreementReceipt?.termMonths,
+    state.appData?.user.clearflowAgreementReceipt?.consents.membershipCommitment,
     state.appData?.user.clearflowTermsAcceptedAt,
     state.appData?.user.clearflowTermsDocumentId,
     state.appData?.user.clearflowTermsSignerName,
@@ -1594,11 +1619,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       onboardingConsents?.privacy &&
       onboardingConsents?.security &&
       onboardingConsents?.eSign &&
-      onboardingConsents?.authority
+      onboardingConsents?.authority &&
+      onboardingConsents?.membershipCommitment
     );
     if (!alreadyAcceptedTerms && (!acceptedTerms || !explicitNewUserConsentsComplete)) {
       console.error(
-        'ClearFlow terms, privacy, security, electronic-record, and authority consents must be accepted before a new profile can complete.'
+        'ClearFlow terms, privacy, security, electronic-record, authority, and membership commitment consents must be accepted before a new profile can complete.'
       );
       return;
     }
@@ -1646,6 +1672,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       authorityAcceptedAt:
         state.appData.user.clearflowAuthorityCertificationAcceptedAt ||
         (onboardingConsents?.authority ? acceptedAt : undefined),
+      membershipCommitmentAccepted:
+        Boolean(
+          state.appData.user.clearflowAgreementReceipt?.consents.membershipCommitment
+        ) || Boolean(onboardingConsents?.membershipCommitment),
     });
     persistStoredTermsAcceptance(finalAppData.user.email, {
       acceptedAt,

@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import type { WealthMandateProfile } from '../../types/app.models';
+import {
+  CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE,
+  CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS,
+} from '../../services/membershipDraft.service';
 
 export const ProfileSetup: React.FC = () => {
   const auth = useAuth();
@@ -14,6 +18,9 @@ export const ProfileSetup: React.FC = () => {
     acceptedSecurity: Boolean(auth.currentUser?.clearflowSecurityAgreementAcceptedAt),
     acceptedESign: Boolean(auth.currentUser?.clearflowESignConsentAcceptedAt),
     acceptedAuthority: Boolean(auth.currentUser?.clearflowAuthorityCertificationAcceptedAt),
+    acceptedMembershipCommitment: Boolean(
+      auth.currentUser?.clearflowAgreementReceipt?.consents.membershipCommitment
+    ),
     signerName:
       auth.currentUser?.clearflowTermsSignerName ||
       auth.currentUser?.name ||
@@ -44,6 +51,9 @@ export const ProfileSetup: React.FC = () => {
         Boolean(auth.currentUser?.clearflowESignConsentAcceptedAt) || current.acceptedESign,
       acceptedAuthority:
         Boolean(auth.currentUser?.clearflowAuthorityCertificationAcceptedAt) || current.acceptedAuthority,
+      acceptedMembershipCommitment:
+        Boolean(auth.currentUser?.clearflowAgreementReceipt?.consents.membershipCommitment) ||
+        current.acceptedMembershipCommitment,
       signerName:
         auth.currentUser?.clearflowTermsSignerName ||
         auth.currentUser?.name ||
@@ -64,6 +74,7 @@ export const ProfileSetup: React.FC = () => {
     auth.currentUser?.clearflowSecurityAgreementAcceptedAt,
     auth.currentUser?.clearflowESignConsentAcceptedAt,
     auth.currentUser?.clearflowAuthorityCertificationAcceptedAt,
+    auth.currentUser?.clearflowAgreementReceipt?.consents.membershipCommitment,
     auth.currentUser?.clearflowTermsSignerName,
     auth.currentUser?.email,
     auth.currentUser?.wealthMandate?.liquidityPreference,
@@ -109,6 +120,7 @@ export const ProfileSetup: React.FC = () => {
           security: form.acceptedSecurity,
           eSign: form.acceptedESign,
           authority: form.acceptedAuthority,
+          membershipCommitment: form.acceptedMembershipCommitment,
         }
       );
     }
@@ -256,6 +268,38 @@ export const ProfileSetup: React.FC = () => {
               </div>
             </div>
             <div className="rounded-md border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-slate-200">
+              <div className="rounded-md border border-sky-400/20 bg-sky-400/10 p-4">
+                <div className="font-semibold text-sky-100">Membership Contract Economics</div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md bg-slate-950/40 px-2 py-3">
+                    <div className="text-xs text-slate-400">Monthly Fee</div>
+                    <div className="mt-1 font-bold text-slate-100">
+                      ${CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-slate-950/40 px-2 py-3">
+                    <div className="text-xs text-slate-400">Term</div>
+                    <div className="mt-1 font-bold text-slate-100">
+                      {CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS} months
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-slate-950/40 px-2 py-3">
+                    <div className="text-xs text-slate-400">Contract Reference</div>
+                    <div className="mt-1 font-bold text-slate-100">
+                      ${(
+                        CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE *
+                        CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS
+                      ).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 text-xs leading-5 text-slate-300">
+                  ClearFlow records the signed 12-month membership economics as a balanced
+                  non-cash memorandum contract: equal user-commitment and ClearFlow-service
+                  values. It is not cash, a deposit account balance, recognized revenue, or a
+                  collectible receivable at signing.
+                </div>
+              </div>
               <div className="font-semibold text-cyan-100">ClearFlow Terms and Record Retention</div>
               <div className="mt-2 leading-6 text-slate-300">
                 Core workspace data for Google users can remain user-owned through Google Drive where available. ClearFlow still retains required platform records, including the user agreement, retained security support, and related compliance or custody records needed for platform operation. By continuing, you represent that you will only establish or operate entities in ClearFlow when you are their lawful owner, officer, manager, trustee, administrator, fiduciary, or otherwise authorized representative.
@@ -362,6 +406,30 @@ export const ProfileSetup: React.FC = () => {
                       <strong>Authority Certification.</strong> I certify that I will only establish, access, or operate entities for which I am the lawful owner, officer, manager, trustee, administrator, fiduciary, or other authorized representative.
                     </span>
                   </label>
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedMembershipCommitment"
+                      checked={form.acceptedMembershipCommitment}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          acceptedMembershipCommitment: event.target.checked,
+                        })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>12-Month Membership Commitment.</strong> I agree to a
+                      {' '}${CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE.toFixed(2)} monthly
+                      membership for {CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS} months and
+                      acknowledge the ${(
+                        CLEARFLOW_DEFAULT_MONTHLY_MEMBERSHIP_FEE *
+                        CLEARFLOW_MEMBERSHIP_CONTRACT_MONTHS
+                      ).toFixed(2)} annualized contract reference value shown above.
+                    </span>
+                  </label>
                 </div>
               )}
             </div>
@@ -380,7 +448,8 @@ export const ProfileSetup: React.FC = () => {
                   !form.acceptedPrivacy ||
                   !form.acceptedSecurity ||
                   !form.acceptedESign ||
-                  !form.acceptedAuthority))
+                  !form.acceptedAuthority ||
+                  !form.acceptedMembershipCommitment))
             }
             className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500"
           >
