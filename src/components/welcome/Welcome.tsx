@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Logo } from '../logo/Logo';
 
 interface WelcomeProps {
-  initialView?: 'landing';
+  initialView?: 'landing' | 'signin';
   initialIntent?: 'new' | 'existing';
   lastKnownGoogleUser?: { name: string; email: string } | null;
   onDevLogin: () => void;
