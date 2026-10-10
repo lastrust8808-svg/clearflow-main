@@ -8,6 +8,7 @@ import {
 import {
   ownerAccountIdFromEmail,
   recordOwnerProviderEvent,
+  applyMercuryProviderUpdateToOwnerWorkspace,
 } from '../services/ownerDatabase.js';
 
 const router = express.Router();
@@ -74,7 +75,27 @@ router.get('/payment-status/:requestId', async (req, res) => {
 
   try {
     const status = await getMercuryPaymentStatus(req.params.requestId);
-    return res.status(200).json({ success: true, ...status });
+    const ownerAccountId = getOwnerAccountId();
+    const relatedTransaction = Array.isArray(status.transactions)
+      ? status.transactions[0] || null
+      : null;
+
+    let workspaceUpdate = null;
+    if (ownerAccountId) {
+      workspaceUpdate = await applyMercuryProviderUpdateToOwnerWorkspace({
+        accountId: ownerAccountId,
+        requestId: req.params.requestId,
+        approvalRequest: status.approvalRequest,
+        transaction: relatedTransaction,
+        actor: 'mercury_status_poll',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      ...status,
+      workspaceUpdated: Boolean(workspaceUpdate?.applied),
+    });
   } catch (error) {
     return res.status(error.statusCode || 502).json({
       success: false,
@@ -126,6 +147,15 @@ router.post('/webhook', async (req, res) => {
           transaction,
         },
       });
+
+      if (transaction?.requestId) {
+        await applyMercuryProviderUpdateToOwnerWorkspace({
+          accountId: ownerAccountId,
+          requestId: transaction.requestId,
+          transaction,
+          actor: 'mercury_webhook',
+        });
+      }
     }
 
     return res.status(200).send('Webhook processed.');
