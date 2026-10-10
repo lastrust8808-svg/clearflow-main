@@ -13,6 +13,8 @@ interface BillIntakeModalProps {
     dueDate: string;
     amount: string;
     description: string;
+    debitAccount: string;
+    payableAccount: string;
     uploadedFileName: string;
     uploadedFile?: File | null;
     parsedNotes: string;
@@ -73,6 +75,8 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
   const [dueDate, setDueDate] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [debitAccount, setDebitAccount] = useState('6000 Expense / Cost or Asset');
+  const [payableAccount, setPayableAccount] = useState('2000 Accounts Payable');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedNotes, setParsedNotes] = useState('');
@@ -88,6 +92,8 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
     setDueDate('');
     setAmount('');
     setDescription('');
+    setDebitAccount('6000 Expense / Cost or Asset');
+    setPayableAccount('2000 Accounts Payable');
     setUploadedFileName('');
     setUploadedFile(null);
     setParsedNotes('');
@@ -323,6 +329,45 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
           </div>
         )}
 
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.18)',
+            background: 'rgba(15,23,42,0.4)',
+          }}
+        >
+          <div style={{ color: '#cbd5e1', fontWeight: 700, fontSize: 13 }}>
+            Recognition entry
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>
+            Saving the bill recognizes the obligation now. It does not reduce cash until a later
+            payment is actually settled.
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <input
+              value={debitAccount}
+              onChange={(e) => setDebitAccount(e.target.value)}
+              placeholder="Debit: expense, inventory, equipment, or other asset"
+              style={inputStyle}
+            />
+            <input
+              value={payableAccount}
+              onChange={(e) => setPayableAccount(e.target.value)}
+              placeholder="Credit: Accounts Payable"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!canSubmit ? (
             <div style={{ color: '#fca5a5', alignSelf: 'center', fontSize: 13 }}>
@@ -340,6 +385,8 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
                 dueDate,
                 amount,
                 description,
+                debitAccount,
+                payableAccount,
                 uploadedFileName,
                 uploadedFile,
                 parsedNotes,
