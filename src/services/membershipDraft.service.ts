@@ -11,7 +11,7 @@ import type { MembershipIntakeDraft } from './onboarding.service';
 
 export const MEMBERSHIP_DRAFT_STORAGE_KEY = 'clearflow-membership-intake-draft';
 export const MEMBERSHIP_DRAFT_ID_STORAGE_KEY = 'clearflow-membership-intake-draft-id';
-export const CLEARFLOW_TERMS_VERSION = '2026.03';
+export const CLEARFLOW_TERMS_VERSION = '2026.10';
 
 function buildPrefixSeed(value: string, fallback: string) {
   const cleaned = value.replace(/[^A-Za-z0-9]+/g, ' ').trim();
@@ -321,6 +321,9 @@ export function hasClearFlowRetentionPackage(appData: AppData): boolean {
   const {
     clearflowTermsDocumentId,
     clearflowRetainedRecordDocumentId,
+    clearflowSecurityAgreementDocumentId,
+    clearflowPrivacyDocumentId,
+    clearflowTermsVersion,
   } = appData.user;
 
   if (!clearflowTermsDocumentId || !clearflowRetainedRecordDocumentId) {
@@ -328,9 +331,23 @@ export function hasClearFlowRetentionPackage(appData: AppData): boolean {
   }
 
   const snapshot = appData.coreDataSnapshot;
-  return (
+  const legacyPackagePresent =
     snapshot.documents.some((item) => item.id === clearflowTermsDocumentId) &&
-    snapshot.documents.some((item) => item.id === clearflowRetainedRecordDocumentId)
+    snapshot.documents.some((item) => item.id === clearflowRetainedRecordDocumentId);
+
+  if (!legacyPackagePresent) {
+    return false;
+  }
+
+  if (clearflowTermsVersion !== CLEARFLOW_TERMS_VERSION) {
+    return true;
+  }
+
+  return Boolean(
+    clearflowSecurityAgreementDocumentId &&
+      clearflowPrivacyDocumentId &&
+      snapshot.documents.some((item) => item.id === clearflowSecurityAgreementDocumentId) &&
+      snapshot.documents.some((item) => item.id === clearflowPrivacyDocumentId)
   );
 }
 
@@ -340,6 +357,10 @@ export function applyClearFlowRetentionRecords(
     acceptedAt: string;
     termsVersion?: string;
     signerName?: string;
+    privacyAcceptedAt?: string;
+    securityAcceptedAt?: string;
+    eSignAcceptedAt?: string;
+    authorityAcceptedAt?: string;
   }
 ): AppData {
   const primaryEntityId =
@@ -354,6 +375,8 @@ export function applyClearFlowRetentionRecords(
   const signerName =
     input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
   const agreementDocumentId = `doc-clearflow-terms-${appData.user.id}`;
+  const privacyDocumentId = `doc-clearflow-privacy-${appData.user.id}`;
+  const securityDocumentId = `doc-clearflow-security-${appData.user.id}`;
   const retainedDocumentId = `doc-clearflow-retained-${appData.user.id}`;
   const agreementTokenId = `tok-clearflow-terms-${appData.user.id}`;
   const cleanedSnapshot: CoreDataBundle = {
@@ -386,6 +409,40 @@ export function applyClearFlowRetentionRecords(
     retentionClass: 'agreement',
     storageNotes:
       'Required internal agreement record retained by ClearFlow for platform security, consent, and recordkeeping support.',
+    externalStorageStatus: 'not_applicable',
+  };
+
+  const privacyDocument: DocumentRecord = {
+    id: privacyDocumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow Privacy and Data Handling Consent',
+    category: 'compliance',
+    date: (input.privacyAcceptedAt || input.acceptedAt).slice(0, 10),
+    status: 'final',
+    linkedTokenIds: [agreementTokenId],
+    summary:
+      `Privacy, data handling, workspace storage, and retained platform-record consent accepted by ${signerName}.`,
+    storageOwner: 'clearflow_retained',
+    retentionClass: 'agreement',
+    storageNotes:
+      'Retained acceptance record for privacy, data handling, and workspace-storage consent.',
+    externalStorageStatus: 'not_applicable',
+  };
+
+  const securityDocument: DocumentRecord = {
+    id: securityDocumentId,
+    entityId: primaryEntityId,
+    title: 'ClearFlow Security and Record Retention Agreement',
+    category: 'contract',
+    date: (input.securityAcceptedAt || input.acceptedAt).slice(0, 10),
+    status: 'final',
+    linkedTokenIds: [agreementTokenId],
+    summary:
+      `Security, protected-record retention, electronic-record, and authorized-use agreement accepted by ${signerName}.`,
+    storageOwner: 'clearflow_retained',
+    retentionClass: 'security_support',
+    storageNotes:
+      'Required retained security agreement supporting platform access, electronic records, audit history, and authorized use.',
     externalStorageStatus: 'not_applicable',
   };
 
@@ -423,7 +480,13 @@ export function applyClearFlowRetentionRecords(
   const nextSnapshot: CoreDataBundle = {
     ...cleanedSnapshot,
     documents: upsertById(
-      upsertById(cleanedSnapshot.documents, agreementDocument),
+      upsertById(
+        upsertById(
+          upsertById(cleanedSnapshot.documents, agreementDocument),
+          privacyDocument
+        ),
+        securityDocument
+      ),
       retainedRecordDocument
     ),
     tokens: upsertById(cleanedSnapshot.tokens, agreementToken),
@@ -443,6 +506,12 @@ export function applyClearFlowRetentionRecords(
       clearflowTermsVersion: termsVersion,
       clearflowTermsSignerName: signerName,
       clearflowTermsDocumentId: agreementDocumentId,
+      clearflowPrivacyAcceptedAt: input.privacyAcceptedAt || input.acceptedAt,
+      clearflowSecurityAgreementAcceptedAt: input.securityAcceptedAt || input.acceptedAt,
+      clearflowESignConsentAcceptedAt: input.eSignAcceptedAt || input.acceptedAt,
+      clearflowAuthorityCertificationAcceptedAt: input.authorityAcceptedAt || input.acceptedAt,
+      clearflowPrivacyDocumentId: privacyDocumentId,
+      clearflowSecurityAgreementDocumentId: securityDocumentId,
       clearflowRetainedRecordDocumentId: retainedDocumentId,
       clearflowInternalLedgerStatus: appData.user.clearflowInternalLedgerStatus || 'pending',
     },
