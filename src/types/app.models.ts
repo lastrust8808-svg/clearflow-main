@@ -42,6 +42,7 @@ export interface User {
       securityAndRetention: true;
       electronicRecordsAndSignature: true;
       authorityCertification: true;
+      membershipCommitment: true;
     };
   };
   clearflowAgreementValueDocumentId?: string;
