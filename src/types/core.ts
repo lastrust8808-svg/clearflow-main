@@ -1415,7 +1415,7 @@ export interface SettlementRecord {
   originSourceType?: 'bank_account' | 'ledger_account' | 'manual_remittance';
   originSourceId?: string;
   executionMode?: 'live' | 'staged';
-  executionProvider?: 'plaid' | 'manual';
+  executionProvider?: 'plaid' | 'mercury' | 'manual';
   payeeType?: 'bank_payee' | 'biller_direct' | 'manual_payee';
   liveExecution?: boolean;
   externalStatus?:
@@ -2432,7 +2432,7 @@ export interface PaymentRecord {
   settlementExecution?: {
     sourceType: 'bank_account' | 'ledger_account' | 'manual_remittance';
     executionMode?: 'live' | 'staged';
-    executionProvider?: 'plaid' | 'manual';
+    executionProvider?: 'plaid' | 'mercury' | 'manual';
     payeeType?: 'bank_payee' | 'biller_direct' | 'manual_payee';
     liveExecution?: boolean;
     externalStatus?:
