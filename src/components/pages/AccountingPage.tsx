@@ -2349,7 +2349,9 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
   const handleBillSubmit = async (payload: BillSubmitPayload) => {
     const numericAmount = Number(payload.amount || 0);
     const issuedDate = new Date().toISOString().slice(0, 10);
-    const billId = `bill-${Date.now()}`;
+    const stamp = Date.now();
+    const billId = `bill-${stamp}`;
+    const journalId = `je-bill-${stamp}`;
     const targetEntityId =
       activeEntityId ??
       defaultEntity?.id ??
@@ -2375,6 +2377,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     let didSaveBill = false;
     let savedEntityLabel = '';
+    let savedBillNumber = '';
 
     setData((prev) => {
       const base = prev.bills?.[0];
@@ -2392,6 +2395,12 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         ) ??
         prev.entities[0];
       if (!entity) return prev;
+
+      const resolvedAmount = numericAmount || extraction.amount || 0;
+      if (!resolvedAmount || resolvedAmount <= 0) {
+        return prev;
+      }
+
       didSaveBill = true;
       savedEntityLabel = entity.displayName || entity.name;
       const { vendorId, vendors: vendorSeed } = ensureVendorRecord(prev, entity.id, {
@@ -2400,13 +2409,18 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         address: extraction.remitAddress,
         notes: extraction.paymentInstructionSummary,
       });
-      const billNumber = payload.billNumber || buildEntityScopedNumber(entity, 'bill', '', String(getEntityNextSequence(entity, 'bill')));
+      const billNumber =
+        payload.billNumber ||
+        buildEntityScopedNumber(
+          entity,
+          'bill',
+          '',
+          String(getEntityNextSequence(entity, 'bill')),
+        );
+      savedBillNumber = billNumber;
 
-      const resolvedAmount = numericAmount || extraction.amount || 0;
       const seededVendor = vendorSeed.find((item) => item.id === vendorId);
-      const seededLinkedObligationId = (
-        seededVendor?.creditLineProfile as CoreDataBundle['vendors'][number]['creditLineProfile']
-      )?.linkedObligationId;
+      const seededLinkedObligationId = seededVendor?.creditLineProfile?.linkedObligationId;
       const recurringVendor = isRecurringVendorAccountCandidate(seededVendor);
       const annualizedStartingAmount =
         recurringVendor && resolvedAmount > 0
@@ -2416,6 +2430,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               bills: prev.bills ?? [],
             })
           : undefined;
+
       const creditProfile: CoreDataBundle['vendors'][number]['creditLineProfile'] =
         recurringVendor || seededVendor?.creditLineProfile?.enabled
           ? {
@@ -2435,28 +2450,147 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               currentBalance: Number(
                 (
                   (seededVendor?.creditLineProfile?.currentBalance ?? 0) + resolvedAmount
-                ).toFixed(2)
+                ).toFixed(2),
               ),
               autoAnnualizeFromBills:
                 seededVendor?.creditLineProfile?.autoAnnualizeFromBills ?? true,
               lastActivityAt: issuedDate,
             }
           : seededVendor?.creditLineProfile;
-      const nextCreditEntry =
-        creditProfile?.enabled && resolvedAmount > 0
-          ? {
-              id: `vcl-${Date.now()}`,
-              entryDate: issuedDate,
-              direction: 'debit_draw' as const,
-              amount: resolvedAmount,
-              resultingBalance: creditProfile.currentBalance ?? resolvedAmount,
-              linkedBillId: billId,
-              linkedObligationId: seededLinkedObligationId,
-              notes:
-                'Vendor bill intake increased the tracked recurring account or line-of-credit balance.',
-            }
-          : undefined;
-      const nextRecord = {
+
+      const existingRecurringObligation =
+        seededLinkedObligationId
+          ? prev.obligations.find((item) => item.id === seededLinkedObligationId)
+          : prev.obligations.find(
+              (item) =>
+                item.entityId === entity.id &&
+                item.linkedVendorId === vendorId &&
+                item.recurringSchedule?.enabled,
+            );
+
+      const billObligationId =
+        creditProfile?.enabled
+          ? existingRecurringObligation?.id ||
+            seededLinkedObligationId ||
+            `obl-vendor-${stamp}`
+          : `obl-bill-${stamp}`;
+
+      const recognitionDebitAccount =
+        payload.debitAccount.trim() || '6000 Expense / Cost or Asset';
+      const recognitionCreditAccount =
+        payload.payableAccount.trim() || '2000 Accounts Payable';
+
+      const nextObligations: CoreDataBundle['obligations'] =
+        creditProfile?.enabled
+          ? existingRecurringObligation
+            ? prev.obligations.map((item) =>
+                item.id === existingRecurringObligation.id
+                  ? {
+                      ...item,
+                      amount: creditProfile.currentBalance ?? item.amount,
+                      status:
+                        (creditProfile.currentBalance ?? 0) > 0
+                          ? ('open' as const)
+                          : ('satisfied' as const),
+                      lifecycleStage:
+                        (creditProfile.currentBalance ?? 0) > 0
+                          ? ('presented' as const)
+                          : ('discharged' as const),
+                      linkedVendorId: vendorId,
+                      linkedDocumentIds: documentRecord
+                        ? Array.from(
+                            new Set([
+                              documentRecord.id,
+                              ...(item.linkedDocumentIds ?? []),
+                            ]),
+                          )
+                        : item.linkedDocumentIds,
+                      recurringSchedule: {
+                        enabled: true,
+                        frequency: 'monthly',
+                        interval: 1,
+                        nextDueDate:
+                          payload.dueDate ||
+                          extraction.date ||
+                          item.recurringSchedule?.nextDueDate,
+                        autoCreatePresentment: true,
+                        note: annualizedStartingAmount
+                          ? `Annualized starting account amount: ${formatCurrency(
+                              annualizedStartingAmount,
+                              entity.operationalDefaults?.baseCurrency ||
+                                prev.workspaceSettings.baseCurrency,
+                            )}. Rolling balance updates from bill and settled-payment history.`
+                          : item.recurringSchedule?.note,
+                      },
+                      enforcementMemo:
+                        annualizedStartingAmount
+                          ? `Recurring vendor account is annualized from monthly history at ${formatCurrency(
+                              annualizedStartingAmount,
+                              entity.operationalDefaults?.baseCurrency ||
+                                prev.workspaceSettings.baseCurrency,
+                            )}; current tracked balance is ${formatCurrency(
+                              creditProfile.currentBalance ?? 0,
+                              entity.operationalDefaults?.baseCurrency ||
+                                prev.workspaceSettings.baseCurrency,
+                            )}. Cash does not reduce this obligation until settlement is confirmed.`
+                          : item.enforcementMemo,
+                    }
+                  : item,
+              )
+            : [
+                {
+                  id: billObligationId,
+                  entityId: entity.id,
+                  title: `${seededVendor?.name || payload.vendorName || 'Vendor'} recurring account obligation`,
+                  linkedVendorId: vendorId,
+                  legalIdentifier: `VOB-${stamp}`,
+                  obligationType: 'private_obligation',
+                  amount: creditProfile.currentBalance ?? resolvedAmount,
+                  paymentMedium: 'fiat',
+                  status: 'open',
+                  linkedDocumentIds: documentRecord ? [documentRecord.id] : undefined,
+                  lifecycleStage: 'presented',
+                  lastPresentmentDate: issuedDate,
+                  recurringSchedule: {
+                    enabled: true,
+                    frequency: 'monthly',
+                    interval: 1,
+                    nextDueDate: payload.dueDate || extraction.date || issuedDate,
+                    autoCreatePresentment: true,
+                    note: annualizedStartingAmount
+                      ? `Annualized starting account amount: ${formatCurrency(
+                          annualizedStartingAmount,
+                          entity.operationalDefaults?.baseCurrency ||
+                            prev.workspaceSettings.baseCurrency,
+                        )}.`
+                      : 'Recurring vendor account tied to monthly bill history.',
+                  },
+                  enforcementMemo:
+                    'Created from recurring vendor bill intake. The obligation remains open until linked settlement performance is confirmed.',
+                },
+                ...(prev.obligations ?? []),
+              ]
+          : [
+              {
+                id: billObligationId,
+                entityId: entity.id,
+                title: `${seededVendor?.name || payload.vendorName || 'Vendor'} bill ${billNumber}`,
+                linkedVendorId: vendorId,
+                legalIdentifier: `BILL-OBL-${stamp}`,
+                obligationType: 'private_obligation',
+                amount: resolvedAmount,
+                paymentMedium: 'fiat',
+                status: 'open',
+                linkedDocumentIds: documentRecord ? [documentRecord.id] : undefined,
+                lifecycleStage: 'presented',
+                lastPresentmentDate: issuedDate,
+                enforcementMemo:
+                  'Recognized from bill intake. This liability remains open until linked payment settlement is externally or otherwise validly confirmed.',
+              },
+              ...(prev.obligations ?? []),
+            ];
+
+      const nextRecord: CoreDataBundle['bills'][number] = {
         ...(base ?? {}),
         id: billId,
         entityId: entity.id,
@@ -2474,6 +2608,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         status: 'entered',
         dueDate: payload.dueDate || extraction.date || base?.dueDate,
         linkedLineItems: base?.linkedLineItems ?? [],
+        linkedJournalEntryIds: [journalId],
+        linkedObligationId: billObligationId,
+        recognitionDebitAccount,
+        recognitionCreditAccount,
         intakeStatus: payload.uploadedFile ? extraction.status : 'manual',
         extractionSummary: extraction.summary,
         extractedVendorName: extraction.vendorOrMerchantName,
@@ -2484,110 +2622,43 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           ? [documentRecord.id, ...(base?.linkedDocumentIds ?? [])]
           : base?.linkedDocumentIds,
       };
-      const obligationBase = prev.obligations?.[0];
-      const existingRecurringObligation =
-        seededLinkedObligationId
-          ? prev.obligations.find((item) => item.id === seededLinkedObligationId)
-          : prev.obligations.find(
-              (item) =>
-                item.entityId === entity.id &&
-                item.linkedVendorId === vendorId &&
-                item.recurringSchedule?.enabled,
-            );
-      const recurringObligationId =
-        existingRecurringObligation?.id || seededLinkedObligationId || `obl-vendor-${Date.now()}`;
-      const nextObligations =
-        creditProfile?.enabled && obligationBase
-          ? existingRecurringObligation
-            ? prev.obligations.map((item) =>
-                item.id === existingRecurringObligation.id
-                  ? {
-                      ...item,
-                      amount: creditProfile.currentBalance ?? item.amount,
-                      status:
-                        (creditProfile.currentBalance ?? 0) > 0 ? ('open' as const) : ('satisfied' as const),
-                      lifecycleStage:
-                        (creditProfile.currentBalance ?? 0) > 0
-                          ? ('presented' as const)
-                          : ('discharged' as const),
-                      linkedVendorId: vendorId,
-                      linkedDocumentIds: documentRecord
-                        ? Array.from(new Set([documentRecord.id, ...(item.linkedDocumentIds ?? [])]))
-                        : item.linkedDocumentIds,
-                      recurringSchedule: {
-                        enabled: true,
-                        frequency: 'monthly',
-                        interval: 1,
-                        nextDueDate: payload.dueDate || extraction.date || item.recurringSchedule?.nextDueDate,
-                        autoCreatePresentment: true,
-                        note:
-                          annualizedStartingAmount
-                            ? `Annualized starting account amount: ${formatCurrency(
-                                annualizedStartingAmount,
-                                entity.operationalDefaults?.baseCurrency ||
-                                  prev.workspaceSettings.baseCurrency,
-                              )}. Rolling balance updates from bill and payment history.`
-                            : item.recurringSchedule?.note,
-                      },
-                      enforcementMemo:
-                        annualizedStartingAmount
-                          ? `Recurring vendor account is annualized from monthly history at ${formatCurrency(
-                              annualizedStartingAmount,
-                              entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                            )}; current tracked balance is ${formatCurrency(
-                              creditProfile.currentBalance ?? 0,
-                              entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                            )}.`
-                          : item.enforcementMemo,
-                    }
-                  : item,
-              )
-            : [
-                {
-                  ...obligationBase,
-                  id: recurringObligationId,
-                  entityId: entity.id,
-                  title: `${seededVendor?.name || payload.vendorName || 'Vendor'} recurring account obligation`,
-                  linkedVendorId: vendorId,
-                  legalIdentifier: `VOB-${Date.now()}`,
-                  obligationType: 'private_obligation' as const,
-                  amount: creditProfile.currentBalance ?? resolvedAmount,
-                  paymentMedium: 'fiat' as const,
-                  status: 'open' as const,
-                  linkedDocumentIds: documentRecord ? [documentRecord.id] : undefined,
-                  linkedSettlementIds: undefined,
-                  linkedRemittanceStatementIds: undefined,
-                  linkedCouponPresentmentIds: undefined,
-                  lifecycleStage: 'presented' as const,
-                  lastPresentmentDate: issuedDate,
-                  recurringSchedule: {
-                    enabled: true,
-                    frequency: 'monthly',
-                    interval: 1,
-                    nextDueDate: payload.dueDate || extraction.date || issuedDate,
-                    autoCreatePresentment: true,
-                    note:
-                      annualizedStartingAmount
-                        ? `Annualized starting account amount: ${formatCurrency(
-                            annualizedStartingAmount,
-                            entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                          )}.`
-                        : 'Recurring vendor account tied to monthly bill history.',
-                  },
-                  enforcementMemo:
-                    annualizedStartingAmount
-                      ? `Created from recurring vendor bill intake. Annualized starting account amount is ${formatCurrency(
-                          annualizedStartingAmount,
-                          entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                        )}; current tracked balance is ${formatCurrency(
-                          creditProfile.currentBalance ?? resolvedAmount,
-                          entity.operationalDefaults?.baseCurrency || prev.workspaceSettings.baseCurrency,
-                        )}.`
-                      : 'Created from recurring vendor bill intake.',
-                },
-                ...(prev.obligations ?? []),
-              ]
-          : prev.obligations;
+
+      const nextJournal: CoreDataBundle['journalEntries'][number] = {
+        id: journalId,
+        entityId: entity.id,
+        entryNumber: buildEntityScopedNumber(
+          entity,
+          'journal',
+          '',
+          String(getEntityNextSequence(entity, 'journal')),
+        ),
+        entryDate: issuedDate,
+        memo: `Recognize bill ${billNumber} from ${seededVendor?.name || payload.vendorName || 'vendor'}`,
+        debitAccount: recognitionDebitAccount,
+        creditAccount: recognitionCreditAccount,
+        amount: resolvedAmount,
+        status: 'posted',
+        source: 'system',
+        linkedDocumentIds: documentRecord ? [documentRecord.id] : undefined,
+        autoReconcileStatus: 'matched',
+        verificationRequired: Boolean(documentRecord),
+      };
+
+      const nextCreditEntry =
+        creditProfile?.enabled && resolvedAmount > 0
+          ? {
+              id: `vcl-${stamp}`,
+              entryDate: issuedDate,
+              direction: 'debit_draw' as const,
+              amount: resolvedAmount,
+              resultingBalance: creditProfile.currentBalance ?? resolvedAmount,
+              linkedBillId: billId,
+              linkedObligationId: billObligationId,
+              notes:
+                'Vendor bill intake increased the tracked recurring account or line-of-credit balance.',
+            }
+          : undefined;
+
       const nextVendors = vendorSeed.map((item) => {
         if (item.id !== vendorId || !creditProfile?.enabled) {
           return item;
@@ -2599,35 +2670,31 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
           creditLineProfile: {
             ...item.creditLineProfile,
             ...creditProfile,
-            linkedObligationId: recurringObligationId,
+            linkedObligationId: billObligationId,
             availableCredit:
               typeof nextLimit === 'number'
                 ? Number((nextLimit - nextBalance).toFixed(2))
                 : item.creditLineProfile?.availableCredit,
           },
           creditLineEntries: nextCreditEntry
-            ? [
-                {
-                  ...nextCreditEntry,
-                  linkedObligationId: recurringObligationId,
-                },
-                ...(item.creditLineEntries ?? []),
-              ]
+            ? [nextCreditEntry, ...(item.creditLineEntries ?? [])]
             : item.creditLineEntries,
         };
       });
 
       return {
         ...prev,
-        entities:
-          payload.billNumber.trim()
-            ? prev.entities
-            : prev.entities.map((item) =>
-                item.id === entity.id ? incrementEntitySequence(item, 'bill') : item
-              ),
+        entities: prev.entities.map((item) => {
+          if (item.id !== entity.id) return item;
+          const afterBill = payload.billNumber.trim()
+            ? item
+            : incrementEntitySequence(item, 'bill');
+          return incrementEntitySequence(afterBill, 'journal');
+        }),
         vendors: nextVendors,
         bills: [nextRecord, ...(prev.bills ?? [])],
         obligations: nextObligations,
+        journalEntries: [nextJournal, ...(prev.journalEntries ?? [])],
         documents: documentRecord
           ? [documentRecord, ...(prev.documents ?? [])]
           : prev.documents,
@@ -2636,14 +2703,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
 
     if (!didSaveBill) {
       setOperationsNotice(
-        'Unable to save the bill into the selected entity records yet. Reopen the entity, then try the bill again.',
+        'Unable to save the bill into the selected entity records. Confirm the amount and entity, then try again.',
       );
       return;
     }
 
     setIsBillModalOpen(false);
     returnToAccountingDashboard(
-      `Saved the bill into ${savedEntityLabel || 'the active entity'} accounting records.`,
+      `Saved bill ${savedBillNumber || ''} into ${savedEntityLabel || 'the active entity'}, recognized the payable, and left cash unchanged.`,
     );
   };
 
