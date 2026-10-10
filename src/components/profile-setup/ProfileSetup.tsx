@@ -10,6 +10,10 @@ export const ProfileSetup: React.FC = () => {
     email: auth.currentUser?.email ?? '',
     phone: auth.currentUser?.phone ?? '',
     acceptedTerms: hasAcceptedTerms,
+    acceptedPrivacy: Boolean(auth.currentUser?.clearflowPrivacyAcceptedAt),
+    acceptedSecurity: Boolean(auth.currentUser?.clearflowSecurityAgreementAcceptedAt),
+    acceptedESign: Boolean(auth.currentUser?.clearflowESignConsentAcceptedAt),
+    acceptedAuthority: Boolean(auth.currentUser?.clearflowAuthorityCertificationAcceptedAt),
     signerName:
       auth.currentUser?.clearflowTermsSignerName ||
       auth.currentUser?.name ||
@@ -32,6 +36,14 @@ export const ProfileSetup: React.FC = () => {
       email: auth.currentUser?.email ?? current.email,
       phone: auth.currentUser?.phone ?? current.phone,
       acceptedTerms: Boolean(auth.currentUser?.clearflowTermsAcceptedAt) || current.acceptedTerms,
+      acceptedPrivacy:
+        Boolean(auth.currentUser?.clearflowPrivacyAcceptedAt) || current.acceptedPrivacy,
+      acceptedSecurity:
+        Boolean(auth.currentUser?.clearflowSecurityAgreementAcceptedAt) || current.acceptedSecurity,
+      acceptedESign:
+        Boolean(auth.currentUser?.clearflowESignConsentAcceptedAt) || current.acceptedESign,
+      acceptedAuthority:
+        Boolean(auth.currentUser?.clearflowAuthorityCertificationAcceptedAt) || current.acceptedAuthority,
       signerName:
         auth.currentUser?.clearflowTermsSignerName ||
         auth.currentUser?.name ||
@@ -48,6 +60,10 @@ export const ProfileSetup: React.FC = () => {
     }));
   }, [
     auth.currentUser?.clearflowTermsAcceptedAt,
+    auth.currentUser?.clearflowPrivacyAcceptedAt,
+    auth.currentUser?.clearflowSecurityAgreementAcceptedAt,
+    auth.currentUser?.clearflowESignConsentAcceptedAt,
+    auth.currentUser?.clearflowAuthorityCertificationAcceptedAt,
     auth.currentUser?.clearflowTermsSignerName,
     auth.currentUser?.email,
     auth.currentUser?.wealthMandate?.liquidityPreference,
@@ -87,7 +103,13 @@ export const ProfileSetup: React.FC = () => {
         undefined,
         form.acceptedTerms,
         form.signerName || form.name,
-        wealthMandate
+        wealthMandate,
+        {
+          privacy: form.acceptedPrivacy,
+          security: form.acceptedSecurity,
+          eSign: form.acceptedESign,
+          authority: form.acceptedAuthority,
+        }
       );
     }
   };
@@ -259,24 +281,89 @@ export const ProfileSetup: React.FC = () => {
                   disabled={hasAcceptedTerms}
                 />
               </div>
-              <label className="mt-3 flex items-start gap-3 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  name="acceptedTerms"
-                  checked={form.acceptedTerms}
-                  onChange={(event) =>
-                    setForm({ ...form, acceptedTerms: event.target.checked })
-                  }
-                  className="mt-1"
-                  required
-                  disabled={hasAcceptedTerms}
-                />
-                <span>
-                  {hasAcceptedTerms
-                    ? 'Your ClearFlow terms acceptance is already on file. Review your profile details and continue into the workspace.'
-                    : 'I agree to ClearFlow&apos;s terms and conditions, authorize the creation of required retained platform records, understand that ClearFlow may keep custody, compliance, and agreement-support records where required for platform operation, and represent that I will only add or operate entities for which I have the legal authority to act.'}
-                </span>
-              </label>
+              {hasAcceptedTerms ? (
+                <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                  Your prior ClearFlow agreement acceptance remains on file. Existing users are not required to re-sign during this profile check.
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedTerms"
+                      checked={form.acceptedTerms}
+                      onChange={(event) =>
+                        setForm({ ...form, acceptedTerms: event.target.checked })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>User Terms.</strong> I agree to ClearFlow&apos;s user terms and conditions.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedPrivacy"
+                      checked={form.acceptedPrivacy}
+                      onChange={(event) =>
+                        setForm({ ...form, acceptedPrivacy: event.target.checked })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>Privacy & Data Handling.</strong> I consent to the stated handling of workspace data, connected-service data, and retained platform records.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedSecurity"
+                      checked={form.acceptedSecurity}
+                      onChange={(event) =>
+                        setForm({ ...form, acceptedSecurity: event.target.checked })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>Security & Record Retention Agreement.</strong> I authorize ClearFlow to create and retain required agreement, access-security, audit, compliance, and record-support records needed to operate the platform.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedESign"
+                      checked={form.acceptedESign}
+                      onChange={(event) =>
+                        setForm({ ...form, acceptedESign: event.target.checked })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>Electronic Records & Signature.</strong> I consent to electronic records and agree that typing my signer name is my electronic signature for this onboarding agreement.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="acceptedAuthority"
+                      checked={form.acceptedAuthority}
+                      onChange={(event) =>
+                        setForm({ ...form, acceptedAuthority: event.target.checked })
+                      }
+                      className="mt-1"
+                      required
+                    />
+                    <span>
+                      <strong>Authority Certification.</strong> I certify that I will only establish, access, or operate entities for which I am the lawful owner, officer, manager, trustee, administrator, fiduciary, or other authorized representative.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-3">
@@ -284,7 +371,17 @@ export const ProfileSetup: React.FC = () => {
           </p>
           <button
             type="submit"
-            disabled={!form.name || (!form.email && !form.phone) || !form.acceptedTerms || !form.signerName}
+            disabled={
+              !form.name ||
+              (!form.email && !form.phone) ||
+              !form.signerName ||
+              (!hasAcceptedTerms &&
+                (!form.acceptedTerms ||
+                  !form.acceptedPrivacy ||
+                  !form.acceptedSecurity ||
+                  !form.acceptedESign ||
+                  !form.acceptedAuthority))
+            }
             className="w-full mt-8 px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-500"
           >
             {hasAcceptedTerms ? 'Continue to Workspace' : 'Sign and Submit'}

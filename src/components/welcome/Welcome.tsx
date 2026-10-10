@@ -9,6 +9,7 @@ interface WelcomeProps {
   onStartNewMember: () => void;
   onStartExistingMember: () => void;
   startGoogleSignIn: (mode?: 'new' | 'existing' | 'returning') => Promise<{ success: boolean; error?: string }>;
+  authMessage?: string | null;
 }
 
 const platformPillars = [
@@ -103,6 +104,7 @@ export const Welcome: React.FC<WelcomeProps> = ({
   onStartNewMember,
   onStartExistingMember,
   startGoogleSignIn,
+  authMessage,
 }) => {
   const [entryView, setEntryView] = useState<'landing' | 'help'>(initialView);
   const [signInIntent, setSignInIntent] = useState<'new' | 'existing'>(initialIntent);
@@ -220,27 +222,69 @@ export const Welcome: React.FC<WelcomeProps> = ({
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
+          <div
             style={{
-              minHeight: 44,
-              padding: '0 16px',
-              borderRadius: 14,
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#eff6fb',
-              fontWeight: 700,
-              cursor: 'pointer',
+              display: 'grid',
+              gridTemplateColumns: isCompact ? '1fr 1fr' : 'auto auto',
+              gap: 8,
               width: isCompact ? '100%' : 'auto',
             }}
-            disabled={isLaunchingGoogle}
           >
-            {isLaunchingGoogle && signInIntent === 'existing'
-              ? 'Opening Login...'
-              : 'Existing User Login'}
-          </button>
+            <button
+              type="button"
+              onClick={() => void launchGoogle('new')}
+              style={{
+                minHeight: 46,
+                padding: '0 16px',
+                borderRadius: 14,
+                border: '1px solid rgba(126,242,255,0.3)',
+                background: 'linear-gradient(135deg, rgba(33,194,198,0.9), rgba(88,141,255,0.82))',
+                color: '#ffffff',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              disabled={isLaunchingGoogle}
+            >
+              {isLaunchingGoogle && signInIntent === 'new'
+                ? 'Starting...'
+                : 'Create New Account'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void launchGoogle(lastKnownGoogleUser ? 'returning' : 'existing')}
+              style={{
+                minHeight: 46,
+                padding: '0 16px',
+                borderRadius: 14,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.04)',
+                color: '#eff6fb',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              disabled={isLaunchingGoogle}
+            >
+              {isLaunchingGoogle && signInIntent === 'existing'
+                ? 'Opening Login...'
+                : 'Existing User Login'}
+            </button>
+          </div>
         </div>
+
+        {authMessage ? (
+          <div
+            style={{
+              borderRadius: 16,
+              padding: '12px 14px',
+              border: '1px solid rgba(251,191,36,0.28)',
+              background: 'rgba(120,53,15,0.2)',
+              color: '#fde68a',
+              lineHeight: 1.5,
+            }}
+          >
+            {authMessage}
+          </div>
+        ) : null}
 
         <section
           style={{

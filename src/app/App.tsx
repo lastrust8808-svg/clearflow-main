@@ -722,7 +722,6 @@ export default function App({
   const hydratedUserIdRef = useRef<string | null>(null);
   const initializedSectionUserIdRef = useRef<string | null>(null);
   const lastProofChainSignatureRef = useRef<string | null>(null);
-  const autoContinuePendingAuthRef = useRef<string | null>(null);
 
   const currentUserId = auth.currentUser?.id ?? null;
 
@@ -748,41 +747,8 @@ export default function App({
       setDocumentVaultScope(null);
       hydratedUserIdRef.current = null;
       initializedSectionUserIdRef.current = null;
-      autoContinuePendingAuthRef.current = null;
     }
   }, [auth.authStatus]);
-
-  useEffect(() => {
-    const pendingGoogleAuth =
-      auth.authStatus === 'pending-gsi' || auth.authStatus === 'pending-drive-check';
-    if (!pendingGoogleAuth) {
-      autoContinuePendingAuthRef.current = null;
-      return;
-    }
-
-    const pendingIdentity =
-      auth.appData?.user?.email ||
-      auth.lastKnownGoogleUser?.email ||
-      auth.appData?.user?.id ||
-      'pending-google-auth';
-    const canAutoContinue = Boolean(auth.appData?.user || auth.lastKnownGoogleUser);
-
-    if (!canAutoContinue || autoContinuePendingAuthRef.current === pendingIdentity) {
-      return;
-    }
-
-    autoContinuePendingAuthRef.current = pendingIdentity;
-    const timeoutId = window.setTimeout(() => {
-      auth.continueGoogleOnboardingFallback();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [
-    auth,
-    auth.appData?.user,
-    auth.authStatus,
-    auth.lastKnownGoogleUser,
-  ]);
 
   useEffect(() => {
     if (
@@ -1189,6 +1155,7 @@ export default function App({
           initialIntent={welcomeIntent}
           lastKnownGoogleUser={auth.lastKnownGoogleUser}
           startGoogleSignIn={auth.startGoogleSignIn}
+          authMessage={auth.authMessage}
           onDevLogin={() => auth.mockLogin('ClearFlow Dev User', 'dev@clearflow.site')}
           onStartNewMember={() => {
             setWelcomeIntent('new');
