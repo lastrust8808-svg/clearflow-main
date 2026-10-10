@@ -7001,19 +7001,23 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
     }
 
     try {
-      const syncedTransactions = await plaidService.syncTransactions(
+      const syncResult = await plaidService.syncTransactions(
         bankAccount.plaidItemId || bankAccount.id
       );
 
       setData((prev) => syncBankFeedToLedger({
         data: prev,
         bankAccountId,
-        plaidTransactions: syncedTransactions,
+        plaidSync: syncResult,
       }));
+      const changeCount =
+        syncResult.added.length +
+        syncResult.modified.length +
+        syncResult.removedTransactionIds.length;
       setOperationsNotice(
-        syncedTransactions.length
-          ? `Imported ${syncedTransactions.length} live bank transaction${syncedTransactions.length === 1 ? '' : 's'} into the ClearFlow bank feed.`
-          : `${bankAccount.accountName} is current. Plaid returned no new transactions.`,
+        changeCount
+          ? `Processed ${changeCount} live bank change${changeCount === 1 ? '' : 's'} from Plaid. New transactions were imported; provider changes/removals were flagged for review rather than silently rewriting posted books.`
+          : `${bankAccount.accountName} is current. Plaid returned no new transaction changes.`,
       );
     } catch (error) {
       console.error('Live bank feed sync failed.', error);
