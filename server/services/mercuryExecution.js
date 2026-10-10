@@ -244,7 +244,7 @@ export async function getMercuryApprovalRequest(requestId) {
 
 
 export async function getMercuryTransactionById(transactionId) {
-  return mercuryRequest(`/transactions/${encodeURIComponent(transactionId)}`);
+  return mercuryRequest(`/transaction/${encodeURIComponent(transactionId)}`);
 }
 
 export async function getMercuryPaymentStatus(requestId) {
