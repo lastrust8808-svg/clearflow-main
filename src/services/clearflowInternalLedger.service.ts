@@ -10,7 +10,10 @@ interface AgreementDepositPayload {
   entityId?: string;
   termsDocumentId: string;
   retainedRecordDocumentId: string;
+  contractValueDocumentId?: string;
   termsAcceptedAt: string;
+  monthlyFee: number;
+  termMonths: number;
 }
 
 export async function recordClearFlowAgreementDeposit(payload: AgreementDepositPayload) {
@@ -35,6 +38,16 @@ export async function recordClearFlowAgreementDeposit(payload: AgreementDepositP
       depositId: string;
       recordedAt: string;
       status: 'recorded';
+      monthlyFee: number;
+      termMonths: number;
+      annualizedContractReferenceValue: number;
+      memoDebitValue: number;
+      memoCreditValue: number;
+      cashValue: number;
+      recognizedReceivableValue: number;
+      valueClassification: 'annualized_contract_reference';
+      poolEligibility: 'review_required' | 'eligible' | 'excluded';
+      verificationStatus: string;
     };
   }>;
 }
