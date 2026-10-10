@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import type { CoreDataBundle } from '../../types/core';
 import type { User } from '../../types/app.models';
 import PageSection from '../ui/PageSection';
@@ -19,7 +20,7 @@ function formatMoney(value: number, currency = 'USD') {
   }).format(value || 0);
 }
 
-const actionStyle = (primary = false): React.CSSProperties => ({
+const actionStyle = (primary = false): CSSProperties => ({
   minHeight: 44,
   borderRadius: 12,
   border: primary
@@ -35,7 +36,7 @@ const actionStyle = (primary = false): React.CSSProperties => ({
   textAlign: 'left',
 });
 
-const metricStyle: React.CSSProperties = {
+const metricStyle: CSSProperties = {
   minWidth: 0,
   padding: '12px 14px',
   borderRadius: 14,
