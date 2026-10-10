@@ -363,14 +363,46 @@ export function applyClearFlowRetentionRecords(
     authorityAcceptedAt?: string;
   }
 ): AppData {
+  const acceptedDate = input.acceptedAt.slice(0, 10);
+
+  const acceptedUser = {
+    ...appData.user,
+    clearflowTermsAcceptedAt: input.acceptedAt,
+    clearflowTermsVersion: termsVersion,
+    clearflowTermsSignerName: signerName,
+    clearflowPrivacyAcceptedAt: input.privacyAcceptedAt || input.acceptedAt,
+    clearflowSecurityAgreementAcceptedAt: input.securityAcceptedAt || input.acceptedAt,
+    clearflowESignConsentAcceptedAt: input.eSignAcceptedAt || input.acceptedAt,
+    clearflowAuthorityCertificationAcceptedAt: input.authorityAcceptedAt || input.acceptedAt,
+    clearflowAgreementReceipt: {
+      termsVersion,
+      acceptedAt: input.acceptedAt,
+      signerName,
+      identityEmail: appData.user.email,
+      acceptanceMethod: 'typed_signature' as const,
+      consents: {
+        userTerms: true as const,
+        privacy: true as const,
+        securityAndRetention: true as const,
+        electronicRecordsAndSignature: true as const,
+        authorityCertification: true as const,
+      },
+    },
+    clearflowInternalLedgerStatus:
+      appData.user.clearflowInternalLedgerStatus || ('pending' as const),
+  };
+
   const primaryEntityId =
     appData.entities[0]?.id ?? appData.coreDataSnapshot?.entities[0]?.id;
 
   if (!primaryEntityId || !appData.coreDataSnapshot) {
-    return appData;
+    return {
+      ...appData,
+      user: acceptedUser,
+    };
   }
 
-  const acceptedDate = input.acceptedAt.slice(0, 10);
+
   const termsVersion = input.termsVersion || CLEARFLOW_TERMS_VERSION;
   const signerName =
     input.signerName?.trim() || appData.user.name || appData.user.email || 'ClearFlow user';
@@ -501,19 +533,11 @@ export function applyClearFlowRetentionRecords(
   return {
     ...appData,
     user: {
-      ...appData.user,
-      clearflowTermsAcceptedAt: input.acceptedAt,
-      clearflowTermsVersion: termsVersion,
-      clearflowTermsSignerName: signerName,
+      ...acceptedUser,
       clearflowTermsDocumentId: agreementDocumentId,
-      clearflowPrivacyAcceptedAt: input.privacyAcceptedAt || input.acceptedAt,
-      clearflowSecurityAgreementAcceptedAt: input.securityAcceptedAt || input.acceptedAt,
-      clearflowESignConsentAcceptedAt: input.eSignAcceptedAt || input.acceptedAt,
-      clearflowAuthorityCertificationAcceptedAt: input.authorityAcceptedAt || input.acceptedAt,
       clearflowPrivacyDocumentId: privacyDocumentId,
       clearflowSecurityAgreementDocumentId: securityDocumentId,
       clearflowRetainedRecordDocumentId: retainedDocumentId,
-      clearflowInternalLedgerStatus: appData.user.clearflowInternalLedgerStatus || 'pending',
     },
     coreDataSnapshot: nextSnapshot,
   };
