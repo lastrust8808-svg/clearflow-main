@@ -1,4 +1,5 @@
 import type { PlaidTransaction } from '../types/app.models';
+import type { PlaidTransactionSyncResult } from './plaid.service';
 import type {
   BankAccountRecord,
   BankFeedEntryRecord,
@@ -229,6 +230,7 @@ export function syncBankFeedToLedger(input: {
   data: CoreDataBundle;
   bankAccountId: string;
   plaidTransactions?: PlaidTransaction[];
+  plaidSync?: PlaidTransactionSyncResult;
 }) {
   const { data, bankAccountId } = input;
   const bankAccount = data.bankAccounts.find((account) => account.id === bankAccountId);
@@ -236,7 +238,12 @@ export function syncBankFeedToLedger(input: {
     return data;
   }
 
-  const sourceTransactions = input.plaidTransactions ?? [];
+  const syncResult: PlaidTransactionSyncResult = input.plaidSync ?? {
+    added: input.plaidTransactions ?? [],
+    modified: [],
+    removedTransactionIds: [],
+  };
+  const sourceTransactions = syncResult.added;
   const feedStartDate =
     bankAccount.feedStartDate ||
     bankAccount.connectedProfile?.connectedAt?.slice(0, 10);
@@ -273,6 +280,50 @@ export function syncBankFeedToLedger(input: {
   let nextTokens = [...data.tokens];
   let nextFeedEntries = [...data.bankFeedEntries];
   let nextReconciliations = [...startingReconciliations];
+
+  const modifiedById = new Map(
+    syncResult.modified
+      .filter((transaction) => transaction.transaction_id)
+      .map((transaction) => [transaction.transaction_id, transaction])
+  );
+  if (modifiedById.size > 0) {
+    nextFeedEntries = nextFeedEntries.map((entry) => {
+      const modified = modifiedById.get(entry.externalTransactionId);
+      if (!modified || entry.bankAccountId !== bankAccountId) {
+        return entry;
+      }
+
+      const normalized = normalizePlaidAmount(Number(modified.amount ?? 0));
+      return {
+        ...entry,
+        postedDate: toIsoDate(modified.date),
+        description: modified.name,
+        merchantName: modified.name,
+        amount: normalized.signedAmount,
+        direction: normalized.direction,
+        category: modified.category?.join(' / '),
+        status: 'exception',
+        verificationStatus: 'pending',
+        notes:
+          'Plaid reported a modification to this previously imported transaction. Review before changing any posted ledger entry.',
+      };
+    });
+  }
+
+  if (syncResult.removedTransactionIds.length > 0) {
+    const removedSet = new Set(syncResult.removedTransactionIds);
+    nextFeedEntries = nextFeedEntries.map((entry) =>
+      entry.bankAccountId === bankAccountId && removedSet.has(entry.externalTransactionId)
+        ? {
+            ...entry,
+            status: 'exception' as const,
+            verificationStatus: 'pending' as const,
+            notes:
+              'Plaid reported this transaction as removed. ClearFlow preserved the existing accounting record and flagged it for review instead of silently reversing the books.',
+          }
+        : entry
+    );
+  }
 
   const bankLedgerAccount = bankAccount.linkedLedgerAccountId
     ? data.ledgerAccounts.find((account) => account.id === bankAccount.linkedLedgerAccountId)
