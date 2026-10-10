@@ -45,6 +45,7 @@ import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
 import { buildSecurityMerchantSuggestions } from '../../services/securityMerchantCatalog.service';
 import { scopeBundleToEntity } from '../../services/entityBundleScope.service';
+import { postInterEntityMovement } from '../../services/interEntityMovement.service';
 import {
   canUseInjectedWalletExecution,
   executeInjectedWalletPayment,
@@ -8233,314 +8234,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
   };
 
   const handleIntercompanySubmit = (payload: InterEntityTransferSubmitPayload) => {
-    const amount = Number(payload.amount || 0);
-    if (!payload.fromEntityId || !payload.toEntityId || payload.fromEntityId === payload.toEntityId) {
-      return;
-    }
-
-    const fromEntity =
-      data.entities.find((entity) => entity.id === payload.fromEntityId) ?? data.entities[0];
-    const toEntity =
-      data.entities.find((entity) => entity.id === payload.toEntityId) ?? data.entities[1];
-
-    if (!fromEntity || !toEntity) {
-      return;
-    }
-
-    const stamp = Date.now();
-    const transferGroupId = `iet-${stamp}`;
-    const originTransactionId = `txn-${stamp}-from`;
-    const destinationTransactionId = `txn-${stamp}-to`;
-    const originSettlementId = `set-${stamp}-from`;
-    const destinationSettlementId = `set-${stamp}-to`;
-    const originPaymentId = `pay-${stamp}-from`;
-    const destinationPaymentId = `pay-${stamp}-to`;
-    const originJournalId = `je-${stamp}-from`;
-    const destinationJournalId = `je-${stamp}-to`;
-    const entryDate = payload.effectiveDate || new Date().toISOString().slice(0, 10);
-    const memo = payload.memo || `Intercompany move from ${fromEntity.name} to ${toEntity.name}`;
-    const originReceivable = `1450 Due From ${toEntity.name}`;
-    const destinationPayable = `2400 Due To ${fromEntity.name}`;
-
-    setData((prev) => {
-      const existingConnection = (prev.entityConnections ?? []).find(
-        (connection) =>
-          connection.ownerEntityId === fromEntity.id &&
-          connection.connectedEntityId === toEntity.id &&
-          connection.connectionType === 'internal_entity',
+    try {
+      const result = postInterEntityMovement(data, payload);
+      setData(result.data);
+      setIsIntercompanyModalOpen(false);
+      returnToAccountingDashboard(result.notice);
+    } catch (error) {
+      setOperationsNotice(
+        error instanceof Error ? error.message : 'Unable to post the intercompany movement.',
       );
-      const existingRail = existingConnection
-        ? (prev.creditRails ?? []).find((rail) => rail.entityConnectionId === existingConnection.id)
-        : undefined;
-      const connectionId = existingConnection?.id ?? `conn-${stamp}`;
-      const railId = existingRail?.id ?? `rail-${stamp}`;
-      const existingRailOutstanding = Number(existingRail?.outstandingExposure ?? 0);
-      const existingRailLimit = Number(existingRail?.exposureLimit ?? 0);
-      const nextOutstandingExposure = existingRailOutstanding + amount;
-
-      return {
-        ...prev,
-        entityConnections: existingConnection
-          ? prev.entityConnections.map((connection) =>
-              connection.id === existingConnection.id
-                ? {
-                    ...connection,
-                    status: 'active',
-                    notes:
-                      connection.notes ||
-                      'Internal entity connection created automatically from intercompany settlement activity.',
-                  }
-                : connection,
-            )
-          : [
-              {
-                id: connectionId,
-                ownerEntityId: fromEntity.id,
-                connectionName: `${fromEntity.displayName || fromEntity.name} <> ${toEntity.displayName || toEntity.name}`,
-                connectionType: 'internal_entity',
-                relationshipClass: 'shared_control',
-                status: 'active',
-                connectedEntityId: toEntity.id,
-                defaultSettlementPath: 'internal_ledger',
-                defaultCurrency: 'USD',
-                validationMode: 'strict',
-                requireVerificationTokens: true,
-                requireComplianceValidation: false,
-                reserveBackedPreferred: true,
-                notes:
-                  'Created automatically from ERP intercompany settlement activity.',
-              },
-              ...(prev.entityConnections ?? []),
-            ],
-        creditRails: existingRail
-          ? prev.creditRails.map((rail) =>
-              rail.id === existingRail.id
-                ? {
-                    ...rail,
-                    status: rail.status === 'blocked' ? 'watch' : rail.status,
-                    outstandingExposure: nextOutstandingExposure,
-                    availableCredit:
-                      existingRailLimit > 0
-                        ? Math.max(existingRailLimit - nextOutstandingExposure, 0)
-                        : rail.availableCredit,
-                  }
-                : rail,
-            )
-          : [
-              {
-                id: railId,
-                ownerEntityId: fromEntity.id,
-                entityConnectionId: connectionId,
-                railName: `${fromEntity.displayName || fromEntity.name} Internal Credit Rail`,
-                railType: 'intercompany_credit',
-                status: 'active',
-                settlementPath: 'internal_ledger',
-                dischargeMethod: 'internal_ledger_credit',
-                legalUsePosture: 'internal_controlled_book_entry',
-                bankingOperationClass: 'affiliate_cash_management',
-                identifierNamespace: `${(fromEntity.displayName || fromEntity.name)
-                  .replace(/[^A-Za-z0-9]/g, '')
-                  .toUpperCase()
-                  .slice(0, 8)}-AFFIL`,
-                currency: 'USD',
-                exposureLimit: amount * 5,
-                outstandingExposure: amount,
-                availableCredit: amount * 4,
-                autoMirrorIntercompanyEntries: true,
-                autoIssueTokens: true,
-                holderRecordRequired: false,
-                reserveBacked: true,
-                notes: 'Created automatically from ERP intercompany transfer posting.',
-              },
-              ...(prev.creditRails ?? []),
-            ],
-        transactions: [
-        {
-          id: originTransactionId,
-          entityId: fromEntity.id,
-          type: 'transfer',
-          title: memo,
-          amount,
-          currency: 'USD',
-          date: entryDate,
-          status: 'posted',
-          linkedSettlementId: originSettlementId,
-          linkedPaymentIds: [originPaymentId],
-          linkedJournalEntryIds: [originJournalId],
-          counterpartyEntityId: toEntity.id,
-          sharedTransferGroupId: transferGroupId,
-          ledgerSide: 'origin',
-          notes: 'Origin half of ERP-posted intercompany transfer under the linked internal credit rail.',
-        },
-        {
-          id: destinationTransactionId,
-          entityId: toEntity.id,
-          type: 'deposit',
-          title: memo,
-          amount,
-          currency: 'USD',
-          date: entryDate,
-          status: 'posted',
-          linkedSettlementId: destinationSettlementId,
-          linkedPaymentIds: [destinationPaymentId],
-          linkedJournalEntryIds: [destinationJournalId],
-          counterpartyEntityId: fromEntity.id,
-          sharedTransferGroupId: transferGroupId,
-          ledgerSide: 'destination',
-          notes: 'Destination half of ERP-posted intercompany transfer under the linked internal credit rail.',
-        },
-        ...(prev.transactions ?? []),
-      ],
-      payments: [
-        {
-          id: originPaymentId,
-          entityId: fromEntity.id,
-          direction: 'outgoing',
-          counterpartyType: 'other',
-          paymentDate: entryDate,
-          amount,
-          currency: 'USD',
-          method: 'internal_transfer',
-          status: 'settled',
-          linkedTransactionIds: [originTransactionId],
-          linkedSettlementId: originSettlementId,
-          linkedEntityConnectionId: connectionId,
-          linkedCreditRailId: railId,
-          notes: `Mirrored origin payment to ${toEntity.name} through the linked internal credit rail.`,
-        },
-        {
-          id: destinationPaymentId,
-          entityId: toEntity.id,
-          direction: 'incoming',
-          counterpartyType: 'other',
-          paymentDate: entryDate,
-          amount,
-          currency: 'USD',
-          method: 'internal_transfer',
-          status: 'settled',
-          linkedTransactionIds: [destinationTransactionId],
-          linkedSettlementId: destinationSettlementId,
-          linkedEntityConnectionId: connectionId,
-          linkedCreditRailId: railId,
-          notes: `Mirrored receipt from ${fromEntity.name} through the linked internal credit rail.`,
-        },
-        ...(prev.payments ?? []),
-      ],
-      settlements: [
-        {
-          id: originSettlementId,
-          entityId: fromEntity.id,
-          linkedTransactionId: originTransactionId,
-          linkedPaymentId: originPaymentId,
-          linkedJournalEntryIds: [originJournalId],
-          path: 'internal_ledger',
-          direction: 'outgoing',
-          status: 'settled',
-          liquidCashStage: 'liquid_cash_released',
-          verificationMethod: 'manual_override',
-          verificationStatus: 'verified',
-          verificationReference:
-            payload.settlementMode === 'mirrored_halves'
-              ? 'Origin entity reconciles only its own half of the intercompany move.'
-              : 'Cross-entity clearing allowed, but origin books remain independently traceable.',
-          grossAmount: amount,
-          settledAmount: amount,
-          currency: 'USD',
-          initiatedAt: entryDate,
-          expectedSettlementDate: entryDate,
-          actualSettlementDate: entryDate,
-          linkedEntityConnectionId: connectionId,
-          linkedCreditRailId: railId,
-          autoReconcileStatus: 'matched',
-          notes: memo,
-        },
-        {
-          id: destinationSettlementId,
-          entityId: toEntity.id,
-          linkedTransactionId: destinationTransactionId,
-          linkedPaymentId: destinationPaymentId,
-          linkedJournalEntryIds: [destinationJournalId],
-          path: 'internal_ledger',
-          direction: 'incoming',
-          status: 'settled',
-          liquidCashStage: 'liquid_cash_available',
-          verificationMethod: 'manual_override',
-          verificationStatus: 'verified',
-          verificationReference:
-            payload.settlementMode === 'mirrored_halves'
-              ? 'Destination entity reconciles only its own half of the intercompany move.'
-              : 'Cross-entity clearing allowed, but destination books remain independently traceable.',
-          grossAmount: amount,
-          settledAmount: amount,
-          currency: 'USD',
-          initiatedAt: entryDate,
-          expectedSettlementDate: entryDate,
-          actualSettlementDate: entryDate,
-          linkedEntityConnectionId: connectionId,
-          linkedCreditRailId: railId,
-          autoReconcileStatus: 'matched',
-          notes: memo,
-        },
-        ...(prev.settlements ?? []),
-      ],
-      journalEntries: [
-        {
-          id: originJournalId,
-          entityId: fromEntity.id,
-          entryNumber: `JE-${stamp}-A`,
-          entryDate,
-          memo,
-          debitAccount: originReceivable,
-          creditAccount: payload.fromCashAccount || '1000 Operating Cash',
-          amount,
-          status: 'posted',
-          source: 'system',
-          linkedTransactionIds: [originTransactionId],
-          linkedSettlementIds: [originSettlementId],
-          autoReconcileStatus: 'matched',
-        },
-        {
-          id: destinationJournalId,
-          entityId: toEntity.id,
-          entryNumber: `JE-${stamp}-B`,
-          entryDate,
-          memo,
-          debitAccount: payload.toCashAccount || '1000 Operating Cash',
-          creditAccount: destinationPayable,
-          amount,
-          status: 'posted',
-          source: 'system',
-          linkedTransactionIds: [destinationTransactionId],
-          linkedSettlementIds: [destinationSettlementId],
-          autoReconcileStatus: 'matched',
-        },
-        ...(prev.journalEntries ?? []),
-      ],
-      interEntityTransfers: [
-        {
-          id: transferGroupId,
-          transferGroupId,
-          fromEntityId: fromEntity.id,
-          toEntityId: toEntity.id,
-          fromTransactionId: originTransactionId,
-          toTransactionId: destinationTransactionId,
-          amount,
-          currency: 'USD',
-          effectiveDate: entryDate,
-          settlementMode: payload.settlementMode,
-          status: 'settled',
-          linkedEntityConnectionId: connectionId,
-          linkedCreditRailId: railId,
-          memo,
-        },
-        ...(prev.interEntityTransfers ?? []),
-      ],
-    }});
-
-    setIsIntercompanyModalOpen(false);
-    returnToAccountingDashboard(
-      `Saved intercompany transfer for ${formatCurrency(amount, 'USD')} and reflected it in the overview.`,
-    );
+    }
   };
 
   const renderSubsection = () => {
@@ -9679,13 +9382,13 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       case 'intercompany':
         return (
           <EditableRecordSection
-            title="Intercompany Transfers"
-            description="Mirrored entity-to-entity moves with due-from and due-to posting support."
-            emptyMessage="No intercompany transfers yet."
+            title="Intercompany Movements"
+            description="Cash transfers, non-cash internal credit, reserve bridges, and transferable note assignments remain distinct so bank cash is never inflated by internal value movements."
+            emptyMessage="No intercompany movements yet."
             records={interEntityTransfers}
             getTitle={(record) => `${record.fromEntityId} -> ${record.toEntityId}`}
             getSubtitle={(record) =>
-              `${record.settlementMode} | ${record.status} | ${formatCurrency(record.amount, record.currency)}`
+              `${(record.movementType || 'legacy_transfer').replaceAll('_', ' ')} | ${record.status} | ${formatCurrency(record.amount, record.currency)}${record.bankConfirmationRequired ? ' | bank confirmation pending' : ''}`
             }
             onSave={(nextRecord) =>
               setData((prev) => ({
@@ -9868,6 +9571,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       <InterEntityTransferModal
         open={isIntercompanyModalOpen}
         entities={data.entities}
+        negotiableInstrumentRegisters={data.negotiableInstrumentRegisters ?? []}
         onClose={() => setIsIntercompanyModalOpen(false)}
         onSubmit={handleIntercompanySubmit}
       />
