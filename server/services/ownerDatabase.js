@@ -636,10 +636,12 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
     transaction?.estimatedDeliveryDate ||
     transaction?.createdAt ||
     nowIso;
+  const settlementDateOnly = String(settlementDate).slice(0, 10);
 
   let changed = false;
   const settlementIds = new Set();
   const paymentIds = new Set();
+  const newlySettledPaymentIds = new Set();
 
   const settlements = (snapshot.settlements || []).map((settlement) => {
     if (
@@ -665,7 +667,7 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
         ? Number(settlement.grossAmount || settlement.settledAmount || 0)
         : settlement.settledAmount,
       actualSettlementDate: providerState.settled
-        ? String(settlementDate).slice(0, 10)
+        ? settlementDateOnly
         : settlement.actualSettlementDate,
       autoReconcileStatus: providerState.settled
         ? 'pending'
@@ -690,6 +692,9 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
 
     changed = true;
     paymentIds.add(payment.id);
+    if (providerState.settled && payment.status !== 'settled') {
+      newlySettledPaymentIds.add(payment.id);
+    }
 
     return {
       ...payment,
@@ -714,6 +719,173 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
     return { applied: false, reason: 'execution_not_found' };
   }
 
+  const newlySettledPayments = payments.filter((payment) =>
+    newlySettledPaymentIds.has(payment.id),
+  );
+  const settledAmountByPaymentId = new Map(
+    newlySettledPayments.map((payment) => [
+      payment.id,
+      Number(payment.amount || 0),
+    ]),
+  );
+
+  const bills = (snapshot.bills || []).map((bill) => {
+    const reduction = (bill.linkedPaymentIds || []).reduce(
+      (sum, id) => sum + (settledAmountByPaymentId.get(id) || 0),
+      0,
+    );
+    if (!reduction) return bill;
+
+    const nextBalance = Math.max(
+      0,
+      Number((Number(bill.balanceDue || 0) - reduction).toFixed(2)),
+    );
+    return {
+      ...bill,
+      balanceDue: nextBalance,
+      status: nextBalance <= 0 ? 'paid' : 'partially_paid',
+    };
+  });
+
+  const invoices = (snapshot.invoices || []).map((invoice) => {
+    const reduction = (invoice.linkedPaymentIds || []).reduce(
+      (sum, id) => sum + (settledAmountByPaymentId.get(id) || 0),
+      0,
+    );
+    if (!reduction) return invoice;
+
+    const nextBalance = Math.max(
+      0,
+      Number((Number(invoice.balanceDue || 0) - reduction).toFixed(2)),
+    );
+    return {
+      ...invoice,
+      balanceDue: nextBalance,
+      status: nextBalance <= 0 ? 'paid' : 'partially_paid',
+    };
+  });
+
+  const obligationReductionById = new Map();
+  for (const payment of newlySettledPayments) {
+    for (const billId of payment.linkedBillIds || []) {
+      const bill = (snapshot.bills || []).find((item) => item.id === billId);
+      if (!bill?.linkedObligationId) continue;
+      obligationReductionById.set(
+        bill.linkedObligationId,
+        (obligationReductionById.get(bill.linkedObligationId) || 0) +
+          Number(payment.amount || 0),
+      );
+    }
+  }
+
+  const obligations = (snapshot.obligations || []).map((obligation) => {
+    const reduction = obligationReductionById.get(obligation.id) || 0;
+    if (!reduction) return obligation;
+
+    const nextAmount = Math.max(
+      0,
+      Number((Number(obligation.amount || 0) - reduction).toFixed(2)),
+    );
+    return {
+      ...obligation,
+      amount: nextAmount,
+      status: nextAmount <= 0 ? 'satisfied' : 'open',
+      lifecycleStage: nextAmount <= 0 ? 'discharged' : 'presented',
+      dischargedAt: nextAmount <= 0 ? settlementDateOnly : obligation.dischargedAt,
+      enforcementMemo:
+        nextAmount <= 0
+          ? 'Mercury-confirmed settlement fully discharged the linked bill obligation.'
+          : `Mercury-confirmed settlement reduced the linked bill obligation to ${nextAmount.toFixed(2)}.`,
+    };
+  });
+
+  const journalEntries = (snapshot.journalEntries || []).map((entry) => {
+    const linked = (entry.linkedSettlementIds || []).some((id) => settlementIds.has(id));
+    if (!linked) return entry;
+
+    if (providerState.settled) {
+      return {
+        ...entry,
+        status: 'posted',
+        autoReconcileStatus: 'pending',
+      };
+    }
+
+    if (providerState.verificationStatus === 'exception') {
+      return {
+        ...entry,
+        status: 'draft',
+        autoReconcileStatus: 'exception',
+      };
+    }
+
+    return entry;
+  });
+
+  const transactions = (snapshot.transactions || []).map((item) => {
+    if (!item.linkedSettlementId || !settlementIds.has(item.linkedSettlementId)) {
+      return item;
+    }
+    return {
+      ...item,
+      status: providerState.settled
+        ? 'posted'
+        : providerState.verificationStatus === 'exception'
+          ? 'failed'
+          : 'pending',
+    };
+  });
+
+  const vendors = (snapshot.vendors || []).map((vendor) => {
+    if (!vendor?.creditLineProfile?.enabled) return vendor;
+
+    const relevant = newlySettledPayments.filter(
+      (payment) =>
+        payment.direction === 'outgoing' &&
+        payment.counterpartyType === 'vendor' &&
+        payment.counterpartyId === vendor.id,
+    );
+    if (!relevant.length) return vendor;
+
+    const reduction = relevant.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0,
+    );
+    const currentBalance = Number(vendor.creditLineProfile.currentBalance || 0);
+    const nextBalance = Math.max(
+      0,
+      Number((currentBalance - reduction).toFixed(2)),
+    );
+    const limit = vendor.creditLineProfile.creditLimit;
+
+    return {
+      ...vendor,
+      creditLineProfile: {
+        ...vendor.creditLineProfile,
+        currentBalance: nextBalance,
+        availableCredit:
+          typeof limit === 'number'
+            ? Number((limit - nextBalance).toFixed(2))
+            : vendor.creditLineProfile.availableCredit,
+        lastActivityAt: settlementDateOnly,
+      },
+      creditLineEntries: [
+        ...relevant.map((payment) => ({
+          id: `vcl-settled-${payment.id}`,
+          entryDate: settlementDateOnly,
+          direction: 'credit_paydown',
+          amount: Number(payment.amount || 0),
+          resultingBalance: nextBalance,
+          linkedPaymentId: payment.id,
+          linkedBillId: payment.linkedBillIds?.[0],
+          linkedObligationId: vendor.creditLineProfile.linkedObligationId,
+          notes: 'Mercury-confirmed settlement reduced the tracked vendor balance.',
+        })),
+        ...(vendor.creditLineEntries || []),
+      ],
+    };
+  });
+
   const result = await saveOwnerWorkspace({
     accountId,
     appData: {
@@ -722,6 +894,12 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
         ...snapshot,
         settlements,
         payments,
+        bills,
+        invoices,
+        obligations,
+        journalEntries,
+        transactions,
+        vendors,
       },
     },
     expectedVersion: row.version,
@@ -734,6 +912,7 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
       transactionStatus: transaction?.status || null,
       settlementIds: Array.from(settlementIds),
       paymentIds: Array.from(paymentIds),
+      newlySettledPaymentIds: Array.from(newlySettledPaymentIds),
     },
   });
 
@@ -744,3 +923,4 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
     paymentIds: Array.from(paymentIds),
   };
 }
+

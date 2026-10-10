@@ -13,6 +13,16 @@ interface BillIntakeModalProps {
     dueDate: string;
     amount: string;
     description: string;
+    debitAccount: string;
+    payableAccount: string;
+    hasStatementCoupon: boolean;
+    couponAmount: string;
+    issuerSignaturePresent: boolean;
+    unconditionalPromiseOrOrder: boolean;
+    payableToOrderOrBearer: boolean;
+    payableOnDemandOrDefiniteTime: boolean;
+    securitizationReference: string;
+    claimedInterestOrGainCredit: string;
     uploadedFileName: string;
     uploadedFile?: File | null;
     parsedNotes: string;
@@ -73,6 +83,16 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
   const [dueDate, setDueDate] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [debitAccount, setDebitAccount] = useState('6000 Expense / Cost or Asset');
+  const [payableAccount, setPayableAccount] = useState('2000 Accounts Payable');
+  const [hasStatementCoupon, setHasStatementCoupon] = useState(false);
+  const [couponAmount, setCouponAmount] = useState('');
+  const [issuerSignaturePresent, setIssuerSignaturePresent] = useState(false);
+  const [unconditionalPromiseOrOrder, setUnconditionalPromiseOrOrder] = useState(false);
+  const [payableToOrderOrBearer, setPayableToOrderOrBearer] = useState(false);
+  const [payableOnDemandOrDefiniteTime, setPayableOnDemandOrDefiniteTime] = useState(false);
+  const [securitizationReference, setSecuritizationReference] = useState('');
+  const [claimedInterestOrGainCredit, setClaimedInterestOrGainCredit] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedNotes, setParsedNotes] = useState('');
@@ -88,6 +108,16 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
     setDueDate('');
     setAmount('');
     setDescription('');
+    setDebitAccount('6000 Expense / Cost or Asset');
+    setPayableAccount('2000 Accounts Payable');
+    setHasStatementCoupon(false);
+    setCouponAmount('');
+    setIssuerSignaturePresent(false);
+    setUnconditionalPromiseOrOrder(false);
+    setPayableToOrderOrBearer(false);
+    setPayableOnDemandOrDefiniteTime(false);
+    setSecuritizationReference('');
+    setClaimedInterestOrGainCredit('');
     setUploadedFileName('');
     setUploadedFile(null);
     setParsedNotes('');
@@ -323,6 +353,138 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
           </div>
         )}
 
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.18)',
+            background: 'rgba(15,23,42,0.4)',
+          }}
+        >
+          <div style={{ color: '#cbd5e1', fontWeight: 700, fontSize: 13 }}>
+            Recognition entry
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>
+            Saving the bill recognizes the obligation now. It does not reduce cash until a later
+            payment is actually settled.
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <input
+              value={debitAccount}
+              onChange={(e) => setDebitAccount(e.target.value)}
+              placeholder="Debit: expense, inventory, equipment, or other asset"
+              style={inputStyle}
+            />
+            <input
+              value={payableAccount}
+              onChange={(e) => setPayableAccount(e.target.value)}
+              placeholder="Credit: Accounts Payable"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.18)',
+            background: 'rgba(15,23,42,0.4)',
+          }}
+        >
+          <label style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#cbd5e1' }}>
+            <input
+              type="checkbox"
+              checked={hasStatementCoupon}
+              onChange={(e) => setHasStatementCoupon(e.target.checked)}
+            />
+            Statement includes a detachable payment/remittance coupon
+          </label>
+
+          {hasStatementCoupon ? (
+            <>
+              <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>
+                ClearFlow keeps the coupon as source evidence and runs an Article 3 review. A
+                detachable amount-due coupon is not treated as payment, cash, or a negotiable
+                instrument merely because it shows a positive amount.
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={couponAmount}
+                  onChange={(e) => setCouponAmount(e.target.value)}
+                  placeholder="Amount shown on coupon"
+                  style={inputStyle}
+                />
+                <input
+                  value={securitizationReference}
+                  onChange={(e) => setSecuritizationReference(e.target.value)}
+                  placeholder="Security / pool / servicing reference, if documented"
+                  style={inputStyle}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={claimedInterestOrGainCredit}
+                  onChange={(e) => setClaimedInterestOrGainCredit(e.target.value)}
+                  placeholder="Claimed interest/gain principal credit (tracking only)"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ color: '#cbd5e1', fontWeight: 700, fontSize: 13 }}>
+                  Negotiable-instrument review facts
+                </div>
+                {[
+                  ['Signed or identified by the maker/drawer', issuerSignaturePresent, setIssuerSignaturePresent],
+                  ['Contains an unconditional promise or order to pay money', unconditionalPromiseOrOrder, setUnconditionalPromiseOrOrder],
+                  ['Payable to order or bearer', payableToOrderOrBearer, setPayableToOrderOrBearer],
+                  ['Payable on demand or at a definite time', payableOnDemandOrDefiniteTime, setPayableOnDemandOrDefiniteTime],
+                ].map(([label, checked, setter]) => (
+                  <label
+                    key={String(label)}
+                    style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#cbd5e1', fontSize: 13 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checked)}
+                      onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)}
+                    />
+                    {String(label)}
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ color: '#fcd34d', fontSize: 12, lineHeight: 1.5 }}>
+                Even if all review facts are checked, ClearFlow records an Article 3 candidate only.
+                It does not mark the bill paid or apply principal credit until creditor/servicer
+                acceptance or an externally verified settlement/credit is recorded.
+              </div>
+            </>
+          ) : null}
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!canSubmit ? (
             <div style={{ color: '#fca5a5', alignSelf: 'center', fontSize: 13 }}>
@@ -340,6 +502,16 @@ export default function BillIntakeModal({ open, onClose, onSubmit }: BillIntakeM
                 dueDate,
                 amount,
                 description,
+                debitAccount,
+                payableAccount,
+                hasStatementCoupon,
+                couponAmount,
+                issuerSignaturePresent,
+                unconditionalPromiseOrOrder,
+                payableToOrderOrBearer,
+                payableOnDemandOrDefiniteTime,
+                securitizationReference,
+                claimedInterestOrGainCredit,
                 uploadedFileName,
                 uploadedFile,
                 parsedNotes,

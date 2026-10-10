@@ -114,6 +114,18 @@ export type CollateralHoldingStatus =
   | 'liquidating'
   | 'released';
 
+export type CollateralCreditProviderType =
+  | 'commercial_bank'
+  | 'federal_reserve_via_eligible_depository'
+  | 'custodian_repo'
+  | 'other';
+
+export type CollateralCreditStatus =
+  | 'pledge_only'
+  | 'pending_external_credit'
+  | 'cash_confirmed'
+  | 'repaid';
+
 export type FuturesStrategyType =
   | 'hedge'
   | 'basis_trade'
@@ -1830,6 +1842,11 @@ export interface BorrowingFacilityRecord {
   facilityType: BorrowingFacilityType;
   status: BorrowingFacilityStatus;
   lenderName?: string;
+  providerType?: CollateralCreditProviderType;
+  creditStatus?: CollateralCreditStatus;
+  externalConfirmationReference?: string;
+  destinationBankAccountId?: string;
+  confirmedCashDate?: string;
   currency: string;
   commitmentAmount: number;
   drawnAmount: number;
@@ -1855,6 +1872,10 @@ export interface CollateralHoldingRecord {
   advanceRate?: number;
   lendableValue?: number;
   marginRequirement?: number;
+  pledgeeName?: string;
+  pledgeProviderType?: CollateralCreditProviderType;
+  externalPledgeReference?: string;
+  cashCreditStatus?: CollateralCreditStatus;
   linkedAssetId?: string;
   linkedInstrumentId?: string;
   linkedBorrowingFacilityId?: string;
@@ -2344,6 +2365,40 @@ export interface BillRecord {
   linkedDocumentIds?: string[];
   linkedPaymentIds?: string[];
   linkedTransactionIds?: string[];
+  linkedJournalEntryIds?: string[];
+  linkedObligationId?: string;
+  recognitionDebitAccount?: string;
+  recognitionCreditAccount?: string;
+  statementCouponProfile?: {
+    detachableCoupon: boolean;
+    amountShown?: number;
+    classification:
+      | 'remittance_advice'
+      | 'article3_candidate'
+      | 'verified_negotiable_instrument'
+      | 'nonnegotiable_statement';
+    reviewStatus: 'not_reviewed' | 'needs_review' | 'verified' | 'rejected';
+    issuerSignaturePresent?: boolean;
+    unconditionalPromiseOrOrder?: boolean;
+    payableToOrderOrBearer?: boolean;
+    payableOnDemandOrDefiniteTime?: boolean;
+    creditorAcceptanceStatus:
+      | 'not_presented'
+      | 'presented'
+      | 'accepted'
+      | 'rejected'
+      | 'unknown';
+    tenderEvidenceStatus:
+      | 'document_only'
+      | 'presented'
+      | 'accepted'
+      | 'rejected';
+    securitizationReference?: string;
+    claimedInterestOrGainCredit?: number;
+    externallyConfirmedPrincipalCredit?: number;
+    linkedInstrumentId?: string;
+    notes?: string;
+  };
   intakeStatus?: 'manual' | 'extracted' | 'needs_review' | 'failed';
   extractionSummary?: string;
   extractedVendorName?: string;

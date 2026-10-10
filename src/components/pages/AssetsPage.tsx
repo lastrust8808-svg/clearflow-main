@@ -15,6 +15,7 @@ import {
 import { buildTrustFundingViews } from '../../services/trustFunding.service';
 import { buildTreasuryPresentmentMailTodos } from '../../services/treasuryPresentmentMail.service';
 import WalletConnectionWorkspace from '../assets/WalletConnectionWorkspace';
+import CollateralCreditWorkspace from '../assets/CollateralCreditWorkspace';
 import PageSection from '../ui/PageSection';
 import StatCard from '../ui/StatCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
@@ -2089,6 +2090,13 @@ export default function AssetsPage({ data, setData }: AssetsPageProps) {
       </PageSection>
 
       <WalletConnectionWorkspace data={data} setData={setData} />
+
+      <PageSection
+        title="Collateral Credit"
+        description="Record pledged collateral separately from cash and recognize a secured cash draw only after a verified external bank credit is matched."
+      >
+        <CollateralCreditWorkspace data={data} setData={setData} />
+      </PageSection>
 
       <PageSection
         title="Borrowing & Collateral"
