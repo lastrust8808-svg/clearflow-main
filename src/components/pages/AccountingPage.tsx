@@ -9772,6 +9772,16 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         defaultCurrency={data.workspaceSettings.baseCurrency}
         onClose={() => setIsConnectedFinancialAccountModalOpen(false)}
         onSubmit={handleAddConnectedFinancialAccount}
+        onOpenPlaid={(institutionName) => {
+          setIsConnectedFinancialAccountModalOpen(false);
+          setSelectedBankFeedAccountId(null);
+          setIsPlaidModalOpen(true);
+          setOperationsNotice(
+            institutionName
+              ? `Plaid opened for ${institutionName}. Select that institution in Plaid Link and authorize the accounts you want ClearFlow to retain.`
+              : 'Plaid opened. Select the institution and authorize the accounts you want ClearFlow to retain.',
+          );
+        }}
       />
 
       <ManualBankTransactionModal
