@@ -3,6 +3,7 @@ import type { LedgerAccountRecord, FinancialConnectionProvider } from '../../typ
 import {
   getFinancialConnectionProvider,
   getFinancialConnectionProviders,
+  getFinancialInstitutionPresets,
 } from '../../services/financialConnectionCatalog.service';
 
 export interface ConnectedFinancialAccountSubmitPayload {
@@ -25,6 +26,7 @@ interface ConnectedFinancialAccountModalProps {
   defaultCurrency: string;
   onClose: () => void;
   onSubmit: (payload: ConnectedFinancialAccountSubmitPayload) => void;
+  onOpenPlaid?: (institutionName?: string) => void;
 }
 
 const overlayStyle = {
@@ -103,8 +105,10 @@ export default function ConnectedFinancialAccountModal({
   defaultCurrency,
   onClose,
   onSubmit,
+  onOpenPlaid,
 }: ConnectedFinancialAccountModalProps) {
   const providers = useMemo(() => getFinancialConnectionProviders().filter((item) => item.providerKey !== 'plaid'), []);
+  const institutionPresets = useMemo(() => getFinancialInstitutionPresets(), []);
   const [form, setForm] = useState<ConnectedFinancialAccountSubmitPayload>(buildInitialForm(defaultCurrency));
 
   useEffect(() => {
@@ -139,6 +143,54 @@ export default function ConnectedFinancialAccountModal({
           <div style={{ fontSize: 24, fontWeight: 800 }}>Add Connected Financial Account</div>
           <div style={{ color: '#94a3b8', marginTop: 6 }}>
             Save a permanent third-party financial account profile into the workspace and chart of accounts.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: 10,
+            padding: '12px 14px',
+            borderRadius: 14,
+            border: '1px solid rgba(148,163,184,0.2)',
+            background: 'rgba(15,23,42,0.32)',
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 800, color: '#e5e7eb' }}>Common institutions</div>
+            <div style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>
+              Users authorize their own account connection. ClearFlow keeps the platform API credentials; do not collect a user&apos;s bank API key or secret.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {institutionPresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  if (preset.connectionMethod === 'plaid_oauth') {
+                    onClose();
+                    onOpenPlaid?.(preset.institutionName);
+                    return;
+                  }
+
+                  setForm((prev) => ({
+                    ...prev,
+                    providerKey: preset.providerKey,
+                    institutionName: preset.institutionName,
+                    accountName:
+                      preset.id === 'paypal' ? 'PayPal Operating Account' : prev.accountName,
+                    accountType: preset.accountTypeHint,
+                  }));
+                }}
+                style={secondaryButtonStyle}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.5 }}>
+            Wells Fargo and Charles Schwab use the live Plaid institution flow. PayPal is already in the provider catalog and can be saved now; live PayPal OAuth remains staged until the ClearFlow PayPal developer app credentials are configured.
           </div>
         </div>
 
