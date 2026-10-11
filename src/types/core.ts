@@ -357,6 +357,7 @@ export type FinancialConnectionProvider =
   | 'stripe'
   | 'cash_app'
   | 'paypal'
+  | 'venmo'
   | 'square'
   | 'lithic'
   | 'issuer_portal'
