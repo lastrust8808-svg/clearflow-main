@@ -1,5 +1,16 @@
 import type { FinancialConnectionProvider, FinancialConnectionRail } from '../types/core';
 
+export interface FinancialInstitutionPreset {
+  id: 'wells_fargo' | 'charles_schwab' | 'paypal';
+  label: string;
+  institutionName: string;
+  providerKey: FinancialConnectionProvider;
+  connectionMethod: 'plaid_oauth' | 'provider_oauth';
+  accountTypeHint: 'checking' | 'savings' | 'credit_card' | 'custodial' | 'other';
+  requiresUserInstitutionApiKey: false;
+  description: string;
+}
+
 export interface FinancialConnectionProviderDefinition {
   providerKey: FinancialConnectionProvider;
   label: string;
@@ -36,7 +47,7 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     executionReadiness: 'institution_dependent',
     supportedRails: ['ACH verification', 'bank feed sync', 'Transfer / ACH (provider-scoped)'],
     description:
-      'Use a live institution login for bank and card issuers, keep linked accounts as permanent ERP and COA records, and treat ACH origination as provider-scoped rather than universally enabled.',
+      'Use ClearFlow’s Plaid application credentials for live institution login. Each user authorizes their own bank or brokerage through OAuth/Link, so users do not provide Wells Fargo, Schwab, or other institution API keys. Keep linked accounts as permanent ERP and COA records, and treat ACH origination as provider-scoped rather than universally enabled.',
   },
   {
     providerKey: 'dwolla',
@@ -640,7 +651,7 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
     executionReadiness: 'staged',
     supportedRails: ['wallet payout', 'processor settlement'],
     description:
-      'Retain a PayPal operating account profile for remittance, payout, and ledger routing while the direct provider connector stays staged.',
+      'Retain a PayPal operating account profile for remittance, payout, and ledger routing. A live direct connector uses one ClearFlow PayPal developer application (client ID/secret) plus per-user OAuth authorization; users should not supply their own PayPal API secret.',
   },
   {
     providerKey: 'square',
@@ -715,6 +726,50 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
       'Use when execution happens through the bank or treasury desk directly and ClearFlow needs to retain the routing, proof, and reconciliation posture.',
   },
 ];
+
+const institutionPresets: FinancialInstitutionPreset[] = [
+  {
+    id: 'wells_fargo',
+    label: 'Wells Fargo',
+    institutionName: 'Wells Fargo',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Connect Wells Fargo through Plaid OAuth using ClearFlow’s Plaid integration. The user signs in at Wells Fargo and authorizes account access; no Wells Fargo API key is collected from the user.',
+  },
+  {
+    id: 'charles_schwab',
+    label: 'Charles Schwab',
+    institutionName: 'Charles Schwab',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'custodial',
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Connect Schwab through Plaid OAuth. ClearFlow can retain the linked brokerage/custodial account profile; investment holdings/transactions depend on Plaid Investments access.',
+  },
+  {
+    id: 'paypal',
+    label: 'PayPal',
+    institutionName: 'PayPal',
+    providerKey: 'paypal',
+    connectionMethod: 'provider_oauth',
+    accountTypeHint: 'other',
+    requiresUserInstitutionApiKey: false,
+    description:
+      'PayPal uses a ClearFlow-owned developer app and per-user OAuth authorization. Until the live PayPal OAuth backend is enabled, ClearFlow keeps a persistent PayPal operating-account profile without requesting the user’s API secret.',
+  },
+];
+
+export function getFinancialInstitutionPresets() {
+  return institutionPresets;
+}
+
+export function getFinancialInstitutionPreset(id: FinancialInstitutionPreset['id']) {
+  return institutionPresets.find((preset) => preset.id === id);
+}
 
 export function getFinancialConnectionProviders() {
   return providerCatalog;
