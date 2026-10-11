@@ -109,6 +109,14 @@ export default function ConnectedFinancialAccountModal({
 }: ConnectedFinancialAccountModalProps) {
   const providers = useMemo(() => getFinancialConnectionProviders().filter((item) => item.providerKey !== 'plaid'), []);
   const institutionPresets = useMemo(() => getFinancialInstitutionPresets(), []);
+  const featuredInstitutionPresets = useMemo(
+    () => institutionPresets.filter((item) => item.featured),
+    [institutionPresets],
+  );
+  const otherInstitutionPresets = useMemo(
+    () => institutionPresets.filter((item) => !item.featured),
+    [institutionPresets],
+  );
   const [form, setForm] = useState<ConnectedFinancialAccountSubmitPayload>(buildInitialForm(defaultCurrency));
 
   useEffect(() => {
@@ -131,6 +139,34 @@ export default function ConnectedFinancialAccountModal({
       accountType: selectedProvider.accountTypeHint,
     }));
   }, [selectedProvider?.providerKey]);
+
+  const openInstitutionPreset = (presetId: string) => {
+    const preset = institutionPresets.find((item) => item.id === presetId);
+    if (!preset) {
+      return;
+    }
+
+    if (preset.connectionMethod === 'plaid_oauth') {
+      onClose();
+      onOpenPlaid?.(preset.institutionName);
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      providerKey: preset.providerKey,
+      institutionName: preset.institutionName,
+      accountName:
+        preset.id === 'paypal'
+          ? 'PayPal Operating Account'
+          : preset.id === 'cash_app'
+            ? 'Cash App Account'
+            : preset.id === 'venmo'
+              ? 'Venmo Account'
+              : prev.accountName,
+      accountType: preset.accountTypeHint,
+    }));
+  };
 
   if (!isOpen) {
     return null;
@@ -163,34 +199,53 @@ export default function ConnectedFinancialAccountModal({
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {institutionPresets.map((preset) => (
+            {featuredInstitutionPresets.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
-                onClick={() => {
-                  if (preset.connectionMethod === 'plaid_oauth') {
-                    onClose();
-                    onOpenPlaid?.(preset.institutionName);
-                    return;
-                  }
-
-                  setForm((prev) => ({
-                    ...prev,
-                    providerKey: preset.providerKey,
-                    institutionName: preset.institutionName,
-                    accountName:
-                      preset.id === 'paypal' ? 'PayPal Operating Account' : prev.accountName,
-                    accountType: preset.accountTypeHint,
-                  }));
-                }}
+                onClick={() => openInstitutionPreset(preset.id)}
                 style={secondaryButtonStyle}
+                title={preset.description}
               >
                 {preset.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenPlaid?.();
+              }}
+              style={secondaryButtonStyle}
+            >
+              Other Bank / Credit Union
+            </button>
           </div>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ color: '#cbd5e1', fontSize: 12, fontWeight: 700 }}>
+              More institution shortcuts
+            </span>
+            <select
+              defaultValue=""
+              onChange={(event) => {
+                if (!event.target.value) return;
+                openInstitutionPreset(event.target.value);
+                event.currentTarget.value = '';
+              }}
+              style={inputStyle}
+            >
+              <option value="">Choose another institution…</option>
+              {otherInstitutionPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.5 }}>
-            Wells Fargo and Charles Schwab use the live Plaid institution flow. PayPal is already in the provider catalog and can be saved now; live PayPal OAuth remains staged until the ClearFlow PayPal developer app credentials are configured.
+            Banks and brokerages open the shared Plaid connection flow, so ClearFlow does not need a separate API key from each user or institution. PayPal, Cash App, and Venmo are kept as provider profiles until their specific authorized connector path is enabled; users should never paste banking passwords or API secrets into ClearFlow.
           </div>
         </div>
 
@@ -276,7 +331,7 @@ export default function ConnectedFinancialAccountModal({
             <input
               value={form.institutionName}
               onChange={(event) => setForm((prev) => ({ ...prev, institutionName: event.target.value }))}
-              placeholder="Stripe, Cash App, Capital One..."
+              placeholder="Stripe, PayPal, Venmo, processor or treasury provider..."
               style={inputStyle}
             />
           </label>
