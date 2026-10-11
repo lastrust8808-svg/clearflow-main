@@ -1,12 +1,37 @@
 import type { FinancialConnectionProvider, FinancialConnectionRail } from '../types/core';
 
+export type FinancialInstitutionPresetId =
+  | 'wells_fargo'
+  | 'chase'
+  | 'fifth_third'
+  | 'bank_of_america'
+  | 'capital_one'
+  | 'citi'
+  | 'pnc'
+  | 'us_bank'
+  | 'citizens'
+  | 'huntington'
+  | 'ally'
+  | 'discover'
+  | 'sofi'
+  | 'chime'
+  | 'onepay'
+  | 'charles_schwab'
+  | 'fidelity'
+  | 'robinhood'
+  | 'paypal'
+  | 'cash_app'
+  | 'venmo';
+
 export interface FinancialInstitutionPreset {
-  id: 'wells_fargo' | 'charles_schwab' | 'paypal';
+  id: FinancialInstitutionPresetId;
   label: string;
   institutionName: string;
   providerKey: FinancialConnectionProvider;
-  connectionMethod: 'plaid_oauth' | 'provider_oauth';
+  connectionMethod: 'plaid_oauth' | 'provider_oauth' | 'profile_only';
   accountTypeHint: 'checking' | 'savings' | 'credit_card' | 'custodial' | 'other';
+  group: 'bank' | 'fintech' | 'brokerage' | 'wallet';
+  featured?: boolean;
   requiresUserInstitutionApiKey: false;
   description: string;
 }
@@ -654,6 +679,24 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
       'Retain a PayPal operating account profile for remittance, payout, and ledger routing. A live direct connector uses one ClearFlow PayPal developer application (client ID/secret) plus per-user OAuth authorization; users should not supply their own PayPal API secret.',
   },
   {
+    providerKey: 'venmo',
+    label: 'Venmo',
+    category: 'wallet',
+    connectionRail: 'oauth',
+    availabilityStatus: 'profile_only',
+    supportsLiveSync: false,
+    supportsTransactionImport: false,
+    supportsSettlementInitiation: false,
+    supportsAchOrigination: false,
+    supportsWireOrigination: false,
+    supportsInstantRails: true,
+    accountTypeHint: 'other',
+    executionReadiness: 'staged',
+    supportedRails: ['wallet profile', 'manual settlement evidence', 'future provider OAuth'],
+    description:
+      'Retain a Venmo wallet/account profile without collecting the user’s credentials or API secrets. ClearFlow does not treat personal Venmo peer-to-peer activity as a live bank rail until an authorized provider integration is available.',
+  },
+  {
     providerKey: 'square',
     label: 'Square',
     category: 'processor',
@@ -729,15 +772,69 @@ const providerCatalog: FinancialConnectionProviderDefinition[] = [
 
 const institutionPresets: FinancialInstitutionPreset[] = [
   {
+    id: 'chase',
+    label: 'Chase',
+    institutionName: 'JPMorgan Chase',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Open the live Plaid institution flow and let the user authorize their own Chase accounts. ClearFlow uses its Plaid credentials; no Chase API key is requested from the user.',
+  },
+  {
+    id: 'fifth_third',
+    label: 'Fifth Third',
+    institutionName: 'Fifth Third Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Open Plaid Link for Fifth Third account authorization. Actual account availability is determined by Plaid Link at connection time.',
+  },
+  {
     id: 'wells_fargo',
     label: 'Wells Fargo',
     institutionName: 'Wells Fargo',
     providerKey: 'plaid',
     connectionMethod: 'plaid_oauth',
     accountTypeHint: 'checking',
+    group: 'bank',
+    featured: true,
     requiresUserInstitutionApiKey: false,
     description:
-      'Connect Wells Fargo through Plaid OAuth using ClearFlow’s Plaid integration. The user signs in at Wells Fargo and authorizes account access; no Wells Fargo API key is collected from the user.',
+      'Connect Wells Fargo through the shared ClearFlow Plaid integration. The user authorizes access in the institution flow; no Wells Fargo API key is collected.',
+  },
+  {
+    id: 'chime',
+    label: 'Chime',
+    institutionName: 'Chime',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'fintech',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Open Plaid Link and let the user select and authorize their Chime account if available in the live Plaid environment.',
+  },
+  {
+    id: 'onepay',
+    label: 'OnePay',
+    institutionName: 'OnePay',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'fintech',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Open Plaid Link and let the user select OnePay if available. ClearFlow does not require a separate OnePay developer key from the account holder.',
   },
   {
     id: 'charles_schwab',
@@ -746,9 +843,11 @@ const institutionPresets: FinancialInstitutionPreset[] = [
     providerKey: 'plaid',
     connectionMethod: 'plaid_oauth',
     accountTypeHint: 'custodial',
+    group: 'brokerage',
+    featured: true,
     requiresUserInstitutionApiKey: false,
     description:
-      'Connect Schwab through Plaid OAuth. ClearFlow can retain the linked brokerage/custodial account profile; investment holdings/transactions depend on Plaid Investments access.',
+      'Connect Schwab through Plaid Link. Brokerage holdings and investment transactions depend on the Plaid products enabled for ClearFlow.',
   },
   {
     id: 'paypal',
@@ -757,11 +856,173 @@ const institutionPresets: FinancialInstitutionPreset[] = [
     providerKey: 'paypal',
     connectionMethod: 'provider_oauth',
     accountTypeHint: 'other',
+    group: 'wallet',
+    featured: true,
     requiresUserInstitutionApiKey: false,
     description:
-      'PayPal uses a ClearFlow-owned developer app and per-user OAuth authorization. Until the live PayPal OAuth backend is enabled, ClearFlow keeps a persistent PayPal operating-account profile without requesting the user’s API secret.',
+      'PayPal uses a ClearFlow-owned developer application plus per-user authorization. Until live PayPal OAuth is enabled, ClearFlow stores the account profile without asking the user for an API secret.',
   },
-];
+  {
+    id: 'cash_app',
+    label: 'Cash App',
+    institutionName: 'Cash App',
+    providerKey: 'cash_app',
+    connectionMethod: 'profile_only',
+    accountTypeHint: 'other',
+    group: 'wallet',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Save a Cash App profile for ledger mapping and settlement evidence. Cash App Pay/Square support is distinct from arbitrary personal peer-to-peer account access.',
+  },
+  {
+    id: 'venmo',
+    label: 'Venmo',
+    institutionName: 'Venmo',
+    providerKey: 'venmo',
+    connectionMethod: 'profile_only',
+    accountTypeHint: 'other',
+    group: 'wallet',
+    featured: true,
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Save a Venmo profile without collecting the user’s password or API credentials. Live personal Venmo transaction sync remains disabled until a supported authorized provider path exists.',
+  },
+  {
+    id: 'bank_of_america',
+    label: 'Bank of America',
+    institutionName: 'Bank of America',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Bank of America account access.',
+  },
+  {
+    id: 'capital_one',
+    label: 'Capital One',
+    institutionName: 'Capital One',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Capital One deposit or credit accounts where supported.',
+  },
+  {
+    id: 'citi',
+    label: 'Citi',
+    institutionName: 'Citi',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Citi account access.',
+  },
+  {
+    id: 'pnc',
+    label: 'PNC',
+    institutionName: 'PNC Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized PNC account access.',
+  },
+  {
+    id: 'us_bank',
+    label: 'U.S. Bank',
+    institutionName: 'U.S. Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized U.S. Bank account access.',
+  },
+  {
+    id: 'citizens',
+    label: 'Citizens',
+    institutionName: 'Citizens Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Citizens account access.',
+  },
+  {
+    id: 'huntington',
+    label: 'Huntington',
+    institutionName: 'Huntington Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Huntington account access.',
+  },
+  {
+    id: 'ally',
+    label: 'Ally',
+    institutionName: 'Ally Bank',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'fintech',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Ally account access.',
+  },
+  {
+    id: 'discover',
+    label: 'Discover',
+    institutionName: 'Discover',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'credit_card',
+    group: 'bank',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized Discover deposit or card accounts where supported.',
+  },
+  {
+    id: 'sofi',
+    label: 'SoFi',
+    institutionName: 'SoFi',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'checking',
+    group: 'fintech',
+    requiresUserInstitutionApiKey: false,
+    description: 'Use Plaid Link for user-authorized SoFi account access.',
+  },
+  {
+    id: 'fidelity',
+    label: 'Fidelity',
+    institutionName: 'Fidelity Investments',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'custodial',
+    group: 'brokerage',
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Use Plaid Link for Fidelity accounts when available. Holdings and investment transactions depend on the products enabled for ClearFlow.',
+  },
+  {
+    id: 'robinhood',
+    label: 'Robinhood',
+    institutionName: 'Robinhood',
+    providerKey: 'plaid',
+    connectionMethod: 'plaid_oauth',
+    accountTypeHint: 'custodial',
+    group: 'brokerage',
+    requiresUserInstitutionApiKey: false,
+    description:
+      'Use Plaid Link for Robinhood where available; keep brokerage and crypto data scoped to the products actually returned by the provider.',
+  },
+]
 
 export function getFinancialInstitutionPresets() {
   return institutionPresets;
