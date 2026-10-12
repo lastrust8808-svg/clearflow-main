@@ -27,12 +27,26 @@ export async function readAccountSnapshot(accountId) {
 }
 export async function writeAccountSnapshot(accountId, appData, expectedRevision = null) {
   await ready();
-  const result = await pool.query(`INSERT INTO clearflow_account_snapshots
-    (account_id,app_data) VALUES($1,$2::jsonb)
-    ON CONFLICT(account_id) DO UPDATE SET
-      app_data=EXCLUDED.app_data,
-      revision=clearflow_account_snapshots.revision+1,
-      updated_at=NOW()
-    RETURNING revision,updated_at`, [accountId, JSON.stringify(appData)]);
-  return result.rows[0];
+  if (expectedRevision === null) {
+    const created = await pool.query(
+      'INSERT INTO clearflow_account_snapshots(account_id,app_data) VALUES($1,$2::jsonb) ON CONFLICT(account_id) DO NOTHING RETURNING revision,updated_at',
+      [accountId, JSON.stringify(appData)]
+    );
+    if (!created.rows.length) {
+      const error = new Error('Account revision conflict. Reload before saving.');
+      error.statusCode = 409;
+      throw error;
+    }
+    return created.rows[0];
+  }
+  const updated = await pool.query(
+    'UPDATE clearflow_account_snapshots SET app_data=$2::jsonb,revision=revision+1,updated_at=NOW() WHERE account_id=$1 AND revision=$3 RETURNING revision,updated_at',
+    [accountId, JSON.stringify(appData), expectedRevision]
+  );
+  if (!updated.rows.length) {
+    const error = new Error('Account revision conflict. Reload before saving.');
+    error.statusCode = 409;
+    throw error;
+  }
+  return updated.rows[0];
 }
