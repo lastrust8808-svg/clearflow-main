@@ -96,6 +96,10 @@ export async function saveAccountAppData(accountId, appData, expectedRevision = 
 }
 
 export async function loadAccountDocumentFile(accountId, fileId) {
+  if (recordsConfigured()) {
+    const record = await readRecord(accountId, 'file', fileId);
+    if (record) return record;
+  }
   try {
     const raw = await fs.readFile(accountFilePath(accountId, fileId), 'utf8');
     return JSON.parse(raw);
@@ -108,6 +112,8 @@ export async function loadAccountDocumentFile(accountId, fileId) {
 }
 
 export async function saveAccountDocumentFile(accountId, fileId, payload) {
+  if (recordsConfigured()) return writeRecord(accountId, 'file', fileId, { ...payload, accountId, savedAt: new Date().toISOString() });
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required.');
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -133,6 +139,10 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 }
 
 export async function loadAccountRemittanceVault(accountId, vendorId) {
+  if (recordsConfigured()) {
+    const record = await readRecord(accountId, 'remittance', vendorId);
+    if (record) return record;
+  }
   try {
     const raw = await fs.readFile(accountRemittancePath(accountId, vendorId), 'utf8');
     return JSON.parse(raw);
@@ -145,6 +155,8 @@ export async function loadAccountRemittanceVault(accountId, vendorId) {
 }
 
 export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
+  if (recordsConfigured()) return writeRecord(accountId, 'remittance', vendorId, { ...payload, accountId, savedAt: new Date().toISOString() });
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required.');
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -170,6 +182,10 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 }
 
 export async function loadAccountTransactionProofVault(accountId) {
+  if (recordsConfigured()) {
+    const record = await readRecord(accountId, 'proof', 'chains');
+    if (record) return record;
+  }
   try {
     const raw = await fs.readFile(accountTransactionProofPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -182,6 +198,8 @@ export async function loadAccountTransactionProofVault(accountId) {
 }
 
 export async function saveAccountTransactionProofVault(accountId, payload) {
+  if (recordsConfigured()) return writeRecord(accountId, 'proof', 'chains', { ...payload, accountId, savedAt: new Date().toISOString() });
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required.');
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -205,6 +223,10 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 }
 
 export async function loadAccountPlaidVault(accountId) {
+  if (recordsConfigured()) {
+    const record = await readRecord(accountId, 'plaid', 'connections');
+    if (record) return record;
+  }
   try {
     const raw = await fs.readFile(accountPlaidPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -217,6 +239,8 @@ export async function loadAccountPlaidVault(accountId) {
 }
 
 export async function saveAccountPlaidVault(accountId, payload) {
+  if (recordsConfigured()) return writeRecord(accountId, 'plaid', 'connections', { ...payload, accountId, savedAt: new Date().toISOString() });
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required.');
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -240,6 +264,10 @@ export async function saveAccountPlaidVault(accountId, payload) {
 }
 
 export async function loadAccountExtractionRecord(accountId, signature) {
+  if (recordsConfigured()) {
+    const record = await readRecord(accountId, 'extraction', signature);
+    if (record) return record;
+  }
   try {
     const raw = await fs.readFile(accountExtractionPath(accountId, signature), 'utf8');
     return JSON.parse(raw);
@@ -252,6 +280,8 @@ export async function loadAccountExtractionRecord(accountId, signature) {
 }
 
 export async function saveAccountExtractionRecord(accountId, signature, payload) {
+  if (recordsConfigured()) return writeRecord(accountId, 'extraction', signature, { ...payload, accountId, savedAt: new Date().toISOString() });
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required.');
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
