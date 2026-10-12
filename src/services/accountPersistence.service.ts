@@ -3,6 +3,7 @@ import type { AppData } from '../types/app.models';
 import { getApiBaseUrl } from './runtimeConfig.service';
 
 const STORAGE_API_BASE = getApiBaseUrl();
+const accountRevisions = new Map<string, string>();
 
 interface RemoteDocumentFilePayload {
   fileName: string;
@@ -90,6 +91,7 @@ export async function loadAccountAppData(accountId: string) {
   });
 
   if (response.status === 404) {
+    accountRevisions.delete(accountId);
     return null;
   }
 
@@ -97,7 +99,9 @@ export async function loadAccountAppData(accountId: string) {
     throw new Error('Failed to load durable account data.');
   }
 
-  const payload = (await response.json()) as { success: boolean; appData: AppData };
+  const payload = (await response.json()) as { success: boolean; appData: AppData; version?: string | number | null };
+  if (payload.version != null) accountRevisions.set(accountId, String(payload.version));
+  else accountRevisions.delete(accountId);
   return payload.appData;
 }
 
@@ -109,6 +113,7 @@ async function performAccountAppDataSave(accountId: string, appData: AppData) {
     headers: {
       ...storageAuthHeaders(),
       'Content-Type': 'application/json',
+      ...(accountRevisions.has(accountId) ? { 'If-Match': accountRevisions.get(accountId)! } : {}),
     },
     body: JSON.stringify(appData),
   });
@@ -117,7 +122,10 @@ async function performAccountAppDataSave(accountId: string, appData: AppData) {
     throw new Error('Failed to save durable account data.');
   }
 
-  return response.json();
+  const saved = await response.json();
+  if (saved.result?.revision != null) accountRevisions.set(accountId, String(saved.result.revision));
+  else if (saved.version != null) accountRevisions.set(accountId, String(saved.version));
+  return saved;
 }
 
 export async function uploadAccountDocumentFile(
