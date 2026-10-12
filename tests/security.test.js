@@ -24,3 +24,41 @@ test('internal ledger ingestion denies browser requests', () => {
   requireInternalLedgerAuthorization({}, res);
   assert.equal(res.code, 403);
 });
+
+test('storage rejects a valid Google identity for another tenant', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ sub: 'google-sub-1', email_verified: true, email: 'other@example.com' }),
+  });
+  try {
+    const res = response();
+    await requireAccountAccess(
+      { params: { accountId: 'google:owner@example.com' }, get: () => 'Bearer example-token' },
+      res,
+      () => assert.fail('cross-tenant access must be denied'),
+    );
+    assert.equal(res.code, 403);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+test('storage permits a matching verified Google identity', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ sub: 'google-sub-1', email_verified: true, email: 'owner@example.com' }),
+  });
+  try {
+    const res = response();
+    let allowed = false;
+    await requireAccountAccess(
+      { params: { accountId: 'google:owner@example.com' }, get: () => 'Bearer example-token' },
+      res,
+      () => { allowed = true; },
+    );
+    assert.equal(allowed, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
