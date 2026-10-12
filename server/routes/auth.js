@@ -4,6 +4,16 @@ import { isSmsConfigured, sendVerificationSms } from '../utils/messenger.js';
 
 const router = express.Router();
 
+// Legacy browser-generated verification codes cannot establish server identity.
+// Disable the insecure preview/delivery endpoint in production until server-issued
+// single-use challenges and durable local sessions are migrated.
+router.use('/verification/start', (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(503).json({ success: false, error: 'Legacy verification is disabled pending secure account migration.' });
+  }
+  return next();
+});
+
 const DEFAULT_ALLOWED_GOOGLE_ORIGINS = new Set([
   'http://localhost:3001',
   'http://127.0.0.1:3001',
