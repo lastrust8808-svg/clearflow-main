@@ -1,3 +1,4 @@
+import { recordsConfigured, readRecord, writeRecord } from './durableAccountRecords.js';
 import { durableAccountStorageConfigured, readAccountSnapshot, writeAccountSnapshot } from './durableAccountSnapshots.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
