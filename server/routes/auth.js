@@ -1,3 +1,4 @@
+import { authConfigured, issueChallenge, exchangeChallenge, lookupSession, revokeToken } from '../services/identityStore.js';
 import express from 'express';
 import { isMailerConfigured, sendPlainEmail } from '../utils/mailer.js';
 import { isSmsConfigured, sendVerificationSms } from '../utils/messenger.js';
@@ -126,6 +127,55 @@ router.post('/verification/start', async (req, res) => {
           ? `Email delivery failed, so the code is available in preview mode. ${error.message}`
           : 'Email delivery failed, so the code is available in preview mode.',
     });
+  }
+});
+
+// Secure email sign-in endpoints. The code is generated, stored, and checked on the server.
+router.post('/session/email/start', async (req, res) => {
+  if (!authConfigured() || !isMailerConfigured()) {
+    return res.status(503).json({ success: false, error: 'Secure email sign-in is not configured.' });
+  }
+  try {
+    await issueChallenge(req.body?.email, async (email, code) => {
+      await sendPlainEmail({
+        to: email, subject: 'Your ClearFlow sign-in code',
+        text: `Your ClearFlow sign-in code is ${code}. It expires in 10 minutes.`,
+        fromName: 'ClearFlow Access',
+      });
+    });
+    return res.json({ success: true, message: 'If eligible, a sign-in code has been sent.' });
+  } catch (error) {
+    return res.status(error.message === 'Invalid email' ? 400 : 503)
+      .json({ success: false, error: 'Unable to start secure sign-in.' });
+  }
+});
+router.post('/session/email/verify', async (req, res) => {
+  if (!authConfigured()) return res.status(503).json({ success: false, error: 'Sign-in unavailable.' });
+  try {
+    const result = await exchangeChallenge(req.body?.email, req.body?.code);
+    if (!result) return res.status(401).json({ success: false, error: 'Invalid or expired code.' });
+    return res.json({ success: true, ...result });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Sign-in unavailable.' });
+  }
+});
+router.get('/session/me', async (req, res) => {
+  try {
+    const token = /^Bearer (\\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    const user = await lookupSession(token);
+    return user ? res.json({ success: true, user }) :
+      res.status(401).json({ success: false, error: 'Session expired.' });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Session unavailable.' });
+  }
+});
+router.post('/session/logout', async (req, res) => {
+  try {
+    const token = /^Bearer (\\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    await revokeToken(token);
+    return res.json({ success: true });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Logout unavailable.' });
   }
 });
 
