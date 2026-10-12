@@ -1,3 +1,4 @@
+import { durableAccountStorageConfigured, readAccountSnapshot, writeAccountSnapshot } from './durableAccountSnapshots.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
@@ -60,6 +61,10 @@ async function ensureDirectory(targetPath) {
 }
 
 export async function loadAccountAppData(accountId) {
+  if (durableAccountStorageConfigured()) {
+    const snapshot = await readAccountSnapshot(accountId);
+    if (snapshot) return snapshot.app_data;
+  }
   try {
     const raw = await fs.readFile(appDataPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -72,6 +77,13 @@ export async function loadAccountAppData(accountId) {
 }
 
 export async function saveAccountAppData(accountId, appData) {
+  if (durableAccountStorageConfigured()) {
+    const saved = await writeAccountSnapshot(accountId, appData);
+    return { accountId, savedAt: saved.updated_at, revision: saved.revision };
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Durable account database required in production.');
+  }
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(appDataPath(accountId), JSON.stringify(appData, null, 2), 'utf8');
