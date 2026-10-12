@@ -14,7 +14,8 @@
     "mobile:open:android": "cap open android",
     "mobile:open:ios": "cap open ios",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@google/genai": "^0.12.0",
