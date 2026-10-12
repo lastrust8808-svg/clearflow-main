@@ -1,3 +1,4 @@
+import { durableAccountStorageConfigured, readAccountSnapshot } from '../services/durableAccountSnapshots.js';
 import { requireAccountAccess, requireInternalLedgerAuthorization } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import {
@@ -71,7 +72,7 @@ router.get('/accounts/:accountId/app-data', async (req, res) => {
       persistenceMode: isConfiguredOwnerAccount(req.params.accountId)
         ? 'owner_database'
         : 'legacy',
-      version: null,
+      version: durableAccountStorageConfigured() ? (await readAccountSnapshot(req.params.accountId))?.revision ?? null : null,
     });
   } catch (error) {
     return res.status(500).json({
