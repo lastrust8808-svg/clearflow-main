@@ -25,7 +25,7 @@ export async function readAccountSnapshot(accountId) {
   );
   return result.rows[0] || null;
 }
-export async function writeAccountSnapshot(accountId, appData) {
+export async function writeAccountSnapshot(accountId, appData, expectedRevision = null) {
   await ready();
   const result = await pool.query(`INSERT INTO clearflow_account_snapshots
     (account_id,app_data) VALUES($1,$2::jsonb)
