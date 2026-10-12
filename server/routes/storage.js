@@ -109,7 +109,7 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Failed to save account data.';
-    return res.status(message.includes('version conflict') ? 409 : 500).json({
+    return res.status((error.statusCode === 409 || message.includes('revision conflict') || message.includes('version conflict')) ? 409 : 500).json({
       success: false,
       error: message,
     });
