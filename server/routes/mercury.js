@@ -1,3 +1,4 @@
+import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import {
@@ -65,7 +66,10 @@ router.get('/status', (_req, res) => {
   });
 });
 
-router.get('/payment-status/:requestId', async (req, res) => {
+router.get('/payment-status/:requestId', (req, res, next) => {
+  req.params.accountId = getOwnerAccountId();
+  return requireAccountAccess(req, res, next);
+}, async (req, res) => {
   if (!isMercuryExecutionConfigured()) {
     return res.status(503).json({
       success: false,
