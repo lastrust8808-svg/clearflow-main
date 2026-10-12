@@ -1,3 +1,4 @@
+import { setStorageAccessToken } from '../services/storageSession.service';
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
@@ -352,6 +353,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
+    setStorageAccessToken(accessToken);
     userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
@@ -1873,6 +1875,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    setStorageAccessToken(null);
     if (typeof google !== 'undefined' && google.accounts) {
       google.accounts.id.disableAutoSelect();
     }
