@@ -1,9 +1,24 @@
+import { lookupSession } from '../services/identityStore.js';
+
 // Fail-closed authorization for account-scoped storage.
 // Google access tokens are verified by Google on the server, not trusted as decoded client claims.
 export async function requireAccountAccess(req, res, next) {
   const accountId = req.params.accountId;
   const match = /^Bearer (\S+)$/i.exec(req.get('authorization') || '');
   if (!match) return res.status(401).json({ success: false, error: 'Authentication required.' });
+  if (accountId && accountId.startsWith('local:')) {
+    try {
+      const user = await lookupSession(match[1]);
+      if (!user) return res.status(401).json({ success: false, error: 'Session expired.' });
+      if (accountId !== 'local:' + user.id) {
+        return res.status(403).json({ success: false, error: 'Account mismatch.' });
+      }
+      req.verifiedIdentity = user;
+      return next();
+    } catch {
+      return res.status(503).json({ success: false, error: 'Session unavailable.' });
+    }
+  }
   if (!accountId || !accountId.startsWith('google:')) {
     return res.status(403).json({ success: false, error: 'Account requires server-side identity migration.' });
   }
