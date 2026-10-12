@@ -1,3 +1,4 @@
+import { storageAuthHeaders } from './storageSession.service';
 import type { AppData } from '../types/app.models';
 import { getApiBaseUrl } from './runtimeConfig.service';
 
@@ -62,6 +63,7 @@ export async function getAccountPersistenceMode(
   const response = await fetch(buildPersistenceModeUrl(accountId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -82,6 +84,7 @@ export async function loadAccountAppData(accountId: string) {
   const response = await fetch(buildAppDataUrl(accountId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -102,6 +105,7 @@ export async function saveAccountAppData(accountId: string, appData: AppData) {
   const response = await fetch(buildAppDataUrl(accountId), {
     method: 'PUT',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(appData),
@@ -130,6 +134,7 @@ export async function uploadAccountDocumentFile(
   const response = await fetch(buildFileUrl(accountId), {
     method: 'POST',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -149,6 +154,7 @@ export async function loadAccountDocumentFile(accountId: string, fileId: string)
   const response = await fetch(buildFileUrl(accountId, fileId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -179,6 +185,7 @@ export async function loadAccountExtractionCache(accountId: string, signature: s
   const response = await fetch(buildExtractionUrl(accountId, signature), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -211,6 +218,7 @@ export async function saveAccountExtractionCache(
   const response = await fetch(buildExtractionUrl(accountId, signature), {
     method: 'PUT',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ result }),
