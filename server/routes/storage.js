@@ -1,3 +1,4 @@
+import { requireAccountAccess, requireInternalLedgerAuthorization } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import {
   loadAccountAppData,
@@ -22,6 +23,10 @@ import {
 } from '../services/ownerDatabase.js';
 
 const router = express.Router();
+
+// Apply authorization before every account-scoped route, including document and vault access.
+router.use('/accounts/:accountId', requireAccountAccess);
+router.use('/internal/clearflow-ledger', requireInternalLedgerAuthorization);
 
 router.get('/accounts/:accountId/persistence-mode', async (req, res) => {
   return res.status(200).json({
