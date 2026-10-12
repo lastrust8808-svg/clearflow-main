@@ -171,6 +171,18 @@ router.post('/google/exchange', async (req, res) => {
     });
   }
 
+  // The OAuth redirect must be an exact registered application origin.
+  // Never allow an arbitrary client-supplied redirect URI.
+  const effectiveRedirectUri = typeof redirectUri === 'string' && redirectUri.trim()
+    ? redirectUri.trim()
+    : requestOrigin;
+  if (effectiveRedirectUri !== requestOrigin || !allowedOrigins.has(effectiveRedirectUri)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid Google authorization redirect URI.',
+    });
+  }
+
   if (!googleClientId || !googleClientSecret) {
     return res.status(500).json({
       success: false,
@@ -183,10 +195,7 @@ router.post('/google/exchange', async (req, res) => {
       code,
       client_id: googleClientId,
       client_secret: googleClientSecret,
-      redirect_uri:
-        typeof redirectUri === 'string' && redirectUri.trim()
-          ? redirectUri.trim()
-          : requestOrigin,
+      redirect_uri: effectiveRedirectUri,
       grant_type: 'authorization_code',
     });
 
