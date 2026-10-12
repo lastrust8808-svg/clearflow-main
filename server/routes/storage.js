@@ -87,7 +87,7 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
   }
 
   try {
-    const result = await saveAccountAppData(req.params.accountId, req.body);
+    const result = await saveAccountAppData(req.params.accountId, req.body, req.get('if-match') || null);
 
     let ownerResult = null;
     if (isConfiguredOwnerAccount(req.params.accountId)) {
