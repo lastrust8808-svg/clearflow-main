@@ -1330,7 +1330,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         entities: [],
       };
       setStorageAccessToken(verified.token);
-      const durable = await loadAccountAppData(accountId).catch(() => null);
+      const durable = await loadAccountAppData(accountId);
       const nextData = durable || appData;
       // Copy the verified user's own browser backup only after server identity
       // confirmation. Preserve the original backup until migration is audited.
