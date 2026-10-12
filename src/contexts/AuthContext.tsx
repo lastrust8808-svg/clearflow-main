@@ -1332,6 +1332,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setStorageAccessToken(verified.token);
       const durable = await loadAccountAppData(accountId).catch(() => null);
       const nextData = durable || appData;
+      // Copy the verified user's own browser backup only after server identity
+      // confirmation. Preserve the original backup until migration is audited.
+      if (!durable && existing?.appData) {
+        await saveAccountAppData(accountId, existing.appData);
+      }
       const nextStatus: AuthStatus = nextData.user.isVerified
         ? 'authenticated' : nextData.user.name ? 'pending-verification' : 'pending-profile-setup';
       setState(current => ({
@@ -1771,6 +1776,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    if (state.localAccountId?.startsWith('local:') && state.token) {
+      void revokeSecureSession(state.token).catch(() => {});
+    }
     setStorageAccessToken(null);
     if (typeof google !== 'undefined' && google.accounts) {
       google.accounts.id.disableAutoSelect();
