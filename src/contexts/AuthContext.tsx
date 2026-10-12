@@ -1,3 +1,4 @@
+import { requestSecureEmailCode, confirmSecureEmailCode, revokeSecureSession } from '../services/secureEmailSession.service';
 import { setStorageAccessToken } from '../services/storageSession.service';
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { AppData, Entity, User } from '../types/app.models';
@@ -1286,37 +1287,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     contactValue: string;
     name?: string;
   }) => {
-    const result = startLocalAuthChallenge(input);
-    if (!result.success) {
-      return result;
+    if (input.contactType !== 'email') {
+      return { success: false, error: 'Secure phone verification is not available. Use an email address.' };
     }
-
-    const delivery = await deliverVerificationCode({
-      contactType: result.challenge.contactType,
-      contactValue: result.challenge.contactValue,
-      maskedTarget: result.challenge.maskedTarget,
-      code: result.challenge.codePreview || '',
-    });
-
-    setState((current) => ({
-      ...current,
-      pendingCredentialAuth: {
-        ...result.challenge,
-        deliveryMode: delivery.deliveryMode,
-        deliveryMessage: delivery.message,
-        codePreview:
-          delivery.deliveryMode === 'in_app_preview'
-            ? result.challenge.codePreview
-            : undefined,
-      },
-      gsiUser: null,
-      token: null,
-      apiAccessToken: null,
-      localAccountId: null,
-      appData: null,
-      status: 'unauthenticated',
-    }));
-    return { success: true };
+    const email = input.contactValue.trim().toLowerCase();
+    try {
+      await requestSecureEmailCode(email);
+      setState(current => ({
+        ...current,
+        pendingCredentialAuth: {
+          contactType: 'email',
+          contactValue: email,
+          maskedTarget: email.replace(/(^.).*(@.*$)/, '$1***$2'),
+          expiresAt: new Date(Date.now() + 600000).toISOString(),
+          isExistingUser: Boolean(findLocalAccountByGoogleEmail(email)),
+          deliveryMode: 'email_sent',
+        },
+        gsiUser: null, token: null, apiAccessToken: null,
+        localAccountId: null, appData: null, status: 'unauthenticated',
+      }));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Email sign-in unavailable.' };
+    }
   };
 
   const verifyCredentialAuth = async (input: {
@@ -1325,137 +1318,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password?: string;
   }) => {
     const challenge = state.pendingCredentialAuth;
-    if (!challenge) {
-      return { success: false, error: 'Request a verification code first.' };
+    if (!challenge || challenge.contactType !== 'email') {
+      return { success: false, error: 'Request a secure email code first.' };
     }
-
-    const result = await verifyLocalAuthChallenge({
-      contactType: challenge.contactType,
-      contactValue: challenge.contactValue,
-      code: input.code,
-      userHandle: input.userHandle,
-      password: input.password,
-    });
-
-    if (!result.success) {
-      return result;
+    try {
+      const verified = await confirmSecureEmailCode(challenge.contactValue, input.code);
+      const accountId = 'local:' + verified.user.id;
+      const existing = findLocalAccountByGoogleEmail(verified.user.email);
+      const appData: AppData = existing?.appData || {
+        user: { id: verified.user.id, name: '', email: verified.user.email, primaryContactType: 'email', isVerified: false },
+        entities: [],
+      };
+      setStorageAccessToken(verified.token);
+      const durable = await loadAccountAppData(accountId).catch(() => null);
+      const nextData = durable || appData;
+      const nextStatus: AuthStatus = nextData.user.isVerified
+        ? 'authenticated' : nextData.user.name ? 'pending-verification' : 'pending-profile-setup';
+      setState(current => ({
+        ...current, appData: nextData, token: verified.token, apiAccessToken: null,
+        localAccountId: accountId, gsiUser: null, pendingCredentialAuth: null, status: nextStatus,
+      }));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Verification failed.' };
     }
-
-    const nextStatus: AuthStatus =
-      result.appData.user.isVerified
-        ? 'authenticated'
-        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
-          ? 'pending-verification'
-          : 'pending-profile-setup';
-
-    setState((current) => ({
-      ...current,
-      appData: result.appData,
-      token: 'local-token',
-      apiAccessToken: null,
-      localAccountId: result.userId,
-      gsiUser: null,
-      pendingCredentialAuth: null,
-      status: nextStatus,
-    }));
-
-    void loadAccountAppData(result.userId)
-      .then((durableAppData) => {
-        if (!durableAppData) {
-          return;
-        }
-
-        saveLocalAuthAppData(result.userId, durableAppData);
-        initialDataLoaded.current = false;
-
-        setState((current) => {
-          if (current.localAccountId !== result.userId) {
-            return current;
-          }
-
-          const durableStatus: AuthStatus =
-            durableAppData.user.isVerified
-              ? 'authenticated'
-              : durableAppData.user.name &&
-                  (durableAppData.user.email || durableAppData.user.phone)
-                ? 'pending-verification'
-                : 'pending-profile-setup';
-
-          return {
-            ...current,
-            appData: durableAppData,
-            status: durableStatus,
-          };
-        });
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate local account from durable storage.', error);
-      });
-
-    return { success: true };
   };
 
-  const signInWithPassword = async (input: {
+  const signInWithPassword = async (_input: {
     identifier: string;
     password: string;
   }) => {
-    const result = await authenticateLocalPassword(input);
-    if (!result.success) {
-      return result;
-    }
-
-    const nextStatus: AuthStatus =
-      result.appData.user.isVerified
-        ? 'authenticated'
-        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
-          ? 'pending-verification'
-          : 'pending-profile-setup';
-
-    setState((current) => ({
-      ...current,
-      appData: result.appData,
-      token: 'local-token',
-      apiAccessToken: null,
-      localAccountId: result.userId,
-      gsiUser: null,
-      pendingCredentialAuth: null,
-      status: nextStatus,
-    }));
-
-    void loadAccountAppData(result.userId)
-      .then((durableAppData) => {
-        if (!durableAppData) {
-          return;
-        }
-
-        saveLocalAuthAppData(result.userId, durableAppData);
-        initialDataLoaded.current = false;
-
-        setState((current) => {
-          if (current.localAccountId !== result.userId) {
-            return current;
-          }
-
-          const durableStatus: AuthStatus =
-            durableAppData.user.isVerified
-              ? 'authenticated'
-              : durableAppData.user.name &&
-                  (durableAppData.user.email || durableAppData.user.phone)
-                ? 'pending-verification'
-                : 'pending-profile-setup';
-
-          return {
-            ...current,
-            appData: durableAppData,
-            status: durableStatus,
-          };
-        });
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate password-auth account from durable storage.', error);
-      });
-
-    return { success: true };
+    return {
+      success: false,
+      error: 'Browser-stored passwords are retired for security. Sign in using a verified email code.',
+    };
   };
 
   const cancelCredentialAuth = () => {
