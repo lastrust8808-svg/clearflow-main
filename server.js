@@ -22,7 +22,19 @@ const PORT = process.env.PORT || 8000;
 
 // --- Middleware ---
 // Enable CORS for all routes to allow frontend requests
-app.use(cors());
+const allowedOrigins = new Set(
+  (process.env.CLEARFLOW_ALLOWED_ORIGINS ||
+    'https://clearflow.site,https://www.clearflow.site,https://clearflow-site.vercel.app')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin not allowed by CORS policy'));
+  },
+}));
 // Use JSON parser for all incoming request bodies
 // Note: Webhook verification needs the raw body, so it's handled separately.
 app.use('/api/plaid/webhook', bodyParser.raw({ type: 'application/json' }));
