@@ -101,7 +101,9 @@ export async function loadAccountAppData(accountId: string) {
   return payload.appData;
 }
 
-export async function saveAccountAppData(accountId: string, appData: AppData) {
+const accountWriteQueues = new Map<string, Promise<unknown>>();
+
+async function performAccountAppDataSave(accountId: string, appData: AppData) {
   const response = await fetch(buildAppDataUrl(accountId), {
     method: 'PUT',
     headers: {
@@ -229,4 +231,17 @@ export async function saveAccountExtractionCache(
   }
 
   return response.json();
+}
+
+/** Serialize writes per account so older responses cannot overwrite newer edits. */
+export function saveAccountAppData(accountId: string, appData: AppData) {
+  const previous = accountWriteQueues.get(accountId) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(() =>
+    performAccountAppDataSave(accountId, appData)
+  );
+  accountWriteQueues.set(accountId, next);
+  void next.finally(() => {
+    if (accountWriteQueues.get(accountId) === next) accountWriteQueues.delete(accountId);
+  }).catch(() => undefined);
+  return next;
 }
