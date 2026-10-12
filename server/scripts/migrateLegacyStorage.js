@@ -36,16 +36,17 @@ try {
       try { raw = await fs.readFile(path.join(base, relative), 'utf8'); }
       catch (error) { if (error.code === 'ENOENT') continue; throw error; }
       const payload = JSON.parse(raw);
+      const recordKey = kind === 'proof' ? 'chains' : kind === 'plaid' ? 'connections' : decodeURIComponent(key);
       examined++;
-      const table = kind === 'snapshot' ? 'clearflow_account_snapshots' : 'clearflow_account_records';
+      // The database schema must be provisioned before running this migration.
       const found = kind === 'snapshot'
         ? await pool.query('SELECT 1 FROM clearflow_account_snapshots WHERE account_id=$1', [accountId])
-        : await pool.query('SELECT 1 FROM clearflow_account_records WHERE account_id=$1 AND kind=$2 AND record_key=$3', [accountId, kind, key]);
+        : await pool.query('SELECT 1 FROM clearflow_account_records WHERE account_id=$1 AND kind=$2 AND record_key=$3', [accountId, kind, recordKey]);
       if (found.rowCount) { alreadyPresent++; continue; }
       pending++;
       if (apply) {
         if (kind === 'snapshot') await pool.query('INSERT INTO clearflow_account_snapshots(account_id,app_data) VALUES($1,$2::jsonb) ON CONFLICT DO NOTHING', [accountId, JSON.stringify(payload)]);
-        else await pool.query('INSERT INTO clearflow_account_records(account_id,kind,record_key,payload) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING', [accountId,kind,key,JSON.stringify(payload)]);
+        else await pool.query('INSERT INTO clearflow_account_records(account_id,kind,record_key,payload) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING', [accountId,kind,recordKey,JSON.stringify(payload)]);
       }
       process.stdout.write(JSON.stringify({ accountId, relative, sha256: sha(raw), action: apply ? 'insert-if-absent' : 'would-insert' }) + '\n');
     }
