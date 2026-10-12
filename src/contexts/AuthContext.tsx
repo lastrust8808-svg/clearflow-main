@@ -513,7 +513,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Condition 2: Don't save the very first time data is loaded from Drive.
     if (!initialDataLoaded.current) {
       initialDataLoaded.current = true;
-      return;
+      // Freshly verified local accounts must persist their initial workspace too.
+      if (!state.localAccountId?.startsWith('local:')) return;
     }
 
     // If conditions pass, it means a user has made a change.
