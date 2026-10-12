@@ -76,9 +76,9 @@ export async function loadAccountAppData(accountId) {
   }
 }
 
-export async function saveAccountAppData(accountId, appData) {
+export async function saveAccountAppData(accountId, appData, expectedRevision = null) {
   if (durableAccountStorageConfigured()) {
-    const saved = await writeAccountSnapshot(accountId, appData);
+    const saved = await writeAccountSnapshot(accountId, appData, expectedRevision);
     return { accountId, savedAt: saved.updated_at, revision: saved.revision };
   }
   if (process.env.NODE_ENV === 'production') {
