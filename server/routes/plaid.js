@@ -1,3 +1,4 @@
+import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import { createHash, createPublicKey, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
@@ -6,8 +7,6 @@ import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accoun
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
-import { requireAccountAccess } from '../middleware/accountAuthorization.js';
-
 // Fail closed for banking operations; provider webhooks use their own signature verification.
 router.use((req, res, next) => {
   if (req.path === '/webhook') return next();
