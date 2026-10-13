@@ -44,3 +44,12 @@ test('legacy migration uses canonical record keys', () => {
   assert.match(migration, /kind === 'proof' \? 'chains'/);
   assert.match(migration, /decodeURIComponent\(key\)/);
 });
+
+test('Plaid item access requires the verified account', () => {
+  const plaid = source('server/routes/plaid.js');
+  const identity = plaid.split("router.post('/identity/get'")[1].split("router.post('/identity/match'")[0];
+  const sync = plaid.split("router.post('/transactions/sync'")[1].split("router.post('/webhook'")[0];
+  assert.ok(identity.includes('item.userId !== verifiedAccountId'));
+  assert.ok(sync.includes('item.userId !== verifiedAccountId'));
+  assert.ok(sync.indexOf('item.userId !== verifiedAccountId') < sync.indexOf('await syncPlaidItemChanges(itemId)'));
+});
