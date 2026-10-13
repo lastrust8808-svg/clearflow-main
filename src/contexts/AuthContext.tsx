@@ -453,33 +453,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       )
       .catch((error) => {
         console.error('OAuth profile hydration failed:', error);
-        setState((current) => {
-          if (current.appData?.user) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
+        setStorageAccessToken(null);
+        setState((current) => ({
+          ...current,
+          status: 'unauthenticated',
+          gsiUser: null,
+          token: null,
+          apiAccessToken: null,
+          authMessage: 'Google authorization failed. Please reconnect your Google account.',
+        }));
       });
   }, [canBypassProfileSetupForGoogleIdentity, exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
