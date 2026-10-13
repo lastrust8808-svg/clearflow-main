@@ -1,5 +1,9 @@
 import { AnalysisResult } from '../types/app.models';
 
+function escapeDriveQueryLiteral(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 class GoogleDriveService {
   async uploadBinaryFile(
     accessToken: string,
@@ -126,7 +130,7 @@ class GoogleDriveService {
   }
 
   async findFileByName(accessToken: string, fileName: string): Promise<string | null> {
-    const query = `name='${fileName}' and trashed=false`;
+    const query = `name='${escapeDriveQueryLiteral(fileName)}' and trashed=false`;
     const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id)`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
@@ -183,7 +187,7 @@ class GoogleDriveService {
   }
 
   async findFileInAppDataFolder(accessToken: string, fileName: string): Promise<string | null> {
-    const query = `name='${fileName}' and trashed=false`;
+    const query = `name='${escapeDriveQueryLiteral(fileName)}' and trashed=false`;
     const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=appDataFolder&fields=files(id)`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
