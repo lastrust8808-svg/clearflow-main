@@ -1497,6 +1497,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       security: boolean;
       eSign: boolean;
       authority: boolean;
+      membershipCommitment: boolean;
     }
   ) => {
     if (!state.appData) {
