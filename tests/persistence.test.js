@@ -14,7 +14,8 @@ test('production account writes cannot fall back to ephemeral filesystem', () =>
 test('account snapshots use revision-aware writes', () => {
   const database = source('server/services/durableAccountSnapshots.js');
   assert.match(database, /CREATE TABLE IF NOT EXISTS clearflow_account_snapshots/);
-  assert.match(database, /ON CONFLICT\(account_id\) DO UPDATE/);
+  assert.match(database, /ON CONFLICT\(account_id\) DO NOTHING/);
+  assert.match(database, /revision=revision\+1/);
 });
 
 test('frontend waits for server save acknowledgement', () => {
