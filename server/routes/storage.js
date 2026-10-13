@@ -88,11 +88,13 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
   }
 
   try {
-    const result = await saveAccountAppData(req.params.accountId, req.body, req.get('if-match') || null);
+    const ownerAccount = isConfiguredOwnerAccount(req.params.accountId);
+    const result = ownerAccount ? null : await saveAccountAppData(req.params.accountId, req.body, req.get('if-match') || null);
 
     let ownerResult = null;
     if (isConfiguredOwnerAccount(req.params.accountId)) {
       ownerResult = await saveOwnerWorkspace({
+        expectedVersion: req.get('if-match') || undefined,
         accountId: req.params.accountId,
         appData: req.body,
         actor: 'clearflow_app',
@@ -102,7 +104,7 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      result,
+      result: ownerResult || result,
       persistenceMode: ownerResult ? 'owner_database' : 'legacy',
       version: ownerResult?.version ?? null,
     });
