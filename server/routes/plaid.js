@@ -625,6 +625,7 @@ router.post('/identity/get', async (req, res) => {
 
   try {
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     const identityData = await getIdentityDataOrFallback(
       plaidClient,
       item.accessToken,
@@ -749,8 +750,9 @@ router.post('/transactions/sync', async (req, res) => {
   }
 
   try {
-    await syncPlaidItemChanges(itemId);
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
+    await syncPlaidItemChanges(itemId);
     const pendingAddedTransactions = item.pendingAddedTransactions || [];
     const pendingModifiedTransactions = item.pendingModifiedTransactions || [];
     const removedTransactionIds = item.removedTransactionIds || [];
