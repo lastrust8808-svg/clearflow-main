@@ -234,7 +234,7 @@ function buildBookEntrySecurityCandidates(
         score: match.score,
       };
     })
-    .filter((item): item is BookEntrySecurityCandidate => Boolean(item));
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const manualCandidate: BookEntrySecurityCandidate = {
     id: 'new',
