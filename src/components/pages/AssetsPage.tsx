@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { AssetRecord, CoreDataBundle, InstrumentRecord } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
@@ -33,7 +33,7 @@ function formatMoney(value: number, currency = 'USD') {
   }).format(value || 0);
 }
 
-function statusPillStyle(active: boolean): React.CSSProperties {
+function statusPillStyle(active: boolean): CSSProperties {
   return {
     padding: '6px 9px',
     borderRadius: 999,
@@ -210,7 +210,7 @@ function buildBookEntrySecurityCandidates(
         score: match.score,
       };
     })
-    .filter((item): item is BookEntrySecurityCandidate => Boolean(item));
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const instrumentCandidates = data.instruments
     .map((instrument) => {
@@ -249,9 +249,8 @@ function buildBookEntrySecurityCandidates(
     score: 1,
   };
 
-  return [...assetCandidates, ...instrumentCandidates]
-    .sort((left, right) => right.score - left.score)
-    .concat(manualCandidate);
+  return ([...assetCandidates, ...instrumentCandidates, manualCandidate] as BookEntrySecurityCandidate[])
+    .sort((left, right) => right.score - left.score);
 }
 
 export default function AssetsPage({ data, setData }: AssetsPageProps) {
