@@ -2529,6 +2529,25 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
                   }))
                 }
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const linked = data.settlements.some((item) => item.transactionId === tx.id)
+;
+                  if (linked) {
+                    window.alert('This transaction has linked settlement or proof records and cannot be deleted. Review those links first.');
+                    return;
+                  }
+                  if (!window.confirm(`Delete transaction "${tx.title}"? This cannot be undone.`)) return;
+                  setData((prev) => ({
+                    ...prev,
+                    transactions: prev.transactions.filter((item) => item.id !== tx.id),
+                  }));
+                }}
+                style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, border: '1px solid #b45353', background: 'transparent', color: '#fecaca', cursor: 'pointer' }}
+              >
+                Delete Transaction
+              </button>
             </div>
           ))}
         </div>
