@@ -1580,86 +1580,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     if (state.apiAccessToken) {
-      // Real Google flow with Drive persistence and durable email-linked recovery.
+      // Complete Google onboarding only after the authenticated workspace is durably saved.
+      // Drive and local backup are secondary copies; neither can bypass durable storage.
       initialDataLoaded.current = true;
       userDataService.setActiveUserEmail(finalAppData.user.email);
-      Promise.resolve(
-        upsertLocalBackupAccount({
-          appData: finalAppData,
-          preferredContactType:
-            finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
-          userHandle,
-          password,
-        })
-      )
-        .then((backupAccountId) =>
-          userDataService.saveUserData(state.apiAccessToken!, finalAppData).then(() => backupAccountId)
-        )
-        .then((backupAccountId) => {
+      void (async () => {
+        try {
           const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
-          if (googleDurableAccountId) {
-            return saveAccountAppData(googleDurableAccountId, finalAppData)
-              .catch((error) => {
-                console.warn('Failed to persist Google workspace to durable storage.', error);
-              })
-              .then(() => backupAccountId);
+          if (!googleDurableAccountId) {
+            throw new Error('A verified Google account identifier is required for durable onboarding.');
           }
-
-          return backupAccountId;
-        })
-        .then((backupAccountId) => {
-          setState((s) => ({
-            ...s,
-            appData: finalAppData,
-            localAccountId: backupAccountId || s.localAccountId,
-            status: 'authenticated',
-          }));
-          clearStoredMembershipDraft();
-        })
-        .catch(err => {
-          console.error("Failed to create user data file in Drive", err);
-          Promise.resolve(
-            upsertLocalBackupAccount({
+          await saveAccountAppData(googleDurableAccountId, finalAppData);
+          let backupAccountId: string | undefined;
+          try {
+            backupAccountId = await upsertLocalBackupAccount({
               appData: finalAppData,
               preferredContactType:
                 finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
               userHandle,
               password,
-            })
-          )
-            .then((backupAccountId) => {
-              if (backupAccountId) {
-                saveLocalAuthAppData(backupAccountId, finalAppData);
-                void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
-                  console.warn('Failed to persist Google onboarding fallback after Drive save error.', error);
-                });
-              }
-
-              const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
-              if (googleDurableAccountId) {
-                void saveAccountAppData(googleDurableAccountId, finalAppData).catch((error) => {
-                  console.warn('Failed to persist Google onboarding durable fallback.', error);
-                });
-              }
-
-              setState((s) => ({
-                ...s,
-                appData: finalAppData,
-                localAccountId: backupAccountId || s.localAccountId,
-                status: 'authenticated',
-              }));
-              clearStoredMembershipDraft();
-            })
-            .catch((fallbackError) => {
-              console.warn('Unable to complete Google onboarding fallback after Drive save error.', fallbackError);
-              setState((s) => ({
-                ...s,
-                appData: finalAppData,
-                status: 'authenticated',
-              }));
-              clearStoredMembershipDraft();
-            });
-        });
+            }) || undefined;
+          } catch (backupError) {
+            console.warn('Google onboarding local backup unavailable.', backupError);
+          }
+          try {
+            await userDataService.saveUserData(state.apiAccessToken!, finalAppData);
+          } catch (driveError) {
+            console.warn('Google Drive secondary backup unavailable.', driveError);
+          }
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            localAccountId: backupAccountId || current.localAccountId,
+            status: 'authenticated',
+          }));
+          clearStoredMembershipDraft();
+        } catch (error) {
+          console.error('Google onboarding not completed: durable storage failed.', error);
+          // Retain the draft and profile setup state so the user can retry.
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            status: 'pending-profile-setup',
+          }));
+        }
+      })();
     } else if (state.token === 'mock-token') {
       // Dev login flow, no persistence
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
