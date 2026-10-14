@@ -90,7 +90,12 @@ export async function resolveMercuryAccount(sourceBankAccount = {}) {
 
       return { account, score };
     })
-    .filter((candidate) => candidate.score > 0)
+    .filter(({ account }) => {
+      const number = normalizeDigits(account.accountNumber);
+      const routing = normalizeDigits(account.routingNumber);
+      return (sourceAccountNumber && number === sourceAccountNumber) ||
+        (sourceLast4 && sourceRouting && number.endsWith(sourceLast4) && routing === sourceRouting);
+    })
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) {
@@ -156,7 +161,14 @@ export async function resolveMercuryRecipient(vendorInstruction = {}) {
 
       return { recipient, score };
     })
-    .filter((candidate) => candidate.score > 0)
+    .filter(({ recipient }) => {
+      const ach = recipient.electronicRoutingInfo || {};
+      const wire = recipient.domesticWireRoutingInfo || {};
+      return Boolean(routingNumber && accountNumber && (
+        (normalizeDigits(ach.routingNumber) === routingNumber && normalizeDigits(ach.accountNumber) === accountNumber) ||
+        (normalizeDigits(wire.routingNumber) === routingNumber && normalizeDigits(wire.accountNumber) === accountNumber)
+      ));
+    })
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) {
