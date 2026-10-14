@@ -61,3 +61,11 @@ test('migration verifies stored JSONB content without relying on key order', () 
   assert.match(migration, /Migration readback mismatch/);
   assert.match(migration, /if \(apply\)/);
 });
+
+
+test('Mercury payment approval cannot resolve accounts or recipients from names alone', () => {
+  const mercury = source('server/services/mercuryExecution.js');
+  assert.match(mercury, /sourceLast4 && sourceRouting && number\.endsWith\(sourceLast4\) && routing === sourceRouting/);
+  assert.match(mercury, /routingNumber && accountNumber &&/);
+  assert.match(mercury, /normalizeDigits\(ach\.routingNumber\) === routingNumber && normalizeDigits\(ach\.accountNumber\) === accountNumber/);
+});
