@@ -56,3 +56,30 @@ test('payment request remains an approval request and uses idempotency', async (
   assert.equal(captured.recipientId, 'recipient-1');
   assert.equal(captured.amount, 12.34);
 });
+
+test('rejects routing mismatch even when full source account matches', async () => {
+  mockMercury([account], [recipient]);
+  await assert.rejects(
+    resolveMercuryAccount({ accountNumber: '123456789', routingNumber: '999999999' }),
+    /could not match/
+  );
+});
+
+test('rejects a mismatched full account number without falling back to last four', async () => {
+  mockMercury([account], [recipient]);
+  await assert.rejects(
+    resolveMercuryAccount({ accountNumber: '999456789', last4: '6789', routingNumber: '111000025' }),
+    /could not match/
+  );
+});
+
+test('rejects malformed payment instructions before contacting Mercury', async () => {
+  let requests = 0;
+  mockMercury([account], [recipient], () => { requests += 1; });
+  const base = { settlementId: 'settlement-1', amount: 12.34, method: 'ach', sourceBankAccount: { accountNumber: '123456789' }, vendorInstruction: { routingNumber: '222000111', accountNumber: '987654321' } };
+  await assert.rejects(queueMercuryPaymentApproval({ ...base, amount: -1 }), /positive amount/);
+  await assert.rejects(queueMercuryPaymentApproval({ ...base, amount: 12.345 }), /whole cents/);
+  await assert.rejects(queueMercuryPaymentApproval({ ...base, method: 'instant' }), /Unsupported/);
+  await assert.rejects(queueMercuryPaymentApproval({ ...base, settlementId: '../bad' }), /settlement identifier/);
+  assert.equal(requests, 0);
+});
