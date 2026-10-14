@@ -53,3 +53,11 @@ test('Plaid item access requires the verified account', () => {
   assert.ok(sync.includes('item.userId !== verifiedAccountId'));
   assert.ok(sync.indexOf('item.userId !== verifiedAccountId') < sync.indexOf('await syncPlaidItemChanges(itemId)'));
 });
+
+
+test('migration verifies stored JSONB content without relying on key order', () => {
+  const migration = source('server/scripts/migrateLegacyStorage.js');
+  assert.match(migration, /isDeepStrictEqual\(readback\.rows\[0\]\.payload, payload\)/);
+  assert.match(migration, /Migration readback mismatch/);
+  assert.match(migration, /if \(apply\)/);
+});
