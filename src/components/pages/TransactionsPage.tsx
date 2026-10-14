@@ -2532,8 +2532,7 @@ export default function TransactionsPage({ data, setData }: TransactionsPageProp
               <button
                 type="button"
                 onClick={() => {
-                  const linked = data.settlements.some((item) => item.transactionId === tx.id)
-;
+                  const linked = data.settlements.some((item) => item.transactionId === tx.id);
                   if (linked) {
                     window.alert('This transaction has linked settlement or proof records and cannot be deleted. Review those links first.');
                     return;
