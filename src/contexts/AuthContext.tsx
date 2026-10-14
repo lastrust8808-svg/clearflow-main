@@ -1629,51 +1629,62 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Dev login flow, no persistence
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
     } else if (state.localAccountId) {
-      saveLocalAuthAppData(state.localAccountId, finalAppData);
-      void updateLocalAccountCredentials({
-        userId: state.localAccountId,
-        appData: finalAppData,
-        userHandle,
-        password,
-      }).catch((error) => {
-        console.warn('Failed to persist local backup credentials.', error);
-      });
-      void saveAccountAppData(state.localAccountId, finalAppData).catch((error) => {
-        console.warn('Failed to persist local account profile setup to durable storage.', error);
-      });
-      setState((s) => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
-    } else if (state.token) {
-      Promise.resolve(
-        upsertLocalBackupAccount({
-          appData: finalAppData,
-          preferredContactType: finalAppData.user.email ? 'email' : 'phone',
-        })
-      )
-        .then((backupAccountId) => {
-          if (backupAccountId) {
-            saveLocalAuthAppData(backupAccountId, finalAppData);
-            void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
-              console.warn('Failed to persist Google fallback onboarding to durable storage.', error);
+      void (async () => {
+        try {
+          await saveAccountAppData(state.localAccountId!, finalAppData);
+          saveLocalAuthAppData(state.localAccountId!, finalAppData);
+          try {
+            await updateLocalAccountCredentials({
+              userId: state.localAccountId!,
+              appData: finalAppData,
+              userHandle,
+              password,
             });
+          } catch (error) {
+            console.warn('Failed to update secondary local credentials.', error);
           }
-
-          setState((s) => ({
-            ...s,
+          setState((current) => ({
+            ...current,
             appData: finalAppData,
-            localAccountId: backupAccountId || s.localAccountId,
+            status: 'pending-verification',
+          }));
+        } catch (error) {
+          console.error('Local onboarding not completed: durable storage failed.', error);
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            status: 'pending-profile-setup',
+          }));
+        }
+      })();
+    } else if (state.token) {
+      void (async () => {
+        try {
+          const backupAccountId = await upsertLocalBackupAccount({
+            appData: finalAppData,
+            preferredContactType: finalAppData.user.email ? 'email' : 'phone',
+          });
+          if (!backupAccountId) {
+            throw new Error('No durable account identifier could be established.');
+          }
+          await saveAccountAppData(backupAccountId, finalAppData);
+          saveLocalAuthAppData(backupAccountId, finalAppData);
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            localAccountId: backupAccountId,
             status: 'authenticated',
           }));
           clearStoredMembershipDraft();
-        })
-        .catch((error) => {
-          console.warn('Unable to provision fallback storage for Google onboarding.', error);
-          setState((s) => ({
-            ...s,
+        } catch (error) {
+          console.error('Fallback onboarding not completed: durable storage failed.', error);
+          setState((current) => ({
+            ...current,
             appData: finalAppData,
-            status: 'authenticated',
+            status: 'pending-profile-setup',
           }));
-          clearStoredMembershipDraft();
-        });
+        }
+      })();
     } else {
       console.error("Incomplete profile setup attempt without access token or mock token.");
       logout();
