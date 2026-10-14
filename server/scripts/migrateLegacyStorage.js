@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import pg from 'pg';
 
 const root = path.resolve(process.cwd(), 'server/storage-data/accounts');
@@ -50,7 +51,7 @@ try {
         const readback = kind === 'snapshot'
           ? await pool.query('SELECT app_data AS payload FROM clearflow_account_snapshots WHERE account_id=$1', [accountId])
           : await pool.query('SELECT payload FROM clearflow_account_records WHERE account_id=$1 AND kind=$2 AND record_key=$3', [accountId,kind,recordKey]);
-        if (!readback.rows.length || JSON.stringify(readback.rows[0].payload) !== JSON.stringify(payload)) {
+        if (!readback.rows.length || !isDeepStrictEqual(readback.rows[0].payload, payload)) {
           throw new Error('Migration readback mismatch for ' + accountId + '/' + relative);
         }
       }
