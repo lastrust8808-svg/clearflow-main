@@ -81,8 +81,11 @@ router.get('/payment-status/:requestId', (req, res, next) => {
   try {
     const status = await getMercuryPaymentStatus(req.params.requestId);
     const ownerAccountId = getOwnerAccountId();
+    const paymentLifecycle = classifyPaymentStatus(status.approvalRequest, status.transactions);
     const relatedTransaction = Array.isArray(status.transactions)
-      ? status.transactions[0] || null
+      ? status.transactions.find((transaction) =>
+          String(transaction?.requestId || '') === String(req.params.requestId)
+        ) || null
       : null;
 
     let workspaceUpdate = null;
@@ -99,7 +102,7 @@ router.get('/payment-status/:requestId', (req, res, next) => {
     return res.status(200).json({
       success: true,
       ...status,
-      paymentLifecycle: classifyPaymentStatus(status.approvalRequest, status.transactions),
+      paymentLifecycle,
       workspaceUpdated: Boolean(workspaceUpdate?.applied),
     });
   } catch (error) {
