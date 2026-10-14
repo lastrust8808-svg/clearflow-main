@@ -2421,7 +2421,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       savedBillNumber = billNumber;
 
       const seededVendor = vendorSeed.find((item) => item.id === vendorId);
-      const seededLinkedObligationId = 'linkedObligationId' in (seededVendor?.creditLineProfile || {}) ? seededVendor?.creditLineProfile?.linkedObligationId : undefined;
+      const seededLinkedObligationId = seededVendor?.creditLineProfile && 'linkedObligationId' in seededVendor.creditLineProfile ? seededVendor.creditLineProfile.linkedObligationId : undefined;
       const recurringVendor = isRecurringVendorAccountCandidate(seededVendor);
       const annualizedStartingAmount =
         recurringVendor && resolvedAmount > 0
@@ -6513,7 +6513,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         currency: payload.currency || prev.workspaceSettings.baseCurrency,
         openingBalance,
         accountType: payload.accountType,
-        providerCategory: provider.category,
+        providerCategory: provider.category === 'government' ? 'bank' : provider.category,
         ledgerAccounts: prev.ledgerAccounts,
       });
 
