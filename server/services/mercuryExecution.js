@@ -73,6 +73,8 @@ export async function resolveMercuryAccount(sourceBankAccount = {}) {
   const sourceLast4 = normalizeDigits(sourceBankAccount.last4).slice(-4);
   const sourceRouting = normalizeDigits(sourceBankAccount.routingNumber);
   const sourceName = normalizeText(sourceBankAccount.accountName);
+  // A supplied routing number must agree even when the full account number matches.
+  // Never silently fall back to a weaker last-four match after a full-number mismatch.
 
   const scored = accounts
     .map((account) => {
@@ -93,8 +95,9 @@ export async function resolveMercuryAccount(sourceBankAccount = {}) {
     .filter(({ account }) => {
       const number = normalizeDigits(account.accountNumber);
       const routing = normalizeDigits(account.routingNumber);
-      return (sourceAccountNumber && number === sourceAccountNumber) ||
-        (sourceLast4 && sourceRouting && number.endsWith(sourceLast4) && routing === sourceRouting);
+      if (sourceRouting && routing !== sourceRouting) return false;
+      if (sourceAccountNumber) return number === sourceAccountNumber;
+      return Boolean(sourceLast4 && sourceRouting && number.endsWith(sourceLast4));
     })
     .sort((a, b) => b.score - a.score);
 
@@ -203,6 +206,21 @@ export async function queueMercuryPaymentApproval({
   sourceBankAccount,
   vendorInstruction,
 }) {
+  if (!settlementId || typeof settlementId !== 'string' || !/^[a-zA-Z0-9_-]{1,120}$/.test(settlementId)) {
+    const error = new Error('A valid settlement identifier is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+    const error = new Error('Payment amount must be a positive amount in whole cents.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!['ach', 'wire', 'check'].includes(method)) {
+    const error = new Error('Unsupported Mercury payment method.');
+    error.statusCode = 400;
+    throw error;
+  }
   const sourceAccount = await resolveMercuryAccount(sourceBankAccount);
   const recipient = await resolveMercuryRecipient(vendorInstruction);
   const paymentMethod = mercuryPaymentMethod(method);
