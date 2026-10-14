@@ -1043,7 +1043,7 @@ Entity: ${primaryEntity.displayName || primaryEntity.name}
     const governingDocId = payload.governingDocFile
       ? `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       : undefined;
-    const trustEntity = {
+    const trustEntity: CoreDataBundle['entities'][number] = {
       id: entityId,
       name: payload.trustName.trim(),
       displayName: trustDisplayName,
