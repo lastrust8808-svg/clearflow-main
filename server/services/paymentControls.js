@@ -1,11 +1,10 @@
 // Provider-neutral, fail-closed payment lifecycle. A request is not proof of settlement.
-const finalStatuses = new Set(['settled', 'failed', 'rejected', 'cancelled']);
 export function classifyPaymentStatus(approvalRequest, transactions = []) {
   const raw = String(approvalRequest?.status || '').toLowerCase();
   const transactionList = Array.isArray(transactions) ? transactions : [];
   const requestId = String(approvalRequest?.id || '');
   const matching = transactionList.filter(tx => requestId && String(tx?.requestId || '') === requestId);
-  const completed = matching.find(tx => ['sent', 'completed', 'settled'].includes(String(tx?.status || '').toLowerCase()));
+  const completed = matching.find(tx => ['completed', 'settled', 'posted'].includes(String(tx?.status || '').toLowerCase()));
   const returned = matching.find(tx => ['failed', 'rejected', 'returned', 'cancelled'].includes(String(tx?.status || '').toLowerCase()));
   if (returned) return { state: 'failed', reconciled: false, transactionId: returned.id || null };
   if (completed) return { state: 'bank_confirmed', reconciled: false, transactionId: completed.id || null };
