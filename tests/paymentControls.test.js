@@ -32,3 +32,14 @@ test('reconciliation requires same account, explicit link, amount, and bank post
   assert.equal(reconcileBankTransaction({ bankTransaction: bank, ledgerEntry: { ...ledger, bankTransactionId: 'other' }, expectedAccountId: 'entity-1' }).matched, false);
   assert.equal(reconcileBankTransaction({ bankTransaction: { ...bank, status: 'pending' }, ledgerEntry: ledger, expectedAccountId: 'entity-1' }).matched, false);
 });
+
+test('a sent bank transaction is not yet bank confirmed', () => {
+  const result = classifyPaymentStatus({ id: 'req-1', status: 'approved' }, [{ id: 'tx-1', requestId: 'req-1', status: 'sent' }]);
+  assert.equal(result.state, 'processing');
+  assert.equal(result.reconciled, false);
+});
+test('a posted bank transaction can be confirmed but is not automatically reconciled', () => {
+  const result = classifyPaymentStatus({ id: 'req-1', status: 'approved' }, [{ id: 'tx-1', requestId: 'req-1', status: 'posted' }]);
+  assert.equal(result.state, 'bank_confirmed');
+  assert.equal(result.reconciled, false);
+});
