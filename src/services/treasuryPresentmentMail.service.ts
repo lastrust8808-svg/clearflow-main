@@ -31,7 +31,7 @@ function isExecutedInstrument(instrument: InstrumentRecord) {
 function needsPresentment(instrument: InstrumentRecord, data: CoreDataBundle) {
   const isNoteOrBond =
     instrument.instrumentType === 'promissory_note' ||
-    instrument.instrumentType === 'bond' ||
+    instrument.instrumentType === 'private_bond' ||
     instrument.sourceClass === 'note' ||
     instrument.sourceClass === 'bond';
   if (!isNoteOrBond || !isExecutedInstrument(instrument)) return false;
