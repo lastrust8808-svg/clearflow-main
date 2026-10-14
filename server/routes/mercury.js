@@ -1,5 +1,6 @@
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
+import { classifyPaymentStatus } from '../services/paymentControls.js';
 import crypto from 'node:crypto';
 import {
   getMercuryPaymentStatus,
@@ -98,6 +99,7 @@ router.get('/payment-status/:requestId', (req, res, next) => {
     return res.status(200).json({
       success: true,
       ...status,
+      paymentLifecycle: classifyPaymentStatus(status.approvalRequest, status.transactions),
       workspaceUpdated: Boolean(workspaceUpdate?.applied),
     });
   } catch (error) {
