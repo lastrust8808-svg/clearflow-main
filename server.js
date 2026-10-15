@@ -11,6 +11,7 @@ import storageRoutes from './server/routes/storage.js';
 import authRoutes from './server/routes/auth.js';
 import assistantRoutes from './server/routes/assistant.js';
 import mercuryRoutes from './server/routes/mercury.js';
+import b2bRoutes from './server/routes/b2b.js';
 import { applyOwnerBootstrapPatchFromEnv } from './server/services/ownerDatabase.js';
 
 // Load environment variables from .env file
@@ -51,6 +52,7 @@ app.use('/api/storage', storageRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/mercury', mercuryRoutes);
+app.use('/api/b2b', b2bRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {
