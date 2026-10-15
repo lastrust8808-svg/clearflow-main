@@ -24,3 +24,12 @@ export async function writeRecord(accountId, kind, key, value) {
   DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[accountId,kind,key,JSON.stringify(value)]);
   return { accountId, savedAt: new Date().toISOString() };
 }
+
+export async function createRecordOnce(accountId, kind, key, value) {
+  await ready();
+  const result = await pool.query(
+    'INSERT INTO clearflow_account_records(account_id,kind,record_key,payload) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT(account_id,kind,record_key) DO NOTHING RETURNING record_key',
+    [accountId, kind, key, JSON.stringify(value)]
+  );
+  return result.rowCount === 1;
+}
