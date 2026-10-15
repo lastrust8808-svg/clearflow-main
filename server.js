@@ -5,6 +5,7 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { configuredOrigins, isAllowedBrowserOrigin } from './server/middleware/corsOrigins.js';
 import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
 import storageRoutes from './server/routes/storage.js';
@@ -23,16 +24,10 @@ const PORT = process.env.PORT || 8000;
 
 // --- Middleware ---
 // Enable CORS for all routes to allow frontend requests
-const allowedOrigins = new Set(
-  (process.env.CLEARFLOW_ALLOWED_ORIGINS ||
-    'https://clearflow.site,https://www.clearflow.site,https://clearflow-site.vercel.app')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-);
+const allowedOrigins = configuredOrigins(process.env.CLEARFLOW_ALLOWED_ORIGINS);
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    if (isAllowedBrowserOrigin(origin, allowedOrigins)) return callback(null, true);
     return callback(new Error('Origin not allowed by CORS policy'));
   },
 }));
