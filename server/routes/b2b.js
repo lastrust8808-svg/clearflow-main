@@ -1,16 +1,27 @@
 import express from 'express';
+import { hasEntityPermission } from '../services/b2bMembership.js';
+import { validateB2BInvoice } from '../services/b2bPayments.js';
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
-import { recordsConfigured, readRecord } from '../services/durableAccountRecords.js';
+import { recordsConfigured, readRecord, createRecordOnce } from '../services/durableAccountRecords.js';
 
 const router = express.Router();
 router.use('/:accountId', requireAccountAccess);
-// Invoice creation is disabled until entity membership can be proven from
-// server-controlled records. A caller-supplied ownerEntityId is not proof.
-router.post('/:accountId/invoices', (_req, res) => {
-  return res.status(403).json({
-    success: false,
-    error: 'Verified entity membership is required before invoice creation.',
-  });
+// An authenticated account must hold a server-provisioned, unrevoked entity grant.
+router.post('/:accountId/invoices', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  try {
+    const invoice = validateB2BInvoice(req.body);
+    if (!await hasEntityPermission(req.params.accountId, invoice.payeeEntityId, 'invoice_create')) {
+      return res.status(403).json({ success: false, error: 'Verified entity membership is required before invoice creation.' });
+    }
+    const record = { ...invoice, accountId: req.params.accountId, state: 'draft', createdAt: new Date().toISOString(), settlementConfirmed: false };
+    if (!await createRecordOnce(req.params.accountId, 'b2b_invoice_draft', invoice.id, record)) {
+      return res.status(409).json({ success: false, error: 'Invoice identifier already exists.' });
+    }
+    return res.status(201).json({ success: true, invoice: record });
+  } catch (error) {
+    return res.status(error.statusCode === 400 ? 400 : 503).json({ success: false, error: error.statusCode === 400 ? error.message : 'Invoice creation unavailable.' });
+  }
 });
 router.get('/:accountId/invoices/:invoiceId', async (req, res) => {
   if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
