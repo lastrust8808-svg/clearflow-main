@@ -116,4 +116,40 @@ router.post('/:accountId/invoices/:invoiceId/credit-memos', async (req, res) => 
   }
 });
 
+
+/**
+ * Read-only invoice lifecycle projection. This is a billing view, not bank
+ * settlement confirmation or an accounts-receivable ledger posting.
+ */
+router.get('/:accountId/invoices/:invoiceId/status', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  const { accountId, invoiceId } = req.params;
+  if (!ID.test(invoiceId)) return res.status(400).json({ success: false, error: 'Invalid invoice identifier.' });
+  try {
+    const invoice = await readRecord(accountId, 'b2b_invoice_draft', invoiceId);
+    if (!invoice) return res.status(404).json({ success: false, error: 'Invoice not found.' });
+    const [issuer, payer] = await Promise.all([
+      hasEntityPermission(accountId, invoice.payeeEntityId, 'invoice_create'),
+      hasEntityPermission(accountId, invoice.payerEntityId, 'payment_approve'),
+    ]);
+    if (!issuer && !payer) return res.status(403).json({ success: false, error: 'Verified entity membership required.' });
+    const [acceptance, creditMemo] = await Promise.all([
+      readRecord(accountId, 'b2b_invoice_acceptance', invoiceId),
+      readRecord(accountId, 'b2b_invoice_credit_memo', invoiceId),
+    ]);
+    const creditCents = creditMemo?.amountCents || 0;
+    if (!Number.isSafeInteger(creditCents) || creditCents < 0 || creditCents > invoice.amountCents) {
+      return res.status(503).json({ success: false, error: 'Invalid invoice credit data.' });
+    }
+    return res.status(200).json({ success: true, status: {
+      invoiceId, currency: invoice.currency, originalAmountCents: invoice.amountCents,
+      creditCents, remainingAmountCents: invoice.amountCents - creditCents,
+      accepted: Boolean(acceptance), paymentState: 'not_verified',
+      settled: false, reconciled: false,
+    } });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Invoice status unavailable.' });
+  }
+});
+
 export default router;
