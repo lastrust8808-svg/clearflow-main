@@ -1,3 +1,5 @@
+import { requestSecureEmailCode, confirmSecureEmailCode, revokeSecureSession } from '../services/secureEmailSession.service';
+import { setStorageAccessToken } from '../services/storageSession.service';
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
@@ -352,6 +354,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
+    setStorageAccessToken(accessToken);
     userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
@@ -450,33 +453,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       )
       .catch((error) => {
         console.error('OAuth profile hydration failed:', error);
-        setState((current) => {
-          if (current.appData?.user) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
+        setStorageAccessToken(null);
+        setState((current) => ({
+          ...current,
+          status: 'unauthenticated',
+          gsiUser: null,
+          token: null,
+          apiAccessToken: null,
+          authMessage: 'Google authorization failed. Please reconnect your Google account.',
+        }));
       });
   }, [canBypassProfileSetupForGoogleIdentity, exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
@@ -510,7 +495,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Condition 2: Don't save the very first time data is loaded from Drive.
     if (!initialDataLoaded.current) {
       initialDataLoaded.current = true;
-      return;
+      // Freshly verified local accounts must persist their initial workspace too.
+      if (!state.localAccountId?.startsWith('local:')) return;
     }
 
     // If conditions pass, it means a user has made a change.
@@ -522,11 +508,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (state.localAccountId) {
       try {
         saveLocalAuthAppData(state.localAccountId, state.appData);
-        void saveAccountAppData(state.localAccountId, state.appData).catch((error) => {
-          console.warn('Failed to mirror local account data to durable storage.', error);
-        });
-        setSavingStatus('saved');
-        setTimeout(() => setSavingStatus('idle'), 2500);
+        void saveAccountAppData(state.localAccountId, state.appData)
+          .then(() => {
+            setSavingStatus('saved');
+            setTimeout(() => setSavingStatus('idle'), 2500);
+          })
+          .catch((error) => {
+            console.error('Failed to persist local account data to server.', error);
+            setSavingStatus('error');
+          });
       } catch (err) {
         console.error('Failed to save local user data:', err);
         setSavingStatus('error');
@@ -1284,37 +1274,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     contactValue: string;
     name?: string;
   }) => {
-    const result = startLocalAuthChallenge(input);
-    if (!result.success) {
-      return result;
+    if (input.contactType !== 'email') {
+      return { success: false, error: 'Secure phone verification is not available. Use an email address.' };
     }
-
-    const delivery = await deliverVerificationCode({
-      contactType: result.challenge.contactType,
-      contactValue: result.challenge.contactValue,
-      maskedTarget: result.challenge.maskedTarget,
-      code: result.challenge.codePreview || '',
-    });
-
-    setState((current) => ({
-      ...current,
-      pendingCredentialAuth: {
-        ...result.challenge,
-        deliveryMode: delivery.deliveryMode,
-        deliveryMessage: delivery.message,
-        codePreview:
-          delivery.deliveryMode === 'in_app_preview'
-            ? result.challenge.codePreview
-            : undefined,
-      },
-      gsiUser: null,
-      token: null,
-      apiAccessToken: null,
-      localAccountId: null,
-      appData: null,
-      status: 'unauthenticated',
-    }));
-    return { success: true };
+    const email = input.contactValue.trim().toLowerCase();
+    try {
+      await requestSecureEmailCode(email);
+      setState(current => ({
+        ...current,
+        pendingCredentialAuth: {
+          contactType: 'email',
+          contactValue: email,
+          maskedTarget: email.replace(/(^.).*(@.*$)/, '$1***$2'),
+          expiresAt: new Date(Date.now() + 600000).toISOString(),
+          isExistingUser: Boolean(findLocalAccountByGoogleEmail(email)),
+          deliveryMode: 'email_sent',
+        },
+        gsiUser: null, token: null, apiAccessToken: null,
+        localAccountId: null, appData: null, status: 'unauthenticated',
+      }));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Email sign-in unavailable.' };
+    }
   };
 
   const verifyCredentialAuth = async (input: {
@@ -1323,137 +1305,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password?: string;
   }) => {
     const challenge = state.pendingCredentialAuth;
-    if (!challenge) {
-      return { success: false, error: 'Request a verification code first.' };
+    if (!challenge || challenge.contactType !== 'email') {
+      return { success: false, error: 'Request a secure email code first.' };
     }
-
-    const result = await verifyLocalAuthChallenge({
-      contactType: challenge.contactType,
-      contactValue: challenge.contactValue,
-      code: input.code,
-      userHandle: input.userHandle,
-      password: input.password,
-    });
-
-    if (!result.success) {
-      return result;
+    try {
+      const verified = await confirmSecureEmailCode(challenge.contactValue, input.code);
+      const accountId = 'local:' + verified.user.id;
+      const existing = findLocalAccountByGoogleEmail(verified.user.email);
+      const appData: AppData = existing?.appData || {
+        user: { id: verified.user.id, name: '', email: verified.user.email, primaryContactType: 'email', isVerified: false },
+        entities: [],
+      };
+      setStorageAccessToken(verified.token);
+      const durable = await loadAccountAppData(accountId);
+      const nextData = durable || appData;
+      // Copy the verified user's own browser backup only after server identity
+      // confirmation. Preserve the original backup until migration is audited.
+      if (!durable && existing?.appData) {
+        await saveAccountAppData(accountId, existing.appData);
+      }
+      const nextStatus: AuthStatus = nextData.user.isVerified
+        ? 'authenticated' : nextData.user.name ? 'pending-verification' : 'pending-profile-setup';
+      setState(current => ({
+        ...current, appData: nextData, token: verified.token, apiAccessToken: null,
+        localAccountId: accountId, gsiUser: null, pendingCredentialAuth: null, status: nextStatus,
+      }));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Verification failed.' };
     }
-
-    const nextStatus: AuthStatus =
-      result.appData.user.isVerified
-        ? 'authenticated'
-        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
-          ? 'pending-verification'
-          : 'pending-profile-setup';
-
-    setState((current) => ({
-      ...current,
-      appData: result.appData,
-      token: 'local-token',
-      apiAccessToken: null,
-      localAccountId: result.userId,
-      gsiUser: null,
-      pendingCredentialAuth: null,
-      status: nextStatus,
-    }));
-
-    void loadAccountAppData(result.userId)
-      .then((durableAppData) => {
-        if (!durableAppData) {
-          return;
-        }
-
-        saveLocalAuthAppData(result.userId, durableAppData);
-        initialDataLoaded.current = false;
-
-        setState((current) => {
-          if (current.localAccountId !== result.userId) {
-            return current;
-          }
-
-          const durableStatus: AuthStatus =
-            durableAppData.user.isVerified
-              ? 'authenticated'
-              : durableAppData.user.name &&
-                  (durableAppData.user.email || durableAppData.user.phone)
-                ? 'pending-verification'
-                : 'pending-profile-setup';
-
-          return {
-            ...current,
-            appData: durableAppData,
-            status: durableStatus,
-          };
-        });
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate local account from durable storage.', error);
-      });
-
-    return { success: true };
   };
 
-  const signInWithPassword = async (input: {
+  const signInWithPassword = async (_input: {
     identifier: string;
     password: string;
   }) => {
-    const result = await authenticateLocalPassword(input);
-    if (!result.success) {
-      return result;
-    }
-
-    const nextStatus: AuthStatus =
-      result.appData.user.isVerified
-        ? 'authenticated'
-        : result.appData.user.name && (result.appData.user.email || result.appData.user.phone)
-          ? 'pending-verification'
-          : 'pending-profile-setup';
-
-    setState((current) => ({
-      ...current,
-      appData: result.appData,
-      token: 'local-token',
-      apiAccessToken: null,
-      localAccountId: result.userId,
-      gsiUser: null,
-      pendingCredentialAuth: null,
-      status: nextStatus,
-    }));
-
-    void loadAccountAppData(result.userId)
-      .then((durableAppData) => {
-        if (!durableAppData) {
-          return;
-        }
-
-        saveLocalAuthAppData(result.userId, durableAppData);
-        initialDataLoaded.current = false;
-
-        setState((current) => {
-          if (current.localAccountId !== result.userId) {
-            return current;
-          }
-
-          const durableStatus: AuthStatus =
-            durableAppData.user.isVerified
-              ? 'authenticated'
-              : durableAppData.user.name &&
-                  (durableAppData.user.email || durableAppData.user.phone)
-                ? 'pending-verification'
-                : 'pending-profile-setup';
-
-          return {
-            ...current,
-            appData: durableAppData,
-            status: durableStatus,
-          };
-        });
-      })
-      .catch((error) => {
-        console.warn('Failed to hydrate password-auth account from durable storage.', error);
-      });
-
-    return { success: true };
+    return {
+      success: false,
+      error: 'Browser-stored passwords are retired for security. Sign in using a verified email code.',
+    };
   };
 
   const cancelCredentialAuth = () => {
@@ -1607,6 +1497,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       security: boolean;
       eSign: boolean;
       authority: boolean;
+      membershipCommitment: boolean;
     }
   ) => {
     if (!state.appData) {
@@ -1689,135 +1580,111 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     if (state.apiAccessToken) {
-      // Real Google flow with Drive persistence and durable email-linked recovery.
+      // Complete Google onboarding only after the authenticated workspace is durably saved.
+      // Drive and local backup are secondary copies; neither can bypass durable storage.
       initialDataLoaded.current = true;
       userDataService.setActiveUserEmail(finalAppData.user.email);
-      Promise.resolve(
-        upsertLocalBackupAccount({
-          appData: finalAppData,
-          preferredContactType:
-            finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
-          userHandle,
-          password,
-        })
-      )
-        .then((backupAccountId) =>
-          userDataService.saveUserData(state.apiAccessToken!, finalAppData).then(() => backupAccountId)
-        )
-        .then((backupAccountId) => {
+      void (async () => {
+        try {
           const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
-          if (googleDurableAccountId) {
-            return saveAccountAppData(googleDurableAccountId, finalAppData)
-              .catch((error) => {
-                console.warn('Failed to persist Google workspace to durable storage.', error);
-              })
-              .then(() => backupAccountId);
+          if (!googleDurableAccountId) {
+            throw new Error('A verified Google account identifier is required for durable onboarding.');
           }
-
-          return backupAccountId;
-        })
-        .then((backupAccountId) => {
-          setState((s) => ({
-            ...s,
-            appData: finalAppData,
-            localAccountId: backupAccountId || s.localAccountId,
-            status: 'authenticated',
-          }));
-          clearStoredMembershipDraft();
-        })
-        .catch(err => {
-          console.error("Failed to create user data file in Drive", err);
-          Promise.resolve(
-            upsertLocalBackupAccount({
+          await saveAccountAppData(googleDurableAccountId, finalAppData);
+          let backupAccountId: string | undefined;
+          try {
+            backupAccountId = await upsertLocalBackupAccount({
               appData: finalAppData,
               preferredContactType:
                 finalAppData.user.primaryContactType === 'phone' ? 'phone' : 'email',
               userHandle,
               password,
-            })
-          )
-            .then((backupAccountId) => {
-              if (backupAccountId) {
-                saveLocalAuthAppData(backupAccountId, finalAppData);
-                void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
-                  console.warn('Failed to persist Google onboarding fallback after Drive save error.', error);
-                });
-              }
-
-              const googleDurableAccountId = buildGoogleDurableAccountId(finalAppData.user.email);
-              if (googleDurableAccountId) {
-                void saveAccountAppData(googleDurableAccountId, finalAppData).catch((error) => {
-                  console.warn('Failed to persist Google onboarding durable fallback.', error);
-                });
-              }
-
-              setState((s) => ({
-                ...s,
-                appData: finalAppData,
-                localAccountId: backupAccountId || s.localAccountId,
-                status: 'authenticated',
-              }));
-              clearStoredMembershipDraft();
-            })
-            .catch((fallbackError) => {
-              console.warn('Unable to complete Google onboarding fallback after Drive save error.', fallbackError);
-              setState((s) => ({
-                ...s,
-                appData: finalAppData,
-                status: 'authenticated',
-              }));
-              clearStoredMembershipDraft();
-            });
-        });
+            }) || undefined;
+          } catch (backupError) {
+            console.warn('Google onboarding local backup unavailable.', backupError);
+          }
+          try {
+            await userDataService.saveUserData(state.apiAccessToken!, finalAppData);
+          } catch (driveError) {
+            console.warn('Google Drive secondary backup unavailable.', driveError);
+          }
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            localAccountId: backupAccountId || current.localAccountId,
+            status: 'authenticated',
+          }));
+          clearStoredMembershipDraft();
+        } catch (error) {
+          console.error('Google onboarding not completed: durable storage failed.', error);
+          // Retain the draft and profile setup state so the user can retry.
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            status: 'pending-profile-setup',
+          }));
+        }
+      })();
     } else if (state.token === 'mock-token') {
       // Dev login flow, no persistence
       setState(s => ({ ...s, appData: finalAppData, status: 'authenticated' }));
     } else if (state.localAccountId) {
-      saveLocalAuthAppData(state.localAccountId, finalAppData);
-      void updateLocalAccountCredentials({
-        userId: state.localAccountId,
-        appData: finalAppData,
-        userHandle,
-        password,
-      }).catch((error) => {
-        console.warn('Failed to persist local backup credentials.', error);
-      });
-      void saveAccountAppData(state.localAccountId, finalAppData).catch((error) => {
-        console.warn('Failed to persist local account profile setup to durable storage.', error);
-      });
-      setState((s) => ({ ...s, appData: finalAppData, status: 'pending-verification' }));
-    } else if (state.token) {
-      Promise.resolve(
-        upsertLocalBackupAccount({
-          appData: finalAppData,
-          preferredContactType: finalAppData.user.email ? 'email' : 'phone',
-        })
-      )
-        .then((backupAccountId) => {
-          if (backupAccountId) {
-            saveLocalAuthAppData(backupAccountId, finalAppData);
-            void saveAccountAppData(backupAccountId, finalAppData).catch((error) => {
-              console.warn('Failed to persist Google fallback onboarding to durable storage.', error);
+      void (async () => {
+        try {
+          await saveAccountAppData(state.localAccountId!, finalAppData);
+          saveLocalAuthAppData(state.localAccountId!, finalAppData);
+          try {
+            await updateLocalAccountCredentials({
+              userId: state.localAccountId!,
+              appData: finalAppData,
+              userHandle,
+              password,
             });
+          } catch (error) {
+            console.warn('Failed to update secondary local credentials.', error);
           }
-
-          setState((s) => ({
-            ...s,
+          setState((current) => ({
+            ...current,
             appData: finalAppData,
-            localAccountId: backupAccountId || s.localAccountId,
+            status: 'pending-verification',
+          }));
+        } catch (error) {
+          console.error('Local onboarding not completed: durable storage failed.', error);
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            status: 'pending-profile-setup',
+          }));
+        }
+      })();
+    } else if (state.token) {
+      void (async () => {
+        try {
+          const backupAccountId = await upsertLocalBackupAccount({
+            appData: finalAppData,
+            preferredContactType: finalAppData.user.email ? 'email' : 'phone',
+          });
+          if (!backupAccountId) {
+            throw new Error('No durable account identifier could be established.');
+          }
+          await saveAccountAppData(backupAccountId, finalAppData);
+          saveLocalAuthAppData(backupAccountId, finalAppData);
+          setState((current) => ({
+            ...current,
+            appData: finalAppData,
+            localAccountId: backupAccountId,
             status: 'authenticated',
           }));
           clearStoredMembershipDraft();
-        })
-        .catch((error) => {
-          console.warn('Unable to provision fallback storage for Google onboarding.', error);
-          setState((s) => ({
-            ...s,
+        } catch (error) {
+          console.error('Fallback onboarding not completed: durable storage failed.', error);
+          setState((current) => ({
+            ...current,
             appData: finalAppData,
-            status: 'authenticated',
+            status: 'pending-profile-setup',
           }));
-          clearStoredMembershipDraft();
-        });
+        }
+      })();
     } else {
       console.error("Incomplete profile setup attempt without access token or mock token.");
       logout();
@@ -1873,6 +1740,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    if (state.localAccountId?.startsWith('local:') && state.token) {
+      void revokeSecureSession(state.token).catch(() => {});
+    }
+    setStorageAccessToken(null);
     if (typeof google !== 'undefined' && google.accounts) {
       google.accounts.id.disableAutoSelect();
     }

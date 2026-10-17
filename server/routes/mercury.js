@@ -1,4 +1,6 @@
+import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
+import { classifyPaymentStatus } from '../services/paymentControls.js';
 import crypto from 'node:crypto';
 import {
   getMercuryPaymentStatus,
@@ -65,7 +67,10 @@ router.get('/status', (_req, res) => {
   });
 });
 
-router.get('/payment-status/:requestId', async (req, res) => {
+router.get('/payment-status/:requestId', (req, res, next) => {
+  req.params.accountId = getOwnerAccountId();
+  return requireAccountAccess(req, res, next);
+}, async (req, res) => {
   if (!isMercuryExecutionConfigured()) {
     return res.status(503).json({
       success: false,
@@ -76,8 +81,11 @@ router.get('/payment-status/:requestId', async (req, res) => {
   try {
     const status = await getMercuryPaymentStatus(req.params.requestId);
     const ownerAccountId = getOwnerAccountId();
+    const paymentLifecycle = classifyPaymentStatus(status.approvalRequest, status.transactions);
     const relatedTransaction = Array.isArray(status.transactions)
-      ? status.transactions[0] || null
+      ? status.transactions.find((transaction) =>
+          String(transaction?.requestId || '') === String(req.params.requestId)
+        ) || null
       : null;
 
     let workspaceUpdate = null;
@@ -94,6 +102,7 @@ router.get('/payment-status/:requestId', async (req, res) => {
     return res.status(200).json({
       success: true,
       ...status,
+      paymentLifecycle,
       workspaceUpdated: Boolean(workspaceUpdate?.applied),
     });
   } catch (error) {

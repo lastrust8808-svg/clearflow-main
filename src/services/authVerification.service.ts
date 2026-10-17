@@ -31,7 +31,7 @@ export async function deliverVerificationCode(input: {
     };
   } catch {
     return {
-      success: true,
+      success: false,
       deliveryMode: 'in_app_preview' as const,
       maskedTarget: input.maskedTarget,
       message: 'Delivery service is unavailable, so the code remains in preview mode.',

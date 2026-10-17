@@ -5,12 +5,14 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { configuredOrigins, isAllowedBrowserOrigin } from './server/middleware/corsOrigins.js';
 import plaidApiRoutes from './server/routes/plaid.js';
 import erpRoutes from './server/routes/erp.js';
 import storageRoutes from './server/routes/storage.js';
 import authRoutes from './server/routes/auth.js';
 import assistantRoutes from './server/routes/assistant.js';
 import mercuryRoutes from './server/routes/mercury.js';
+import b2bRoutes from './server/routes/b2b.js';
 import { applyOwnerBootstrapPatchFromEnv } from './server/services/ownerDatabase.js';
 
 // Load environment variables from .env file
@@ -22,7 +24,13 @@ const PORT = process.env.PORT || 8000;
 
 // --- Middleware ---
 // Enable CORS for all routes to allow frontend requests
-app.use(cors());
+const allowedOrigins = configuredOrigins(process.env.CLEARFLOW_ALLOWED_ORIGINS);
+app.use(cors({
+  origin(origin, callback) {
+    if (isAllowedBrowserOrigin(origin, allowedOrigins)) return callback(null, true);
+    return callback(new Error('Origin not allowed by CORS policy'));
+  },
+}));
 // Use JSON parser for all incoming request bodies
 // Note: Webhook verification needs the raw body, so it's handled separately.
 app.use('/api/plaid/webhook', bodyParser.raw({ type: 'application/json' }));
@@ -39,6 +47,7 @@ app.use('/api/storage', storageRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/mercury', mercuryRoutes);
+app.use('/api/b2b', b2bRoutes);
 
 // --- Health Check Endpoint ---
 app.get('/health', (req, res) => {

@@ -1,3 +1,4 @@
+import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { isMailerConfigured, sendInvoiceEmail } from '../utils/mailer.js';
@@ -7,6 +8,14 @@ import {
 } from '../services/paymentExecution.js';
 
 const router = express.Router();
+
+// ERP operations require a verified tenant; never trust invoice/entity IDs as authorization.
+router.use((req, res, next) => {
+  const accountId = req.get('x-clearflow-account-id');
+  if (!accountId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+  req.params.accountId = accountId;
+  return requireAccountAccess(req, res, next);
+});
 
 const invoiceDeliveryJobs = [];
 const invoiceExportJobs = [];

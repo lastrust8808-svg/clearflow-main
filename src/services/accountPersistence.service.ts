@@ -1,7 +1,9 @@
+import { storageAuthHeaders } from './storageSession.service';
 import type { AppData } from '../types/app.models';
 import { getApiBaseUrl } from './runtimeConfig.service';
 
 const STORAGE_API_BASE = getApiBaseUrl();
+const accountRevisions = new Map<string, string>();
 
 interface RemoteDocumentFilePayload {
   fileName: string;
@@ -62,6 +64,7 @@ export async function getAccountPersistenceMode(
   const response = await fetch(buildPersistenceModeUrl(accountId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -82,11 +85,13 @@ export async function loadAccountAppData(accountId: string) {
   const response = await fetch(buildAppDataUrl(accountId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
 
   if (response.status === 404) {
+    accountRevisions.delete(accountId);
     return null;
   }
 
@@ -94,15 +99,21 @@ export async function loadAccountAppData(accountId: string) {
     throw new Error('Failed to load durable account data.');
   }
 
-  const payload = (await response.json()) as { success: boolean; appData: AppData };
+  const payload = (await response.json()) as { success: boolean; appData: AppData; version?: string | number | null };
+  if (payload.version != null) accountRevisions.set(accountId, String(payload.version));
+  else accountRevisions.delete(accountId);
   return payload.appData;
 }
 
-export async function saveAccountAppData(accountId: string, appData: AppData) {
+const accountWriteQueues = new Map<string, Promise<unknown>>();
+
+async function performAccountAppDataSave(accountId: string, appData: AppData) {
   const response = await fetch(buildAppDataUrl(accountId), {
     method: 'PUT',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
+      ...(accountRevisions.has(accountId) ? { 'If-Match': accountRevisions.get(accountId)! } : {}),
     },
     body: JSON.stringify(appData),
   });
@@ -111,7 +122,10 @@ export async function saveAccountAppData(accountId: string, appData: AppData) {
     throw new Error('Failed to save durable account data.');
   }
 
-  return response.json();
+  const saved = await response.json();
+  if (saved.result?.revision != null) accountRevisions.set(accountId, String(saved.result.revision));
+  else if (saved.version != null) accountRevisions.set(accountId, String(saved.version));
+  return saved;
 }
 
 export async function uploadAccountDocumentFile(
@@ -130,6 +144,7 @@ export async function uploadAccountDocumentFile(
   const response = await fetch(buildFileUrl(accountId), {
     method: 'POST',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -149,6 +164,7 @@ export async function loadAccountDocumentFile(accountId: string, fileId: string)
   const response = await fetch(buildFileUrl(accountId, fileId), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -179,6 +195,7 @@ export async function loadAccountExtractionCache(accountId: string, signature: s
   const response = await fetch(buildExtractionUrl(accountId, signature), {
     method: 'GET',
     headers: {
+      ...storageAuthHeaders(),
       Accept: 'application/json',
     },
   });
@@ -211,6 +228,7 @@ export async function saveAccountExtractionCache(
   const response = await fetch(buildExtractionUrl(accountId, signature), {
     method: 'PUT',
     headers: {
+      ...storageAuthHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ result }),
@@ -221,4 +239,17 @@ export async function saveAccountExtractionCache(
   }
 
   return response.json();
+}
+
+/** Serialize writes per account so older responses cannot overwrite newer edits. */
+export function saveAccountAppData(accountId: string, appData: AppData) {
+  const previous = accountWriteQueues.get(accountId) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(() =>
+    performAccountAppDataSave(accountId, appData)
+  );
+  accountWriteQueues.set(accountId, next);
+  void next.finally(() => {
+    if (accountWriteQueues.get(accountId) === next) accountWriteQueues.delete(accountId);
+  }).catch(() => undefined);
+  return next;
 }
