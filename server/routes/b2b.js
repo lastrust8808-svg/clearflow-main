@@ -1,4 +1,5 @@
 import express from 'express';
+import { validateCreditMemo } from '../services/b2bCreditMemos.js';
 import { hasEntityPermission } from '../services/b2bMembership.js';
 import { validateB2BInvoice } from '../services/b2bPayments.js';
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
@@ -87,6 +88,31 @@ router.post('/:accountId/invoices/:invoiceId/acceptances', async (req, res) => {
     return res.status(201).json({ success: true, acceptance });
   } catch {
     return res.status(503).json({ success: false, error: 'Invoice acceptance unavailable.' });
+  }
+});
+
+
+router.post('/:accountId/invoices/:invoiceId/credit-memos', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  const { accountId, invoiceId } = req.params;
+  if (!ID.test(invoiceId)) return res.status(400).json({ success: false, error: 'Invalid invoice identifier.' });
+  try {
+    const invoice = await readRecord(accountId, 'b2b_invoice_draft', invoiceId);
+    if (!invoice) return res.status(404).json({ success: false, error: 'Invoice not found.' });
+    if (!await hasEntityPermission(accountId, invoice.payeeEntityId, 'invoice_create')) {
+      return res.status(403).json({ success: false, error: 'Verified issuer permission required.' });
+    }
+    let memo;
+    try { memo = validateCreditMemo(invoice, req.body); }
+    catch (error) { return res.status(400).json({ success: false, error: error.message }); }
+    // One credit memo per invoice until aggregate credit accounting is implemented.
+    // Keyed by invoice ID to prevent multiple credits from exceeding the invoice.
+    const created = await createRecordOnce(accountId, 'b2b_invoice_credit_memo', invoiceId,
+      { ...memo, createdAt: new Date().toISOString() });
+    if (!created) return res.status(409).json({ success: false, error: 'Invoice already has a credit memo.' });
+    return res.status(201).json({ success: true, creditMemo: memo });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Credit memo unavailable.' });
   }
 });
 
