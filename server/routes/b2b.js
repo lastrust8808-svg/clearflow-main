@@ -30,6 +30,11 @@ router.get('/:accountId/invoices/:invoiceId', async (req, res) => {
     if (!/^[A-Za-z0-9_-]{1,120}$/.test(req.params.invoiceId)) return res.status(400).json({ success: false, error: 'Invalid invoice identifier.' });
     const invoice = await readRecord(req.params.accountId, 'b2b_invoice_draft', req.params.invoiceId);
     if (!invoice) return res.status(404).json({ success: false, error: 'Invoice draft not found.' });
+    const [issuer, payer] = await Promise.all([
+      hasEntityPermission(req.params.accountId, invoice.payeeEntityId, 'invoice_create'),
+      hasEntityPermission(req.params.accountId, invoice.payerEntityId, 'payment_approve'),
+    ]);
+    if (!issuer && !payer) return res.status(403).json({ success: false, error: 'Verified entity membership required.' });
     return res.status(200).json({ success: true, invoice });
   } catch {
     return res.status(503).json({ success: false, error: 'Invoice draft unavailable.' });
