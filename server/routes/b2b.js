@@ -1,4 +1,5 @@
 import express from 'express';
+import { publishInvoiceDelivery, getDeliveredInvoice, listPayerDeliveries } from '../services/b2bDelivery.js';
 import { validateCreditMemo } from '../services/b2bCreditMemos.js';
 import { hasEntityPermission } from '../services/b2bMembership.js';
 import { validateB2BInvoice } from '../services/b2bPayments.js';
@@ -154,6 +155,45 @@ router.get('/:accountId/invoices/:invoiceId/status', async (req, res) => {
     } });
   } catch {
     return res.status(503).json({ success: false, error: 'Invoice status unavailable.' });
+  }
+});
+
+
+/** Publishing is issuer-only and creates a payer-visible immutable delivery. */
+router.post('/:accountId/invoices/:invoiceId/publish', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  const { accountId, invoiceId } = req.params;
+  if (!ID.test(invoiceId)) return res.status(400).json({ success: false, error: 'Invalid invoice identifier.' });
+  try {
+    const invoice = await readRecord(accountId, 'b2b_invoice_draft', invoiceId);
+    if (!invoice) return res.status(404).json({ success: false, error: 'Invoice not found.' });
+    if (!await hasEntityPermission(accountId, invoice.payeeEntityId, 'invoice_create')) {
+      return res.status(403).json({ success: false, error: 'Verified issuer permission required.' });
+    }
+    const deliveryId = await publishInvoiceDelivery(accountId, invoice);
+    if (!deliveryId) return res.status(409).json({ success: false, error: 'Invoice already published.' });
+    return res.status(201).json({ success: true, deliveryId });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Invoice publishing unavailable.' });
+  }
+});
+router.get('/:accountId/payer-inbox', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  try {
+    const deliveries = await listPayerDeliveries(req.params.accountId);
+    return res.status(200).json({ success: true, deliveries });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Payer inbox unavailable.' });
+  }
+});
+router.get('/:accountId/deliveries/:deliveryId', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  try {
+    const delivery = await getDeliveredInvoice(req.params.deliveryId, req.params.accountId, 'payer');
+    if (!delivery) return res.status(404).json({ success: false, error: 'Delivery not found.' });
+    return res.status(200).json({ success: true, delivery });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Delivery unavailable.' });
   }
 });
 
