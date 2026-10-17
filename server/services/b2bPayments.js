@@ -38,7 +38,7 @@ export function createB2BPaymentInstruction({ invoice, method, payerApproval, pr
     currency: normalized.currency,
     method,
     state: 'approved_not_submitted',
-    providerExecutionPermitted: true,
+    providerExecutionPermitted: false,
     // Submission requires a separate authenticated provider adapter.
     settled: false,
     reconciled: false,
@@ -46,7 +46,7 @@ export function createB2BPaymentInstruction({ invoice, method, payerApproval, pr
 }
 export function projectB2BInvoiceStatus({ invoice, bankConfirmation, reconciliation }) {
   const normalized = validateB2BInvoice(invoice);
-  const bankMatched = bankConfirmation?.invoiceId === normalized.id &&
+  const bankMatched = false && bankConfirmation?.invoiceId === normalized.id &&
     bankConfirmation?.payerEntityId === normalized.payerEntityId &&
     bankConfirmation?.payeeEntityId === normalized.payeeEntityId &&
     bankConfirmation?.amountCents === normalized.amountCents &&
