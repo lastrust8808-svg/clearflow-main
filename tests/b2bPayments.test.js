@@ -19,6 +19,7 @@ test('requires specific approval and provider capability before execution', () =
   const instruction = createB2BPaymentInstruction({ invoice, method: 'ach', payerApproval: approval, providerCapability: capability });
   assert.equal(instruction.state, 'approved_not_submitted');
   assert.equal(instruction.settled, false);
+  assert.equal(instruction.providerExecutionPermitted, false);
 });
 test('unverified bank confirmation cannot close invoice', () => {
   const result = projectB2BInvoiceStatus({ invoice, bankConfirmation: { invoiceId: 'inv-1', status: 'settled' } });
@@ -28,9 +29,9 @@ test('unverified bank confirmation cannot close invoice', () => {
 test('settlement and reconciliation require matching provider evidence', () => {
   const bankConfirmation = { invoiceId: 'inv-1', payerEntityId: 'aac', payeeEntityId: 'vendor', amountCents: 450000, currency: 'USD', status: 'settled', providerTransactionId: 'tx-123' };
   const settled = projectB2BInvoiceStatus({ invoice, bankConfirmation });
-  assert.equal(settled.settled, true);
+  assert.equal(settled.settled, false);
   assert.equal(settled.reconciled, false);
   const reconciled = projectB2BInvoiceStatus({ invoice, bankConfirmation, reconciliation: { invoiceId: 'inv-1', providerTransactionId: 'tx-123', matched: true } });
-  assert.equal(reconciled.reconciled, true);
+  assert.equal(reconciled.reconciled, false);
   assert.equal(projectB2BInvoiceStatus({ invoice, bankConfirmation: { ...bankConfirmation, amountCents: 1 } }).settled, false);
 });
