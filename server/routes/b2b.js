@@ -61,4 +61,33 @@ router.post('/:accountId/invoices/:invoiceId/disputes', async (req, res) => {
   }
 });
 
+
+/**
+ * Payer acceptance is a durable acknowledgment, NOT authorization to debit a bank.
+ * It requires a separately provisioned payer permission on the authenticated account.
+ */
+router.post('/:accountId/invoices/:invoiceId/acceptances', async (req, res) => {
+  if (!recordsConfigured()) return res.status(503).json({ success: false, error: 'Durable database unavailable.' });
+  const { accountId, invoiceId } = req.params;
+  if (!ID.test(invoiceId) || req.body?.accepted !== true) {
+    return res.status(400).json({ success: false, error: 'Explicit invoice acceptance is required.' });
+  }
+  try {
+    const invoice = await readRecord(accountId, 'b2b_invoice_draft', invoiceId);
+    if (!invoice) return res.status(404).json({ success: false, error: 'Invoice not found.' });
+    if (!await hasEntityPermission(accountId, invoice.payerEntityId, 'payment_approve')) {
+      return res.status(403).json({ success: false, error: 'Verified payer entity permission required.' });
+    }
+    const acceptance = { invoiceId, payerEntityId: invoice.payerEntityId,
+      amountCents: invoice.amountCents, currency: invoice.currency,
+      state: 'accepted_not_paid', acceptedAt: new Date().toISOString() };
+    if (!await createRecordOnce(accountId, 'b2b_invoice_acceptance', invoiceId, acceptance)) {
+      return res.status(409).json({ success: false, error: 'Invoice already accepted.' });
+    }
+    return res.status(201).json({ success: true, acceptance });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Invoice acceptance unavailable.' });
+  }
+});
+
 export default router;
