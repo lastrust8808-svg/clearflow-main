@@ -80,7 +80,15 @@ async function hydrateStoredItemByItemId(itemId) {
     const { readdir } = await import('node:fs/promises');
     const path = await import('node:path');
     const accountsRoot = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
-    const accountDirectories = await readdir(accountsRoot, { withFileTypes: true });
+    // A fresh stateless deployment may have no legacy account directory.
+    // Treat that as an empty legacy index, not a provider failure.
+    let accountDirectories;
+    try {
+      accountDirectories = await readdir(accountsRoot, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === 'ENOENT') return null;
+      throw error;
+    }
 
     for (const entry of accountDirectories) {
       if (!entry.isDirectory()) {
