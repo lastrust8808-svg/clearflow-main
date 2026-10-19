@@ -445,15 +445,20 @@ async function createLinkTokenWithFallbacks(plaidClient, payload) {
   throw lastError;
 }
 
-async function getIdentityDataOrFallback(plaidClient, accessToken, userName) {
+async function getIdentityDataOrFallback(plaidClient, accessToken) {
+  // Identity is a separately entitled Plaid product. Never infer a verified
+  // bank-account owner from the user's self-entered display name.
+  if (process.env.CLEARFLOW_PLAID_IDENTITY_ENABLED !== 'true') {
+    return { accounts: [], identityAvailable: false };
+  }
   try {
     const response = await plaidClient.identityGet({ access_token: accessToken });
-    return response.data;
+    return { ...response.data, identityAvailable: true };
   } catch (error) {
-    console.warn('Plaid identity product unavailable for connected item; falling back to inferred identity.', {
+    console.warn('Plaid Identity unavailable; owner identity remains unverified.', {
       error: error.response?.data?.error_message || error.message,
     });
-    return buildMockIdentity(userName);
+    return { accounts: [], identityAvailable: false };
   }
 }
 
