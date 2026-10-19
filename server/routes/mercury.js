@@ -156,7 +156,8 @@ router.post('/webhook', async (req, res) => {
       await recordOwnerProviderEvent({
         accountId: ownerAccountId,
         provider: 'mercury',
-        eventId: event?.id || `mercury-${Date.now()}`,
+        // Never invent a time-based ID: retries must retain the same event identity.
+        eventId: event?.id || `mercury-${crypto.createHash('sha256').update(rawBody).digest('hex')}`,
         resourceType: event?.resourceType || null,
         resourceId: event?.resourceId || null,
         occurredAt: event?.occurredAt || null,
