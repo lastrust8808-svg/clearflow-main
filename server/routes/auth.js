@@ -1,8 +1,19 @@
+import { authConfigured, issueChallenge, exchangeChallenge, lookupSession, revokeToken } from '../services/identityStore.js';
 import express from 'express';
 import { isMailerConfigured, sendPlainEmail } from '../utils/mailer.js';
 import { isSmsConfigured, sendVerificationSms } from '../utils/messenger.js';
 
 const router = express.Router();
+
+// Legacy browser-generated verification codes cannot establish server identity.
+// Disable the insecure preview/delivery endpoint in production until server-issued
+// single-use challenges and durable local sessions are migrated.
+router.use('/verification/start', (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(503).json({ success: false, error: 'Legacy verification is disabled pending secure account migration.' });
+  }
+  return next();
+});
 
 const DEFAULT_ALLOWED_GOOGLE_ORIGINS = new Set([
   'http://localhost:3001',
@@ -119,6 +130,55 @@ router.post('/verification/start', async (req, res) => {
   }
 });
 
+// Secure email sign-in endpoints. The code is generated, stored, and checked on the server.
+router.post('/session/email/start', async (req, res) => {
+  if (!authConfigured() || !isMailerConfigured()) {
+    return res.status(503).json({ success: false, error: 'Secure email sign-in is not configured.' });
+  }
+  try {
+    await issueChallenge(req.body?.email, async (email, code) => {
+      await sendPlainEmail({
+        to: email, subject: 'Your ClearFlow sign-in code',
+        text: `Your ClearFlow sign-in code is ${code}. It expires in 10 minutes.`,
+        fromName: 'ClearFlow Access',
+      });
+    });
+    return res.json({ success: true, message: 'If eligible, a sign-in code has been sent.' });
+  } catch (error) {
+    return res.status(error.message === 'Invalid email' ? 400 : 503)
+      .json({ success: false, error: 'Unable to start secure sign-in.' });
+  }
+});
+router.post('/session/email/verify', async (req, res) => {
+  if (!authConfigured()) return res.status(503).json({ success: false, error: 'Sign-in unavailable.' });
+  try {
+    const result = await exchangeChallenge(req.body?.email, req.body?.code);
+    if (!result) return res.status(401).json({ success: false, error: 'Invalid or expired code.' });
+    return res.json({ success: true, ...result });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Sign-in unavailable.' });
+  }
+});
+router.get('/session/me', async (req, res) => {
+  try {
+    const token = /^Bearer (\\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    const user = await lookupSession(token);
+    return user ? res.json({ success: true, user }) :
+      res.status(401).json({ success: false, error: 'Session expired.' });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Session unavailable.' });
+  }
+});
+router.post('/session/logout', async (req, res) => {
+  try {
+    const token = /^Bearer (\\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    await revokeToken(token);
+    return res.json({ success: true });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Logout unavailable.' });
+  }
+});
+
 router.get('/status', async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -161,6 +221,18 @@ router.post('/google/exchange', async (req, res) => {
     });
   }
 
+  // The OAuth redirect must be an exact registered application origin.
+  // Never allow an arbitrary client-supplied redirect URI.
+  const effectiveRedirectUri = typeof redirectUri === 'string' && redirectUri.trim()
+    ? redirectUri.trim()
+    : requestOrigin;
+  if (effectiveRedirectUri !== requestOrigin || !allowedOrigins.has(effectiveRedirectUri)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid Google authorization redirect URI.',
+    });
+  }
+
   if (!googleClientId || !googleClientSecret) {
     return res.status(500).json({
       success: false,
@@ -173,10 +245,7 @@ router.post('/google/exchange', async (req, res) => {
       code,
       client_id: googleClientId,
       client_secret: googleClientSecret,
-      redirect_uri:
-        typeof redirectUri === 'string' && redirectUri.trim()
-          ? redirectUri.trim()
-          : requestOrigin,
+      redirect_uri: effectiveRedirectUri,
       grant_type: 'authorization_code',
     });
 

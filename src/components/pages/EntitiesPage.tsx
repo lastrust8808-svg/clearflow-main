@@ -9,6 +9,7 @@ import EntityExecutionStudio from '../entities/EntityExecutionStudio';
 import EntityQuickAddModal from '../entities/EntityQuickAddModal';
 import EntityConnectionRailModal from '../entities/EntityConnectionRailModal';
 import StatCard from '../ui/StatCard';
+import RecordEditorCard from '../ui/RecordEditorCard';
 import WorkbenchRecordCard from '../ui/WorkbenchRecordCard';
 import { buildPrivateWealthRailSummaries } from '../../services/privateWealthRail.service';
 import {
@@ -219,6 +220,18 @@ export default function EntitiesPage({
   };
 
   const deleteEntityProfile = (entityId: string) => {
+    const hasLinkedRecords = Object.entries(data).some(([key, records]) =>
+      key !== 'entities' && Array.isArray(records) && records.some((record) =>
+        record && typeof record === 'object' && Object.entries(record).some(([field, value]) =>
+          (field === 'entityId' || field === 'ownerEntityId' || field === 'connectedEntityId' ||
+           field === 'issuerEntityId' || field === 'currentHolderEntityId') && value === entityId
+        )
+      )
+    );
+    if (hasLinkedRecords) {
+      window.alert('This entity has linked financial, banking, or authority records. Remove or reassign those links before deleting the entity.');
+      return;
+    }
     const entityLabel = entityNameById.get(entityId) || 'this entity';
     if (
       typeof window !== 'undefined' &&
@@ -1894,6 +1907,19 @@ export default function EntitiesPage({
                     >
                       Confirm Authority And Release Hold
                     </button>
+                    <RecordEditorCard
+                      title="Edit Entity"
+                      subtitle="Update the entity profile and save changes."
+                      record={entity}
+                      onSave={(nextRecord) =>
+                        setData((prev) => ({
+                          ...prev,
+                          entities: prev.entities.map((item) =>
+                            item.id === entity.id ? nextRecord : item
+                          ),
+                        }))
+                      }
+                    />
                     <button
                       type="button"
                       onClick={() => deleteEntityProfile(entity.id)}

@@ -1,3 +1,4 @@
+import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import { createHash, createPublicKey, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
@@ -6,6 +7,18 @@ import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accoun
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
+// Fail closed for banking operations; provider webhooks use their own signature verification.
+router.use((req, res, next) => {
+  if (req.path === '/webhook') return next();
+  const accountId = req.get('x-clearflow-account-id');
+  if (!accountId) return res.status(401).json({ error: 'Account authentication required.' });
+  req.params.accountId = accountId;
+  return requireAccountAccess(req, res, () => {
+    req.verifiedAccountId = accountId;
+    next();
+  });
+});
+
 
 const itemStore = new Map();
 const accountIndex = new Map();
@@ -67,7 +80,15 @@ async function hydrateStoredItemByItemId(itemId) {
     const { readdir } = await import('node:fs/promises');
     const path = await import('node:path');
     const accountsRoot = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
-    const accountDirectories = await readdir(accountsRoot, { withFileTypes: true });
+    // A fresh stateless deployment may have no legacy account directory.
+    // Treat that as an empty legacy index, not a provider failure.
+    let accountDirectories;
+    try {
+      accountDirectories = await readdir(accountsRoot, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === 'ENOENT') return null;
+      throw error;
+    }
 
     for (const entry of accountDirectories) {
       if (!entry.isDirectory()) {
@@ -424,19 +445,25 @@ async function createLinkTokenWithFallbacks(plaidClient, payload) {
   throw lastError;
 }
 
-async function getIdentityDataOrFallback(plaidClient, accessToken, userName) {
+async function getIdentityDataOrFallback(plaidClient, accessToken) {
+  // Identity is a separately entitled Plaid product. Never infer a verified
+  // bank-account owner from the user's self-entered display name.
+  if (process.env.CLEARFLOW_PLAID_IDENTITY_ENABLED !== 'true') {
+    return { accounts: [], identityAvailable: false };
+  }
   try {
     const response = await plaidClient.identityGet({ access_token: accessToken });
-    return response.data;
+    return { ...response.data, identityAvailable: true };
   } catch (error) {
-    console.warn('Plaid identity product unavailable for connected item; falling back to inferred identity.', {
+    console.warn('Plaid Identity unavailable; owner identity remains unverified.', {
       error: error.response?.data?.error_message || error.message,
     });
-    return buildMockIdentity(userName);
+    return { accounts: [], identityAvailable: false };
   }
 }
 
 router.post('/link_token', async (req, res) => {
+  if ((req.body.userId || req.body.user_id) !== req.verifiedAccountId) return res.status(403).json({ error: 'Account mismatch.' });
   const userId = req.body.userId || req.body.user_id;
   if (!userId) {
     return res.status(400).json({ error: 'userId is required' });
@@ -465,6 +492,7 @@ router.post('/link_token', async (req, res) => {
 });
 
 router.post('/exchange_public_token', async (req, res) => {
+  if ((req.body.userId || req.body.user_id) !== req.verifiedAccountId) return res.status(403).json({ error: 'Account mismatch.' });
   const userId = req.body.userId || req.body.user_id;
   const publicToken = req.body.public_token || req.body.publicToken;
   const userName = req.body.userName || req.body.user_name || 'ClearFlow User';
@@ -570,6 +598,7 @@ router.post('/exchange_public_token', async (req, res) => {
 });
 
 router.post('/auth/get', async (req, res) => {
+  const verifiedAccountId = req.verifiedAccountId;
   const itemId = req.body.itemId || req.body.item_id;
   const initialAmount = Number(req.body.initialAmount || req.body.initial_amount || 0);
   if (!itemId) {
@@ -583,6 +612,7 @@ router.post('/auth/get', async (req, res) => {
 
   try {
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     const response = await plaidClient.authGet({ access_token: item.accessToken });
     item.authResponse = response.data;
     return res.json(response.data);
@@ -594,6 +624,7 @@ router.post('/auth/get', async (req, res) => {
 });
 
 router.post('/identity/get', async (req, res) => {
+  const verifiedAccountId = req.verifiedAccountId;
   const itemId = req.body.itemId || req.body.item_id;
   const userName = req.body.userName || req.body.user_name || 'ClearFlow User';
   if (!itemId) {
@@ -607,6 +638,7 @@ router.post('/identity/get', async (req, res) => {
 
   try {
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     const identityData = await getIdentityDataOrFallback(
       plaidClient,
       item.accessToken,
@@ -632,6 +664,7 @@ router.post('/signal/prepare', async (_req, res) => {
 });
 
 router.post('/signal/evaluate', async (req, res) => {
+  const verifiedAccountId = req.verifiedAccountId;
   const itemId = req.body.itemId || req.body.item_id;
   const accountId = req.body.accountId || req.body.account_id;
   const amount = Number(req.body.amount || 0);
@@ -662,6 +695,7 @@ router.post('/signal/evaluate', async (req, res) => {
   try {
     const resolvedItemId = itemId || accountIndex.get(accountId);
     const item = await getStoredItem(resolvedItemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     const response = await plaidClient.signalEvaluate({
       access_token: item.accessToken,
       account_id: accountId,
@@ -679,6 +713,7 @@ router.post('/signal/evaluate', async (req, res) => {
 });
 
 router.get('/transactions/:itemId', async (req, res) => {
+  const verifiedAccountId = req.verifiedAccountId;
   const { itemId } = req.params;
   const plaidClient = getPlaidClient();
 
@@ -709,6 +744,7 @@ router.get('/transactions/:itemId', async (req, res) => {
 });
 
 router.post('/transactions/sync', async (req, res) => {
+  const verifiedAccountId = req.verifiedAccountId;
   const itemId = req.body.itemId || req.body.item_id;
   if (!itemId) {
     return res.status(400).json({ error: 'itemId is required' });
@@ -727,8 +763,9 @@ router.post('/transactions/sync', async (req, res) => {
   }
 
   try {
-    await syncPlaidItemChanges(itemId);
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
+    await syncPlaidItemChanges(itemId);
     const pendingAddedTransactions = item.pendingAddedTransactions || [];
     const pendingModifiedTransactions = item.pendingModifiedTransactions || [];
     const removedTransactionIds = item.removedTransactionIds || [];

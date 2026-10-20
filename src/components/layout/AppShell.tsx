@@ -486,6 +486,7 @@ export default function AppShell({
     assets: 'Custody, wallets, reserves, digital holdings, and asset support records.',
     transactions: 'Settlement, performance, obligations, remittance, and movement execution.',
     compliance: 'Review queues, filings, controls, and reporting follow-through.',
+    credit: 'Credit building, monitoring, and account management.',
     documents: 'Vault routing, retained records, user-owned files, and generated packets.',
     aiStudio: 'Generators, research, search, reporting, and operational tool launchers.',
     settings: 'Workspace behavior, storage posture, integrations, and access configuration.',
