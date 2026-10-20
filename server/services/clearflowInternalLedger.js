@@ -350,11 +350,14 @@ export async function recordClearFlowAgreementDeposit(input) {
       return databaseRecord;
     }
   } catch (error) {
-    console.warn(
-      'Falling back to file-backed ClearFlow agreement ledger after database write failure.',
-      error,
-    );
+    // A failed database write must never be reported as a successful deposit
+    // from ephemeral filesystem storage.
+    if (process.env.NODE_ENV === 'production') throw error;
+    console.warn('Development agreement database write failed; using local test storage.', error);
   }
 
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Durable platform agreement ledger database is required in production.');
+  }
   return saveAgreementDepositToFile(record);
 }
