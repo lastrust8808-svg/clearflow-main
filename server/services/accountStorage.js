@@ -161,6 +161,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
   if (await writeDurable(accountId, 'file', fileId, { ...payload, accountId, fileId, savedAt: new Date().toISOString() })) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -203,6 +204,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
   if (await writeDurable(accountId, 'remittance', vendorId, { ...payload, accountId, vendorId, savedAt: new Date().toISOString() })) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -245,6 +247,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
   if (await writeDurable(accountId, 'proof', 'default', { ...payload, accountId, savedAt: new Date().toISOString() })) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -285,6 +288,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
   if (await writeDurable(accountId, 'plaid', 'default', { ...payload, accountId, savedAt: new Date().toISOString() })) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
@@ -325,6 +329,7 @@ export async function saveAccountExtractionRecord(accountId, signature, payload)
   if (await writeDurable(accountId, 'extraction', signature, { ...payload, accountId, signature, savedAt: new Date().toISOString() })) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(
