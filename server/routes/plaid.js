@@ -444,7 +444,7 @@ router.post('/link_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json({ link_token: `link-sandbox-mock-${Date.now()}` });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
@@ -475,46 +475,7 @@ router.post('/exchange_public_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    const itemId = `mock-item-${Date.now()}`;
-    const authResponse = buildMockAuth();
-    const identityData = buildMockIdentity(userName);
-    const bankOwnerName = identityData.accounts[0]?.owners?.[0]?.names?.[0] || '';
-    itemStore.set(itemId, {
-      userId,
-      accessToken: `mock-access-${Date.now()}`,
-      itemId,
-      authResponse,
-      identityData,
-      accounts: [
-        {
-          account_id: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-        },
-      ],
-    });
-    accountIndex.set(authResponse.accounts[0].account_id, itemId);
-    await savePersistedConnections(userId);
-
-    return res.json({
-      authResponse,
-      identityData,
-      identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
-      itemId,
-      linkedAccounts: [
-        {
-          accountId: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-          currentBalance: 2500,
-          availableBalance: 2500,
-        },
-      ],
-    });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
