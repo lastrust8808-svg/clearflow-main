@@ -132,6 +132,7 @@ export async function saveAccountAppData(accountId, appData) {
   if (await writeDurable(accountId, 'app-data', 'default', appData)) {
     return { accountId, savedAt: new Date().toISOString() };
   }
+  if (durablePool()) throw new Error('Durable account storage failed; refusing temporary-file fallback.');
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await fs.writeFile(appDataPath(accountId), JSON.stringify(appData, null, 2), 'utf8');
