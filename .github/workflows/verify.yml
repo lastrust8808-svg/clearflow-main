@@ -1,0 +1,24 @@
+name: Verify ClearFlow
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+        # Temporary compatibility step: lockfile is missing pg dependency entries.
+      - run: npm run lint
+      - run: npm run build
+      - run: node --check server.js
+      - run: node --check server/routes/plaid.js
+      - run: node --check server/routes/storage.js
+      - run: node --check server/services/accountStorage.js

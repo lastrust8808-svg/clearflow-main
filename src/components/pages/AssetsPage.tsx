@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction, CSSProperties } from 'react';
 import type { AssetRecord, CoreDataBundle, InstrumentRecord } from '../../types/core';
 import { buildCapitalStrategySummary } from '../../services/capitalStrategy.service';
 import { buildAssetAcquisitionRailViews } from '../../services/assetAcquisitionRails.service';
@@ -33,7 +33,7 @@ function formatMoney(value: number, currency = 'USD') {
   }).format(value || 0);
 }
 
-function statusPillStyle(active: boolean): React.CSSProperties {
+function statusPillStyle(active: boolean): CSSProperties {
   return {
     padding: '6px 9px',
     borderRadius: 999,
