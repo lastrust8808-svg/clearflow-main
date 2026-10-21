@@ -6,6 +6,7 @@ import type {
   BankFeedRuleRecord,
   CoreDataBundle,
   JournalEntryRecord,
+  LedgerAccountRecord,
   ReconciliationRecord,
   ReconciliationStatementLineRecord,
   TokenRecord,
