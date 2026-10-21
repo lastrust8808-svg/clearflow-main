@@ -116,7 +116,7 @@ async function ensureDirectory(targetPath) {
 
 export async function loadAccountAppData(accountId) {
   const durable = await readDurable(accountId, 'app-data', 'default');
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(appDataPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -144,7 +144,7 @@ export async function saveAccountAppData(accountId, appData) {
 
 export async function loadAccountDocumentFile(accountId, fileId) {
   const durable = await readDurable(accountId, 'file', fileId);
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(accountFilePath(accountId, fileId), 'utf8');
     return JSON.parse(raw);
@@ -186,7 +186,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 
 export async function loadAccountRemittanceVault(accountId, vendorId) {
   const durable = await readDurable(accountId, 'remittance', vendorId);
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(accountRemittancePath(accountId, vendorId), 'utf8');
     return JSON.parse(raw);
@@ -228,7 +228,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 
 export async function loadAccountTransactionProofVault(accountId) {
   const durable = await readDurable(accountId, 'proof', 'default');
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(accountTransactionProofPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -268,7 +268,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 
 export async function loadAccountPlaidVault(accountId) {
   const durable = await readDurable(accountId, 'plaid', 'default');
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(accountPlaidPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -308,7 +308,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
 
 export async function loadAccountExtractionRecord(accountId, signature) {
   const durable = await readDurable(accountId, 'extraction', signature);
-  if (durable !== undefined) return durable;
+  if (durable !== undefined && durable !== null) return durable;
   try {
     const raw = await fs.readFile(accountExtractionPath(accountId, signature), 'utf8');
     return JSON.parse(raw);
