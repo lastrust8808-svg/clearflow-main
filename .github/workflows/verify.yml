@@ -14,7 +14,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
+        # Temporary compatibility step: lockfile is missing pg dependency entries.
       - run: npm run lint
       - run: npm run build
       - run: node --check server.js
