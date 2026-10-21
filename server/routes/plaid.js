@@ -403,8 +403,6 @@ async function verifyPlaidWebhook(rawBody, verificationHeader, plaidClient) {
 
 async function createLinkTokenWithFallbacks(plaidClient, payload) {
   const productSets = [
-    [Products.Auth, Products.Transactions],
-    [Products.Auth],
     [Products.Transactions],
   ];
   let lastError = null;
@@ -414,6 +412,8 @@ async function createLinkTokenWithFallbacks(plaidClient, payload) {
       const response = await plaidClient.linkTokenCreate({
         ...payload,
         products,
+        optional_products: [Products.Auth],
+        additional_consented_products: [Products.Investments],
       });
       return { response, products };
     } catch (error) {
