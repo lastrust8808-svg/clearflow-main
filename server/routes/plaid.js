@@ -522,14 +522,23 @@ router.post('/exchange_public_token', async (req, res) => {
     const accessToken = exchange.data.access_token;
     const itemId = exchange.data.item_id;
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
-    const authResponse = await plaidClient.authGet({ access_token: accessToken });
+    // Auth is optional in Link: investment and credit accounts may not support ACH details.
+    let authResponse = null;
+    try {
+      const authResult = await plaidClient.authGet({ access_token: accessToken });
+      authResponse = authResult.data;
+    } catch (authError) {
+      console.info('Plaid Auth unavailable for this linked account; continuing without ACH details.', {
+        code: authError.response?.data?.error_code || 'UNAVAILABLE',
+      });
+    }
     const identityData = await getIdentityDataOrFallback(plaidClient, accessToken, userName);
 
     itemStore.set(itemId, {
       userId,
       accessToken,
       itemId,
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       accounts: accountsResponse.data.accounts,
     });
@@ -543,7 +552,7 @@ router.post('/exchange_public_token', async (req, res) => {
       identityData.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
 
     return res.json({
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
