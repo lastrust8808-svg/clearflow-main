@@ -13,8 +13,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      # Temporary dependency install until the committed lockfile is regenerated for pg.
-      - run: npm install --no-save --package-lock=false
+      # CI must use reproducible dependency resolution and fail on install errors.
+      - run: npm ci
       - run: npm run lint
       - run: npm test
       - run: npm run build
