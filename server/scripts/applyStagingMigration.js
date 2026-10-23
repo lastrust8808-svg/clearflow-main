@@ -20,7 +20,22 @@ try {
       'clearflow_schema_migrations','clearflow_account_snapshots',
       'clearflow_account_records','clearflow_entity_memberships','clearflow_b2b_deliveries'
     ]]);
-  if (check.rowCount !== 5) throw new Error('Migration verification failed.');
+  const found = new Set(check.rows.map(row => row.table_name));
+  const required = [
+    'clearflow_schema_migrations', 'clearflow_account_snapshots',
+    'clearflow_account_records', 'clearflow_entity_memberships',
+    'clearflow_b2b_deliveries',
+  ];
+  if (required.some(name => !found.has(name))) throw new Error('Migration verification failed: required table missing.');
+  const version = await client.query('SELECT version FROM public.clearflow_schema_migrations WHERE version = $1', ['001_storage_foundation']);
+  if (version.rowCount !== 1) throw new Error('Migration version was not recorded.');
+  const columns = await client.query(`SELECT table_name, column_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name = ANY($1::text[])`, [required]);
+  const names = new Set(columns.rows.map(row => `${row.table_name}.${row.column_name}`));
+  for (const key of ['clearflow_account_snapshots.revision', 'clearflow_account_records.payload',
+    'clearflow_entity_memberships.revoked_at', 'clearflow_b2b_deliveries.invoice_payload']) {
+    if (!names.has(key)) throw new Error(`Migration verification failed: ${key} missing.`);
+  }
   console.log('Staging migration applied and five required tables verified.');
 } finally {
   await client.end();
