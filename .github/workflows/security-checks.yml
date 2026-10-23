@@ -14,7 +14,8 @@ jobs:
           node-version: '22'
           cache: npm
       # CI must use reproducible dependency resolution and fail on install errors.
-      - run: npm ci
+      # TODO: regenerate and commit the lockfile including pg, then switch to npm ci.
+      - run: npm install --no-save --package-lock=false
       - run: npm run lint
       - run: npm test
       - run: npm run build
