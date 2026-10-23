@@ -15,5 +15,7 @@ test('staging migration validates all five tables before declaring success', () 
   for (const name of ['clearflow_schema_migrations','clearflow_account_snapshots','clearflow_account_records','clearflow_entity_memberships','clearflow_b2b_deliveries']) {
     assert.ok(runner.includes(name), name);
   }
-  assert.match(runner, /check\.rowCount !== 5/);
+  assert.match(runner, /required\.some\(name => !found\.has\(name\)\)/);
+  assert.match(runner, /version\.rowCount !== 1/);
+  assert.match(runner, /names\.has\(key\)/);
 });
