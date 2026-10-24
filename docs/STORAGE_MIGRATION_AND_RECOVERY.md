@@ -41,7 +41,7 @@ The `storage-recovery` job provisions three disposable PostgreSQL databases. No 
 
 - `npm run test:legacy`: prior compatibility schema upgrade, repeat migration, historical record preservation, encrypted item backfill.
 - `npm run test:storage`: HTTP storage isolation, revision conflicts, document retention, membership-based delivery, revoked membership, revoked/expired sessions, encrypted banking item retention in a fresh process.
-- `npm run test:restore`: `pg_dump` into a temporary archive, restore into an empty dedicated database, compare every public table and decrypt restored banking records. Refuses to clean or overwrite a populated target.
+- `npm run test:restore`: `pg_dump` into a custom-format archive, restore into an empty dedicated database, compare every public table and decrypt restored banking records. Refuses to clean or overwrite a populated target.
 
 Required URLs use database names `clearflow_staging`, `clearflow_legacy_test`, and `clearflow_restore_test`. Use isolated test infrastructure only. The restore test requires PostgreSQL client tools matching the server major version.
 
@@ -90,8 +90,11 @@ Completion scope: these checks establish application behavior under controlled p
 
 ## Deployment evidence and version coverage
 
-The actual Render PostgreSQL services report version 18, so the storage/recovery CI matrix runs against PostgreSQL 16 and 18 with matching client tools. A pass on version 16 alone is not the full version-compatibility result.
+The actual Render PostgreSQL services report version 18, so the storage/recovery CI matrix runs against PostgreSQL 16 and 18 using each service container's matching client tools. A pass on version 16 alone is not the full version-compatibility result.
 
 Read-only Render inspection found the live `clearflow-api` service still serving main commit `e5eaa90562ed4b7ff0af5abaf25ce847e441a15d`; its production database currently exposes only the three owner workspace/audit/provider-event tables. The release branch has not been deployed there. The existing staging runner is `clearflow-staging-migration-test` and its database rejects external connections. The connector cannot run an existing cron job, so staging execution must use the authenticated Render dashboard/internal runner. Do not widen database network access to work around this.
 
 CI completion and live-user readiness are separate entries: the repaired banking gate can pass while the running service still lacks the repaired code and schema. Existing-user reconciliation, authenticated browser flows against the configured runtime, institution/OAuth tests, and payment-provider evidence remain required before production use is claimed complete.
+
+
+The first PostgreSQL 18 matrix attempt stopped before application tests because the runner's package sources did not contain `postgresql-client-18`. CI now executes `pg_dump`/`pg_restore` from the matching official database service container rather than relying on the host package repositories. This does not skip recovery testing or downgrade the server version. Matrix failures no longer cancel the other version's evidence.

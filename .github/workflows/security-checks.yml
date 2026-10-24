@@ -28,6 +28,7 @@ jobs:
   storage-recovery:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         postgres: ['16', '18']
     services:
@@ -63,14 +64,11 @@ jobs:
           await c.query('CREATE DATABASE clearflow_restore_test');
           await c.end();
           JS
-      - name: Install matching PostgreSQL client tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client-${{ matrix.postgres }}
-          echo "/usr/lib/postgresql/${{ matrix.postgres }}/bin" >> "$GITHUB_PATH"
       - run: npm run test:legacy
       - run: npm run test:storage
       - run: npm run test:restore
+        env:
+          CLEARFLOW_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
 
   banking-release:
     runs-on: ubuntu-latest

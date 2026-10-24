@@ -2,9 +2,6 @@
 import pg from 'pg';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
-import path from 'node:path';
-import { tmpdir } from 'node:os';
 import { decryptJson } from '../utils/secureVault.js';
 
 const source = new URL(process.env.CLEARFLOW_STAGING_DATABASE_URL || 'invalid:');
@@ -16,7 +13,14 @@ const pgEnv = url => ({ ...process.env, PGHOST: url.hostname, PGPORT: url.port |
   PGDATABASE: url.pathname.slice(1), PGSSLMODE: url.searchParams.get('sslmode') || 'prefer' });
 const from = new pg.Client({ connectionString: source.toString() });
 const to = new pg.Client({ connectionString: target.toString() });
-const directory = await mkdtemp(path.join(tmpdir(), 'clearflow-restore-'));
+// In CI, use the service container's own client binaries so their major version matches.
+const container = process.env.CLEARFLOW_POSTGRES_CONTAINER;
+const runPg = (binary, args, url, input) => execFileSync(container ? 'docker' : binary,
+  container ? ['exec', ...(input ? ['-i'] : []),
+    ...['PGHOST','PGPORT','PGUSER','PGPASSWORD','PGDATABASE','PGSSLMODE'].flatMap(name => ['-e', name]),
+    container, binary, ...args] : args,
+  { env: { ...pgEnv(url), ...(container ? { PGHOST: '127.0.0.1', PGPORT: '5432' } : {}) },
+    input, stdio: 'pipe', timeout: 60000, maxBuffer: 32 * 1024 * 1024 });
 const quote = name => '"' + name.replaceAll('"','""') + '"';
 const canonical = value => JSON.stringify(value, (_, v) => v && !Array.isArray(v) && typeof v === 'object'
   ? Object.fromEntries(Object.entries(v).sort(([a],[b]) => a.localeCompare(b))) : v);
@@ -32,14 +36,12 @@ try {
   };
   const before = await snapshot(from);
   assert.ok(before.clearflow_plaid_items.length > 0, 'Seeded encrypted records required.');
-  const backup = path.join(directory, 'release.dump');
-  execFileSync('pg_dump', ['--format=custom','--no-owner','--no-privileges','--file',backup], { env: pgEnv(source), stdio: 'pipe', timeout: 60000 });
-  execFileSync('pg_restore', ['--exit-on-error','--no-owner','--no-privileges','--dbname',target.pathname.slice(1),backup], { env: pgEnv(target), stdio: 'pipe', timeout: 60000 });
+  const backup = runPg('pg_dump', ['--format=custom','--no-owner','--no-privileges'], source);
+  runPg('pg_restore', ['--exit-on-error','--no-owner','--no-privileges','--dbname',target.pathname.slice(1)], target, backup);
   assert.deepEqual(await snapshot(to), before, 'Every public table and retained record must match.');
   const vaults = await to.query('SELECT account_id,encrypted_payload FROM clearflow_plaid_items');
   for (const row of vaults.rows) assert.equal(decryptJson(row.encrypted_payload).userId,row.account_id);
   console.log('Backup/restore verified: all rows, memberships, sessions, revisions and decryptable banking items preserved.');
 } finally {
   await Promise.allSettled([from.end(),to.end()]);
-  await rm(directory,{ recursive:true,force:true });
 }
