@@ -303,7 +303,7 @@ export interface PlaidIdentityMatchScores {
 }
 
 export interface PlaidConnectionPayload {
-  authResponse: PlaidAuthResponse;
+  authResponse: PlaidAuthResponse | null;
   identityData: PlaidIdentityData;
   identityMatchScores: PlaidIdentityMatchScores;
   itemId: string;

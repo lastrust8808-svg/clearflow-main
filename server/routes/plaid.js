@@ -1,10 +1,12 @@
+import { stagePlaidDelivery, acknowledgePlaidDelivery } from '../services/plaidDelivery.js';
+import { isConfiguredOwnerAccount, loadOwnerWorkspace } from '../services/ownerDatabase.js';
 import { plaidItemStorageConfigured, readPlaidItem, writePlaidItem } from '../services/plaidItemStorage.js';
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import { createHash, createPublicKey, timingSafeEqual } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from 'plaid';
-import { loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accountStorage.js';
+import { loadAccountAppData, loadAccountPlaidVault, saveAccountPlaidVault } from '../services/accountStorage.js';
 import { decryptJson, encryptJson } from '../utils/secureVault.js';
 
 const router = express.Router();
@@ -63,6 +65,8 @@ async function savePersistedConnections(userId, item) {
       pendingAddedTransactions: item.pendingAddedTransactions || [],
       pendingModifiedTransactions: item.pendingModifiedTransactions || [],
       removedTransactionIds: item.removedTransactionIds || [],
+      delivery: item.delivery || null,
+      lastAcknowledgedDeliveryId: item.lastAcknowledgedDeliveryId || null,
     }))
   );
 
@@ -728,27 +732,35 @@ router.post('/transactions/sync', async (req, res) => {
   try {
     const item = await getStoredItem(itemId);
     if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
+    // A frozen delivery is replayed unchanged until its durable workspace receipt is acknowledged.
+    if (item.delivery) return res.json(item.delivery);
     await syncPlaidItemChanges(itemId);
     const syncedItem = await getStoredItem(itemId);
-    Object.assign(item, syncedItem);
-    const pendingAddedTransactions = item.pendingAddedTransactions || [];
-    const pendingModifiedTransactions = item.pendingModifiedTransactions || [];
-    const removedTransactionIds = item.removedTransactionIds || [];
-
-    item.pendingAddedTransactions = [];
-    item.pendingModifiedTransactions = [];
-    item.removedTransactionIds = [];
-    await savePersistedConnections(item.userId, item);
-
-    return res.json({
-      added: pendingAddedTransactions,
-      modified: pendingModifiedTransactions,
-      removedTransactionIds,
-    });
+    const staged = stagePlaidDelivery(syncedItem);
+    if (staged.changed) await savePersistedConnections(syncedItem.userId, syncedItem);
+    return res.json(staged.delivery);
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       error: error.response?.data?.error_message || error.message || 'Failed to sync transactions.',
     });
+  }
+});
+
+router.post('/transactions/ack', async (req, res) => {
+  const { itemId, deliveryId } = req.body || {};
+  if (typeof itemId !== 'string' || !itemId || typeof deliveryId !== 'string' || !deliveryId) {
+    return res.status(400).json({ error: 'Item and delivery identifiers are required.' });
+  }
+  try {
+    const item = await getStoredItem(itemId);
+    if (item.userId !== req.verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
+    const workspace = isConfiguredOwnerAccount(req.verifiedAccountId)
+      ? (await loadOwnerWorkspace(req.verifiedAccountId))?.app_data
+      : await loadAccountAppData(req.verifiedAccountId);
+    if (acknowledgePlaidDelivery(item, deliveryId, workspace)) await savePersistedConnections(item.userId, item);
+    return res.json({ acknowledged: true, deliveryId });
+  } catch (error) {
+    return res.status(error.statusCode || 503).json({ error: error.message || 'Bank delivery acknowledgement unavailable.' });
   }
 });
 

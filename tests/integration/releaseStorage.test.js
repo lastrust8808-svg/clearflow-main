@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import express from 'express';
+import { PlaidApi } from 'plaid';
+import ts from 'typescript';
 
 const url = process.env.CLEARFLOW_STAGING_DATABASE_URL;
 if (!url || new URL(url).pathname !== '/clearflow_staging') throw new Error('Isolated clearflow_staging database required.');
@@ -26,7 +28,8 @@ test('committed storage survives a new process; HTTP isolation, grants and sessi
   await identity.prepareAuth();
   const { default: storage } = await import('../../server/routes/storage.js');
   const { default: b2b } = await import('../../server/routes/b2b.js');
-  const app = express(); app.use(express.json()); app.use('/storage', storage); app.use('/b2b', b2b);
+  const { default: plaid } = await import('../../server/routes/plaid.js');
+  const app = express(); app.use(express.json()); app.use('/storage', storage); app.use('/b2b', b2b); app.use('/plaid', plaid);
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const users = {};
@@ -75,6 +78,52 @@ test('committed storage survives a new process; HTTP isolation, grants and sessi
   await assert.rejects(() => writePlaidItem({ ...copy, cursor: 'stale' }), /revision conflict/);
   const raw = await client.query('SELECT encrypted_payload FROM clearflow_plaid_items WHERE item_id=$1', [item.itemId]);
   assert.ok(!JSON.stringify(raw.rows).includes(item.accessToken));
+  // Exercise the complete delivery -> accounting import -> durable save -> acknowledgement boundary.
+  process.env.PLAID_CLIENT_ID='ci-test'; process.env.PLAID_SECRET='ci-test';
+  const originalSync=PlaidApi.prototype.transactionsSync;
+  PlaidApi.prototype.transactionsSync=async()=>({data:{added:[],modified:[],removed:[],next_cursor:'after-sync',has_more:false}});
+  t.after(()=>{PlaidApi.prototype.transactionsSync=originalSync;});
+  const deliveryItemId='delivery-'+suffix;
+  await writePlaidItem({itemId:deliveryItemId,userId:alice.account,accessToken:'ci-only-access',pendingAddedTransactions:[
+    {transaction_id:'checking-txn',account_id:'provider-checking',amount:25,date:'2026-10-24',name:'Checking purchase'},
+    {transaction_id:'savings-txn',account_id:'provider-savings',amount:50,date:'2026-10-24',name:'Savings purchase'},
+  ]});
+  const bankReq=(user,route,body)=>req(user,'/plaid'+route,'POST',body,{'x-clearflow-account-id':user.account});
+  const deliveryResponse=await bankReq(alice,'/transactions/sync',{itemId:deliveryItemId});
+  assert.equal(deliveryResponse.status,200);const batch=await deliveryResponse.json();assert.ok(batch.deliveryId);
+  assert.deepEqual(await (await bankReq(alice,'/transactions/sync',{itemId:deliveryItemId})).json(),batch);
+  assert.equal((await bankReq(bob,'/transactions/ack',{itemId:deliveryItemId,deliveryId:batch.deliveryId})).status,403);
+  assert.equal((await bankReq(alice,'/transactions/ack',{itemId:deliveryItemId,deliveryId:batch.deliveryId})).status,409,'Unsaved deliveries cannot be acknowledged.');
+  const bankSource=readFileSync(new URL('../../src/services/bankFeed.service.ts',import.meta.url),'utf8');
+  const compiled=ts.transpileModule(bankSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+  const {syncPlaidItemToLedger}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+  const bankCore={bankAccounts:['checking','savings'].map((name,index)=>({id:name,entityId:'entity-'+index,accountName:name,institutionName:'Test bank',currency:'USD',accountType:name,status:'active',plaidItemId:deliveryItemId,connectionType:'plaid_connected',connectedProfile:{externalAccountId:'provider-'+name}})),bankFeedEntries:[],bankFeedRules:[],reconciliations:[],ledgerAccounts:[],transactions:[],journalEntries:[],tokens:[]};
+  const imported=syncPlaidItemToLedger(bankCore,deliveryItemId,batch);
+  assert.deepEqual(imported.bankFeedEntries.map(entry=>[entry.bankAccountId,entry.externalTransactionId]).sort(),[['checking','checking-txn'],['savings','savings-txn']]);
+  const current=await (await req(alice,workspace)).json();
+  const retainedWorkspace={...current.appData,coreDataSnapshot:imported};
+  assert.equal((await req(alice,workspace,'PUT',retainedWorkspace,{'If-Match':'0'})).status,409);
+  assert.equal((await bankReq(alice,'/transactions/ack',{itemId:deliveryItemId,deliveryId:batch.deliveryId})).status,409);
+  assert.equal((await req(alice,workspace,'PUT',retainedWorkspace,{'If-Match':current.version})).status,200);
+  const updatedItem=await readPlaidItem(deliveryItemId);
+  updatedItem.pendingAddedTransactions=[{transaction_id:'later-txn',account_id:'provider-checking',amount:5,date:'2026-10-24',name:'Later purchase'}];
+  await writePlaidItem(updatedItem);
+  assert.equal((await bankReq(alice,'/transactions/ack',{itemId:deliveryItemId,deliveryId:batch.deliveryId})).status,200);
+  assert.equal((await bankReq(alice,'/transactions/ack',{itemId:deliveryItemId,deliveryId:batch.deliveryId})).status,200,'A lost acknowledgement response is safe to retry.');
+  const later=await (await bankReq(alice,'/transactions/sync',{itemId:deliveryItemId})).json();
+  assert.notEqual(later.deliveryId,batch.deliveryId);assert.equal(later.added[0].transaction_id,'later-txn');
+  assert.equal((await bankReq(alice,'/transactions/ack',{itemId:deliveryItemId,deliveryId:later.deliveryId})).status,409,'An earlier receipt cannot acknowledge later changes.');
+  const deliveryRestart=execFileSync(process.execPath,['--input-type=module','-e',`
+    import assert from 'node:assert/strict';
+    import { readPlaidItem } from './server/services/plaidItemStorage.js';
+    import { loadAccountAppData } from './server/services/accountStorage.js';
+    const [itemId,accountId,deliveryId]=process.argv.slice(1);
+    const item=await readPlaidItem(itemId);assert.equal(item.delivery.deliveryId,deliveryId);
+    assert.equal(item.delivery.added[0].transaction_id,'later-txn');
+    const workspace=await loadAccountAppData(accountId);assert.equal(workspace.coreDataSnapshot.bankFeedEntries.length,2);
+    console.log('delivery restart passed');process.exit(0);
+  `,deliveryItemId,alice.account,later.deliveryId],{encoding:'utf8',timeout:20000});
+  assert.match(deliveryRestart,/delivery restart passed/);
   // Load through fresh application modules in a new process: no caches or legacy files.
   const child = execFileSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict';

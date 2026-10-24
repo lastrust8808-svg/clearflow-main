@@ -17,6 +17,8 @@ interface SignalEvaluatePayload {
 }
 
 export interface PlaidTransactionSyncResult {
+  itemId?: string;
+  deliveryId?: string;
   added: PlaidTransaction[];
   modified: PlaidTransaction[];
   removedTransactionIds: string[];
@@ -67,6 +69,13 @@ class PlaidService {
     });
   }
 
+
+  async acknowledgeTransactions(itemId: string, deliveryId: string): Promise<{ acknowledged: boolean }> {
+    return this.requestJson('/api/plaid/transactions/ack', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, deliveryId }),
+    });
+  }
 
   async getAuth(itemId: string, initialAmount?: number): Promise<PlaidAuthResponse> {
     return this.requestJson<PlaidAuthResponse>('/api/plaid/auth/get', {

@@ -71,3 +71,18 @@ Findings on candidate `5b8af641ed18425fa1fb287b52f558271d657cb9`:
 Passing extended checks: foreign users are denied before provider operations on all five tested item endpoints; unexpected Auth errors do not create a successful connection; unsigned, altered, and expired webhooks cannot trigger sync; correctly signed webhooks can; a provider outage leaves the persisted cursor unchanged and the next retry recovers its transaction; replaying an already imported transaction in a separate importer call does not duplicate it.
 
 The original 99 tests still pass on Node 22. The extended suite fails four leaf assertions (the framework also reports their failing parent group). Keep the draft blocked until these assertions pass through corrected behavior. No production implementation was changed in this verification pass.
+
+## Banking delivery repair
+
+The failed banking probes now have production fixes, rather than relaxed assertions:
+
+- Linked-item changes are partitioned by `connectedProfile.externalAccountId`, applied to every mapped account, and retain one workspace receipt. Missing or ambiguous mappings stop the batch without acknowledging it.
+- The importer deduplicates within a single response and across replays. It rejects non-finite amounts, prevents cross-entity/currency rule posting, and retains pending activity for review without auto-posting it.
+- The shared connection payload models Auth as nullable, and the reconnect callback handles missing Auth and account masks.
+- The server freezes a delivery with a unique ID and replays it until acknowledgement. Webhook changes arriving later remain queued separately. Optimistic item revisions prevent concurrent writes from silently replacing each other.
+- The browser acknowledges only after its workspace write succeeds. The server independently reads the retained workspace and requires the matching receipt. Failed saves, failed acknowledgement responses, replay, and later batches cannot silently discard the delivery.
+- Google autosave now waits for the durable server save before the Drive copy; it no longer starts a second delayed durable write that could overwrite newer data. A Drive failure remains visible as a save error.
+
+Verification adds: browser save/ack ordering and retry checks; frozen delivery serialization; stale acknowledgement protection; full multi-account import; failed workspace save followed by rejected acknowledgement; later changes retained during acknowledgement; idempotent acknowledgement retries; and a fresh-process read of both retained accounting entries and the next unacknowledged delivery. The real PostgreSQL CI suite exercises the complete HTTP workflow and the existing backup/restore test compares all retained rows.
+
+Completion scope: these checks establish application behavior under controlled provider responses. Deployment configuration, existing-user migration reconciliation, live institution/OAuth flows, and real payment execution still require separate direct evidence before the full app can be called ready for users.
