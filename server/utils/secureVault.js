@@ -1,11 +1,16 @@
 import crypto from 'node:crypto';
 
-function getVaultKey() {
-  const seed =
-    process.env.REMITTANCE_VAULT_KEY ||
-    process.env.ENCRYPTION_KEY ||
-    'clearflow-dev-remittance-vault-key';
+export function assertVaultConfiguration() {
+  const seed = process.env.REMITTANCE_VAULT_KEY || process.env.ENCRYPTION_KEY;
+  if (process.env.NODE_ENV === 'production' &&
+      (!seed || seed.length < 32 || seed === 'clearflow-dev-remittance-vault-key' || seed === 'a-secret-key-for-dev-only-32-bytes')) {
+    throw new Error('A private vault encryption key of at least 32 characters is required in production.');
+  }
+  return seed;
+}
 
+function getVaultKey() {
+  const seed = assertVaultConfiguration() || 'clearflow-dev-remittance-vault-key';
   return crypto.createHash('sha256').update(seed).digest();
 }
 

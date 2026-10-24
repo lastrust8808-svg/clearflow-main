@@ -1,3 +1,4 @@
+import { plaidService } from './plaid.service';
 import { storageAuthHeaders } from './storageSession.service';
 import type { AppData } from '../types/app.models';
 import { getApiBaseUrl } from './runtimeConfig.service';
@@ -125,6 +126,11 @@ async function performAccountAppDataSave(accountId: string, appData: AppData) {
   const saved = await response.json();
   if (saved.result?.revision != null) accountRevisions.set(accountId, String(saved.result.revision));
   else if (saved.version != null) accountRevisions.set(accountId, String(saved.version));
+  // Receipt and imported entries are retained in the same workspace write. Never acknowledge a failed save.
+  for (const receipt of appData.coreDataSnapshot?.bankFeedDeliveryReceipts || []) {
+    try { await plaidService.acknowledgeTransactions(receipt.itemId, receipt.deliveryId); }
+    catch (error) { console.warn('Bank delivery remains available for retry; workspace was saved.', error); }
+  }
   return saved;
 }
 

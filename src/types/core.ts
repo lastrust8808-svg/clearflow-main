@@ -2804,6 +2804,7 @@ export interface CreditBuildPlanRecord {
 }
 
 export interface CoreDataBundle {
+  bankFeedDeliveryReceipts?: Array<{ itemId: string; deliveryId: string }>;
   entities: EntityRecord[];
   entityMarkUsageRecords: EntityMarkUsageRecord[];
   entityConnections: EntityConnectionRecord[];
