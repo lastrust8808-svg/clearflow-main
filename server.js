@@ -1,6 +1,7 @@
 // server.js
 // Main application entry point for the Clear-Flow backend.
 
+import { assertVaultConfiguration } from './server/utils/secureVault.js';
 import express from 'express';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
@@ -18,6 +19,7 @@ import { applyOwnerBootstrapPatchFromEnv } from './server/services/ownerDatabase
 // Load environment variables from .env file
 dotenv.config({ path: '.env.local' });
 dotenv.config();
+assertVaultConfiguration();
 
 const app = express();
 const PORT = process.env.PORT || 8000;

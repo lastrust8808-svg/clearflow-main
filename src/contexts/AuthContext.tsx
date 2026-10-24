@@ -354,7 +354,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
-    setStorageAccessToken(accessToken);
+    setStorageAccessToken(accessToken, `google:${profile.email.trim().toLowerCase()}`);
     userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
@@ -1316,7 +1316,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user: { id: verified.user.id, name: '', email: verified.user.email, primaryContactType: 'email', isVerified: false },
         entities: [],
       };
-      setStorageAccessToken(verified.token);
+      setStorageAccessToken(verified.token, accountId);
       const durable = await loadAccountAppData(accountId);
       const nextData = durable || appData;
       // Copy the verified user's own browser backup only after server identity

@@ -1,3 +1,4 @@
+import { plaidItemStorageConfigured, readPlaidItem, writePlaidItem } from '../services/plaidItemStorage.js';
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
 import { createHash, createPublicKey, timingSafeEqual } from 'node:crypto';
@@ -43,7 +44,8 @@ async function loadPersistedConnections(userId) {
   }
 }
 
-async function savePersistedConnections(userId) {
+async function savePersistedConnections(userId, item) {
+  if (plaidItemStorageConfigured()) return writePlaidItem(item);
   if (!userId) {
     return;
   }
@@ -72,6 +74,8 @@ async function hydrateStoredItemByItemId(itemId) {
     return null;
   }
 
+  if (plaidItemStorageConfigured()) return readPlaidItem(itemId);
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable Plaid storage required.');
   if (itemStore.has(itemId)) {
     return itemStore.get(itemId);
   }
@@ -218,6 +222,7 @@ function buildIdentityMatchScore(userName = '', bankName = '') {
   const userParts = userName.toLowerCase().split(/\s+/).filter(Boolean);
   const bankParts = bankName.toLowerCase().split(/\s+/).filter(Boolean);
 
+  if (!userParts.length || !bankParts.length) return { legal_name: { score: 0 } };
   let score = 40;
   if (userParts.length && userParts.every((part) => bankParts.includes(part))) {
     score = 95;
@@ -271,7 +276,9 @@ function buildMockTransactions(itemId) {
 }
 
 async function getStoredItem(itemId) {
-  const item = itemStore.get(itemId) || (await hydrateStoredItemByItemId(itemId));
+  const item = plaidItemStorageConfigured()
+    ? await readPlaidItem(itemId)
+    : await hydrateStoredItemByItemId(itemId);
   if (!item) {
     const error = new Error(`Plaid item ${itemId} is not connected in the current runtime.`);
     error.statusCode = 404;
@@ -299,7 +306,7 @@ function normalizePlaidTransactions(plaidTransactions = []) {
 }
 
 function allowBankingMocks() {
-  return String(process.env.CLEARFLOW_ALLOW_BANKING_MOCKS || '').trim().toLowerCase() === 'true';
+  return process.env.NODE_ENV !== 'production' && String(process.env.CLEARFLOW_ALLOW_BANKING_MOCKS || '').trim().toLowerCase() === 'true';
 }
 
 function mergePendingTransactions(existing = [], incoming = []) {
@@ -327,7 +334,7 @@ async function syncPlaidItemChanges(itemId) {
   }
 
   const item = await getStoredItem(itemId);
-  let cursor = transactionCursorStore.get(itemId) || item.cursor || null;
+  let cursor = item.cursor || null;
   let hasMore = true;
   const added = [];
   const modified = [];
@@ -369,7 +376,7 @@ async function syncPlaidItemChanges(itemId) {
     normalizedModified
   ).filter((transaction) => !removedSet.has(transaction.transaction_id));
   item.removedTransactionIds = Array.from(removedSet);
-  await savePersistedConnections(item.userId);
+  await savePersistedConnections(item.userId, item);
 
   return {
     added: normalizedAdded,
@@ -424,8 +431,6 @@ async function verifyPlaidWebhook(rawBody, verificationHeader, plaidClient) {
 
 async function createLinkTokenWithFallbacks(plaidClient, payload) {
   const productSets = [
-    [Products.Auth, Products.Transactions],
-    [Products.Auth],
     [Products.Transactions],
   ];
   let lastError = null;
@@ -435,6 +440,8 @@ async function createLinkTokenWithFallbacks(plaidClient, payload) {
       const response = await plaidClient.linkTokenCreate({
         ...payload,
         products,
+        optional_products: [Products.Auth],
+        additional_consented_products: [Products.Investments],
       });
       return { response, products };
     } catch (error) {
@@ -471,7 +478,7 @@ router.post('/link_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json({ link_token: `link-sandbox-mock-${Date.now()}` });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
@@ -503,46 +510,7 @@ router.post('/exchange_public_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    const itemId = `mock-item-${Date.now()}`;
-    const authResponse = buildMockAuth();
-    const identityData = buildMockIdentity(userName);
-    const bankOwnerName = identityData.accounts[0]?.owners?.[0]?.names?.[0] || '';
-    itemStore.set(itemId, {
-      userId,
-      accessToken: `mock-access-${Date.now()}`,
-      itemId,
-      authResponse,
-      identityData,
-      accounts: [
-        {
-          account_id: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-        },
-      ],
-    });
-    accountIndex.set(authResponse.accounts[0].account_id, itemId);
-    await savePersistedConnections(userId);
-
-    return res.json({
-      authResponse,
-      identityData,
-      identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
-      itemId,
-      linkedAccounts: [
-        {
-          accountId: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-          currentBalance: 2500,
-          availableBalance: 2500,
-        },
-      ],
-    });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
@@ -550,14 +518,21 @@ router.post('/exchange_public_token', async (req, res) => {
     const accessToken = exchange.data.access_token;
     const itemId = exchange.data.item_id;
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
-    const authResponse = await plaidClient.authGet({ access_token: accessToken });
+    let authResponse = null;
+    try {
+      authResponse = (await plaidClient.authGet({ access_token: accessToken })).data;
+    } catch (error) {
+      const code = error.response?.data?.error_code;
+      if (!['PRODUCT_NOT_SUPPORTED', 'PRODUCT_NOT_READY', 'ADDITIONAL_CONSENT_REQUIRED', 'NO_AUTH_ACCOUNTS', 'INVALID_PRODUCT'].includes(code)) throw error;
+      console.info('Optional Plaid Auth unavailable.', { code });
+    }
     const identityData = await getIdentityDataOrFallback(plaidClient, accessToken, userName);
 
     itemStore.set(itemId, {
       userId,
       accessToken,
       itemId,
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       accounts: accountsResponse.data.accounts,
     });
@@ -565,13 +540,14 @@ router.post('/exchange_public_token', async (req, res) => {
     accountsResponse.data.accounts.forEach((account) => {
       accountIndex.set(account.account_id, itemId);
     });
-    await savePersistedConnections(userId);
+    await savePersistedConnections(userId, itemStore.get(itemId));
 
     const bankOwnerName =
-      identityData.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
+      identityData.accounts?.[0]?.owners?.[0]?.names?.[0] || '';
+
 
     return res.json({
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
@@ -607,7 +583,7 @@ router.post('/auth/get', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json(buildMockAuth(initialAmount));
+    return res.status(503).json({ error: 'Plaid live banking is not configured.' });
   }
 
   try {
@@ -633,7 +609,7 @@ router.post('/identity/get', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json(buildMockIdentity(userName));
+    return res.status(503).json({ error: 'Plaid live banking is not configured.' });
   }
 
   try {
@@ -675,21 +651,7 @@ router.post('/signal/evaluate', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    const cents = Math.round((amount - Math.floor(amount)) * 100);
-    const decision = cents === 99 ? 'REROUTE' : 'ACCEPT';
-    return res.json({
-      decision,
-      ruleset_key: 'clearflowach',
-      signal: {
-        ruleset: {
-          result: decision,
-          triggered_rule_details:
-            decision === 'REROUTE'
-              ? { internal_note: 'High risk score detected in mock evaluation.' }
-              : undefined,
-        },
-      },
-    });
+    return res.status(503).json({ error: 'Plaid live banking is not configured.' });
   }
 
   try {
@@ -726,6 +688,7 @@ router.get('/transactions/:itemId', async (req, res) => {
 
   try {
     const item = await getStoredItem(itemId);
+    if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 30);
     const response = await plaidClient.transactionsGet({
@@ -766,6 +729,8 @@ router.post('/transactions/sync', async (req, res) => {
     const item = await getStoredItem(itemId);
     if (item.userId !== verifiedAccountId) return res.status(403).json({ error: 'Bank connection access denied.' });
     await syncPlaidItemChanges(itemId);
+    const syncedItem = await getStoredItem(itemId);
+    Object.assign(item, syncedItem);
     const pendingAddedTransactions = item.pendingAddedTransactions || [];
     const pendingModifiedTransactions = item.pendingModifiedTransactions || [];
     const removedTransactionIds = item.removedTransactionIds || [];
@@ -773,7 +738,7 @@ router.post('/transactions/sync', async (req, res) => {
     item.pendingAddedTransactions = [];
     item.pendingModifiedTransactions = [];
     item.removedTransactionIds = [];
-    await savePersistedConnections(item.userId);
+    await savePersistedConnections(item.userId, item);
 
     return res.json({
       added: pendingAddedTransactions,

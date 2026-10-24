@@ -54,7 +54,8 @@ router.get('/accounts/:accountId/app-data', async (req, res) => {
       }
     }
 
-    const appData = await loadAccountAppData(req.params.accountId);
+    const snapshot = durableAccountStorageConfigured() ? await readAccountSnapshot(req.params.accountId) : null;
+    const appData = durableAccountStorageConfigured() ? snapshot?.app_data : await loadAccountAppData(req.params.accountId);
 
     if (!appData) {
       return res.status(404).json({
@@ -72,7 +73,7 @@ router.get('/accounts/:accountId/app-data', async (req, res) => {
       persistenceMode: isConfiguredOwnerAccount(req.params.accountId)
         ? 'owner_database'
         : 'legacy',
-      version: durableAccountStorageConfigured() ? (await readAccountSnapshot(req.params.accountId))?.revision ?? null : null,
+      version: snapshot?.revision ?? null,
     });
   } catch (error) {
     return res.status(500).json({
@@ -106,7 +107,7 @@ router.put('/accounts/:accountId/app-data', async (req, res) => {
       success: true,
       result: ownerResult || result,
       persistenceMode: ownerResult ? 'owner_database' : 'legacy',
-      version: ownerResult?.version ?? null,
+      version: ownerResult?.version ?? result?.revision ?? null,
     });
   } catch (error) {
     const message =
@@ -380,7 +381,7 @@ router.get('/accounts/:accountId/plaid-connections', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      connections: decryptJson(record.encryptedPayload),
+      connections: decryptJson(record.encryptedPayload).map(({ itemId, accounts }) => ({ itemId, accounts: (accounts || []).map(({ account_id, name, mask, type, subtype }) => ({ account_id, name, mask, type, subtype })) })),
       savedAt: record.savedAt,
     });
   } catch (error) {
@@ -392,34 +393,9 @@ router.get('/accounts/:accountId/plaid-connections', async (req, res) => {
   }
 });
 
-router.put('/accounts/:accountId/plaid-connections', async (req, res) => {
-  const { connections } = req.body || {};
-
-  if (!Array.isArray(connections)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing Plaid connections payload.',
-    });
-  }
-
-  try {
-    const encryptedPayload = encryptJson(connections);
-    const result = await saveAccountPlaidVault(req.params.accountId, {
-      encryptedPayload,
-    });
-
-    return res.status(200).json({
-      success: true,
-      result,
-      connectionCount: connections.length,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error:
-        error instanceof Error ? error.message : 'Failed to save Plaid connections.',
-    });
-  }
+// Provider tokens and item ownership are written only by server-side token exchange.
+router.put('/accounts/:accountId/plaid-connections', (_req, res) => {
+  return res.status(403).json({ success: false, error: 'Use the authenticated bank connection flow.' });
 });
 
 router.post('/internal/clearflow-ledger/agreement-deposits', async (req, res) => {
