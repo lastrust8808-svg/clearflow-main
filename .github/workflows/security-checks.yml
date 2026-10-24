@@ -64,3 +64,14 @@ jobs:
       - run: npm run test:legacy
       - run: npm run test:storage
       - run: npm run test:restore
+
+  banking-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:banking-release

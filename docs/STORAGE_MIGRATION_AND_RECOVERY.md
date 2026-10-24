@@ -54,3 +54,19 @@ Required URLs use database names `clearflow_staging`, `clearflow_legacy_test`, a
 - Authorized payment-provider submission, duplicate/retry handling, failure/return events and provider-confirmed reconciliation. Offline simulations do not establish those capabilities.
 
 Local evidence: clean `npm ci`; unit/HTTP/browser service tests; type checking and build. Migration SQL and the legacy upgrade/backfill were additionally executed against PostgreSQL-WASM (PGlite). PGlite is not evidence of a successful multi-connection PostgreSQL run or `pg_dump`/restore.
+
+## Extended banking verification
+
+`npm run test:banking-release` exercises actual application HTTP handlers with controlled provider responses, locally signed ES256 webhooks, and the bank-feed importer. It is a separate blocking CI job. These checks do not contact a bank, send funds, or verify a production OAuth registration.
+
+Findings on candidate `5b8af641ed18425fa1fb287b52f558271d657cb9`:
+
+| Risk | Direct result | Severity / confidence | Smallest remediation |
+| --- | --- | --- | --- |
+| Multi-account item attribution | Checking and savings transactions from one item are both imported into checking and attributed to checking's entity. The importer never checks provider `account_id` against `connectedProfile.externalAccountId`. | High / high | Partition additions and modifications by verified provider account ID before import. Apply each item's changes to all mapped accounts before acknowledging the batch; reject ambiguous mappings. |
+| Failed browser persistence / delivery retry | The first sync response contains a transaction; without any acknowledgement or workspace save, a retry returns an empty additions list. The cursor advanced and pending records were cleared before the response. | High / high | Retain a durable, replayable delivery until an authenticated acknowledgement follows successful durable workspace persistence. Acknowledgements must identify the specific batch and preserve concurrent new changes. |
+| Duplicate input within an importer call | A duplicate transaction ID inside one additions array produces two feed entries. Separate-call replay is correctly deduplicated. | Medium / high, bounded reach | Extend the importer's seen-ID set as entries are imported. The current sync handler already deduplicates additions, so this is a missing importer safeguard rather than proof of duplicate posting through the current sync endpoint. |
+
+Passing extended checks: foreign users are denied before provider operations on all five tested item endpoints; unexpected Auth errors do not create a successful connection; unsigned, altered, and expired webhooks cannot trigger sync; correctly signed webhooks can; a provider outage leaves the persisted cursor unchanged and the next retry recovers its transaction; replaying an already imported transaction in a separate importer call does not duplicate it.
+
+The original 99 tests still pass on Node 22. The extended suite fails three leaf assertions (the framework also reports their failing parent group). Keep the draft blocked until these assertions pass through corrected behavior. No production implementation was changed in this verification pass.
