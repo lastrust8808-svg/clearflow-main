@@ -86,3 +86,12 @@ The failed banking probes now have production fixes, rather than relaxed asserti
 Verification adds: browser save/ack ordering and retry checks; frozen delivery serialization; stale acknowledgement protection; full multi-account import; failed workspace save followed by rejected acknowledgement; later changes retained during acknowledgement; idempotent acknowledgement retries; and a fresh-process read of both retained accounting entries and the next unacknowledged delivery. The real PostgreSQL CI suite exercises the complete HTTP workflow and the existing backup/restore test compares all retained rows.
 
 Completion scope: these checks establish application behavior under controlled provider responses. Deployment configuration, existing-user migration reconciliation, live institution/OAuth flows, and real payment execution still require separate direct evidence before the full app can be called ready for users.
+
+
+## Deployment evidence and version coverage
+
+The actual Render PostgreSQL services report version 18, so the storage/recovery CI matrix runs against PostgreSQL 16 and 18 with matching client tools. A pass on version 16 alone is not the full version-compatibility result.
+
+Read-only Render inspection found the live `clearflow-api` service still serving main commit `e5eaa90562ed4b7ff0af5abaf25ce847e441a15d`; its production database currently exposes only the three owner workspace/audit/provider-event tables. The release branch has not been deployed there. The existing staging runner is `clearflow-staging-migration-test` and its database rejects external connections. The connector cannot run an existing cron job, so staging execution must use the authenticated Render dashboard/internal runner. Do not widen database network access to work around this.
+
+CI completion and live-user readiness are separate entries: the repaired banking gate can pass while the running service still lacks the repaired code and schema. Existing-user reconciliation, authenticated browser flows against the configured runtime, institution/OAuth tests, and payment-provider evidence remain required before production use is claimed complete.
