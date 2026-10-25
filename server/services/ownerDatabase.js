@@ -636,6 +636,21 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
   }
 
   const providerState = mapMercuryProviderState({ approvalRequest, transaction });
+  // A request that failed cannot be revived by delayed progress or approval events.
+  // Retrying a payment requires a distinct provider request and explicit review.
+  const retainedFailure = (snapshot.payments || []).some(payment =>
+    payment?.settlementExecution?.executionProvider === 'mercury' &&
+    String(payment.settlementExecution.executionReference || '') === String(requestId) &&
+    ['failed', 'reversed'].includes(payment.status)) ||
+    (snapshot.settlements || []).some(settlement =>
+      settlement?.executionProvider === 'mercury' &&
+      String(settlement.executionReference || '') === String(requestId) &&
+      settlement.verificationStatus === 'exception' &&
+      ['failed', 'returned'].includes(settlement.externalStatus));
+  if (retainedFailure && providerState.verificationStatus !== 'exception') {
+    return { applied: false, reason: 'terminal_failure_preserved' };
+  }
+
   const nowIso = new Date().toISOString();
   const settlementDate =
     transaction?.postedAt ||

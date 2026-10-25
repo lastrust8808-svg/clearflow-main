@@ -5,12 +5,12 @@ import ts from 'typescript';
 const source=ts.createSourceFile('ownerDatabase.js',readFileSync(new URL('../server/services/ownerDatabase.js',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true);
 const functions=new Map();
 for(const node of source.statements)if(ts.isFunctionDeclaration(node)&&node.name)functions.set(node.name.text,node.getText(source).replace(/^export /,''));
-async function update(transaction,approvalRequest={id:'request-1',status:'approved'}) {
+async function update(transaction,approvalRequest={id:'request-1',status:'approved'},previousSnapshot=null) {
  let retained;
  const execution={executionProvider:'mercury',executionReference:'request-1'};
- const snapshot={settlements:[{id:'settlement-1',...execution,grossAmount:45}],payments:[{id:'payment-1',amount:45,status:'initiated',settlementExecution:execution,linkedBillIds:['bill-1']}],bills:[{id:'bill-1',balanceDue:45,status:'open',linkedPaymentIds:['payment-1'],linkedObligationId:'obligation-1'}],invoices:[],obligations:[{id:'obligation-1',amount:45,status:'open'}],journalEntries:[{id:'journal-1',status:'draft',linkedSettlementIds:['settlement-1']}],transactions:[{id:'ledger-1',status:'pending',linkedSettlementId:'settlement-1'}],vendors:[]};
+ const snapshot=previousSnapshot || {settlements:[{id:'settlement-1',...execution,grossAmount:45}],payments:[{id:'payment-1',amount:45,status:'initiated',settlementExecution:execution,linkedBillIds:['bill-1']}],bills:[{id:'bill-1',balanceDue:45,status:'open',linkedPaymentIds:['payment-1'],linkedObligationId:'obligation-1'}],invoices:[],obligations:[{id:'obligation-1',amount:45,status:'open'}],journalEntries:[{id:'journal-1',status:'draft',linkedSettlementIds:['settlement-1']}],transactions:[{id:'ledger-1',status:'pending',linkedSettlementId:'settlement-1'}],vendors:[]};
  const apply=new Function('isConfiguredOwnerAccount','loadOwnerWorkspace','saveOwnerWorkspace',functions.get('mapMercuryProviderState')+'\n'+functions.get('applyMercuryProviderUpdateToOwnerWorkspace')+'\nreturn applyMercuryProviderUpdateToOwnerWorkspace;')(()=>true,async()=>({version:1,app_data:{coreDataSnapshot:snapshot}}),async args=>{retained=args.appData.coreDataSnapshot;return{version:2};});
- const result=await apply({accountId:'owner',requestId:'request-1',approvalRequest,transaction});return{result,retained};
+ const result=await apply({accountId:'owner',requestId:'request-1',approvalRequest,transaction});return{result,retained,snapshot:retained || snapshot};
 }
 test('sent payment cannot pay bills, discharge obligations or post the ledger without reconciliation',async()=>{
  const {retained}=await update({id:'tx-1',requestId:'request-1',status:'sent',amount:45});
@@ -27,4 +27,17 @@ test('a returned payment stays an exception without reducing balances',async()=>
  const {retained}=await update({id:'tx-1',requestId:'request-1',status:'reversed'});
  assert.equal(retained.payments[0].status,'reversed');assert.equal(retained.bills[0].balanceDue,45);
  assert.equal(retained.settlements[0].verificationStatus,'exception');
+});
+
+
+test('delayed progress and approval events cannot erase a retained reversal',async()=>{
+ const first=await update({id:'tx-1',requestId:'request-1',status:'reversed'});
+ for(const transaction of [{id:'tx-1',requestId:'request-1',status:'sent'},{id:'tx-1',requestId:'request-1',status:'pending'},null]) {
+  const next=await update(transaction,{id:'request-1',status:'approved'},first.snapshot);
+  assert.equal(next.result.applied,false,'Delayed progress must not write over a terminal failure.');
+  assert.equal(next.snapshot.payments[0].status,'reversed');
+  assert.equal(next.snapshot.settlements[0].verificationStatus,'exception');
+  assert.equal(next.snapshot.bills[0].balanceDue,45);
+  assert.equal(next.snapshot.transactions[0].status,'failed');
+ }
 });
