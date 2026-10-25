@@ -42,7 +42,7 @@ export async function accrueMembershipMonth(db, subscription, {year,month,today}
   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
 }
 export async function runMembershipAccrual(db,today) {
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(today) || !Number.isFinite(Date.parse(today+'T00:00:00Z')))throw new Error('Invalid UTC billing date');
+  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(today) || !Number.isFinite(Date.parse(today+'T00:00:00Z')) || new Date(today+'T00:00:00Z').toISOString().slice(0,10)!==today)throw new Error('Invalid UTC billing date');
   const [year,month]=today.split('-').map(Number);
   const subscriptions=await db.query(
     `SELECT * FROM membership_subscriptions WHERE status='active' AND
