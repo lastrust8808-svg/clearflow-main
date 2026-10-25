@@ -1,10 +1,11 @@
+import './server/loadEnvironment.js';
+import { checkProductionReadiness } from './server/services/releaseReadiness.js';
 // server.js
 // Main application entry point for the Clear-Flow backend.
 
 import { assertVaultConfiguration } from './server/utils/secureVault.js';
 import express from 'express';
 import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import { configuredOrigins, isAllowedBrowserOrigin } from './server/middleware/corsOrigins.js';
 import plaidApiRoutes from './server/routes/plaid.js';
@@ -16,10 +17,8 @@ import mercuryRoutes from './server/routes/mercury.js';
 import b2bRoutes from './server/routes/b2b.js';
 import { applyOwnerBootstrapPatchFromEnv } from './server/services/ownerDatabase.js';
 
-// Load environment variables from .env file
-dotenv.config({ path: '.env.local' });
-dotenv.config();
 assertVaultConfiguration();
+await checkProductionReadiness();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -52,8 +51,13 @@ app.use('/api/mercury', mercuryRoutes);
 app.use('/api/b2b', b2bRoutes);
 
 // --- Health Check Endpoint ---
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    await checkProductionReadiness();
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'not_ready' });
+  }
 });
 
 // =================================================================

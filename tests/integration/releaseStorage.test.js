@@ -1,3 +1,4 @@
+import { checkProductionReadiness } from '../../server/services/releaseReadiness.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -21,11 +22,14 @@ const migrations = ['001_storage_foundation.sql', '002_plaid_items_and_legacy_re
 test('committed storage survives a new process; HTTP isolation, grants and sessions fail closed', async t => {
   const client = new pg.Client({ connectionString: url }); await client.connect();
   t.after(() => client.end());
+  const readinessEnv = {...process.env, CLEARFLOW_OWNER_DATABASE_URL: ''};
+  await assert.rejects(checkProductionReadiness(readinessEnv), /schema is missing/);
   for (let pass = 0; pass < 2; pass++) for (const file of migrations) {
     await client.query(readFileSync(new URL('../../server/db/versions/' + file, import.meta.url), 'utf8'));
   }
   const identity = await import('../../server/services/identityStore.js');
   await identity.prepareAuth();
+  await checkProductionReadiness(readinessEnv);
   const { default: storage } = await import('../../server/routes/storage.js');
   const { default: b2b } = await import('../../server/routes/b2b.js');
   const { default: plaid } = await import('../../server/routes/plaid.js');
