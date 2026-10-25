@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import crypto from 'node:crypto';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+const source=ts.createSourceFile('mercury.js',readFileSync(new URL('../server/routes/mercury.js',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true);
+let handler,verify;
+function visit(node){
+ if(ts.isFunctionDeclaration(node)&&node.name?.text==='verifyMercuryWebhook')verify=node.getText(source);
+ if(ts.isCallExpression(node)&&node.expression.getText(source)==='router.post'&&node.arguments[0]?.text==='/webhook')handler=node.arguments.at(-1).getText(source);
+ ts.forEachChild(node,visit);
+}visit(source);assert.ok(handler);assert.ok(verify);
+test('actual signed Mercury webhook retries provider and durable-write failures without acknowledging lost work',async t=>{
+ const previous=process.env.MERCURY_WEBHOOK_SECRET;process.env.MERCURY_WEBHOOK_SECRET='test-only-webhook-secret';
+ t.after(()=>{if(previous===undefined)delete process.env.MERCURY_WEBHOOK_SECRET;else process.env.MERCURY_WEBHOOK_SECRET=previous;});
+ let outage=true,saveFailure=false,configured=true,owner='owner',transactionId='tx-1',providerCalls=0,applied=0;const events=[];
+ const callback=new Function('crypto','isMercuryExecutionConfigured','getMercuryTransactionById','getOwnerAccountId','recordOwnerProviderEvent','applyMercuryProviderUpdateToOwnerWorkspace',verify+'\nreturn '+handler)(crypto,()=>configured,async()=>{providerCalls++;if(outage)throw new Error('controlled provider outage');return{id:transactionId,requestId:'request-1',status:'reversed'};},()=> owner,async event=>{events.push(event);},async()=>{if(saveFailure)throw new Error('controlled version conflict');applied++;return{applied:true};});
+ const app=express();app.post('/webhook',express.raw({type:'application/json'}),callback);
+ const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const body=JSON.stringify({id:'event-stable',resourceType:'transaction',resourceId:'tx-1'});
+ const sign=(payload,timestamp=Math.floor(Date.now()/1000))=>`t=${timestamp},v1=${crypto.createHmac('sha256',process.env.MERCURY_WEBHOOK_SECRET).update(`${timestamp}.`).update(payload).digest('hex')}`;
+ const request=(payload=body,signature=sign(payload))=>fetch(`http://127.0.0.1:${server.address().port}/webhook`,{method:'POST',headers:{'Content-Type':'application/json','Mercury-Signature':signature},body:payload});
+ assert.equal((await request(body,'invalid')).status,401);assert.equal(providerCalls,0);
+ assert.equal((await request(body,sign(body,Math.floor(Date.now()/1000)-600))).status,401);assert.equal(providerCalls,0);
+ assert.equal((await request(body+' ',sign(body))).status,401);assert.equal(providerCalls,0);
+ assert.equal((await request()).status,500,'Provider lookup failure must not acknowledge processing.');assert.equal(applied,0);
+ configured=false;assert.equal((await request()).status,503);configured=true;
+ outage=false;transactionId='wrong';assert.equal((await request()).status,502);assert.equal(applied,0);transactionId='tx-1';
+ owner='';assert.equal((await request()).status,503);assert.equal(applied,0);owner='owner';
+ saveFailure=true;assert.equal((await request()).status,500);
+ saveFailure=false;assert.equal((await request()).status,200);assert.equal(applied,1);
+ assert.ok(events.length>=2);assert.ok(events.every(event=>event.eventId==='event-stable'));
+});
