@@ -1,3 +1,4 @@
+import { mountFrontend } from './server/services/frontendHosting.js';
 import './server/loadEnvironment.js';
 import { checkProductionReadiness } from './server/services/releaseReadiness.js';
 // server.js
@@ -59,6 +60,8 @@ app.get('/health', async (req, res) => {
     res.status(503).json({ status: 'not_ready' });
   }
 });
+
+if (process.env.CLEARFLOW_SERVE_FRONTEND === 'true') mountFrontend(app);
 
 // =================================================================
 // SERVER START

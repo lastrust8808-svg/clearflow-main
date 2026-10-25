@@ -1,0 +1,50 @@
+# Creates only a staging web service; existing cron/database resources are referenced, not managed.
+services:
+  - type: web
+    name: clearflow-browser-staging
+    runtime: node
+    plan: free
+    region: ohio
+    repo: https://github.com/lastrust8808-svg/clearflow-main
+    branch: work/release-gates-2026-10-23
+    autoDeployTrigger: 'off'
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: CLEARFLOW_SERVE_FRONTEND
+        value: 'true'
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: clearflow-browser-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: CLEARFLOW_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: clearflow-browser-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: CLEARFLOW_STORAGE_DATABASE_URL
+        fromService:
+          type: cron
+          name: clearflow-staging-migration-test
+          envVarKey: CLEARFLOW_STAGING_DATABASE_URL
+      - key: CLEARFLOW_AUTH_DATABASE_URL
+        fromService:
+          type: cron
+          name: clearflow-staging-migration-test
+          envVarKey: CLEARFLOW_STAGING_DATABASE_URL
+      - key: CLEARFLOW_AUTH_SECRET
+        fromService:
+          type: cron
+          name: clearflow-staging-migration-test
+          envVarKey: CLEARFLOW_AUTH_SECRET
+      - key: ENCRYPTION_KEY
+        fromService:
+          type: cron
+          name: clearflow-staging-migration-test
+          envVarKey: ENCRYPTION_KEY
