@@ -1,6 +1,6 @@
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
-import { classifyPaymentStatus } from '../services/paymentControls.js';
+import { classifyPaymentStatus, selectPaymentTransaction } from '../services/paymentControls.js';
 import crypto from 'node:crypto';
 import {
   getMercuryPaymentStatus,
@@ -82,11 +82,7 @@ router.get('/payment-status/:requestId', (req, res, next) => {
     const status = await getMercuryPaymentStatus(req.params.requestId);
     const ownerAccountId = getOwnerAccountId();
     const paymentLifecycle = classifyPaymentStatus(status.approvalRequest, status.transactions);
-    const relatedTransaction = Array.isArray(status.transactions)
-      ? status.transactions.find((transaction) =>
-          String(transaction?.requestId || '') === String(req.params.requestId)
-        ) || null
-      : null;
+    const relatedTransaction = selectPaymentTransaction(req.params.requestId, status.transactions);
 
     let workspaceUpdate = null;
     if (ownerAccountId) {

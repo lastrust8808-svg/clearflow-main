@@ -43,3 +43,14 @@ test('a posted bank transaction can be confirmed but is not automatically reconc
   assert.equal(result.state, 'bank_confirmed');
   assert.equal(result.reconciled, false);
 });
+
+test('Mercury reversed and blocked transactions override earlier completion in either order', () => {
+  for (const status of ['reversed', 'blocked']) {
+    const complete={id:'tx-complete',requestId:'req-1',status:'completed'};
+    const failure={id:'tx-failure',requestId:'req-1',status};
+    for (const transactions of [[complete,failure],[failure,complete]]) {
+      const result=classifyPaymentStatus({id:'req-1',status:'approved'},transactions);
+      assert.equal(result.state,'failed');assert.equal(result.transactionId,'tx-failure');
+    }
+  }
+});
