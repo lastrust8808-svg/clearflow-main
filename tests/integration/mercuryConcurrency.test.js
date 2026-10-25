@@ -29,6 +29,8 @@ test('concurrent payment progress and reversal cannot silently lose a failed sta
     // Both updaters must read the original snapshot before either can commit.
     const deadline=Date.now()+10000;
     while(Date.now()<deadline){
+      // PostgreSQL caches activity snapshots within this lock-holding transaction.
+      await client.query('SELECT pg_stat_clear_snapshot()');
       const result=await client.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%SELECT version%clearflow_owner_workspaces%'");
       if(result.rows[0].n>=2){blocked=true;break;}
       await new Promise(resolve=>setTimeout(resolve,20));
