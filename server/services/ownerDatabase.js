@@ -524,14 +524,14 @@ function mapMercuryProviderState({ approvalRequest, transaction }) {
 
   if (transactionStatus === 'sent') {
     return {
-      paymentStatus: 'settled',
-      settlementStatus: 'settled',
-      processorStatus: 'settled',
-      externalStatus: 'settled',
-      verificationStatus: 'verified',
+      paymentStatus: 'initiated',
+      settlementStatus: 'clearing',
+      processorStatus: 'processing',
+      externalStatus: 'sent',
+      verificationStatus: 'pending',
       liveExecution: true,
-      executionReason: 'Mercury confirms the payment was sent.',
-      settled: true,
+      executionReason: 'Mercury reports the payment sent; settlement and ledger reconciliation remain unverified.',
+      settled: false,
     };
   }
 
@@ -621,6 +621,12 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
 }) {
   if (!isConfiguredOwnerAccount(accountId) || !requestId) {
     return { applied: false, reason: 'not_applicable' };
+  }
+
+  // Validate provider linkage before reading or writing the owner's records.
+  if ((transaction && (!transaction.id || String(transaction.requestId || '') !== String(requestId))) ||
+      (approvalRequest && String(approvalRequest.id || '') !== String(requestId))) {
+    return { applied: false, reason: 'provider_request_mismatch' };
   }
 
   const row = await loadOwnerWorkspace(accountId);
