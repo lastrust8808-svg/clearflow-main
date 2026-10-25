@@ -1,3 +1,5 @@
+import { bankingSession } from '../../services/storageSession.service';
+import { isPlaidOAuthReturn, readPlaidLinkSession } from '../../services/plaidOAuth.service';
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentProps, CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle, DocumentRecord, InvoiceRecord, SettlementPath, TokenRecord } from '../../types/core';
@@ -327,7 +329,7 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isIntercompanyModalOpen, setIsIntercompanyModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(false);
+  const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(isPlaidOAuthReturn);
   const [isConnectedFinancialAccountModalOpen, setIsConnectedFinancialAccountModalOpen] =
     useState(false);
   const [isManualBankAccountModalOpen, setIsManualBankAccountModalOpen] = useState(false);
@@ -340,7 +342,10 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const [hasSavedPresentmentDraft, setHasSavedPresentmentDraft] = useState(
     () => Boolean(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey))
   );
-  const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
+  const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(() => {
+    if (!isPlaidOAuthReturn()) return null;
+    try { return readPlaidLinkSession(bankingSession().accountId)?.targetAccountId ?? null; } catch { return null; }
+  });
   const [pendingPlaidSetup, setPendingPlaidSetup] = useState<PendingPlaidSetup | null>(null);
 
   const replaceAccountingHash = (hash: string) => {
@@ -9723,6 +9728,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       />
       {isPlaidModalOpen ? (
         <PlaidLinkModal
+          targetAccountId={selectedBankFeedAccountId}
           onClose={() => {
             setIsPlaidModalOpen(false);
             setSelectedBankFeedAccountId(null);

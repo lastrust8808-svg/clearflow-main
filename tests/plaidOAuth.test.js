@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+const source = readFileSync(new URL('../src/services/plaidOAuth.service.ts', import.meta.url), 'utf8');
+const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+test('OAuth resume retains the original Link token only for its account and lifetime', () => {
+  const store = new Map();
+  const window = {sessionStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},location:{search:'?oauth_state_id=state',href:'https://app.example.test/return?oauth_state_id=state#ledger'},history:{replaceState:(_a,_b,url)=>{window.cleaned=url;}}};
+  const exports = {};
+  new Function('exports','window',compiled)(exports,window);
+  assert.equal(exports.isPlaidOAuthReturn(),true);
+  exports.savePlaidLinkSession('original-link-token','google:alice','checking');
+  assert.equal(exports.readPlaidLinkSession('google:alice').token,'original-link-token');
+  assert.equal(exports.readPlaidLinkSession('google:alice').targetAccountId,'checking');
+  assert.equal(exports.readPlaidLinkSession('google:bob'),null);
+  assert.equal(exports.plaidReceivedRedirectUri(),'https://app.example.test/return?oauth_state_id=state');
+  const key=[...store.keys()][0], state=JSON.parse(store.get(key));
+  state.createdAt=Date.now()-31*60*1000;store.set(key,JSON.stringify(state));
+  assert.equal(exports.readPlaidLinkSession('google:alice'),null);
+  state.createdAt=Date.now()+60000;store.set(key,JSON.stringify(state));
+  assert.equal(exports.readPlaidLinkSession('google:alice'),null);
+  store.set(key,'invalid json');assert.equal(exports.readPlaidLinkSession('google:alice'),null);
+  exports.clearPlaidLinkSession();assert.equal(store.size,0);
+  assert.equal(window.cleaned,'/return#ledger');
+});

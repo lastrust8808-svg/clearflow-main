@@ -54,6 +54,16 @@ test('banking HTTP routes isolate two authenticated users and tolerate unavailab
   assert.equal((await request('alice', '/link_token', { userId: 'google:alice@example.com' })).status, 200);
   assert.deepEqual(linkRequest.products, ['transactions']);
   assert.deepEqual(linkRequest.optional_products, ['auth']);
+  process.env.PLAID_REDIRECT_URI = 'https://app.example.test/bank-return';
+  assert.equal((await request('alice', '/link_token', { userId: 'google:alice@example.com', redirect_uri: 'https://attacker.example/' })).status, 200);
+  assert.equal(linkRequest.redirect_uri, 'https://app.example.test/bank-return', 'Redirect destination must come only from server configuration.');
+  for (const invalid of ['http://app.example.test/return', 'https://app.example.test/return#account', 'https://user:secret@app.example.test/return', 'https://*.example.test/return', 'https://app.example.test/return?account=alice', 'not a URL']) {
+    process.env.PLAID_REDIRECT_URI = invalid;
+    linkRequest = null;
+    assert.equal((await request('alice', '/link_token', { userId: 'google:alice@example.com' })).status, 500);
+    assert.equal(linkRequest, null, 'Invalid redirects must fail before calling Plaid.');
+  }
+  delete process.env.PLAID_REDIRECT_URI;
   authUnavailable = true;
   const investment = await request('alice', '/exchange_public_token', { userId: 'google:alice@example.com', public_token: 'investment-item' });
   assert.equal(investment.status, 200);

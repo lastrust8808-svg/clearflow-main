@@ -473,6 +473,20 @@ async function getIdentityDataOrFallback(plaidClient, accessToken) {
   }
 }
 
+function configuredPlaidRedirectUri() {
+  const value = process.env.PLAID_REDIRECT_URI?.trim();
+  if (!value) return undefined; // Popup OAuth remains available without redirects.
+  let url;
+  try { url = new URL(value); } catch { throw new Error('Invalid PLAID_REDIRECT_URI configuration.'); }
+  const localSandbox = process.env.PLAID_ENV === 'sandbox' &&
+    url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if ((url.protocol !== 'https:' && !localSandbox) || url.username || url.password ||
+      url.hash || url.search || url.hostname.includes('*')) {
+    throw new Error('PLAID_REDIRECT_URI must be an HTTPS callback URL without credentials, query, wildcard, or fragment.');
+  }
+  return value;
+}
+
 router.post('/link_token', async (req, res) => {
   if ((req.body.userId || req.body.user_id) !== req.verifiedAccountId) return res.status(403).json({ error: 'Account mismatch.' });
   const userId = req.body.userId || req.body.user_id;
@@ -486,12 +500,14 @@ router.post('/link_token', async (req, res) => {
   }
 
   try {
+    const redirectUri = configuredPlaidRedirectUri();
     const { response } = await createLinkTokenWithFallbacks(plaidClient, {
       user: { client_user_id: buildPlaidClientUserId(userId) },
       client_name: 'ClearFlow',
       country_codes: [CountryCode.Us],
       language: 'en',
       webhook: getPlaidWebhookUrl(),
+      ...(redirectUri ? { redirect_uri: redirectUri } : {}),
     });
 
     return res.json({ link_token: response.data.link_token });
