@@ -66,6 +66,10 @@ jobs:
           JS
       - run: npm run test:legacy
       - run: npm run test:storage
+      - name: Verify production HTTP runtime and restart retention
+        run: node server/scripts/verifyStagingRuntime.js
+        env:
+          CLEARFLOW_AUTH_SECRET: test-auth-secret-that-is-at-least-32-characters
       - run: npm run test:restore
         env:
           CLEARFLOW_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
