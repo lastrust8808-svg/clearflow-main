@@ -1,0 +1,24 @@
+name: Document verification checks
+on:
+  pull_request:
+    paths:
+      - 'server/services/documentVerification.js'
+      - 'tests/documentVerification.test.js'
+      - '.github/workflows/document-verification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/services/documentVerification.js'
+      - 'tests/documentVerification.test.js'
+permissions:
+  contents: read
+jobs:
+  document-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check server/services/documentVerification.js
+      - run: node --test tests/documentVerification.test.js
