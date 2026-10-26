@@ -36,5 +36,7 @@ test('entity selector and responsive app tiles remain wired', () => {
   assert.ok(overview.includes('onSelectActiveEntity?.(event.target.value || null)'));
   assert.ok(overview.includes('records.filter((item) => item.entityId === activeEntityId)'));
   assert.ok(overview.includes('onClick={() => navigate(app.hash)}'));
-  assert.ok(overview.includes("repeat(auto-fit, minmax(205px, 1fr))"));
+  for (const minWidth of [205, 220, 230, 280]) {
+    assert.ok(overview.includes(`minmax(min(100%, ${minWidth}px), 1fr)`), `grid must fit narrow screens: ${minWidth}px`);
+  }
 });
