@@ -284,7 +284,7 @@ export default function OverviewPage({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
               gap: 10,
             }}
           >
@@ -310,7 +310,7 @@ export default function OverviewPage({
       ) : null}
 
       <PageSection title="Workspace Apps">
-        <div role="group" aria-label="Workspace applications" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(205px, 1fr))', gap: 12 }}>
+        <div role="group" aria-label="Workspace applications" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 205px), 1fr))', gap: 12 }}>
           {visibleApps.map((app) => (
             <button key={app.title} type="button" onClick={() => navigate(app.hash)}
               style={{ ...actionStyle(), display: 'grid', alignContent: 'start', gap: 8, minHeight: 140, padding: 16 }}>
@@ -326,7 +326,7 @@ export default function OverviewPage({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
             gap: 12,
           }}
         >
@@ -378,7 +378,7 @@ export default function OverviewPage({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: 12,
         }}
       >
