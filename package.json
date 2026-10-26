@@ -15,7 +15,7 @@
     "mobile:open:ios": "cap open ios",
     "lint": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js server/services/membershipBillingEngine.test.js server/services/membershipBillingPersistence.test.js",
     "test:storage": "node --test tests/integration/releaseStorage.test.js tests/integration/mercuryConcurrency.test.js",
     "test:legacy": "node server/scripts/testLegacyRecordUpgrade.js",
     "test:restore": "node server/scripts/testReleaseRestore.js",
