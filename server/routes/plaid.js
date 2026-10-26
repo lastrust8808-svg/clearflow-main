@@ -403,8 +403,6 @@ async function verifyPlaidWebhook(rawBody, verificationHeader, plaidClient) {
 
 async function createLinkTokenWithFallbacks(plaidClient, payload) {
   const productSets = [
-    [Products.Auth, Products.Transactions],
-    [Products.Auth],
     [Products.Transactions],
   ];
   let lastError = null;
@@ -414,6 +412,8 @@ async function createLinkTokenWithFallbacks(plaidClient, payload) {
       const response = await plaidClient.linkTokenCreate({
         ...payload,
         products,
+        optional_products: [Products.Auth],
+        additional_consented_products: [Products.Investments],
       });
       return { response, products };
     } catch (error) {
@@ -444,7 +444,7 @@ router.post('/link_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    return res.json({ link_token: `link-sandbox-mock-${Date.now()}` });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
@@ -475,46 +475,7 @@ router.post('/exchange_public_token', async (req, res) => {
 
   const plaidClient = getPlaidClient();
   if (!plaidClient) {
-    const itemId = `mock-item-${Date.now()}`;
-    const authResponse = buildMockAuth();
-    const identityData = buildMockIdentity(userName);
-    const bankOwnerName = identityData.accounts[0]?.owners?.[0]?.names?.[0] || '';
-    itemStore.set(itemId, {
-      userId,
-      accessToken: `mock-access-${Date.now()}`,
-      itemId,
-      authResponse,
-      identityData,
-      accounts: [
-        {
-          account_id: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-        },
-      ],
-    });
-    accountIndex.set(authResponse.accounts[0].account_id, itemId);
-    await savePersistedConnections(userId);
-
-    return res.json({
-      authResponse,
-      identityData,
-      identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
-      itemId,
-      linkedAccounts: [
-        {
-          accountId: authResponse.accounts[0].account_id,
-          name: 'Mock Checking',
-          mask: authResponse.numbers.ach[0].account.slice(-4),
-          type: 'depository',
-          subtype: 'checking',
-          currentBalance: 2500,
-          availableBalance: 2500,
-        },
-      ],
-    });
+    return res.status(503).json({ error: 'Bank connections are unavailable until Plaid is configured.' });
   }
 
   try {
@@ -522,14 +483,23 @@ router.post('/exchange_public_token', async (req, res) => {
     const accessToken = exchange.data.access_token;
     const itemId = exchange.data.item_id;
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
-    const authResponse = await plaidClient.authGet({ access_token: accessToken });
+    // Auth is optional in Link: investment and credit accounts may not support ACH details.
+    let authResponse = null;
+    try {
+      const authResult = await plaidClient.authGet({ access_token: accessToken });
+      authResponse = authResult.data;
+    } catch (authError) {
+      console.info('Plaid Auth unavailable for this linked account; continuing without ACH details.', {
+        code: authError.response?.data?.error_code || 'UNAVAILABLE',
+      });
+    }
     const identityData = await getIdentityDataOrFallback(plaidClient, accessToken, userName);
 
     itemStore.set(itemId, {
       userId,
       accessToken,
       itemId,
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       accounts: accountsResponse.data.accounts,
     });
@@ -543,7 +513,7 @@ router.post('/exchange_public_token', async (req, res) => {
       identityData.accounts?.[0]?.owners?.[0]?.names?.[0] || userName;
 
     return res.json({
-      authResponse: authResponse.data,
+      authResponse,
       identityData,
       identityMatchScores: buildIdentityMatchScore(userName, bankOwnerName),
       itemId,
