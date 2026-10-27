@@ -16,8 +16,8 @@ const requiredColumns = {
 export function productionDatabaseTargets(env = process.env) {
   const storage = env.CLEARFLOW_STORAGE_DATABASE_URL || env.CLEARFLOW_OWNER_DATABASE_URL;
   const auth = env.CLEARFLOW_AUTH_DATABASE_URL || env.CLEARFLOW_OWNER_DATABASE_URL;
-  if (!storage || !auth || (env.CLEARFLOW_AUTH_SECRET || '').trim().length < 32) {
-    throw new Error('Production requires durable storage and authentication database configuration and an authentication secret of at least 32 characters.');
+  if (!storage || !auth || (env.CLEARFLOW_AUTH_SECRET || '').trim().length < 32 || (env.ENCRYPTION_KEY || '').trim().length < 32) {
+    throw new Error('Production requires durable storage and authentication database configuration, an authentication secret, and a vault encryption key of at least 32 characters.');
   }
   return [{url:storage,tables:storageTables},{url:auth,tables:authTables},
     ...(env.CLEARFLOW_OWNER_DATABASE_URL ? [{url:env.CLEARFLOW_OWNER_DATABASE_URL,tables:ownerTables}] : [])];
