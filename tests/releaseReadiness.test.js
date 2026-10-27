@@ -8,7 +8,7 @@ test('production readiness requires both durable account storage and server auth
  assert.throws(()=>productionDatabaseTargets({...valid,CLEARFLOW_AUTH_SECRET:' '.repeat(32)}));
  assert.throws(()=>productionDatabaseTargets({...valid,ENCRYPTION_KEY:'short'}),/vault encryption key/);
  assert.equal(productionDatabaseTargets(valid).length,2);
- assert.equal(productionDatabaseTargets({CLEARFLOW_OWNER_DATABASE_URL:'postgres://owner',CLEARFLOW_AUTH_SECRET:'a'.repeat(32)}).length,3);
+ assert.equal(productionDatabaseTargets({CLEARFLOW_OWNER_DATABASE_URL:'postgres://owner',CLEARFLOW_AUTH_SECRET:'a'.repeat(32),ENCRYPTION_KEY:'v'.repeat(32)}).length,3);
 });
 test('nonproduction readiness does not require a live database',async()=>{await checkProductionReadiness({NODE_ENV:'test'});});
 test('production server exits before listening when durable/auth configuration is absent',()=>{
