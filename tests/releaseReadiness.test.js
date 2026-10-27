@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {productionDatabaseTargets,checkProductionReadiness} from '../server/services/releaseReadiness.js';
 test('production readiness requires both durable account storage and server authentication',()=>{
- const valid={CLEARFLOW_STORAGE_DATABASE_URL:'postgres://storage',CLEARFLOW_AUTH_DATABASE_URL:'postgres://auth',CLEARFLOW_AUTH_SECRET:'a'.repeat(32)};
+ const valid={CLEARFLOW_STORAGE_DATABASE_URL:'postgres://storage',CLEARFLOW_AUTH_DATABASE_URL:'postgres://auth',CLEARFLOW_AUTH_SECRET:'a'.repeat(32),ENCRYPTION_KEY:'v'.repeat(32)};
  for(const key of Object.keys(valid)){const invalid={...valid};delete invalid[key];assert.throws(()=>productionDatabaseTargets(invalid),/Production requires/);}
  assert.throws(()=>productionDatabaseTargets({...valid,CLEARFLOW_AUTH_SECRET:' '.repeat(32)}));
+ assert.throws(()=>productionDatabaseTargets({...valid,ENCRYPTION_KEY:'short'}),/vault encryption key/);
  assert.equal(productionDatabaseTargets(valid).length,2);
  assert.equal(productionDatabaseTargets({CLEARFLOW_OWNER_DATABASE_URL:'postgres://owner',CLEARFLOW_AUTH_SECRET:'a'.repeat(32)}).length,3);
 });
