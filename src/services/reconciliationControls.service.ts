@@ -83,14 +83,17 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
-  if (reconciliation.statementReviewStatus === 'not_imported') {
+  // Only an explicitly completed review can be considered for automatic
+  // close eligibility. Missing, pending, and already-completed reviews must
+  // never be inferred as ready merely because balances happen to match.
+  if (reconciliation.statementReviewStatus !== 'ready_to_close') {
     return {
       bookEndingBalance,
       differenceAmount,
       unresolvedLineCount,
       matchedLineCount,
       isReadyToApprove: false,
-      blockedReason: 'Statement review has not started yet.',
+      blockedReason: 'Statement review must be explicitly ready to close.',
     };
   }
 
