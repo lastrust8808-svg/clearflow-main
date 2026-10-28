@@ -62,6 +62,7 @@ function buildApiSubdomainCandidate() {
     normalizedHost.endsWith('.localhost') ||
     /^[\d.]+$/.test(normalizedHost) ||
     normalizedHost.endsWith('.vercel.app') ||
+    normalizedHost.endsWith('.onrender.com') ||
     normalizedHost.startsWith('api.')
   ) {
     return '';

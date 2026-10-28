@@ -354,7 +354,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
-    setStorageAccessToken(accessToken);
+    setStorageAccessToken(accessToken, `google:${profile.email.trim().toLowerCase()}`);
     userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
@@ -468,13 +468,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
     try {
-      await userDataService.saveUserData(token, data);
       const googleDurableAccountId = buildGoogleDurableAccountId(data.user.email);
-      if (googleDurableAccountId) {
-        void saveAccountAppData(googleDurableAccountId, data).catch((error) => {
-          console.warn('Failed to mirror Google workspace to durable storage.', error);
-        });
-      }
+      if (!googleDurableAccountId) throw new Error('Verified account identifier required for workspace storage.');
+      await saveAccountAppData(googleDurableAccountId, data);
+      await userDataService.saveUserData(token, data);
       setSavingStatus('saved');
       setTimeout(() => setSavingStatus('idle'), 2500); // Show 'saved' for 2.5s
     } catch (err) {
@@ -505,7 +502,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       debouncedSave(state.apiAccessToken, state.appData);
     }
 
-    if (state.localAccountId) {
+    if (state.localAccountId && !state.apiAccessToken) {
       try {
         saveLocalAuthAppData(state.localAccountId, state.appData);
         void saveAccountAppData(state.localAccountId, state.appData)
@@ -1316,7 +1313,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user: { id: verified.user.id, name: '', email: verified.user.email, primaryContactType: 'email', isVerified: false },
         entities: [],
       };
-      setStorageAccessToken(verified.token);
+      setStorageAccessToken(verified.token, accountId);
       const durable = await loadAccountAppData(accountId);
       const nextData = durable || appData;
       // Copy the verified user's own browser backup only after server identity

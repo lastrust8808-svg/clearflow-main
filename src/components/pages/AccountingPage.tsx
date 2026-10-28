@@ -1,3 +1,5 @@
+import { bankingSession } from '../../services/storageSession.service';
+import { isPlaidOAuthReturn, readPlaidLinkSession } from '../../services/plaidOAuth.service';
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentProps, CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle, DocumentRecord, InvoiceRecord, SettlementPath, TokenRecord } from '../../types/core';
@@ -40,7 +42,7 @@ import {
   resolveDefaultFundsRightsClassification,
   resolvePaymentRightsClassification,
 } from '../../services/paymentRightsClassification.service';
-import { syncBankFeedToLedger } from '../../services/bankFeed.service';
+import { syncPlaidItemToLedger } from '../../services/bankFeed.service';
 import { plaidService } from '../../services/plaid.service';
 import { executeSettlementProcessing } from '../../services/settlementExecution.service';
 import { buildSecurityMerchantSuggestions } from '../../services/securityMerchantCatalog.service';
@@ -327,7 +329,7 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isIntercompanyModalOpen, setIsIntercompanyModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(false);
+  const [isPlaidModalOpen, setIsPlaidModalOpen] = useState(isPlaidOAuthReturn);
   const [isConnectedFinancialAccountModalOpen, setIsConnectedFinancialAccountModalOpen] =
     useState(false);
   const [isManualBankAccountModalOpen, setIsManualBankAccountModalOpen] = useState(false);
@@ -340,7 +342,10 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
   const [hasSavedPresentmentDraft, setHasSavedPresentmentDraft] = useState(
     () => Boolean(loadSessionDraft<PresentmentModalDraft>(presentmentDraftStorageKey))
   );
-  const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(null);
+  const [selectedBankFeedAccountId, setSelectedBankFeedAccountId] = useState<string | null>(() => {
+    if (!isPlaidOAuthReturn()) return null;
+    try { return readPlaidLinkSession(bankingSession().accountId)?.targetAccountId ?? null; } catch { return null; }
+  });
   const [pendingPlaidSetup, setPendingPlaidSetup] = useState<PendingPlaidSetup | null>(null);
 
   const replaceAccountingHash = (hash: string) => {
@@ -6158,10 +6163,10 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         ? payload.linkedAccounts
         : [
             {
-              accountId: payload.authResponse.accounts[0]?.account_id || `plaid-${Date.now()}`,
+              accountId: payload.authResponse?.accounts[0]?.account_id || `plaid-${Date.now()}`,
               name: payload.institutionName || 'Connected account',
-              mask: payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) || '',
-              subtype: payload.authResponse.accounts[0]?.verification_status || '',
+              mask: payload.authResponse?.numbers.ach?.[0]?.account?.slice(-4) || '',
+              subtype: payload.authResponse?.accounts[0]?.verification_status || '',
               type: 'depository',
               currentBalance: undefined,
               availableBalance: undefined,
@@ -6188,7 +6193,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             availableBalance: linkedAccounts[0]?.availableBalance,
             last4:
               linkedAccounts[0]?.mask ||
-              payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) ||
+              payload.authResponse?.numbers.ach?.[0]?.account?.slice(-4) ||
               reconnectedAccount.last4,
             externalAccountId: linkedAccounts[0]?.accountId,
             plaidItemId: payload.itemId,
@@ -6211,7 +6216,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                   feedStartDate: account.feedStartDate || connectedStartDate,
                   last4:
                     linkedAccounts[0]?.mask ||
-                    payload.authResponse.numbers.ach?.[0]?.account?.slice(-4) ||
+                    payload.authResponse?.numbers.ach?.[0]?.account?.slice(-4) ||
                     account.last4,
                   achOriginationEnabled: account.achOriginationEnabled ?? true,
                   autoReconcileEnabled: account.autoReconcileEnabled ?? true,
@@ -7156,18 +7161,17 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         bankAccount.plaidItemId || bankAccount.id
       );
 
-      setData((prev) => syncBankFeedToLedger({
-        data: prev,
-        bankAccountId,
-        plaidSync: syncResult,
-      }));
+      const itemId = bankAccount.plaidItemId || bankAccount.id;
+      // Validate before enqueueing the state update so a missing mapping is shown to the user.
+      syncPlaidItemToLedger(data, itemId, syncResult);
+      setData((prev) => syncPlaidItemToLedger(prev, itemId, syncResult));
       const changeCount =
         syncResult.added.length +
         syncResult.modified.length +
         syncResult.removedTransactionIds.length;
       setOperationsNotice(
         changeCount
-          ? `Processed ${changeCount} live bank change${changeCount === 1 ? '' : 's'} from Plaid. New transactions were imported; provider changes/removals were flagged for review rather than silently rewriting posted books.`
+          ? `Processed ${changeCount} live bank change${changeCount === 1 ? '' : 's'} from Plaid. Changes were applied to the linked accounts and are pending workspace save; provider changes/removals were flagged for review rather than silently rewriting posted books.`
           : `${bankAccount.accountName} is current. Plaid returned no new transaction changes.`,
       );
     } catch (error) {
@@ -9724,6 +9728,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
       />
       {isPlaidModalOpen ? (
         <PlaidLinkModal
+          targetAccountId={selectedBankFeedAccountId}
           onClose={() => {
             setIsPlaidModalOpen(false);
             setSelectedBankFeedAccountId(null);

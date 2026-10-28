@@ -1,6 +1,6 @@
 import { requireAccountAccess } from '../middleware/accountAuthorization.js';
 import express from 'express';
-import { classifyPaymentStatus } from '../services/paymentControls.js';
+import { classifyPaymentStatus, selectPaymentTransaction } from '../services/paymentControls.js';
 import crypto from 'node:crypto';
 import {
   getMercuryPaymentStatus,
@@ -82,11 +82,7 @@ router.get('/payment-status/:requestId', (req, res, next) => {
     const status = await getMercuryPaymentStatus(req.params.requestId);
     const ownerAccountId = getOwnerAccountId();
     const paymentLifecycle = classifyPaymentStatus(status.approvalRequest, status.transactions);
-    const relatedTransaction = Array.isArray(status.transactions)
-      ? status.transactions.find((transaction) =>
-          String(transaction?.requestId || '') === String(req.params.requestId)
-        ) || null
-      : null;
+    const relatedTransaction = selectPaymentTransaction(req.params.requestId, status.transactions);
 
     let workspaceUpdate = null;
     if (ownerAccountId) {
@@ -139,19 +135,19 @@ router.post('/webhook', async (req, res) => {
 
   try {
     let transaction = null;
-    if (
-      event?.resourceType === 'transaction' &&
-      event?.resourceId &&
-      isMercuryExecutionConfigured()
-    ) {
-      try {
-        transaction = await getMercuryTransactionById(event.resourceId);
-      } catch (error) {
-        console.warn('Mercury transaction detail lookup failed for webhook event.', error);
+    if (event?.resourceType === 'transaction') {
+      if (!event.resourceId) return res.status(400).send('Transaction resource ID required.');
+      if (!isMercuryExecutionConfigured()) return res.status(503).send('Mercury lookup is not configured.');
+      // Acknowledge only after lookup and durable processing succeed. Swallowing
+      // this error would return 200 and could permanently lose the update.
+      transaction = await getMercuryTransactionById(event.resourceId);
+      if (!transaction?.id || String(transaction.id) !== String(event.resourceId)) {
+        return res.status(502).send('Mercury returned mismatched transaction evidence.');
       }
     }
 
     const ownerAccountId = getOwnerAccountId();
+    if (!ownerAccountId) return res.status(503).send('Webhook workspace is not configured.');
     if (ownerAccountId) {
       await recordOwnerProviderEvent({
         accountId: ownerAccountId,

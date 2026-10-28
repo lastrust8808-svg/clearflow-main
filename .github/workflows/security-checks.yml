@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - security/hardening-2026-10-12
+      - main
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -13,12 +14,73 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      # Temporary dependency install until the committed lockfile is regenerated for pg.
-      - run: npm install --no-save --package-lock=false
+      - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm test
       - run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.example.test
       - run: |
           for file in server.js server/routes/*.js server/middleware/*.js server/services/*.js; do
             node --check "$file"
           done
+
+  storage-recovery:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: clearflow-ci-only
+          POSTGRES_DB: clearflow_staging
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CLEARFLOW_STAGING_DATABASE_URL: postgres://postgres:clearflow-ci-only@localhost:5432/clearflow_staging
+      CLEARFLOW_LEGACY_TEST_DATABASE_URL: postgres://postgres:clearflow-ci-only@localhost:5432/clearflow_legacy_test
+      CLEARFLOW_RESTORE_TEST_DATABASE_URL: postgres://postgres:clearflow-ci-only@localhost:5432/clearflow_restore_test
+      ENCRYPTION_KEY: test-vault-secret-that-is-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Provision disposable recovery targets
+        run: |
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          const c = new pg.Client({ connectionString: process.env.CLEARFLOW_STAGING_DATABASE_URL });
+          await c.connect();
+          await c.query('CREATE DATABASE clearflow_legacy_test');
+          await c.query('CREATE DATABASE clearflow_restore_test');
+          await c.end();
+          JS
+      - run: npm run test:legacy
+      - run: npm run test:storage
+      - name: Verify production HTTP runtime and restart retention
+        run: node server/scripts/verifyStagingRuntime.js
+        env:
+          CLEARFLOW_AUTH_SECRET: test-auth-secret-that-is-at-least-32-characters
+      - run: npm run test:restore
+        env:
+          CLEARFLOW_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+
+  banking-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:banking-release

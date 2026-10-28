@@ -2,6 +2,7 @@
 // Usage: CLEARFLOW_STAGING_DATABASE_URL=... node server/scripts/applyStagingMigration.js
 import pg from 'pg';
 import { readFileSync } from 'node:fs';
+import { backfillPlaidItems } from '../services/plaidItemMigration.js';
 const url = process.env.CLEARFLOW_STAGING_DATABASE_URL;
 if (!url) throw new Error('CLEARFLOW_STAGING_DATABASE_URL is required.');
 const parsed = new URL(url);
@@ -15,13 +16,40 @@ try {
   if (result.rows[0]?.name !== 'clearflow_staging') throw new Error('Database identity mismatch.');
   const sql = readFileSync(new URL('../db/versions/001_storage_foundation.sql', import.meta.url), 'utf8');
   await client.query(sql);
+  await client.query(readFileSync(new URL('../db/versions/002_plaid_items_and_legacy_records.sql', import.meta.url), 'utf8'));
+  const itemTable = await client.query("SELECT to_regclass('public.clearflow_plaid_items') AS name");
+  if (!itemTable.rows[0]?.name) throw new Error('Plaid item table missing.');
+  await client.query('BEGIN');
+  try {
+    await backfillPlaidItems(client);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
   const check = await client.query(`SELECT table_name FROM information_schema.tables
     WHERE table_schema='public' AND table_name = ANY($1::text[])`, [[
       'clearflow_schema_migrations','clearflow_account_snapshots',
       'clearflow_account_records','clearflow_entity_memberships','clearflow_b2b_deliveries'
     ]]);
-  if (check.rowCount !== 5) throw new Error('Migration verification failed.');
-  console.log('Staging migration applied and five required tables verified.');
+  const found = new Set(check.rows.map(row => row.table_name));
+  const required = [
+    'clearflow_schema_migrations', 'clearflow_account_snapshots',
+    'clearflow_account_records', 'clearflow_entity_memberships',
+    'clearflow_b2b_deliveries','clearflow_plaid_items',
+  ];
+  if (required.some(name => !found.has(name))) throw new Error('Migration verification failed: required table missing.');
+  const versions = await client.query('SELECT version FROM public.clearflow_schema_migrations WHERE version = ANY($1::text[])', [['001_storage_foundation','002_plaid_items_and_legacy_records']]);
+  if (versions.rowCount !== 2) throw new Error('Both required migration versions must be recorded.');
+  const columns = await client.query(`SELECT table_name, column_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name = ANY($1::text[])`, [required]);
+  const names = new Set(columns.rows.map(row => `${row.table_name}.${row.column_name}`));
+  for (const key of ['clearflow_account_snapshots.revision', 'clearflow_account_records.payload',
+    'clearflow_entity_memberships.revoked_at', 'clearflow_b2b_deliveries.invoice_payload',
+    'clearflow_plaid_items.encrypted_payload', 'clearflow_plaid_items.revision']) {
+    if (!names.has(key)) throw new Error(`Migration verification failed: ${key} missing.`);
+  }
+  console.log('Staging migration applied and six required tables and both migration versions verified.');
 } finally {
   await client.end();
 }

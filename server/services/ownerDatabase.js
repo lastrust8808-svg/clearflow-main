@@ -524,14 +524,14 @@ function mapMercuryProviderState({ approvalRequest, transaction }) {
 
   if (transactionStatus === 'sent') {
     return {
-      paymentStatus: 'settled',
-      settlementStatus: 'settled',
-      processorStatus: 'settled',
-      externalStatus: 'settled',
-      verificationStatus: 'verified',
+      paymentStatus: 'initiated',
+      settlementStatus: 'clearing',
+      processorStatus: 'processing',
+      externalStatus: 'sent',
+      verificationStatus: 'pending',
       liveExecution: true,
-      executionReason: 'Mercury confirms the payment was sent.',
-      settled: true,
+      executionReason: 'Mercury reports the payment sent; settlement and ledger reconciliation remain unverified.',
+      settled: false,
     };
   }
 
@@ -623,6 +623,12 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
     return { applied: false, reason: 'not_applicable' };
   }
 
+  // Validate provider linkage before reading or writing the owner's records.
+  if ((transaction && (!transaction.id || String(transaction.requestId || '') !== String(requestId))) ||
+      (approvalRequest && String(approvalRequest.id || '') !== String(requestId))) {
+    return { applied: false, reason: 'provider_request_mismatch' };
+  }
+
   const row = await loadOwnerWorkspace(accountId);
   const snapshot = row?.app_data?.coreDataSnapshot;
   if (!row?.app_data || !snapshot) {
@@ -630,6 +636,21 @@ export async function applyMercuryProviderUpdateToOwnerWorkspace({
   }
 
   const providerState = mapMercuryProviderState({ approvalRequest, transaction });
+  // A request that failed cannot be revived by delayed progress or approval events.
+  // Retrying a payment requires a distinct provider request and explicit review.
+  const retainedFailure = (snapshot.payments || []).some(payment =>
+    payment?.settlementExecution?.executionProvider === 'mercury' &&
+    String(payment.settlementExecution.executionReference || '') === String(requestId) &&
+    ['failed', 'reversed'].includes(payment.status)) ||
+    (snapshot.settlements || []).some(settlement =>
+      settlement?.executionProvider === 'mercury' &&
+      String(settlement.executionReference || '') === String(requestId) &&
+      settlement.verificationStatus === 'exception' &&
+      ['failed', 'returned'].includes(settlement.externalStatus));
+  if (retainedFailure && providerState.verificationStatus !== 'exception') {
+    return { applied: false, reason: 'terminal_failure_preserved' };
+  }
+
   const nowIso = new Date().toISOString();
   const settlementDate =
     transaction?.postedAt ||

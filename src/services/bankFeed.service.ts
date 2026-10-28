@@ -244,7 +244,19 @@ export function syncBankFeedToLedger(input: {
     modified: [],
     removedTransactionIds: [],
   };
-  const sourceTransactions = syncResult.added;
+  const providerAccountId = bankAccount.connectedProfile?.externalAccountId;
+  if (bankAccount.connectionType === 'plaid_connected' && !providerAccountId) {
+    throw new Error('Reconnect this bank account before importing: its provider account identifier is missing.');
+  }
+  const belongsToAccount = (transaction: PlaidTransaction) =>
+    bankAccount.connectionType !== 'plaid_connected' || transaction.account_id === providerAccountId;
+  const sourceTransactions = syncResult.added.filter(belongsToAccount);
+  for (const transaction of [...sourceTransactions, ...syncResult.modified.filter(belongsToAccount)]) {
+    if (typeof transaction.amount !== 'number' || !Number.isFinite(transaction.amount) ||
+        Math.abs(transaction.amount) * 100 > Number.MAX_SAFE_INTEGER) {
+      throw new Error('Invalid bank transaction amount. No accounting changes were imported.');
+    }
+  }
   const feedStartDate =
     bankAccount.feedStartDate ||
     bankAccount.connectedProfile?.connectedAt?.slice(0, 10);
@@ -252,6 +264,10 @@ export function syncBankFeedToLedger(input: {
     ? sourceTransactions.filter((transaction) => toIsoDate(transaction.date) >= feedStartDate)
     : sourceTransactions;
 
+  const linkedLedger = data.ledgerAccounts.find(account => account.id === bankAccount.linkedLedgerAccountId);
+  if (linkedLedger && (linkedLedger.entityId !== bankAccount.entityId || linkedLedger.currency !== bankAccount.currency)) {
+    throw new Error('The bank ledger must belong to the same entity and currency as its bank account.');
+  }
   const existingExternalIds = new Set(
     (data.bankFeedEntries ?? [])
       .filter((entry) => entry.bankAccountId === bankAccountId)
@@ -284,6 +300,7 @@ export function syncBankFeedToLedger(input: {
 
   const modifiedById = new Map(
     syncResult.modified
+      .filter(belongsToAccount)
       .filter((transaction) => transaction.transaction_id)
       .map((transaction) => [transaction.transaction_id, transaction])
   );
@@ -335,6 +352,7 @@ export function syncBankFeedToLedger(input: {
       continue;
     }
 
+    existingExternalIds.add(plaidTransaction.transaction_id);
     const normalized = normalizePlaidAmount(Number(plaidTransaction.amount ?? 0));
     const rule = pickMatchingRule(entityRules, {
       bankAccountId,
@@ -351,8 +369,11 @@ export function syncBankFeedToLedger(input: {
     const ruleLedgerAccount = rule?.defaultLedgerAccountId
       ? nextLedgerAccounts.find((account) => account.id === rule.defaultLedgerAccountId)
       : undefined;
+    if (ruleLedgerAccount && (ruleLedgerAccount.entityId !== bankAccount.entityId || ruleLedgerAccount.currency !== bankAccount.currency)) {
+      throw new Error('The bank rule ledger must belong to the same entity and currency as its bank account.');
+    }
     const shouldUseFallbackCounterparty = Boolean(
-      !ruleLedgerAccount &&
+      !plaidTransaction.pending && rule?.verificationMode !== 'manual_review' && !ruleLedgerAccount &&
         bankLedgerAccount &&
         (bankAccount.autoCategorizeFeedTransactions || rule?.autoPost),
     );
@@ -369,12 +390,12 @@ export function syncBankFeedToLedger(input: {
     }
     const postingLedgerAccount = ruleLedgerAccount || fallbackCounterparty?.ledgerAccount;
     const shouldAutoPost = Boolean(
-      bankLedgerAccount &&
+      !plaidTransaction.pending && rule?.verificationMode !== 'manual_review' && bankLedgerAccount &&
         ((rule?.autoPost && (postingLedgerAccount || bankLedgerAccount)) ||
           (bankAccount.autoCategorizeFeedTransactions && postingLedgerAccount)),
     );
     const verificationStatus =
-      rule?.verificationMode === 'manual_review' ? 'pending' : 'verified';
+      plaidTransaction.pending || rule?.verificationMode === 'manual_review' ? 'pending' : 'verified';
 
     let createdTransactionId: string | undefined;
     let createdJournalEntryId: string | undefined;
@@ -596,4 +617,26 @@ export function syncBankFeedToLedger(input: {
     reconciliations: nextReconciliations,
     bankFeedEntries: nextFeedEntries,
   };
+}
+
+/** Import every mapped account in an item before retaining its delivery receipt. */
+export function syncPlaidItemToLedger(data: CoreDataBundle, itemId: string, sync: PlaidTransactionSyncResult): CoreDataBundle {
+  if (sync.itemId && sync.itemId !== itemId) throw new Error('Bank delivery item mismatch.');
+  const accounts = data.bankAccounts.filter(account => account.plaidItemId === itemId && account.connectionType === 'plaid_connected');
+  const mappings = new Map<string, string>();
+  for (const account of accounts) {
+    const external = account.connectedProfile?.externalAccountId;
+    if (!external || mappings.has(external)) throw new Error('Reconnect bank accounts to resolve missing or ambiguous provider mappings.');
+    mappings.set(external, account.id);
+  }
+  if (!accounts.length || [...sync.added, ...sync.modified].some(transaction => !mappings.has(transaction.account_id))) {
+    throw new Error('Connect every account in this bank delivery before importing it.');
+  }
+  let next = data;
+  for (const account of accounts) next = syncBankFeedToLedger({ data: next, bankAccountId: account.id, plaidSync: sync });
+  if (sync.deliveryId) next = { ...next, bankFeedDeliveryReceipts: [
+    ...(next.bankFeedDeliveryReceipts || []).filter(receipt => receipt.itemId !== itemId),
+    { itemId, deliveryId: sync.deliveryId },
+  ] };
+  return next;
 }

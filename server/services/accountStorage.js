@@ -64,8 +64,9 @@ async function ensureDirectory(targetPath) {
 export async function loadAccountAppData(accountId) {
   if (durableAccountStorageConfigured()) {
     const snapshot = await readAccountSnapshot(accountId);
-    if (snapshot) return snapshot.app_data;
+    return snapshot?.app_data ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable account database required in production.');
   try {
     const raw = await fs.readFile(appDataPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -98,8 +99,9 @@ export async function saveAccountAppData(accountId, appData, expectedRevision = 
 export async function loadAccountDocumentFile(accountId, fileId) {
   if (recordsConfigured()) {
     const record = await readRecord(accountId, 'file', fileId);
-    if (record) return record;
+    return record ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required in production.');
   try {
     const raw = await fs.readFile(accountFilePath(accountId, fileId), 'utf8');
     return JSON.parse(raw);
@@ -141,8 +143,9 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 export async function loadAccountRemittanceVault(accountId, vendorId) {
   if (recordsConfigured()) {
     const record = await readRecord(accountId, 'remittance', vendorId);
-    if (record) return record;
+    return record ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required in production.');
   try {
     const raw = await fs.readFile(accountRemittancePath(accountId, vendorId), 'utf8');
     return JSON.parse(raw);
@@ -184,8 +187,9 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 export async function loadAccountTransactionProofVault(accountId) {
   if (recordsConfigured()) {
     const record = await readRecord(accountId, 'proof', 'chains');
-    if (record) return record;
+    return record ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required in production.');
   try {
     const raw = await fs.readFile(accountTransactionProofPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -225,8 +229,9 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 export async function loadAccountPlaidVault(accountId) {
   if (recordsConfigured()) {
     const record = await readRecord(accountId, 'plaid', 'connections');
-    if (record) return record;
+    return record ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required in production.');
   try {
     const raw = await fs.readFile(accountPlaidPath(accountId), 'utf8');
     return JSON.parse(raw);
@@ -266,8 +271,9 @@ export async function saveAccountPlaidVault(accountId, payload) {
 export async function loadAccountExtractionRecord(accountId, signature) {
   if (recordsConfigured()) {
     const record = await readRecord(accountId, 'extraction', signature);
-    if (record) return record;
+    return record ?? null;
   }
+  if (process.env.NODE_ENV === 'production') throw new Error('Durable record database required in production.');
   try {
     const raw = await fs.readFile(accountExtractionPath(accountId, signature), 'utf8');
     return JSON.parse(raw);

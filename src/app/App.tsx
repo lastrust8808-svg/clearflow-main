@@ -1,3 +1,4 @@
+import { isPlaidOAuthReturn } from '../services/plaidOAuth.service';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSection, CoreDataBundle, EntityRecord } from '../types/core';
 import type { Entity } from '../types/app.models';
@@ -822,8 +823,8 @@ export default function App({
     const hashSection = parseHashSection(browserHash);
     const storedRoute = loadRouteForUser(currentUserId);
     const storedSection = loadSectionForUser(currentUserId);
-    const nextRoute = hashSection ? browserHash : resolvePreferredRoute(storedRoute, storedSection);
-    const nextSection = parseHashSection(nextRoute) || storedSection;
+    const nextRoute = isPlaidOAuthReturn() ? buildSectionHash('accounting') : hashSection ? browserHash : resolvePreferredRoute(storedRoute, storedSection);
+    const nextSection = isPlaidOAuthReturn() ? 'accounting' : parseHashSection(nextRoute) || storedSection;
     setActiveSection(nextSection);
     if (typeof window !== 'undefined' && window.location.hash !== nextRoute) {
       replaceWindowHash(nextRoute);

@@ -1,15 +1,22 @@
 // Provider-neutral, fail-closed payment lifecycle. A request is not proof of settlement.
+const FAILURE_STATES = new Set(['failed', 'rejected', 'returned', 'cancelled', 'reversed', 'blocked']);
+const CONFIRMED_STATES = new Set(['completed', 'settled', 'posted']);
+const statusOf = tx => String(tx?.status || '').toLowerCase();
+
+// A failure wins over earlier progress, independent of provider array ordering.
+export function selectPaymentTransaction(requestId, transactions = []) {
+  if (!requestId || !Array.isArray(transactions)) return null;
+  const matching = transactions.filter(tx => tx?.id && String(tx.requestId || '') === String(requestId));
+  return matching.find(tx => FAILURE_STATES.has(statusOf(tx))) ||
+    matching.find(tx => !CONFIRMED_STATES.has(statusOf(tx))) || matching[0] || null;
+}
 export function classifyPaymentStatus(approvalRequest, transactions = []) {
   const raw = String(approvalRequest?.status || '').toLowerCase();
-  const transactionList = Array.isArray(transactions) ? transactions : [];
-  const requestId = String(approvalRequest?.id || '');
-  const matching = transactionList.filter(tx => requestId && String(tx?.requestId || '') === requestId);
-  const completed = matching.find(tx => ['completed', 'settled', 'posted'].includes(String(tx?.status || '').toLowerCase()));
-  const returned = matching.find(tx => ['failed', 'rejected', 'returned', 'cancelled'].includes(String(tx?.status || '').toLowerCase()));
-  if (returned) return { state: 'failed', reconciled: false, transactionId: returned.id || null };
-  if (completed) return { state: 'bank_confirmed', reconciled: false, transactionId: completed.id || null };
-  if (['rejected', 'failed', 'cancelled', 'denied'].includes(raw)) return { state: 'failed', reconciled: false, transactionId: null };
-  if (['approved', 'processing', 'pending', 'sent', 'completed'].includes(raw)) return { state: 'processing', reconciled: false, transactionId: null };
+  const transaction = selectPaymentTransaction(approvalRequest?.id, transactions);
+  if (transaction && FAILURE_STATES.has(statusOf(transaction))) return { state: 'failed', reconciled: false, transactionId: transaction.id };
+  if (FAILURE_STATES.has(raw) || raw === 'denied') return { state: 'failed', reconciled: false, transactionId: null };
+  if (transaction && CONFIRMED_STATES.has(statusOf(transaction))) return { state: 'bank_confirmed', reconciled: false, transactionId: transaction.id };
+  if (transaction || ['approved', 'processing', 'pending', 'sent', 'completed'].includes(raw)) return { state: 'processing', reconciled: false, transactionId: null };
   return { state: 'approval_pending', reconciled: false, transactionId: null };
 }
 export function reconcileBankTransaction({ bankTransaction, ledgerEntry, expectedAccountId }) {
