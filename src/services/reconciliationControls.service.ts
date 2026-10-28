@@ -21,6 +21,15 @@ export function buildReconciliationCloseMetrics(
   // unmatched IDs and unresolved parsed lines as blockers; either source can
   // be stale independently after an interrupted statement review.
   const parsedLines = reconciliation.parsedStatementLines ?? [];
+  // Duplicate or blank statement-line IDs can make a duplicated import look
+  // fully matched. Fail closed rather than approving ambiguous source rows.
+  const parsedLineIds = new Set<string>();
+  const hasInvalidLineIds = parsedLines.some((line) => {
+    const id = line?.id;
+    if (typeof id !== 'string' || !id.trim() || parsedLineIds.has(id)) return true;
+    parsedLineIds.add(id);
+    return false;
+  });
   const unresolvedLineIds = new Set(reconciliation.unmatchedStatementLineIds ?? []);
   for (const line of parsedLines) {
     if (line.matchStatus !== 'matched') {
@@ -69,6 +78,17 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Statement lines must be imported and reviewed before automatic approval.',
+    };
+  }
+
+  if (hasInvalidLineIds) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Statement lines must have unique, nonempty identifiers.',
     };
   }
 
