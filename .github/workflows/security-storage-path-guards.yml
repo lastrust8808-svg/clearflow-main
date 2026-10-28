@@ -1,0 +1,30 @@
+name: Security storage path guards
+
+on:
+  push:
+    branches:
+      - security/infrastructure-audit-2026-10-28
+  pull_request:
+    paths:
+      - server/services/accountStorage.js
+      - server/utils/storageSegment.js
+      - tests/storageSegment.test.mjs
+      - tests/accountStoragePathContainment.test.mjs
+      - .github/workflows/security-storage-path-guards.yml
+
+jobs:
+  storage-path-containment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check storage code syntax
+        run: |
+          node --check server/utils/storageSegment.js
+          node --check server/services/accountStorage.js
+      - name: Run path traversal and storage integration regressions
+        run: node --test tests/storageSegment.test.mjs tests/accountStoragePathContainment.test.mjs
