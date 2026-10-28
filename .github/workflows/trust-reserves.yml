@@ -6,6 +6,8 @@ on:
       - 'tests/reserveCapacity.test.js'
       - 'server/services/noteAmortization.js'
       - 'tests/noteAmortization.test.js'
+      - 'server/services/trusteeSigningPolicy.js'
+      - 'tests/trusteeSigningPolicy.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -14,6 +16,8 @@ on:
       - 'tests/reserveCapacity.test.js'
       - 'server/services/noteAmortization.js'
       - 'tests/noteAmortization.test.js'
+      - 'server/services/trusteeSigningPolicy.js'
+      - 'tests/trusteeSigningPolicy.test.js'
 permissions:
   contents: read
 jobs:
@@ -26,4 +30,5 @@ jobs:
           node-version: '22'
       - run: node --check server/services/reserveCapacity.js
       - run: node --check server/services/noteAmortization.js
-      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js
+      - run: node --check server/services/trusteeSigningPolicy.js
+      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js
