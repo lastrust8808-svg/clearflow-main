@@ -36,19 +36,20 @@ try {
   const required = [
     'clearflow_schema_migrations', 'clearflow_account_snapshots',
     'clearflow_account_records', 'clearflow_entity_memberships',
-    'clearflow_b2b_deliveries',
+    'clearflow_b2b_deliveries','clearflow_plaid_items',
   ];
   if (required.some(name => !found.has(name))) throw new Error('Migration verification failed: required table missing.');
-  const version = await client.query('SELECT version FROM public.clearflow_schema_migrations WHERE version = $1', ['001_storage_foundation']);
-  if (version.rowCount !== 1) throw new Error('Migration version was not recorded.');
+  const versions = await client.query('SELECT version FROM public.clearflow_schema_migrations WHERE version = ANY($1::text[])', [['001_storage_foundation','002_plaid_items_and_legacy_records']]);
+  if (versions.rowCount !== 2) throw new Error('Both required migration versions must be recorded.');
   const columns = await client.query(`SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema='public' AND table_name = ANY($1::text[])`, [required]);
   const names = new Set(columns.rows.map(row => `${row.table_name}.${row.column_name}`));
   for (const key of ['clearflow_account_snapshots.revision', 'clearflow_account_records.payload',
-    'clearflow_entity_memberships.revoked_at', 'clearflow_b2b_deliveries.invoice_payload']) {
+    'clearflow_entity_memberships.revoked_at', 'clearflow_b2b_deliveries.invoice_payload',
+    'clearflow_plaid_items.encrypted_payload', 'clearflow_plaid_items.revision']) {
     if (!names.has(key)) throw new Error(`Migration verification failed: ${key} missing.`);
   }
-  console.log('Staging migration applied and five required tables verified.');
+  console.log('Staging migration applied and six required tables and both migration versions verified.');
 } finally {
   await client.end();
 }
