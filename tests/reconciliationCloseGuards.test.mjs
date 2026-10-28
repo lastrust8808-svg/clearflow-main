@@ -86,6 +86,19 @@ test('invalid statement balance blocks approval', () => {
   assert.equal(metrics.isReadyToApprove, false);
 });
 
+for (const reviewStatus of ['not_imported', 'needs_review', 'completed', undefined]) {
+  test(`statement review status ${String(reviewStatus)} cannot qualify for automatic close`, () => {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ statementReviewStatus: reviewStatus }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false);
+    assert.equal(metrics.differenceAmount, 0);
+    assert.equal(metrics.unresolvedLineCount, 0);
+    assert.match(metrics.blockedReason, /explicitly ready to close/);
+  });
+}
+
 test('book and statement differences still block automatic approval', () => {
   const metrics = buildReconciliationCloseMetrics(
     reconciliation({ statementEndingBalance: 100.03 }),
