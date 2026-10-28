@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'src/services/erpOperations.service.ts'
+      - 'server/routes/erp.js'
+      - 'tests/erpDurableAcceptance.test.mjs'
       - 'tests/erpOperationsFailures.test.mjs'
       - '.github/workflows/erp-operation-failclosed.yml'
   push:
@@ -16,4 +18,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs
+      - run: node --check server/routes/erp.js
+      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs tests/erpDurableAcceptance.test.mjs
