@@ -35,8 +35,43 @@ interface ReconciliationCloseResponse {
 
 const ERP_API_BASE = getApiBaseUrl();
 
-function buildLocalId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', operation?: 'send' | 'export'): boolean {
+  if (!isRecord(value) || value.success !== true || !isRecord(value[key])) return false;
+  const job = value[key];
+  if (typeof job.id !== 'string' || job.id.trim() === '') return false;
+  if (operation) {
+    return job.operation === operation &&
+      ['queued', 'sent', 'fallback_required'].includes(String(job.status)) &&
+      typeof job.queuedAt === 'string' && job.queuedAt.length > 0;
+  }
+  return job.status === 'processed' &&
+    typeof (key === 'importJob' ? job.importedAt : job.closedAt) === 'string';
+}
+
+async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
+  // Never fabricate a successful job. The caller must retain the user's input for retry.
+  const response = await fetch(`${ERP_API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`${label} was not accepted by the server (HTTP ${response.status}). Please retry.`);
+  }
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`${label} returned an invalid server response. Please verify before retrying.`);
+  }
+  if (!validate(result)) {
+    throw new Error(`${label} was not confirmed by the server. Please verify before retrying.`);
+  }
+  return result as T;
 }
 
 export async function queueInvoiceDelivery(payload: {
@@ -54,31 +89,8 @@ export async function queueInvoiceDelivery(payload: {
   attachmentHtml?: string;
   replyTo?: string;
 }) {
-  try {
-    const response = await fetch(`${ERP_API_BASE}/api/erp/invoice-deliveries`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to queue invoice delivery.');
-    }
-
-    return (await response.json()) as DeliveryQueueResponse;
-  } catch {
-    return {
-      success: true,
-      job: {
-        id: buildLocalId('delivery'),
-        status: 'queued' as const,
-        queuedAt: new Date().toISOString(),
-        operation: 'send' as const,
-      },
-    };
-  }
+  return postErp<DeliveryQueueResponse>('/api/erp/invoice-deliveries', payload, 'Invoice delivery',
+    (result) => isAcceptedJob(result, 'job', 'send'));
 }
 
 export async function queueInvoiceExport(payload: {
@@ -86,31 +98,8 @@ export async function queueInvoiceExport(payload: {
   entityId: string;
   invoiceNumber: string;
 }) {
-  try {
-    const response = await fetch(`${ERP_API_BASE}/api/erp/invoice-exports`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to queue invoice export.');
-    }
-
-    return (await response.json()) as DeliveryQueueResponse;
-  } catch {
-    return {
-      success: true,
-      job: {
-        id: buildLocalId('export'),
-        status: 'queued' as const,
-        queuedAt: new Date().toISOString(),
-        operation: 'export' as const,
-      },
-    };
-  }
+  return postErp<DeliveryQueueResponse>('/api/erp/invoice-exports', payload, 'Invoice export',
+    (result) => isAcceptedJob(result, 'job', 'export'));
 }
 
 export async function importReconciliationStatement(payload: {
@@ -120,33 +109,9 @@ export async function importReconciliationStatement(payload: {
   statementFileName: string;
   exceptionNotes: string;
 }) {
-  try {
-    const response = await fetch(
-      `${ERP_API_BASE}/api/erp/reconciliations/${payload.reconciliationId}/statement-import`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to import reconciliation statement.');
-    }
-
-    return (await response.json()) as StatementImportResponse;
-  } catch {
-    return {
-      success: true,
-      importJob: {
-        id: buildLocalId('statement-import'),
-        status: 'processed' as const,
-        importedAt: new Date().toISOString(),
-      },
-    };
-  }
+  return postErp<StatementImportResponse>(
+    `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/statement-import`,
+    payload, 'Statement import', (result) => isAcceptedJob(result, 'importJob'));
 }
 
 export async function closeReconciliationJob(payload: {
@@ -154,31 +119,7 @@ export async function closeReconciliationJob(payload: {
   closeSummary: string;
   exceptionNotes?: string;
 }) {
-  try {
-    const response = await fetch(
-      `${ERP_API_BASE}/api/erp/reconciliations/${payload.reconciliationId}/close`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to close reconciliation.');
-    }
-
-    return (await response.json()) as ReconciliationCloseResponse;
-  } catch {
-    return {
-      success: true,
-      closeJob: {
-        id: buildLocalId('reconciliation-close'),
-        status: 'processed' as const,
-        closedAt: new Date().toISOString(),
-      },
-    };
-  }
+  return postErp<ReconciliationCloseResponse>(
+    `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/close`,
+    payload, 'Reconciliation close', (result) => isAcceptedJob(result, 'closeJob'));
 }
