@@ -187,6 +187,13 @@ router.get('/status', async (req, res) => {
       smsConfigured: isSmsConfigured(),
       smsProvider: process.env.SMS_PROVIDER || null,
       plaidConfigured: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
+      // Configuration is not evidence of an authenticated provider connection.
+      // Never expose credentials or claim live delivery from this public endpoint.
+      integrationStates: {
+        plaid: { configured: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET), state: 'unverified' },
+        smtp: { configured: isMailerConfigured(), state: 'unverified' },
+        sms: { configured: isSmsConfigured(), state: 'unverified' },
+      },
     },
   });
 });
