@@ -1,0 +1,29 @@
+name: Banking reconciliation close guards
+
+on:
+  pull_request:
+    paths:
+      - 'src/services/reconciliationControls.service.ts'
+      - 'tests/reconciliationCloseGuards.test.mjs'
+      - '.github/workflows/banking-reconciliation-guards.yml'
+  push:
+    branches:
+      - workstream/banking-reconciliation-2026-10-28
+    paths:
+      - 'src/services/reconciliationControls.service.ts'
+      - 'tests/reconciliationCloseGuards.test.mjs'
+      - '.github/workflows/banking-reconciliation-guards.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reconciliation-close-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify close guards (no external provider credentials)
+        run: node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs
