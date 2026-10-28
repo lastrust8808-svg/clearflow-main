@@ -106,3 +106,29 @@ test('book and statement differences still block automatic approval', () => {
   );
   assert.equal(metrics.isReadyToApprove, false);
 });
+
+
+test('duplicate matched statement line IDs cannot approve a double-counted import', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({
+      parsedStatementLines: [
+        { id: 'line-1', matchStatus: 'matched' },
+        { id: 'line-1', matchStatus: 'matched' },
+      ],
+    }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /unique, nonempty identifiers/);
+});
+
+test('blank or missing statement line identifiers cannot be approved', () => {
+  for (const id of ['', '  ', undefined]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ parsedStatementLines: [{ id, matchStatus: 'matched' }] }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false);
+    assert.match(metrics.blockedReason, /unique, nonempty identifiers/);
+  }
+});
