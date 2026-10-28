@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { sanitizeStorageSegment } from '../server/utils/storageSegment.js';
+
+const root = path.resolve('/tmp', 'clearflow-test', 'accounts');
+
+test('rejects filesystem dot traversal and missing storage identifiers', () => {
+  for (const value of ['.', '..', '', '  ', null, undefined]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+});
+
+test('encodes slash, backslash, percent, and nested traversal as a single segment', () => {
+  for (const value of ['alice/bob', '..\\..', '../other', '%2e%2e', 'member@example.com']) {
+    const encoded = sanitizeStorageSegment(value);
+    const resolved = path.resolve(root, encoded);
+    assert.equal(path.dirname(resolved), root);
+    assert.notEqual(encoded, '.');
+    assert.notEqual(encoded, '..');
+    assert.ok(!encoded.includes('/'));
+    assert.ok(!encoded.includes('\\'));
+  }
+});
+
+test('different account IDs retain distinct storage paths', () => {
+  const identifiers = ['member-a', 'member-b', 'a/b', 'a%2Fb', 'member@example.com'];
+  const segments = identifiers.map(sanitizeStorageSegment);
+  assert.equal(new Set(segments).size, identifiers.length);
+});
