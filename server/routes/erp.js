@@ -1,6 +1,5 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
-import { isMailerConfigured, sendInvoiceEmail } from '../utils/mailer.js';
 import {
   buildExecutionCapabilities,
   buildSettlementExecution,
@@ -8,102 +7,35 @@ import {
 
 const router = express.Router();
 
-const invoiceDeliveryJobs = [];
-const invoiceExportJobs = [];
 const statementImportJobs = [];
 const reconciliationCloseJobs = [];
 const settlementExecutionJobs = [];
 
-router.post('/invoice-deliveries', async (req, res) => {
-  const {
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    deliveryMethod,
-    recipientEmail,
-    internalDeliveryTarget,
-    emailSubject,
-    emailTextBody,
-    emailHtmlBody,
-    attachmentFileName,
-    attachmentHtml,
-    replyTo,
-    fromName,
-  } = req.body || {};
+// Fail closed until a durable, tenant-authorized job store and delivery audit exist.
+// In particular, never send SMTP before a job has been durably accepted.
+function rejectNonDurableJob(res, operation) {
+  return res.status(503).json({
+    success: false,
+    code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
+    operation,
+    error: 'This operation is unavailable until authenticated durable job storage is implemented. No job was queued and no message was sent.',
+  });
+}
 
+router.post('/invoice-deliveries', (req, res) => {
+  const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (!invoiceId || !entityId || !invoiceNumber) {
     return res.status(400).json({ success: false, error: 'Missing invoice delivery payload.' });
   }
-
-  const job = {
-    id: randomUUID(),
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    deliveryMethod: deliveryMethod || 'manual',
-    recipientEmail: recipientEmail || null,
-    internalDeliveryTarget: internalDeliveryTarget || null,
-    status: 'queued',
-    operation: 'send',
-    queuedAt: new Date().toISOString(),
-  };
-
-  if (job.deliveryMethod === 'email' && recipientEmail) {
-    if (isMailerConfigured()) {
-      try {
-        await sendInvoiceEmail({
-          to: recipientEmail,
-          subject: emailSubject || `Invoice ${invoiceNumber}`,
-          text: emailTextBody || `Your invoice ${invoiceNumber} is attached.`,
-          html: emailHtmlBody || `<p>Your invoice <strong>${invoiceNumber}</strong> is attached.</p>`,
-          attachmentFileName,
-          attachmentHtml,
-          replyTo,
-          fromName,
-        });
-        job.status = 'sent';
-        job.sentAt = new Date().toISOString();
-        job.deliveryChannel = 'smtp';
-      } catch (error) {
-        job.status = 'fallback_required';
-        job.deliveryChannel = 'manual';
-        job.fallbackReason =
-          error instanceof Error ? error.message : 'SMTP delivery failed.';
-      }
-    } else {
-      job.status = 'fallback_required';
-      job.deliveryChannel = 'manual';
-      job.fallbackReason = 'SMTP is not configured on the server.';
-    }
-  } else if (job.deliveryMethod === 'internal_user') {
-    job.deliveryChannel = 'internal';
-  } else {
-    job.deliveryChannel = 'manual';
-  }
-
-  invoiceDeliveryJobs.unshift(job);
-  return res.status(201).json({ success: true, job });
+  return rejectNonDurableJob(res, 'invoice_delivery');
 });
 
 router.post('/invoice-exports', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-
   if (!invoiceId || !entityId || !invoiceNumber) {
     return res.status(400).json({ success: false, error: 'Missing invoice export payload.' });
   }
-
-  const job = {
-    id: randomUUID(),
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    status: 'queued',
-    operation: 'export',
-    queuedAt: new Date().toISOString(),
-  };
-
-  invoiceExportJobs.unshift(job);
-  return res.status(201).json({ success: true, job });
+  return rejectNonDurableJob(res, 'invoice_export');
 });
 
 router.post('/settlements/execute', async (req, res) => {
@@ -201,9 +133,13 @@ router.post('/reconciliations/:reconciliationId/close', (req, res) => {
 router.get('/ops-status', (_req, res) => {
   return res.status(200).json({
     success: true,
+    capabilities: {
+      invoiceDeliveries: { available: false, reason: 'durable_job_store_required' },
+      invoiceExports: { available: false, reason: 'durable_job_store_required' },
+    },
     counts: {
-      invoiceDeliveries: invoiceDeliveryJobs.length,
-      invoiceExports: invoiceExportJobs.length,
+      invoiceDeliveries: 0,
+      invoiceExports: 0,
       statementImports: statementImportJobs.length,
       reconciliationCloses: reconciliationCloseJobs.length,
       settlementExecutions: settlementExecutionJobs.length,
