@@ -35,6 +35,29 @@ test('duplicate provider delivery is idempotent', () => {
 test('conflicting duplicate event ID fails closed', () => {
   assert.throws(() => project(scope, [paid(), paid('evt-paid', { settlementId: 'settle-2' })], asOf), /conflicting duplicate/);
 });
+test('duplicate settlement under distinct provider event IDs is processed once', () => {
+  const result = project(scope, [paid('evt-one'), paid('evt-two')], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.processedEvents, 1);
+});
+test('settlement replay cannot silently extend the membership period', () => {
+  assert.throws(
+    () => project(scope, [paid('evt-one'), paid('evt-two', { periodEnd: '2027-11-20T12:00:00Z' })], asOf),
+    /conflicting settlement replay/,
+  );
+});
+test('settlement replay cannot silently change its effective payment time', () => {
+  const replay = paid('evt-two');
+  replay.occurredAt = '2026-10-21T12:00:00Z';
+  assert.throws(() => project(scope, [paid('evt-one'), replay], asOf), /conflicting settlement replay/);
+});
+test('settlement replay cannot hide a conflicting provider event ID', () => {
+  const alias = paid('evt-alias');
+  assert.throws(
+    () => project(scope, [paid('evt-one'), alias, paid('evt-alias', { settlementId: 'settle-2' })], asOf),
+    /conflicting duplicate membership event/,
+  );
+});
 test('out-of-order newer payment failure removes access', () => {
   assert.equal(project(scope, [failed(), paid()], asOf).status, 'past_due');
   assert.equal(project(scope, [failed(), paid()], asOf).entitled, false);
