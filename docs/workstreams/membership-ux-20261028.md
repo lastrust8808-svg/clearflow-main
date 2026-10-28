@@ -36,4 +36,8 @@ Prices are configuration proposals, **not** active charges or verified processor
 Use non-production payment processor credentials and synthetic identities only. No live charges, deployments, or merges.
 
 ## Current verification
-No functional tests or billing integration tests executed by this workstream yet. This document is a coordination contract, not evidence of a working feature.
+A pure, non-posting entitlement projector is now implemented at `src/domain/membershipEntitlements.mjs` with 15 local Node tests passing. It handles duplicate event IDs, out-of-order events, cross-scope rejection, payment failure/refund/cancellation, and paid-through expiration. The GitHub Actions workflow `membership-entitlements.yml` runs these tests for this branch and PR changes.
+
+**Security caveat:** the projector's `verified: true` event flag is an input contract, not proof of webhook authenticity. The caller MUST authenticate provider signatures, bind the subscription to the authenticated tenant/member, persist verified events and enforce entitlements server-side. This module alone must not authorize access or charge users. CI status and end-to-end billing verification must be checked separately.
+
+**Still unverified:** actual processor webhooks, durable event storage, authenticated tenant authorization, membership agreement persistence, UI wiring, billing scheduler, mobile/browser flows, and all live payment behavior.
