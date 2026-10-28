@@ -78,16 +78,32 @@ export function projectMembershipEntitlement(scope, events, asOf) {
       if (instant(normalizedEvent.periodEnd, 'event.periodEnd') <= occurred) {
         throw new Error('payment period must end after settlement event');
       }
-      const existingInvoice = settlements.get(normalizedEvent.settlementId);
-      if (existingInvoice && existingInvoice !== normalizedEvent.invoiceId) {
-        throw new Error('settlement reused across invoices');
-      }
-      settlements.set(normalizedEvent.settlementId, normalizedEvent.invoiceId);
     }
     const fingerprint = JSON.stringify(normalizedEvent);
     if (seen.has(id)) {
       if (seen.get(id) !== fingerprint) throw new Error('conflicting duplicate membership event');
       continue;
+    }
+    // A settlement is a unique economic event, not a reusable entitlement token.
+    // A second webhook ID for the same settlement must neither extend the paid
+    // period nor count as a second payment. Conflicting replays fail closed.
+    if (event.type === 'payment_succeeded') {
+      const prior = settlements.get(normalizedEvent.settlementId);
+      if (prior) {
+        if (prior.invoiceId !== normalizedEvent.invoiceId) {
+          throw new Error('settlement reused across invoices');
+        }
+        if (prior.periodEnd !== normalizedEvent.periodEnd || prior.occurredAt !== normalizedEvent.occurredAt) {
+          throw new Error('conflicting settlement replay');
+        }
+        seen.set(id, fingerprint);
+        continue;
+      }
+      settlements.set(normalizedEvent.settlementId, {
+        invoiceId: normalizedEvent.invoiceId,
+        periodEnd: normalizedEvent.periodEnd,
+        occurredAt: normalizedEvent.occurredAt,
+      });
     }
     seen.set(id, fingerprint);
     normalized.push({ ...normalizedEvent, occurred });
