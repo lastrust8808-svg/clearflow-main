@@ -5,6 +5,10 @@
  * Control characters are not valid account or document identifiers.
  * Windows trims trailing periods and reserves device basenames (including
  * names with extensions), which would otherwise alias or fail on that host.
+ *
+ * The same segment is also used as a JSON filename with a ".json" suffix.
+ * Limit the encoded ASCII segment to 250 bytes so the resulting basename
+ * fits the common 255-byte filesystem component limit.
  */
 export function sanitizeStorageSegment(value) {
   if (
@@ -18,5 +22,22 @@ export function sanitizeStorageSegment(value) {
   ) {
     throw new TypeError('Invalid storage identifier.');
   }
-  return encodeURIComponent(value);
+
+  // encodeURIComponent throws URIError for unpaired UTF-16 surrogates.
+  // Normalize that failure to the same explicit input-validation error,
+  // rather than letting malformed user identifiers reach filesystem I/O.
+  let segment;
+  try {
+    segment = encodeURIComponent(value);
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new TypeError('Invalid storage identifier.');
+    }
+    throw error;
+  }
+
+  if (segment.length > 250) {
+    throw new TypeError('Invalid storage identifier.');
+  }
+  return segment;
 }
