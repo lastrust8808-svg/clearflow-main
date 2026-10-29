@@ -24,8 +24,12 @@ const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.import
 const accepted = [
   { success: true, job: { id: 'j1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
   { success: true, job: { id: 'j2', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
-  { success: true, importJob: { id: 'j3', status: 'processed', importedAt: '2026-10-28T00:00:00Z' } },
-  { success: true, closeJob: { id: 'j4', status: 'processed', closedAt: '2026-10-28T00:00:00Z' } },
+  { success: true, importJob: { id: 'j3', operation: 'statement_import', status: 'processed',
+    queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
+    persistence: 'durable', importedAt: '2026-10-28T00:00:02Z' } },
+  { success: true, closeJob: { id: 'j4', operation: 'reconciliation_close', status: 'processed',
+    queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
+    persistence: 'durable', closedAt: '2026-10-28T00:00:02Z' } },
 ];
 try {
   for (let i = 0; i < operations.length; i++) {
@@ -110,6 +114,40 @@ try {
         }) });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/);
       }
+    }
+  });
+  await test('statement imports reject unbound, non-durable or chronologically invalid completion receipts', async () => {
+    const valid = accepted[2].importJob;
+    for (const changes of [
+      { operation: undefined }, { operation: 'reconciliation_close' },
+      { persistence: undefined }, { persistence: 'memory' },
+      { queuedAt: undefined }, { queuedAt: '2026-02-30T00:00:00Z' },
+      { persistedAt: undefined }, { persistedAt: '2026-10-27T23:59:59Z' },
+      { importedAt: undefined }, { importedAt: 'not-a-date' },
+      { importedAt: '2026-10-28T00:00:00Z' },
+      { status: 'queued' },
+    ]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, importJob: { ...valid, ...changes },
+      }) });
+      await assert.rejects(api.importReconciliationStatement(payloads[2]), /not confirmed/);
+    }
+  });
+  await test('reconciliation close rejects unbound, non-durable or chronologically invalid completion receipts', async () => {
+    const valid = accepted[3].closeJob;
+    for (const changes of [
+      { operation: undefined }, { operation: 'statement_import' },
+      { persistence: undefined }, { persistence: 'memory' },
+      { queuedAt: undefined }, { queuedAt: 'not-a-date' },
+      { persistedAt: undefined }, { persistedAt: '2026-02-30T00:00:01Z' },
+      { closedAt: undefined }, { closedAt: '2026-02-30T00:00:02Z' },
+      { closedAt: '2026-10-28T00:00:00Z' },
+      { status: 'queued' },
+    ]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, closeJob: { ...valid, ...changes },
+      }) });
+      await assert.rejects(api.closeReconciliationJob(payloads[3]), /not confirmed/);
     }
   });
   await test('sent acknowledgement must occur after durable acceptance', async () => {
