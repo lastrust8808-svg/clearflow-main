@@ -148,13 +148,27 @@ function isConfirmedInvoiceDelivery(
 
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
   // Never fabricate a successful job. The caller must retain the user's input for retry.
-  const response = await fetch(`${ERP_API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${ERP_API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // A connection may fail after the server has already committed the job.
+    // Without a persisted idempotency key and status lookup, blind retry can
+    // duplicate invoice delivery, statement imports or accounting closure.
+    throw new Error(`${label} outcome unknown: no server confirmation was received. Verify operation status before retrying.`);
+  }
   if (!response.ok) {
-    throw new Error(`${label} was not accepted by the server (HTTP ${response.status}). Please retry.`);
+    // A 5xx, timeout or throttled response may follow a committed operation.
+    // Only an explicit non-transient client rejection can be treated as
+    // rejected rather than indeterminate.
+    if (response.status >= 500 || response.status === 408 || response.status === 429) {
+      throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
+    }
+    throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
   }
   let result: unknown;
   try {
