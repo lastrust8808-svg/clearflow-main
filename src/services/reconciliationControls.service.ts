@@ -232,6 +232,17 @@ export function buildReconciliationCloseMetrics(
   // Reject malformed imported amounts, directions, dates and descriptions
   // even if all line IDs and balances tie. Do not treat a fabricated matched
   // marker as sufficient source-row evidence.
+  if (parsedLines.some((line) => !hasValidStatementFinancialFields(line))) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Imported statement rows require valid date, description, direction and exact-cent nonzero amount.',
+    };
+  }
+
   // Reconciliation periods and imported posting dates must be real calendar
   // dates and refer to the same closed statement window. Otherwise an
   // out-of-period matched row can certify an unrelated balance snapshot.
@@ -253,17 +264,6 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Statement period and imported posting dates must be valid and within the same period.',
-    };
-  }
-
-  if (parsedLines.some((line) => !hasValidStatementFinancialFields(line))) {
-    return {
-      bookEndingBalance,
-      differenceAmount,
-      unresolvedLineCount,
-      matchedLineCount,
-      isReadyToApprove: false,
-      blockedReason: 'Imported statement rows require valid date, description, direction and exact-cent nonzero amount.',
     };
   }
 
