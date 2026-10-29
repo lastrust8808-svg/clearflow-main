@@ -82,6 +82,30 @@ test('cross-tenant, cross-member, and cross-subscription events are rejected', (
 test('a settlement cannot be reused across different invoices', () => {
   assert.throws(() => project(scope, [paid(), paid('again', { invoiceId: 'inv-2' })], asOf), /settlement reused/);
 });
+test('one monthly invoice cannot be settled twice under different settlement IDs', () => {
+  assert.throws(
+    () => project(scope, [paid('first'), paid('second', { settlementId: 'settle-2' })], asOf),
+    /invoice has multiple successful settlements/,
+  );
+});
+test('a second settlement cannot extend an already paid invoice period', () => {
+  assert.throws(
+    () => project(scope, [paid('first'), paid('second', {
+      settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+    })], asOf),
+    /invoice has multiple successful settlements/,
+  );
+});
+test('distinct monthly invoices can each settle once', () => {
+  const second = paid('second', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  second.occurredAt = '2026-11-20T12:00:00Z';
+  const result = project(scope, [second, paid()], '2026-11-25T12:00:00Z');
+  assert.equal(result.status, 'active');
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+  assert.equal(result.processedEvents, 2);
+});
 test('future events cannot grant access early', () => {
   const future = paid('future', { periodEnd: '2026-12-20T12:00:00Z' });
   future.occurredAt = '2026-11-20T12:00:00Z';
