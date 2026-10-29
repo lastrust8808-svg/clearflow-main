@@ -3,9 +3,10 @@
  * Amounts are integer minor currency units. A reserve snapshot is NOT a bank
  * balance, credit facility, settlement, or authorization to spend funds.
  *
- * Caller MUST authenticate/authorize the requested tenant/entity and persist
- * the underlying ledger entries with audit history. This function performs
- * scope validation only; it does not authenticate a user.
+ * Caller MUST authenticate/authorize the requested tenant/entity, independently
+ * verify each evidenceRef against the underlying asset/source, and persist
+ * entries with audit history. Distinct evidence pointers prevent exact replay,
+ * but do not prove independent assets or available bank cash.
  */
 const KINDS = new Set(['cash', 'noncash_collateral']);
 
@@ -36,7 +37,7 @@ function safeAdd(left, right, field) {
 
 /**
  * @param {{tenantId:string, entityId:string, currency:string, entries:Array<{
- *   id:string, tenantId:string, entityId:string, currency:string,
+ *   id:string, evidenceRef:string, tenantId:string, entityId:string, currency:string,
  *   kind:'cash'|'noncash_collateral', amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
  * }>}} snapshot
@@ -57,11 +58,20 @@ export function calculateReserveCapacity(snapshot) {
     noncashCollateralMinor: 0,
   };
   const ids = new Set();
+  const evidenceRefs = new Set();
   for (const entry of snapshot.entries) {
     if (!entry || typeof entry !== 'object') throw new TypeError('Invalid reserve entry');
     const id = requiredString(entry.id, 'entry.id');
     if (ids.has(id)) throw new Error(`Duplicate reserve entry ID: ${id}`);
     ids.add(id);
+    // Every classified asset needs its own provenance pointer. Reusing the
+    // same source record under a different entry ID must not double-count it.
+    // Authentication and verification of the referenced record are external.
+    const evidenceRef = requiredString(entry.evidenceRef, 'entry.evidenceRef');
+    if (evidenceRefs.has(evidenceRef)) {
+      throw new Error('Duplicate reserve evidence reference');
+    }
+    evidenceRefs.add(evidenceRef);
     if (entry.tenantId !== tenantId || entry.entityId !== entityId || entry.currency !== currency) {
       throw new Error('Reserve entry scope or currency mismatch');
     }
