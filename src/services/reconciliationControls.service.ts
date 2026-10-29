@@ -289,6 +289,41 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
+  // A balanced statement is not sufficient when the book-side transaction
+  // review still contains unresolved items. Validate both indices explicitly:
+  // malformed or duplicated cleared IDs can conceal a replayed posting, and
+  // unresolved book transactions cannot be silently ignored at close.
+  const clearedIds = reconciliation.clearedTransactionIds;
+  const unmatchedBookIds = reconciliation.unmatchedTransactionIds;
+  const validUniqueIds = (ids: unknown): ids is string[] =>
+    Array.isArray(ids) &&
+    ids.every((id) => isValidStatementSourceRef(id)) &&
+    new Set(ids).size === ids.length;
+  if (
+    !validUniqueIds(clearedIds) ||
+    (unmatchedBookIds !== undefined && !validUniqueIds(unmatchedBookIds)) ||
+    (Array.isArray(unmatchedBookIds) && unmatchedBookIds.some((id) => clearedIds.includes(id)))
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Cleared and unmatched book transaction identifiers must be valid, unique and disjoint.',
+    };
+  }
+  if (unmatchedBookIds?.length) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Unresolved book transactions must be reviewed before reconciliation close.',
+    };
+  }
+
   if (
     (reconciliation.statementImportId != null && !isValidStatementSourceRef(reconciliation.statementImportId)) ||
     (reconciliation.statementFileName != null && !isValidStatementSourceRef(reconciliation.statementFileName)) ||
