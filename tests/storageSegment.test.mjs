@@ -12,7 +12,7 @@ test('rejects filesystem dot traversal and missing storage identifiers', () => {
 });
 
 test('encodes slash, backslash, percent, and nested traversal as a single segment', () => {
-  for (const value of ['alice/bob', '..\\..', '../other', '%2e%2e', 'member@example.com']) {
+  for (const value of ['alice/bob', '..\\other', '../other', '%2e%2e', 'member@example.com']) {
     const encoded = sanitizeStorageSegment(value);
     const resolved = path.resolve(root, encoded);
     assert.equal(path.dirname(resolved), root);
@@ -41,4 +41,21 @@ test('rejects control characters in storage identifiers without altering valid u
     assert.throws(() => sanitizeStorageSegment(value), TypeError);
   }
   assert.equal(sanitizeStorageSegment('élève@example.com'), '%C3%A9l%C3%A8ve%40example.com');
+});
+
+test('rejects trailing periods that alias another directory on Windows', () => {
+  for (const value of ['member.', 'member..', 'folder.name.', '..\\..']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
+  }
+  assert.equal(sanitizeStorageSegment('member'), 'member');
+  assert.equal(sanitizeStorageSegment('folder.name'), 'folder.name');
+});
+
+test('rejects reserved Windows device names including names with extensions', () => {
+  for (const value of ['CON', 'con', 'con.txt', 'PRN', 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
+  }
+  for (const value of ['console', 'com10', 'lpt10', 'report.final', 'member@example.com']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value), value);
+  }
 });
