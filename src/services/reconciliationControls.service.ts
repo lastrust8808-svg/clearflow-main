@@ -70,7 +70,24 @@ export function buildReconciliationCloseMetrics(
   // Suggested matches are not controller-approved matches. Treat both explicit
   // unmatched IDs and unresolved parsed lines as blockers; either source can
   // be stale independently after an interrupted statement review.
-  const parsedLines = reconciliation.parsedStatementLines ?? [];
+  const rawParsedLines = reconciliation.parsedStatementLines;
+  // Imported rows are untrusted persisted input. A malformed collection or
+  // null/non-object row must block approval, not throw during index matching.
+  // Missing rows remain subject to the existing no-statement-lines gate.
+  if (rawParsedLines != null && (
+    !Array.isArray(rawParsedLines) ||
+    rawParsedLines.some((line) => !line || typeof line !== 'object' || Array.isArray(line))
+  )) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount: 0,
+      matchedLineCount: 0,
+      isReadyToApprove: false,
+      blockedReason: 'Parsed statement lines must be a valid array of source rows.',
+    };
+  }
+  const parsedLines = rawParsedLines ?? [];
   // Duplicate or blank statement-line IDs can make a duplicated import look
   // fully matched. Fail closed rather than approving ambiguous source rows.
   const parsedLineIds = new Set<string>();
