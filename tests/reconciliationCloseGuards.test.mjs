@@ -8,6 +8,18 @@ const account = {
   currentBalance: 100,
 };
 
+function statementLine(id, matchStatus, overrides = {}) {
+  return {
+    id,
+    postedDate: '2026-10-28',
+    description: 'Imported bank transaction',
+    amount: 25.75,
+    direction: 'debit',
+    matchStatus,
+    ...overrides,
+  };
+}
+
 function reconciliation(overrides = {}) {
   return {
     id: 'reconciliation-a',
@@ -20,7 +32,7 @@ function reconciliation(overrides = {}) {
     closeApprovalStatus: 'pending',
     matchedStatementLineIds: ['line-1'],
     unmatchedStatementLineIds: [],
-    parsedStatementLines: [{ id: 'line-1', matchStatus: 'matched' }],
+    parsedStatementLines: [statementLine('line-1', 'matched')],
     ...overrides,
   };
 }
@@ -36,7 +48,7 @@ for (const status of ['suggested', 'exception', 'unreviewed']) {
   test(`${status} lines cannot be treated as approved when unmatched ID list is stale`, () => {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({
-        parsedStatementLines: [{ id: 'line-1', matchStatus: status }],
+        parsedStatementLines: [statementLine('line-1', status)],
         matchedStatementLineIds: ['line-1'],
         unmatchedStatementLineIds: [],
       }),
@@ -114,8 +126,8 @@ test('duplicate matched statement line IDs cannot approve a double-counted impor
   const metrics = buildReconciliationCloseMetrics(
     reconciliation({
       parsedStatementLines: [
-        { id: 'line-1', matchStatus: 'matched' },
-        { id: 'line-1', matchStatus: 'matched' },
+        statementLine('line-1', 'matched'),
+        statementLine('line-1', 'matched'),
       ],
     }),
     account
@@ -157,8 +169,8 @@ test('matched index cannot include a source row still awaiting review', () => {
   const metrics = buildReconciliationCloseMetrics(
     reconciliation({
       parsedStatementLines: [
-        { id: 'line-1', matchStatus: 'matched' },
-        { id: 'line-2', matchStatus: 'suggested' },
+        statementLine('line-1', 'matched'),
+        statementLine('line-2', 'suggested'),
       ],
       matchedStatementLineIds: ['line-1', 'line-2'],
     }),
@@ -456,10 +468,10 @@ test('malformed parsed statement collections fail closed without throwing', () =
     'line-1',
     42,
     {},
-    { id: 'line-1', matchStatus: 'matched' },
-    [{ id: 'line-1', matchStatus: 'matched' }, null],
-    [{ id: 'line-1', matchStatus: 'matched' }, 'line-2'],
-    [{ id: 'line-1', matchStatus: 'matched' }, ['line-2']],
+    statementLine('line-1', 'matched'),
+    [statementLine('line-1', 'matched'), null],
+    [statementLine('line-1', 'matched'), 'line-2'],
+    [statementLine('line-1', 'matched'), ['line-2']],
   ]) {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({ parsedStatementLines }),
@@ -508,4 +520,52 @@ test('matching missing or malformed bank/entity IDs cannot authorize reconciliat
     assert.match(metrics.blockedReason, /valid scoped identifiers/);
   }
   assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
+});
+
+test('malformed imported statement financial rows cannot approve a balance-matched close', () => {
+  const invalidRows = [
+    { amount: undefined },
+    { amount: null },
+    { amount: Number.NaN },
+    { amount: Number.POSITIVE_INFINITY },
+    { amount: 0 },
+    { amount: 25.751 },
+    { amount: '25.75' },
+    { direction: undefined },
+    { direction: 'transfer' },
+    { postedDate: undefined },
+    { postedDate: '2026-02-30' },
+    { postedDate: '2025-02-29' },
+    { postedDate: '2026-13-01' },
+    { postedDate: '10/28/2026' },
+    { description: undefined },
+    { description: ' ' },
+    { description: 'Bank\\ntransaction' },
+  ];
+  for (const invalid of invalidRows) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [statementLine('line-1', 'matched', invalid)],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(invalid));
+    assert.match(metrics.blockedReason, /Imported statement rows require valid/);
+  }
+});
+
+test('valid exact-cent statement rows and real leap dates retain eligibility', () => {
+  for (const valid of [
+    { postedDate: '2024-02-29', amount: -25.75, direction: 'debit' },
+    { postedDate: '2026-10-28', amount: 0.01, direction: 'credit' },
+    { postedDate: '2026-10-28', amount: 25.75, direction: 'debit' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [statementLine('line-1', 'matched', valid)],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, true, JSON.stringify(valid));
+  }
 });
