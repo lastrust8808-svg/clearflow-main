@@ -209,3 +209,39 @@ test('refund of the only paid invoice still revokes access', () => {
   assert.equal(result.status, 'past_due');
   assert.equal(result.entitled, false);
 });
+
+test('delayed failure of a superseded paid invoice cannot revoke a newer paid period', () => {
+  const renewal = paid('renewal', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  renewal.occurredAt = '2026-10-25T12:00:00Z';
+  const oldFailure = event('old-failure', 'payment_failed', '2026-10-27T12:00:00Z', {
+    invoiceId: 'inv-1',
+  });
+  const result = project(scope, [oldFailure, renewal, paid()], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.entitled, true);
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
+
+test('same-instant old invoice failure cannot override independent renewal', () => {
+  const renewal = paid('renewal-same-time', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  renewal.occurredAt = '2026-10-25T12:00:00Z';
+  const oldFailure = event('old-failure-same-time', 'payment_failed', '2026-10-25T12:00:00Z', {
+    invoiceId: 'inv-1',
+  });
+  const result = project(scope, [oldFailure, renewal, paid()], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
+
+test('failure of currently paid invoice still revokes entitlement', () => {
+  const currentFailure = event('current-failure', 'payment_failed', '2026-10-27T12:00:00Z', {
+    invoiceId: 'inv-1',
+  });
+  const result = project(scope, [paid(), currentFailure], asOf);
+  assert.equal(result.status, 'past_due');
+  assert.equal(result.entitled, false);
+});
