@@ -163,6 +163,30 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
+  // An approved close must retain explicit controller signoff evidence. An
+  // approval flag without a named controller and timestamp can be replayed
+  // from a partial/stale client record; it must not qualify as close-ready.
+  // This checks record completeness only; server-side authorization and
+  // immutable approval audit remain mandatory before any actual close.
+  if (
+    reconciliation.closeApprovalStatus === 'approved' && (
+      typeof reconciliation.controllerSignoffName !== 'string' ||
+      !reconciliation.controllerSignoffName.trim() ||
+      typeof reconciliation.controllerSignoffAt !== 'string' ||
+      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(reconciliation.controllerSignoffAt) ||
+      !Number.isFinite(Date.parse(reconciliation.controllerSignoffAt))
+    )
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Controller-approved close requires a named controller and valid signoff timestamp.',
+    };
+  }
+
   if (reconciliation.statementReviewStatus !== 'ready_to_close') {
     return {
       bookEndingBalance,
