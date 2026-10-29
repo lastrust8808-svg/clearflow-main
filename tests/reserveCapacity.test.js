@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateReserveCapacity } from '../server/services/reserveCapacity.js';
 
 const base = { tenantId: 'tenant-a', entityId: 'trust-a', currency: 'USD' };
-const entry = (id, amountMinor, options = {}) => ({ id, ...base, kind: 'cash', amountMinor, ...options });
+const entry = (id, amountMinor, options = {}) => ({ id, evidenceRef: 'source-' + id, ...base, kind: 'cash', amountMinor, ...options });
 const calculate = (entries) => calculateReserveCapacity({ ...base, entries });
 
 test('separates restricted and pledged cash from unencumbered cash', () => {
@@ -67,4 +67,38 @@ test('rejects padded or control-character reserve entry IDs before classificatio
     assert.throws(() => calculate([entry(bad, 100)]), /unpadded|control characters/);
   }
   assert.equal(calculate([entry('valid-entry', 100)]).unencumberedCashMinor, 100);
+});
+
+test('every reserve entry requires a distinct nonempty provenance reference', () => {
+  for (const missing of [undefined, null, '', ' ', ' padded ', 123]) {
+    assert.throws(() => calculate([entry('cash-a', 100, { evidenceRef: missing })]),
+      /entry\.evidenceRef/);
+  }
+  assert.equal(calculate([entry('cash-a', 100)]).unencumberedCashMinor, 100);
+});
+
+test('same evidence cannot be replayed under different reserve entry IDs or asset kinds', () => {
+  const source = 'source-bank-statement-1';
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { evidenceRef: source }),
+    entry('cash-b', 100, { evidenceRef: source }),
+  ]), /Duplicate reserve evidence reference/);
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { evidenceRef: source }),
+    entry('collateral-b', 500, { kind: 'noncash_collateral', evidenceRef: source }),
+  ]), /Duplicate reserve evidence reference/);
+  // Distinct pointers allow classification, but their authenticity and
+  // whether they refer to independent assets must be checked by the caller.
+  assert.equal(calculate([
+    entry('cash-a', 100, { evidenceRef: 'bank-statement-a' }),
+    entry('cash-b', 200, { evidenceRef: 'bank-statement-b' }),
+  ]).unencumberedCashMinor, 300);
+});
+
+test('rejects control bytes and padding in reserve provenance references', () => {
+  for (const invalid of [' source', 'source ', 'source\\u0000', 'source\\u001f',
+    'source\\u007f', 'source\\u009f']) {
+    assert.throws(() => calculate([entry('cash-a', 100, { evidenceRef: invalid })]),
+      /unpadded|control characters/);
+  }
 });
