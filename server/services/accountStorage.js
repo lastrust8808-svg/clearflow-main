@@ -106,8 +106,9 @@ async function readJsonSafely(targetPath) {
 
 // Replace JSON records atomically: readers see the old complete record or the
 // new complete record, never a partially written/truncated JSON document.
-// File sync precedes rename. Directory durability after sudden power loss and
-// multi-writer ordering remain separate acceptance gates.
+// File sync precedes rename and the containing directory is synced after
+// rename. Hardware power-loss guarantees, multi-writer ordering and database
+// transaction durability remain separate acceptance gates.
 async function writeJsonAtomically(targetPath, value) {
   await assertSafeStorageDirectory(path.dirname(targetPath));
   const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
@@ -120,6 +121,23 @@ async function writeJsonAtomically(targetPath, value) {
     handle = null;
     await assertSafeStorageDirectory(path.dirname(targetPath));
     await fs.rename(temporaryPath, targetPath);
+    // fsync the containing directory so the rename itself is durable on
+    // Linux filesystems after an abrupt restart. Syncing only the temporary
+    // file does not guarantee that the new directory entry survives.
+    // Fail closed if this cannot be confirmed: callers must not report a
+    // successful durable save. A failed directory sync may still leave the
+    // complete new record visible; retries must not imply exactly-once writes.
+    const directoryHandle = await fs.open(
+      path.dirname(targetPath),
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+    );
+    try {
+      const stat = await directoryHandle.stat();
+      if (!stat.isDirectory()) throw new Error('Unsafe storage directory path.');
+      await directoryHandle.sync();
+    } finally {
+      await directoryHandle.close();
+    }
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
     await fs.unlink(temporaryPath).catch(() => {});
