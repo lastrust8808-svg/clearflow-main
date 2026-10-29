@@ -14,7 +14,7 @@ export interface ReconciliationCloseMetrics {
 // Validate the decimal representation first; then round only IEEE-754
 // multiplication noise from an already valid two-decimal input.
 function toSafeCents(amount: number): number | null {
-  if (!Number.isFinite(amount) || !/^-?\\d+(?:\\.\\d{1,2})?$/.test(String(amount))) {
+  if (!Number.isFinite(amount) || !/^-?\d+(?:\.\d{1,2})?$/.test(String(amount))) {
     return null;
   }
   const cents = Math.round(amount * 100);
