@@ -103,3 +103,73 @@ test('database errors and missing/conflicting receipts never return success', as
   }] }) };
   await assert.rejects(reserve({ db: wrong, ...args }), /invalid tenant-bound receipt/);
 });
+
+const statusJobId = '123e4567-e89b-42d3-a456-426614174000';
+
+test('status lookup is tenant-and-actor scoped and returns persisted status only', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  const calls = [];
+  const db = { async query(sql, params) {
+    calls.push({ sql, params });
+    return { rows: [{
+      id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+      operation: 'invoice_delivery', status: 'queued',
+      created_at: new Date('2026-10-29T12:00:00Z'),
+      updated_at: new Date('2026-10-29T12:01:00Z'),
+    }] };
+  } };
+  const result = await readErpOperationJobStatus({
+    db, authenticatedScope: scope, jobId: statusJobId,
+  });
+  assert.deepEqual(calls[0].params, [scope.tenantId, scope.actorId, statusJobId]);
+  assert.match(calls[0].sql, /WHERE tenant_id = \\$1 AND actor_id = \\$2 AND id = \\$3/);
+  assert.equal(result.status, 'queued');
+  assert.equal(result.id, statusJobId);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal('delivered' in result, false);
+});
+
+test('status lookup fails closed on missing scope, invalid ids, malformed or foreign records', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { async query() { calls++; return { rows: [] }; } };
+  for (const invalid of [
+    { authenticatedScope: null },
+    { authenticatedScope: { tenantId: scope.tenantId } },
+    { jobId: 'not-a-uuid' },
+  ]) {
+    await assert.rejects(readErpOperationJobStatus({
+      db, authenticatedScope: scope, jobId: statusJobId, ...invalid,
+    }));
+  }
+  assert.equal(calls, 0);
+  assert.equal(await readErpOperationJobStatus({
+    db, authenticatedScope: scope, jobId: statusJobId,
+  }), null);
+  const base = {
+    id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+    operation: 'invoice_delivery', status: 'queued',
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:01:00Z'),
+  };
+  for (const record of [
+    { ...base, tenant_id: 'other-tenant' },
+    { ...base, actor_id: 'other-actor' },
+    { ...base, id: '123e4567-e89b-42d3-a456-426614174001' },
+    { ...base, status: 'delivered' },
+    { ...base, updated_at: 'not-a-date' },
+  ]) {
+    const wrongDb = { query: async () => ({ rows: [record] }) };
+    await assert.rejects(readErpOperationJobStatus({
+      db: wrongDb, authenticatedScope: scope, jobId: statusJobId,
+    }), /invalid/);
+  }
+  await assert.rejects(readErpOperationJobStatus({
+    db: { query: async () => { throw new Error('database offline'); } },
+    authenticatedScope: scope, jobId: statusJobId,
+  }), /database offline/);
+  await assert.rejects(readErpOperationJobStatus({
+    db: { query: async () => ({ rows: [{ ...base }, { ...base }] }) },
+    authenticatedScope: scope, jobId: statusJobId,
+  }), /invalid status result/);
+});
