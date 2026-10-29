@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { sanitizeStorageSegment as sanitizeSegment } from '../utils/storageSegment.js';
@@ -54,8 +54,46 @@ function accountExtractionPath(accountId, signature) {
   return path.join(accountExtractionDirectory(accountId), `${sanitizeSegment(signature)}.json`);
 }
 
+// Reject symlinked storage directories before reads and writes. A tenant
+// directory symlink must never redirect an account operation into another
+// account's records (or outside the storage tree). This local filesystem
+// defense does not replace authenticated tenant authorization or eliminate
+// all concurrent filesystem mutation races.
+async function assertSafeStorageDirectory(directory) {
+  const base = path.resolve(process.cwd());
+  const relative = path.relative(base, directory);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('Unsafe storage directory path.');
+  }
+  let current = base;
+  for (const segment of relative.split(path.sep)) {
+    current = path.join(current, segment);
+    try {
+      const stat = await fs.lstat(current);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        throw new Error('Unsafe storage directory path.');
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+}
+
 async function ensureDirectory(targetPath) {
+  await assertSafeStorageDirectory(targetPath);
   await fs.mkdir(targetPath, { recursive: true });
+  await assertSafeStorageDirectory(targetPath);
+}
+
+async function readJsonSafely(targetPath) {
+  await assertSafeStorageDirectory(path.dirname(targetPath));
+  // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
+  const handle = await fs.open(targetPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    return JSON.parse(await handle.readFile('utf8'));
+  } finally {
+    await handle.close();
+  }
 }
 
 // Replace JSON records atomically: readers see the old complete record or the
@@ -63,6 +101,7 @@ async function ensureDirectory(targetPath) {
 // File sync precedes rename. Directory durability after sudden power loss and
 // multi-writer ordering remain separate acceptance gates.
 async function writeJsonAtomically(targetPath, value) {
+  await assertSafeStorageDirectory(path.dirname(targetPath));
   const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
   let handle;
   try {
@@ -71,6 +110,7 @@ async function writeJsonAtomically(targetPath, value) {
     await handle.sync();
     await handle.close();
     handle = null;
+    await assertSafeStorageDirectory(path.dirname(targetPath));
     await fs.rename(temporaryPath, targetPath);
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
@@ -81,8 +121,7 @@ async function writeJsonAtomically(targetPath, value) {
 
 export async function loadAccountAppData(accountId) {
   try {
-    const raw = await fs.readFile(appDataPath(accountId), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(appDataPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -104,8 +143,7 @@ export async function saveAccountAppData(accountId, appData) {
 
 export async function loadAccountDocumentFile(accountId, fileId) {
   try {
-    const raw = await fs.readFile(accountFilePath(accountId, fileId), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(accountFilePath(accountId, fileId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -135,8 +173,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 
 export async function loadAccountRemittanceVault(accountId, vendorId) {
   try {
-    const raw = await fs.readFile(accountRemittancePath(accountId, vendorId), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(accountRemittancePath(accountId, vendorId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -166,8 +203,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 
 export async function loadAccountTransactionProofVault(accountId) {
   try {
-    const raw = await fs.readFile(accountTransactionProofPath(accountId), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(accountTransactionProofPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -195,8 +231,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 
 export async function loadAccountPlaidVault(accountId) {
   try {
-    const raw = await fs.readFile(accountPlaidPath(accountId), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(accountPlaidPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -224,8 +259,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
 
 export async function loadAccountExtractionRecord(accountId, signature) {
   try {
-    const raw = await fs.readFile(accountExtractionPath(accountId, signature), 'utf8');
-    return JSON.parse(raw);
+    return readJsonSafely(accountExtractionPath(accountId, signature));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
