@@ -51,3 +51,20 @@ test('returns immutable snapshot without mutating entries', () => {
   assert.equal(entries[0].amountMinor, 123);
   assert.deepEqual(calculate([]).unencumberedCashMinor, 0);
 });
+
+test('rejects padded or control-character tenant and entity identifiers', () => {
+  for (const key of ['tenantId', 'entityId']) {
+    for (const bad of [' ' + base[key], base[key] + ' ', base[key] + '\u0000',
+      base[key] + '\u001f', base[key] + '\u007f', base[key] + '\u009f']) {
+      assert.throws(() => calculateReserveCapacity({ ...base, [key]: bad, entries: [] }),
+        /unpadded|control characters/);
+    }
+  }
+});
+
+test('rejects padded or control-character reserve entry IDs before classification', () => {
+  for (const bad of [' x', 'x ', 'x\n', 'x\u0000', 'x\u007f', 'x\u009f']) {
+    assert.throws(() => calculate([entry(bad, 100)]), /unpadded|control characters/);
+  }
+  assert.equal(calculate([entry('valid-entry', 100)]).unencumberedCashMinor, 100);
+});
