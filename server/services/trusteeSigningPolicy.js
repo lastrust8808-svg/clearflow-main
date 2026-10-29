@@ -40,7 +40,7 @@ function calendarDate(value, field) {
  * @param {{tenantId:string, entityId:string, trustId:string,
  *   asOfDate:string, mode:'independent'|'joint', signerIds:string[],
  *   appointments:Array<{trusteeId:string,tenantId:string,entityId:string,
- *     trustId:string,effectiveOn:string,acceptedOn?:string,revokedOn?:string}>}} snapshot
+ *     trustId:string,effectiveOn:string,acceptedOn?:string,acceptanceEvidenceRef?:string,revokedOn?:string}>}} snapshot
  * @returns {{eligible:boolean,reason:string,activeTrusteeCount:number,
  *   signerCount:number}} Frozen policy assessment, not an authorization token.
  */
@@ -60,6 +60,9 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   }
   const trustees = new Set();
   const active = new Set();
+  // A date alone cannot stand in for a distinct acceptance record. The caller
+  // must independently authenticate and authorize every referenced record.
+  const acceptanceEvidenceRefs = new Set();
   for (const appointment of snapshot.appointments) {
     if (!appointment || typeof appointment !== 'object' || Array.isArray(appointment)) {
       throw new TypeError('Invalid trustee appointment');
@@ -76,6 +79,13 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
       calendarDate(appointment.acceptedOn, 'appointment.acceptedOn');
     const revokedOn = appointment.revokedOn == null ? null :
       calendarDate(appointment.revokedOn, 'appointment.revokedOn');
+    if (acceptedOn !== null) {
+      const acceptanceEvidenceRef = id(appointment.acceptanceEvidenceRef, 'appointment.acceptanceEvidenceRef');
+      if (acceptanceEvidenceRefs.has(acceptanceEvidenceRef)) {
+        throw new Error('Duplicate trustee acceptance evidence reference');
+      }
+      acceptanceEvidenceRefs.add(acceptanceEvidenceRef);
+    }
     if (revokedOn !== null && revokedOn < effectiveOn) {
       throw new RangeError('Revocation precedes appointment effective date');
     }
