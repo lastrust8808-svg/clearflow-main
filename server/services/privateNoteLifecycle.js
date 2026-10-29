@@ -57,6 +57,8 @@ export function projectPrivateNoteLifecycle(snapshot) {
   let status = 'draft';
   let lastEventId = null;
   let lastEventAt = null;
+  let issuedDocumentRef = null;
+  const noticeDocumentRefs = new Set();
   for (const event of snapshot.events) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
@@ -74,8 +76,21 @@ export function projectPrivateNoteLifecycle(snapshot) {
     }
     const next = Object.hasOwn(NEXT[status], event.type) ? NEXT[status][event.type] : null;
     if (next === null) throw new Error('Invalid private note lifecycle transition');
-    if (event.type === 'issued' || event.type === 'notice_prepared') {
-      requiredId(event.documentRef, 'documentRef');
+    if (event.type === 'issued') {
+      issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
+    }
+    if (event.type === 'presented') {
+      const presentedDocumentRef = requiredId(event.documentRef, 'documentRef');
+      if (presentedDocumentRef !== issuedDocumentRef) {
+        throw new Error('Presented document must match the issued note document');
+      }
+    }
+    if (event.type === 'notice_prepared') {
+      const noticeDocumentRef = requiredId(event.documentRef, 'documentRef');
+      if (noticeDocumentRef === issuedDocumentRef || noticeDocumentRefs.has(noticeDocumentRef)) {
+        throw new Error('Notice draft document reference must be distinct and unique');
+      }
+      noticeDocumentRefs.add(noticeDocumentRef);
     }
     if (event.type === 'presented' || event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
