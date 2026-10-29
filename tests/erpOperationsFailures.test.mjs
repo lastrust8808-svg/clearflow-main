@@ -15,14 +15,14 @@ writeFileSync(join(directory, 'erpOperations.service.ts'),
 const api = await import(pathToFileURL(join(directory, 'erpOperations.service.ts')).href);
 const originalFetch = globalThis.fetch;
 const payloads = [
-  { invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1' },
+  { invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', deliveryMethod: 'email', recipientEmail: 'alice@example.invalid' },
   { invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1' },
   { reconciliationId: 'rec-1', bankAccountId: 'bank-1', statementEndingBalance: 100, statementFileName: 'test.csv', exceptionNotes: '' },
   { reconciliationId: 'rec-1', closeSummary: 'Reviewed' },
 ];
 const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.importReconciliationStatement, api.closeReconciliationJob];
 const accepted = [
-  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
+  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send', status: 'sent', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z', sentAt: '2026-10-28T00:00:02Z', deliveryChannel: 'smtp', recipientEmail: 'alice@example.invalid' } },
   { success: true, job: { id: 'j2', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
   { success: true, importJob: { id: 'j3', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
@@ -125,7 +125,7 @@ try {
     const confirmation = { success: true, job: { id: 'sent-job', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send',
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
       persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
-      sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp' } };
+      sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp', recipientEmail: 'alice@example.invalid' } };
     globalThis.fetch = async () => ({ ok: true, json: async () => confirmation });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), confirmation);
   });
@@ -222,13 +222,36 @@ try {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true, job }) });
   };
 
+  await test('delivery without a declared channel cannot be reported as sent', async () => {
+    const completed = { ...accepted[0].job };
+    replyWith(completed);
+    for (const deliveryMethod of [undefined, '', 'manual', 'unknown']) {
+      await assert.rejects(
+        api.queueInvoiceDelivery({ ...payloads[0], deliveryMethod }),
+        /not confirmed/,
+      );
+    }
+  });
+
+  await test('delivery cannot confirm missing intended recipient even with a sent receipt', async () => {
+    replyWith({ ...accepted[0].job });
+    await assert.rejects(
+      api.queueInvoiceDelivery({ ...payloads[0], recipientEmail: undefined }),
+      /not confirmed/,
+    );
+    await assert.rejects(
+      api.queueInvoiceDelivery({ ...payloads[0], deliveryMethod: 'internal_user', internalDeliveryTarget: undefined }),
+      /not confirmed/,
+    );
+  });
+
   await test('email delivery cannot acknowledge queued work as already sent', async () => {
-    replyWith({ ...accepted[0].job, recipientEmail: emailRequest.recipientEmail });
+    replyWith({ ...accepted[0].job, status: 'queued', recipientEmail: emailRequest.recipientEmail });
     await assert.rejects(api.queueInvoiceDelivery(emailRequest), /not confirmed/);
   });
 
   await test('internal delivery cannot acknowledge queued work as already sent', async () => {
-    replyWith({ ...accepted[0].job, internalDeliveryTarget: internalRequest.internalDeliveryTarget });
+    replyWith({ ...accepted[0].job, status: 'queued', internalDeliveryTarget: internalRequest.internalDeliveryTarget });
     await assert.rejects(api.queueInvoiceDelivery(internalRequest), /not confirmed/);
   });
 
