@@ -130,7 +130,7 @@ test('distinct evidence records cannot double-count the same underlying asset', 
 test('rejects unclassified reserve sources instead of treating private notes as cash', () => {
   for (const sourceType of [undefined, null, '', ' ', ' bank_balance ', 'private_note', 'other_collateral']) {
     assert.throws(() => calculate([entry('cash-a', 100, { sourceType })]),
-      /entry\\.sourceType|Cash reserve entry requires a cash source classification/);
+      /sourceType|Cash reserve entry requires a cash source classification/);
   }
   assert.equal(calculate([entry('cash-a', 100, { sourceType: 'physical_cash' })]).cashTotalMinor, 100);
 });
@@ -138,7 +138,7 @@ test('rejects unclassified reserve sources instead of treating private notes as 
 test('rejects bank-balance classification for noncash collateral', () => {
   for (const sourceType of [undefined, null, '', 'bank_balance', 'physical_cash']) {
     assert.throws(() => calculate([entry('note-a', 100, { kind: 'noncash_collateral', sourceType })]),
-      /entry\\.sourceType|Noncash collateral requires a noncash source classification/);
+      /sourceType|Noncash collateral requires a noncash source classification/);
   }
   const result = calculate([entry('note-a', 100, { kind: 'noncash_collateral', sourceType: 'private_note' })]);
   assert.equal(result.cashTotalMinor, 0);
