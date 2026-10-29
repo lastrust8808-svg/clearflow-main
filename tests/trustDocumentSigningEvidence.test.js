@@ -23,7 +23,8 @@ const attestation = (signerId, changes = {}) => ({
   ...changes,
 });
 const packet = (changes = {}) => ({
-  ...scope, content, evaluatedAt: '2026-10-29T12:00:00.000Z',
+  ...scope, content, finalizedAt: '2026-10-28T09:00:00.000Z',
+  evaluatedAt: '2026-10-29T12:00:00.000Z',
   governance: {
     tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId,
     mode: 'independent', appointments: [appointment('a'), appointment('b')],
@@ -54,6 +55,27 @@ test('hash is recomputed from actual bytes; changed PDF or claimed hash fails', 
   assert.equal(assess({ attestations: [attestation('a', { documentSha256: '0'.repeat(64) })] }).reason, 'document_bytes_mismatch');
   assert.throws(() => assess({ attestations: [attestation('a', { documentSha256: 'not-a-digest' })] }), /SHA-256/);
 });
+test('signing evidence must follow finalized document version, not an earlier draft', () => {
+  assert.throws(() => assess({ attestations: [attestation('a', {
+    signedAt: '2026-10-28T08:59:59.999Z',
+  })] }), /predates finalized document/);
+  assert.equal(assess({
+    finalizedAt: '2026-10-28T10:00:00.000Z',
+  }).status, 'evidence_ready_for_review');
+  assert.equal(assess({
+    finalizedAt: '2026-10-28T10:00:00.001Z',
+  }).status, 'incomplete');
+});
+
+test('missing, invalid or future document finalization fails closed', () => {
+  assert.throws(() => assess({ finalizedAt: undefined }), /finalizedAt.*canonical/);
+  assert.throws(() => assess({ finalizedAt: '2026-02-30T10:00:00.000Z' }), /finalizedAt.*canonical/);
+  assert.throws(() => assess({ finalizedAt: '2026-10-30T10:00:00.000Z' }), /finalization cannot follow/);
+  assert.throws(() => assess({
+    finalizedAt: '2026-10-30T10:00:00.000Z', attestations: [],
+  }), /finalization cannot follow/);
+});
+
 test('document/version/tenant/entity/trust substitutions are rejected', () => {
   for (const key of Object.keys(scope)) {
     assert.throws(() => assess({ attestations: [attestation('a', { [key]: 'other' })] }), /scope mismatch/);
