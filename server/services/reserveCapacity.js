@@ -37,7 +37,7 @@ function safeAdd(left, right, field) {
 
 /**
  * @param {{tenantId:string, entityId:string, currency:string, entries:Array<{
- *   id:string, evidenceRef:string, tenantId:string, entityId:string, currency:string,
+ *   id:string, assetId:string, evidenceRef:string, tenantId:string, entityId:string, currency:string,
  *   kind:'cash'|'noncash_collateral', amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
  * }>}} snapshot
@@ -58,12 +58,18 @@ export function calculateReserveCapacity(snapshot) {
     noncashCollateralMinor: 0,
   };
   const ids = new Set();
+  // A different evidence record must not make the same identified underlying
+  // asset count twice. The caller still must verify canonical asset identity.
+  const assetIds = new Set();
   const evidenceRefs = new Set();
   for (const entry of snapshot.entries) {
     if (!entry || typeof entry !== 'object') throw new TypeError('Invalid reserve entry');
     const id = requiredString(entry.id, 'entry.id');
     if (ids.has(id)) throw new Error(`Duplicate reserve entry ID: ${id}`);
     ids.add(id);
+    const assetId = requiredString(entry.assetId, 'entry.assetId');
+    if (assetIds.has(assetId)) throw new Error('Duplicate reserve asset ID');
+    assetIds.add(assetId);
     // Every classified asset needs its own provenance pointer. Reusing the
     // same source record under a different entry ID must not double-count it.
     // Authentication and verification of the referenced record are external.
