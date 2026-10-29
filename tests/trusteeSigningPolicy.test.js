@@ -4,7 +4,8 @@ import { evaluateTrusteeSigningPolicy } from '../server/services/trusteeSigningP
 
 const appointment = (trusteeId, overrides = {}) => ({
   trusteeId, tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
-  effectiveOn: '2025-01-01', acceptedOn: '2025-01-02', ...overrides,
+  effectiveOn: '2025-01-01', acceptedOn: '2025-01-02',
+  acceptanceEvidenceRef: 'acceptance-' + trusteeId, ...overrides,
 });
 const snapshot = (overrides = {}) => ({
   tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
@@ -107,4 +108,29 @@ test('rejects control characters in appointment and signer IDs', () => {
     }), /control characters/);
   }
   assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
+});
+
+
+test('accepted trustees require a distinct provenance reference before eligibility', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'ref\u0000', 123]) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: invalid })],
+      signerIds: ['a'],
+    }), /appointment.acceptanceEvidenceRef/);
+  }
+  assert.equal(evaluate({
+    appointments: [appointment('a', { acceptanceEvidenceRef: 'verified-pointer-1' })],
+    signerIds: ['a'],
+  }).eligible, true);
+});
+
+test('different trustee appointments cannot replay the same acceptance evidence', () => {
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { acceptanceEvidenceRef: 'shared-acceptance' }),
+      appointment('b', { acceptanceEvidenceRef: 'shared-acceptance' }),
+    ],
+    signerIds: ['a'],
+  }), /Duplicate trustee acceptance evidence reference/);
+  assert.equal(evaluate().eligible, true);
 });
