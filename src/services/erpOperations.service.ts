@@ -39,18 +39,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// A queued acknowledgement is not proof of durable acceptance unless the
+// authenticated backend supplies an explicit persistence receipt. This is
+// response validation, not a substitute for server-side transactional storage.
+function isUtcTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString().slice(0, 19) === value.slice(0, 19);
+}
+
+function hasDurableReceipt(job: Record<string, unknown>): boolean {
+  return job.persistence === 'durable' &&
+    isUtcTimestamp(job.queuedAt) &&
+    isUtcTimestamp(job.persistedAt) &&
+    Date.parse(job.persistedAt) >= Date.parse(job.queuedAt);
+}
+
 function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', operation?: 'send' | 'export'): boolean {
   if (!isRecord(value) || value.success !== true || !isRecord(value[key])) return false;
   const job = value[key];
   if (typeof job.id !== 'string' || job.id.trim() === '') return false;
   if (operation) {
-    if (job.operation !== operation ||
-        typeof job.queuedAt !== 'string' || job.queuedAt.trim() === '') return false;
+    if (job.operation !== operation || !hasDurableReceipt(job)) return false;
     // A manual fallback is not accepted delivery or export. An explicit sent
     // acknowledgement must carry completion metadata; export cannot be "sent".
     if (job.status === 'queued') return true;
     return operation === 'send' && job.status === 'sent' &&
-      typeof job.sentAt === 'string' && job.sentAt.trim() !== '' &&
+      isUtcTimestamp(job.sentAt) && Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
       (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
   return job.status === 'processed' &&

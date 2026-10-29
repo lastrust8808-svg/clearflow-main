@@ -22,8 +22,8 @@ const payloads = [
 ];
 const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.importReconciliationStatement, api.closeReconciliationJob];
 const accepted = [
-  { success: true, job: { id: 'j1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z' } },
-  { success: true, job: { id: 'j2', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z' } },
+  { success: true, job: { id: 'j1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
+  { success: true, job: { id: 'j2', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
   { success: true, importJob: { id: 'j3', status: 'processed', importedAt: '2026-10-28T00:00:00Z' } },
   { success: true, closeJob: { id: 'j4', status: 'processed', closedAt: '2026-10-28T00:00:00Z' } },
 ];
@@ -71,7 +71,8 @@ try {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({
         success: true,
         job: { id: 'sent-job', operation: 'send', status: 'sent',
-          queuedAt: '2026-10-29T00:00:00Z', ...metadata },
+          queuedAt: '2026-10-29T00:00:00Z', persistence: 'durable',
+          persistedAt: '2026-10-29T00:00:01Z', ...metadata },
       }) });
       await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
     }
@@ -79,6 +80,7 @@ try {
   await test('sent delivery with explicit SMTP completion metadata remains accepted', async () => {
     const confirmation = { success: true, job: { id: 'sent-job', operation: 'send',
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
+      persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
       sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp' } };
     globalThis.fetch = async () => ({ ok: true, json: async () => confirmation });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), confirmation);
@@ -90,6 +92,38 @@ try {
         deliveryChannel: 'smtp' },
     }) });
     await assert.rejects(api.queueInvoiceExport(payloads[1]), /not confirmed/);
+  });
+  await test('queued jobs require a valid durable persistence receipt', async () => {
+    for (const index of [0, 1]) {
+      const valid = accepted[index].job;
+      for (const changes of [
+        { persistence: undefined },
+        { persistence: 'memory' },
+        { persistedAt: undefined },
+        { persistedAt: 'not-a-date' },
+        { persistedAt: '2026-02-30T00:00:01Z' },
+        { persistedAt: '2026-10-27T23:59:59Z' },
+        { queuedAt: 'not-a-date' },
+      ]) {
+        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+          success: true, job: { ...valid, ...changes },
+        }) });
+        await assert.rejects(operations[index](payloads[index]), /not confirmed/);
+      }
+    }
+  });
+  await test('sent acknowledgement must occur after durable acceptance', async () => {
+    for (const sentAt of ['not-a-date', '2026-10-28T23:59:59Z', '2026-02-30T00:00:02Z']) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, job: {
+          id: 'sent-job', operation: 'send', status: 'sent',
+          queuedAt: '2026-10-29T00:00:00Z',
+          persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
+          sentAt, deliveryChannel: 'smtp',
+        },
+      }) });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
+    }
   });
 } finally {
   globalThis.fetch = originalFetch;
