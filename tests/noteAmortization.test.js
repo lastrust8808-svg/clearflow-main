@@ -92,3 +92,22 @@ test('permits a one-cent single-installment note without inventing payments', ()
   assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
   assert.equal(input.principalMinor, 1);
 });
+
+
+test('rejects padded or whitespace-only note scope identifiers before amortization', () => {
+  for (const key of ['tenantId', 'entityId', 'noteId']) {
+    for (const invalid of [' ', ' valid', 'valid ', '\tvalid', 'valid\n']) {
+      assert.throws(() => schedule({ [key]: invalid }), /unpadded/);
+    }
+  }
+  assert.equal(schedule().installments.length, 12);
+});
+
+test('rejects invisible control characters in note scope identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'noteId']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+      assert.throws(() => schedule({ [key]: 'valid' + control }), /control characters/);
+    }
+  }
+  assert.equal(schedule({ noteId: 'valid-note' }).noteId, 'valid-note');
+});
