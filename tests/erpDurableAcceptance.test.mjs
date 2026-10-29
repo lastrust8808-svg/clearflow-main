@@ -148,6 +148,35 @@ try {
     assert.equal(response.body.counts.reconciliationCloses, 0);
     assert.doesNotMatch(source, /reconciliationCloseJobs/);
   });
+  await test('statement import fails closed without durable persistence', async () => {
+    const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import', {
+      bankAccountId: 'bank-test',
+      statementEndingBalance: 100,
+      statementFileName: 'test-statement.csv',
+      exceptionNotes: 'test-only',
+    }, { reconciliationId: 'recon-test' });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.success, false);
+    assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    assert.equal(response.body.operation, 'statement_import');
+    assert.equal(response.body.importJob, undefined);
+  });
+
+  await test('statement import retains required identifier validation', async () => {
+    const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import',
+      { statementEndingBalance: 100 }, { reconciliationId: 'recon-test' });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  await test('statement imports report unavailable and cannot accumulate in memory', async () => {
+    const response = await invoke('GET', '/ops-status');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.capabilities.statementImports.available, false);
+    assert.equal(response.body.capabilities.statementImports.reason, 'durable_job_store_required');
+    assert.equal(response.body.counts.statementImports, 0);
+    assert.doesNotMatch(source, /statementImportJobs|randomUUID/);
+  });
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
