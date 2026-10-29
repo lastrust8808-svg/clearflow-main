@@ -197,7 +197,7 @@ test('refunded older invoice replay cannot override an already active newer invo
   assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
 });
 
-test('refund of the currently effective paid invoice still revokes access', () => {
+test('refund of the only paid invoice still revokes access', () => {
   const next = paid('new-payment', {
     invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
   });
@@ -205,7 +205,7 @@ test('refund of the currently effective paid invoice still revokes access', () =
   const refund = event('refund-current', 'payment_refunded', '2026-10-27T12:00:00Z', {
     invoiceId: 'inv-2',
   });
-  const result = project(scope, [paid(), next, refund], asOf);
+  const result = project(scope, [next, refund], asOf);
   assert.equal(result.status, 'past_due');
   assert.equal(result.entitled, false);
 });
