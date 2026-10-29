@@ -15,8 +15,14 @@ const RATE_DENOMINATOR = 120_000n; // 12 months * 10,000 basis points
 const MAX_PERIODS = 600;
 
 function requiredString(value, field) {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new TypeError(`${field} must be a nonempty string`);
+  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
+    throw new TypeError(`${field} must be a nonempty unpadded string`);
+  }
+  // Match the reserve, trustee and private-note identifier boundary. These
+  // terms may later be matched to tenant-scoped immutable note records;
+  // control bytes must never create ambiguous ledger identifiers.
+  if (/[\\u0000-\\u001f\\u007f-\\u009f]/u.test(value)) {
+    throw new TypeError(`${field} must not contain control characters`);
   }
   return value;
 }
