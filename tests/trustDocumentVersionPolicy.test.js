@@ -7,6 +7,7 @@ const digestB = 'b'.repeat(64);
 const digestC = 'c'.repeat(64);
 const version = (sequence, overrides = {}) => ({
   versionId: 'version-' + sequence, sequence,
+  tenantId: 'tenant-a', entityId: 'trust-a', documentId: 'doc-a',
   sha256: sequence === 1 ? digestA : sequence === 2 ? digestB : digestC,
   status: 'current', evidenceRef: 'registration-' + sequence,
   registeredAt: '2026-10-' + String(sequence).padStart(2, '0') + 'T12:00:00.000Z',
@@ -45,6 +46,8 @@ test('modified bytes or unknown version fail closed without disclosing status', 
 test('rejects historical current versions and sequence gaps', () => {
   assert.throws(() => check([version(1), version(2)], { versionId: 'version-1', sha256: digestA }),
     /Historical document version cannot be current/);
+  assert.throws(() => check([version(1, { status: 'superseded' })],
+    { versionId: 'version-1', sha256: digestA }), /without a successor/);
   assert.throws(() => check([version(1, { status: 'superseded' }), version(3)],
     { versionId: 'version-3', sha256: digestC }), /sequence must be contiguous/);
 });
@@ -56,6 +59,13 @@ test('rejects duplicate immutable version and registration identifiers', () => {
   assert.throws(() => check([version(1, { status: 'superseded' }),
     version(2, { evidenceRef: 'registration-1' })], { versionId: 'version-2', sha256: digestB }),
   /Duplicate document version evidence reference/);
+});
+
+test('rejects cross-tenant, cross-entity and cross-document version records', () => {
+  for (const key of ['tenantId', 'entityId', 'documentId']) {
+    assert.throws(() => check([version(1, { [key]: 'other' })],
+      { versionId: 'version-1', sha256: digestA }), /scope mismatch/);
+  }
 });
 
 test('rejects malformed scope, version metadata and hash digests', () => {
