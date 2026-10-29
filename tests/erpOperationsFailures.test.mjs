@@ -54,6 +54,43 @@ try {
     globalThis.fetch = async () => ({ ok: true, json: async () => accepted[1] });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
   });
+  await test('manual fallback is not a confirmed invoice delivery or export', async () => {
+    for (const [index, operation] of [[0, 'send'], [1, 'export']]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true,
+        job: { id: 'fallback-job', operation, status: 'fallback_required',
+          queuedAt: '2026-10-29T00:00:00Z', fallbackReason: 'SMTP unavailable' },
+      }) });
+      await assert.rejects(operations[index](payloads[index]), /not confirmed/);
+    }
+  });
+  await test('sent acknowledgement without completion evidence is rejected', async () => {
+    for (const metadata of [{}, { sentAt: '2026-10-29T00:01:00Z' },
+      { sentAt: ' ', deliveryChannel: 'smtp' },
+      { sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'manual' }]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true,
+        job: { id: 'sent-job', operation: 'send', status: 'sent',
+          queuedAt: '2026-10-29T00:00:00Z', ...metadata },
+      }) });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
+    }
+  });
+  await test('sent delivery with explicit SMTP completion metadata remains accepted', async () => {
+    const confirmation = { success: true, job: { id: 'sent-job', operation: 'send',
+      status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
+      sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp' } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => confirmation });
+    assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), confirmation);
+  });
+  await test('export cannot claim sent-delivery status', async () => {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      success: true, job: { id: 'export-sent', operation: 'export', status: 'sent',
+        queuedAt: '2026-10-29T00:00:00Z', sentAt: '2026-10-29T00:01:00Z',
+        deliveryChannel: 'smtp' },
+    }) });
+    await assert.rejects(api.queueInvoiceExport(payloads[1]), /not confirmed/);
+  });
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(directory, { recursive: true, force: true });
