@@ -30,6 +30,10 @@ on:
       - 'tests/privateNoteLifecycle.test.js'
       - 'server/services/trustDocumentVersionPolicy.js'
       - 'tests/trustDocumentVersionPolicy.test.js'
+      - 'server/services/trustDocumentQrPolicy.js'
+      - 'tests/trustDocumentQrPolicy.test.js'
+      - 'server/services/trustDocumentQrRegistryPolicy.js'
+      - 'tests/trustDocumentQrRegistryPolicy.test.js'
 permissions:
   contents: read
 jobs:
