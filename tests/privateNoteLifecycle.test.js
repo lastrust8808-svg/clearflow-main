@@ -6,7 +6,8 @@ const scope = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', 
 const event = (type, index, overrides = {}) => ({
   ...scope, eventId: 'event-' + index, type, actorId: 'actor-a',
   occurredAt: '2026-10-' + String(index).padStart(2, '0') + 'T12:00:00.000Z',
-  documentRef: 'document-' + index, evidenceRef: 'evidence-' + index,
+  documentRef: type === 'presented' ? 'document-1' : 'document-' + index,
+  evidenceRef: 'evidence-' + index,
   ...overrides,
 });
 const project = events => projectPrivateNoteLifecycle({ ...scope, events });
@@ -44,6 +45,30 @@ test('evidence references required before projecting external events', () => {
   assert.throws(() => project([event('issued', 1, { documentRef: '' })]), /documentRef/);
   assert.throws(() => project([event('issued', 1), event('presented', 2, { evidenceRef: null })]), /evidenceRef/);
   assert.throws(() => project([event('issued', 1), event('presented', 2), event('notice_prepared', 3, { documentRef: undefined })]), /documentRef/);
+});
+test('presentment evidence is bound to the actual issued document version', () => {
+  assert.equal(project([event('issued', 1), event('presented', 2)]).status, 'presented');
+  assert.throws(() => project([event('issued', 1), event('presented', 2, { documentRef: 'another-note-document' })]), /must match the issued note/);
+  assert.throws(() => project([event('issued', 1), event('presented', 2, { documentRef: undefined })]), /documentRef/);
+});
+test('notice drafts cannot masquerade as the issued instrument or reuse a draft version', () => {
+  assert.throws(() => project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3, { documentRef: 'document-1' }),
+  ]), /distinct and unique/);
+  assert.throws(() => project([
+    event('issued', 1), event('presented', 2), event('notice_prepared', 3),
+    event('disputed', 4), event('notice_prepared', 5, { documentRef: 'document-3' }),
+  ]), /distinct and unique/);
+});
+test('distinct notice revisions remain draft-only and require separate evidence for disputes', () => {
+  const events = [
+    event('issued', 1), event('presented', 2), event('notice_prepared', 3),
+    event('disputed', 4), event('notice_prepared', 5),
+  ];
+  assert.equal(project(events).status, 'notice_prepared');
+  assert.throws(() => project(events.map((entry, index) =>
+    index === 3 ? { ...entry, evidenceRef: null } : entry)), /evidenceRef/);
 });
 test('rejects missing actor, malformed timestamps, out-of-order or tied events', () => {
   assert.throws(() => project([event('issued', 1, { actorId: ' ' })]), /actorId/);
