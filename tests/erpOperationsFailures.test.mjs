@@ -60,6 +60,52 @@ try {
       assert.deepEqual(await operations[i](payloads[i]), accepted[i]);
     });
   }
+  await test('explicit durable-store 503 confirms no ERP job was accepted', async () => {
+    const names = ['invoice_delivery', 'invoice_export', 'statement_import', 'reconciliation_close'];
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async () => ({
+        ok: false, status: 503, json: async () => ({
+          success: false, code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
+          operation: names[index], error: 'No job was queued and no message was sent.',
+        }),
+      });
+      await assert.rejects(operations[index](payloads[index]),
+        /is unavailable: durable job storage is not enabled. No operation was queued or completed/,
+        names[index]);
+    }
+  });
+
+  await test('untrusted or malformed 503 response remains indeterminate', async () => {
+    const validFailure = {
+      success: false, code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
+      operation: 'invoice_delivery',
+    };
+    for (const failure of [
+      { ...validFailure, operation: 'invoice_export' },
+      { ...validFailure, code: 'OTHER_ERROR' },
+      { ...validFailure, success: true },
+      { ...validFailure, job: { id: 'maybe-accepted' } },
+      { ...validFailure, importJob: {} },
+      { ...validFailure, closeJob: {} },
+    ]) {
+      globalThis.fetch = async () => ({
+        ok: false, status: 503, json: async () => failure,
+      });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]),
+        /outcome unknown \(HTTP 503\).*Verify operation status before retrying/);
+    }
+    globalThis.fetch = async () => ({
+      ok: false, status: 503, json: async () => { throw new SyntaxError('invalid JSON'); },
+    });
+    await assert.rejects(api.queueInvoiceDelivery(payloads[0]),
+      /outcome unknown \(HTTP 503\).*Verify operation status before retrying/);
+    globalThis.fetch = async () => ({
+      ok: false, status: 502, json: async () => validFailure,
+    });
+    await assert.rejects(api.queueInvoiceDelivery(payloads[0]),
+      /outcome unknown \(HTTP 502\).*Verify operation status before retrying/);
+  });
+
   await test('future-dated durable acceptance and completion receipts never confirm an operation', async () => {
     const future = '2099-01-01T00:00:00Z';
     for (let index = 0; index < operations.length; index++) {
