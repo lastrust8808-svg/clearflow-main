@@ -119,13 +119,12 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountFilePath(accountId, fileId),
     {
-     
         ...payload,
         accountId,
         fileId,
         savedAt: new Date().toISOString(),
       }
-    ));
+    );
 
   return {
     accountId,
@@ -151,13 +150,12 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountRemittancePath(accountId, vendorId),
     {
-     
         ...payload,
         accountId,
         vendorId,
         savedAt: new Date().toISOString(),
       }
-    ));
+    );
 
   return {
     accountId,
@@ -183,12 +181,11 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountTransactionProofPath(accountId),
     {
-     
         ...payload,
         accountId,
         savedAt: new Date().toISOString(),
       }
-    ));
+    );
 
   return {
     accountId,
@@ -213,12 +210,11 @@ export async function saveAccountPlaidVault(accountId, payload) {
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountPlaidPath(accountId),
     {
-     
         ...payload,
         accountId,
         savedAt: new Date().toISOString(),
       }
-    ));
+    );
 
   return {
     accountId,
@@ -243,13 +239,12 @@ export async function saveAccountExtractionRecord(accountId, signature, payload)
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountExtractionPath(accountId, signature),
     {
-     
         ...payload,
         accountId,
         signature,
         savedAt: new Date().toISOString(),
       }
-    ));
+    );
 
   return {
     accountId,
