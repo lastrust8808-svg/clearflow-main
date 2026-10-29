@@ -14,6 +14,8 @@ interface DeliveryQueueResponse {
     persistence: 'durable';
     operation: 'send' | 'export';
     sentAt?: string;
+    // Transport-specific acknowledgement, issued after actual delivery.
+    deliveryReceiptId?: string;
     deliveryChannel?: 'smtp' | 'manual' | 'internal';
     recipientEmail?: string;
     internalDeliveryTarget?: string;
@@ -97,6 +99,11 @@ function isAcceptedJob(
     return operation === 'send' && job.status === 'sent' &&
       isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
       Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
+      // A timestamp and destination alone are not transport evidence.
+      // The backend must persist the provider/internal delivery receipt ID.
+      typeof job.deliveryReceiptId === 'string' &&
+      job.deliveryReceiptId.trim().length > 0 &&
+      job.deliveryReceiptId.length <= 255 &&
       (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
   // Imports and accounting-period closure require the same durable receipt as
