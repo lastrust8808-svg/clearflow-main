@@ -161,9 +161,31 @@ function assertStoredRecordScope(record, expected) {
   return record;
 }
 
+// Google-backed workspaces must retain the authenticated account's email in
+// their stored app-data identity. A regular file copied into a different
+// account directory is otherwise readable even without a symlink/hard link.
+// Legacy non-Google storage identifiers remain unchanged until their
+// identity migration is designed and verified.
+function assertGoogleAppDataScope(accountId, appData) {
+  if (typeof accountId !== 'string' || !accountId.startsWith('google:')) {
+    return appData;
+  }
+  const expectedEmail = accountId.slice('google:'.length);
+  const actualEmail = appData?.user?.email;
+  if (
+    !expectedEmail ||
+    expectedEmail !== expectedEmail.trim().toLowerCase() ||
+    typeof actualEmail !== 'string' ||
+    actualEmail.trim().toLowerCase() !== expectedEmail
+  ) {
+    throw new Error('Stored app data identity does not match requested account.');
+  }
+  return appData;
+}
+
 export async function loadAccountAppData(accountId) {
   try {
-    return await readJsonSafely(appDataPath(accountId));
+    return assertGoogleAppDataScope(accountId, await readJsonSafely(appDataPath(accountId)));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -173,6 +195,7 @@ export async function loadAccountAppData(accountId) {
 }
 
 export async function saveAccountAppData(accountId, appData) {
+  assertGoogleAppDataScope(accountId, appData);
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(appDataPath(accountId), appData);
