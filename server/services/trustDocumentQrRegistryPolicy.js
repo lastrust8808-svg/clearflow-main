@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 
 /**
  * Pure, INTERNAL binding resolver for QR token SHA-256 digests.
@@ -92,4 +93,32 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     }
   }
   return Object.freeze(matched ?? { status: 'unknown' });
+}
+
+/**
+ * INTERNAL end-to-end decision from an authorized QR digest lookup and actual
+ * finalized document bytes. Neither the token nor a caller-supplied hash is
+ * evidence of document authenticity, execution, signature or notarization.
+ *
+ * The caller MUST authenticate tenant/entity access before reading both
+ * registries, fetch immutable version records and finalized bytes from trusted
+ * durable storage, and enforce its own rate limits and public disclosure policy.
+ * Do not return the internal QR binding's document/version identifiers publicly.
+ *
+ * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Metadata-free result
+ */
+export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, content) {
+  const binding = resolveTrustDocumentQrBinding(qrRegistry, lookup);
+  // An unknown or revoked QR token must not reveal whether a document exists.
+  if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
+  if (!versionRegistry || typeof versionRegistry !== 'object' || Array.isArray(versionRegistry) ||
+      versionRegistry.tenantId !== qrRegistry.tenantId ||
+      versionRegistry.entityId !== qrRegistry.entityId ||
+      versionRegistry.documentId !== binding.documentId) {
+    throw new Error('QR document registry scope mismatch');
+  }
+  return verifyTrustDocumentBytes(versionRegistry, {
+    versionId: binding.versionId,
+    content,
+  });
 }
