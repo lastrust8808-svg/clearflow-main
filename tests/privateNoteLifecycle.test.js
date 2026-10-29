@@ -183,7 +183,7 @@ test('does not mutate supplied events and freezes the projection', () => {
 
 test('rejects control characters in tenant, entity, trust and note identifiers', () => {
   for (const key of Object.keys(scope)) {
-    for (const control of ['\\u0000', '\\u001f', '\\u007f', '\\u009f']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
       assert.throws(() => projectPrivateNoteLifecycle({
         ...scope, [key]: scope[key] + control, events: [],
       }), /control characters/);
@@ -193,7 +193,7 @@ test('rejects control characters in tenant, entity, trust and note identifiers',
 
 test('rejects control characters in lifecycle event, actor, document and evidence references', () => {
   for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
-    for (const control of ['\\u0000', '\\u001f', '\\u007f', '\\u009f']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
       assert.throws(() => project([event('issued', 1, {
         [key]: 'identifier' + control,
       })]), /control characters/);
