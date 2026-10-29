@@ -85,3 +85,26 @@ test('does not mutate inputs and freezes assessment result', () => {
   assert.ok(Object.isFrozen(result));
   assert.equal(Object.hasOwn(result, 'signatureVerified'), false);
 });
+
+test('rejects control characters in governance scope identifiers before evaluating signers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+      assert.throws(() => evaluate({ [key]: 'valid' + control }), /control characters/);
+    }
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('rejects control characters in appointment and signer IDs', () => {
+  for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a' + control)],
+      signerIds: ['a' + control],
+    }), /control characters/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a')],
+      signerIds: ['a' + control],
+    }), /control characters/);
+  }
+  assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
+});
