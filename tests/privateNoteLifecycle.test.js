@@ -72,6 +72,28 @@ test('notice drafts cannot masquerade as the issued instrument or reuse a draft 
     event('disputed', 4), event('notice_prepared', 5, { documentRef: 'document-3' }),
   ]), /distinct and unique/);
 });
+test('prepared notice drafts require a provenance reference without claiming delivery', () => {
+  const issued = event('issued', 1);
+  const presented = event('presented', 2);
+  for (const missing of [undefined, null, '', ' ', ' padded-evidence ']) {
+    assert.throws(() => project([
+      issued, presented, event('notice_prepared', 3, { evidenceRef: missing }),
+    ]), /evidenceRef/);
+  }
+  assert.equal(project([issued, presented, event('notice_prepared', 3)]).status, 'notice_prepared');
+});
+
+test('later revised notice drafts also require their own preparation evidence', () => {
+  const history = [
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4),
+  ];
+  assert.throws(() => project([
+    ...history, event('notice_prepared', 5, { evidenceRef: undefined }),
+  ]), /evidenceRef/);
+  assert.equal(project([...history, event('notice_prepared', 5)]).status, 'notice_prepared');
+});
+
 test('distinct notice revisions remain draft-only and require separate evidence for disputes', () => {
   const events = [
     event('issued', 1), event('presented', 2), event('notice_prepared', 3),
