@@ -20,6 +20,17 @@ test('issuance and evidenced presentment project document status only', () => {
     status: 'presented', eventCount: 2, lastEventId: 'event-2', lastEventAt: '2026-10-02T12:00:00.000Z',
   });
 });
+test('issuance requires a nonempty provenance reference, not just a document identifier', () => {
+  for (const missing of [undefined, null, '', ' ', ' evidence-with-padding ']) {
+    assert.throws(() => project([event('issued', 1, { evidenceRef: missing })]), /evidenceRef/);
+  }
+  assert.equal(project([event('issued', 1, { evidenceRef: 'authority-and-signature-record' })]).status, 'issued');
+});
+test('a later presentment cannot make an unevidenced issuance valid', () => {
+  assert.throws(() => project([
+    event('issued', 1, { evidenceRef: null }), event('presented', 2),
+  ]), /evidenceRef/);
+});
 test('dispute and notice preparation remain draft-only workflow states', () => {
   assert.equal(project([event('issued', 1), event('presented', 2), event('disputed', 3), event('notice_prepared', 4)]).status, 'notice_prepared');
   assert.equal(project([event('issued', 1), event('presented', 2), event('notice_prepared', 3), event('disputed', 4)]).status, 'disputed');
