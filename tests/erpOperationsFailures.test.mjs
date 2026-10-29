@@ -50,6 +50,22 @@ try {
       assert.deepEqual(await operations[i](payloads[i]), accepted[i]);
     });
   }
+  await test('future-dated durable acceptance and completion receipts never confirm an operation', async () => {
+    const future = '2099-01-01T00:00:00Z';
+    for (let index = 0; index < operations.length; index++) {
+      const key = index < 2 ? 'job' : index === 2 ? 'importJob' : 'closeJob';
+      const valid = accepted[index][key];
+      const completion = index === 0 ? 'sentAt' : index === 2 ? 'importedAt' : index === 3 ? 'closedAt' : null;
+      const fields = ['queuedAt', 'persistedAt', ...(completion ? [completion] : [])];
+      for (const field of fields) {
+        globalThis.fetch = async () => ({
+          ok: true,
+          json: async () => ({ success: true, [key]: { ...valid, [field]: future } }),
+        });
+        await assert.rejects(operations[index](payloads[index]), /not confirmed/, `${index}: ${field}`);
+      }
+    }
+  });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
