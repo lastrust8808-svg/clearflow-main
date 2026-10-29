@@ -625,6 +625,24 @@ test('unresolved book-side transactions block close despite matched statement li
   assert.match(metrics.blockedReason, /Unresolved book transactions/);
 });
 
+test('missing unmatched book index requires explicit review instead of treating legacy absence as empty', () => {
+  for (const missing of [undefined, null]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ unmatchedTransactionIds: missing }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(missing));
+    assert.match(metrics.blockedReason, /Cleared and unmatched book transaction identifiers/);
+  }
+  const legacy = reconciliation();
+  delete legacy.unmatchedTransactionIds;
+  assert.equal(buildReconciliationCloseMetrics(legacy, account).isReadyToApprove, false);
+  assert.equal(buildReconciliationCloseMetrics(
+    reconciliation({ unmatchedTransactionIds: [] }),
+    account
+  ).isReadyToApprove, true);
+});
+
 test('malformed, duplicate and overlapping book transaction indices cannot approve close', () => {
   const invalid = [
     { clearedTransactionIds: undefined },
