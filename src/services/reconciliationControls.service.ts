@@ -47,6 +47,16 @@ function hasValidControllerSignoffTimestamp(value: unknown): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
+// A filename-only legacy import is still allowed, but blank, padded, or
+// control-character provenance must never certify an automatic close.
+// This is record-shape validation, not proof that a statement was imported.
+function isValidStatementSourceRef(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value === value.trim() &&
+    !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
+}
+
 export function buildReconciliationCloseMetrics(
   reconciliation: ReconciliationRecord,
   bankAccount?: BankAccountRecord
@@ -155,7 +165,12 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
-  if (!reconciliation.statementImportId && !reconciliation.statementFileName) {
+  if (
+    (reconciliation.statementImportId != null && !isValidStatementSourceRef(reconciliation.statementImportId)) ||
+    (reconciliation.statementFileName != null && !isValidStatementSourceRef(reconciliation.statementFileName)) ||
+    (!isValidStatementSourceRef(reconciliation.statementImportId) &&
+      !isValidStatementSourceRef(reconciliation.statementFileName))
+  ) {
     return {
       bookEndingBalance,
       differenceAmount,
