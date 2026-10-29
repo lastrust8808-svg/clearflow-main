@@ -189,6 +189,20 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
+  // Unknown or missing approval states must not be treated as pending review.
+  // Legacy records without an explicit approval state require re-review rather
+  // than silently becoming eligible for controller approval or close.
+  if (reconciliation.closeApprovalStatus !== 'pending' && reconciliation.closeApprovalStatus !== 'approved') {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Reconciliation close requires an explicit pending or approved controller state.',
+    };
+  }
+
   // An approved close must retain explicit controller signoff evidence. An
   // approval flag without a named controller and timestamp can be replayed
   // from a partial/stale client record; it must not qualify as close-ready.
