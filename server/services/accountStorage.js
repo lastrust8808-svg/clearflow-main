@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { sanitizeStorageSegment as sanitizeSegment } from '../utils/storageSegment.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
@@ -57,6 +58,27 @@ async function ensureDirectory(targetPath) {
   await fs.mkdir(targetPath, { recursive: true });
 }
 
+// Replace JSON records atomically: readers see the old complete record or the
+// new complete record, never a partially written/truncated JSON document.
+// File sync precedes rename. Directory durability after sudden power loss and
+// multi-writer ordering remain separate acceptance gates.
+async function writeJsonAtomically(targetPath, value) {
+  const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
+  let handle;
+  try {
+    handle = await fs.open(temporaryPath, 'wx', 0o600);
+    await handle.writeFile(JSON.stringify(value, null, 2), 'utf8');
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await fs.rename(temporaryPath, targetPath);
+  } catch (error) {
+    if (handle) await handle.close().catch(() => {});
+    await fs.unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
 export async function loadAccountAppData(accountId) {
   try {
     const raw = await fs.readFile(appDataPath(accountId), 'utf8');
@@ -72,7 +94,7 @@ export async function loadAccountAppData(accountId) {
 export async function saveAccountAppData(accountId, appData) {
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(appDataPath(accountId), JSON.stringify(appData, null, 2), 'utf8');
+  await writeJsonAtomically(appDataPath(accountId), JSON.stringify(appData, null, 2));
 
   return {
     accountId,
@@ -95,8 +117,7 @@ export async function loadAccountDocumentFile(accountId, fileId) {
 export async function saveAccountDocumentFile(accountId, fileId, payload) {
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(
-    accountFilePath(accountId, fileId),
+  await writeJsonAtomically(accountFilePath(accountId, fileId),
     JSON.stringify(
       {
         ...payload,
@@ -106,9 +127,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
       },
       null,
       2
-    ),
-    'utf8'
-  );
+    ));
 
   return {
     accountId,
@@ -132,8 +151,7 @@ export async function loadAccountRemittanceVault(accountId, vendorId) {
 export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(
-    accountRemittancePath(accountId, vendorId),
+  await writeJsonAtomically(accountRemittancePath(accountId, vendorId),
     JSON.stringify(
       {
         ...payload,
@@ -143,9 +161,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
       },
       null,
       2
-    ),
-    'utf8'
-  );
+    ));
 
   return {
     accountId,
@@ -169,8 +185,7 @@ export async function loadAccountTransactionProofVault(accountId) {
 export async function saveAccountTransactionProofVault(accountId, payload) {
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(
-    accountTransactionProofPath(accountId),
+  await writeJsonAtomically(accountTransactionProofPath(accountId),
     JSON.stringify(
       {
         ...payload,
@@ -179,9 +194,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
       },
       null,
       2
-    ),
-    'utf8'
-  );
+    ));
 
   return {
     accountId,
@@ -204,8 +217,7 @@ export async function loadAccountPlaidVault(accountId) {
 export async function saveAccountPlaidVault(accountId, payload) {
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(
-    accountPlaidPath(accountId),
+  await writeJsonAtomically(accountPlaidPath(accountId),
     JSON.stringify(
       {
         ...payload,
@@ -214,9 +226,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
       },
       null,
       2
-    ),
-    'utf8'
-  );
+    ));
 
   return {
     accountId,
@@ -239,8 +249,7 @@ export async function loadAccountExtractionRecord(accountId, signature) {
 export async function saveAccountExtractionRecord(accountId, signature, payload) {
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await fs.writeFile(
-    accountExtractionPath(accountId, signature),
+  await writeJsonAtomically(accountExtractionPath(accountId, signature),
     JSON.stringify(
       {
         ...payload,
@@ -250,9 +259,7 @@ export async function saveAccountExtractionRecord(accountId, signature, payload)
       },
       null,
       2
-    ),
-    'utf8'
-  );
+    ));
 
   return {
     accountId,
