@@ -9,16 +9,16 @@ export interface ReconciliationCloseMetrics {
   blockedReason?: string;
 }
 
-// Automatic close requires exact minor-unit balances. Rounding a difference
-// to two decimals and allowing a one-cent tolerance can approve an imbalance.
-// Reject fractional cents and amounts whose cents cannot be represented safely.
+// Automatic close requires exact minor-unit balances. Checking only whether
+// amount * 100 is near an integer silently accepts tiny fractional cents.
+// Validate the decimal representation first; then round only IEEE-754
+// multiplication noise from an already valid two-decimal input.
 function toSafeCents(amount: number): number | null {
-  if (!Number.isFinite(amount)) return null;
-  const scaled = amount * 100;
-  const cents = Math.round(scaled);
-  return Number.isSafeInteger(cents) && Math.abs(scaled - cents) <= 1e-7
-    ? cents
-    : null;
+  if (!Number.isFinite(amount) || !/^-?\\d+(?:\\.\\d{1,2})?$/.test(String(amount))) {
+    return null;
+  }
+  const cents = Math.round(amount * 100);
+  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 export function buildReconciliationCloseMetrics(
