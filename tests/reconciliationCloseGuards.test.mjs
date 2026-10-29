@@ -381,3 +381,34 @@ test('real leap-day controller signoffs and valid timezone offsets remain eligib
     assert.equal(metrics.isReadyToApprove, true, controllerSignoffAt);
   }
 });
+
+test('malformed statement provenance never qualifies for automatic reconciliation close', () => {
+  for (const invalid of [
+    { statementImportId: '' },
+    { statementImportId: '  ' },
+    { statementImportId: ' import-a' },
+    { statementImportId: 'import-a ' },
+    { statementImportId: 'import\\n-a' },
+    { statementImportId: 42 },
+    { statementImportId: null, statementFileName: '  ' },
+    { statementImportId: null, statementFileName: 'bank\\tstatement.csv' },
+    { statementImportId: null, statementFileName: false },
+    { statementImportId: '  ', statementFileName: 'bank.csv' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation(invalid), account);
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(invalid));
+    assert.match(metrics.blockedReason, /Import a statement/);
+  }
+});
+
+test('valid imported statement identifiers and legacy filename-only provenance remain eligible', () => {
+  for (const valid of [
+    { statementImportId: 'import-a', statementFileName: undefined },
+    { statementImportId: null, statementFileName: 'bank-statement.csv' },
+    { statementImportId: undefined, statementFileName: 'bank-statement.csv' },
+    { statementImportId: 'import-a', statementFileName: 'bank-statement.csv' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation(valid), account);
+    assert.equal(metrics.isReadyToApprove, true, JSON.stringify(valid));
+  }
+});
