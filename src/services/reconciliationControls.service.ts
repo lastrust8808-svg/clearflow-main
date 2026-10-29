@@ -21,6 +21,32 @@ function toSafeCents(amount: number): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
+// Date.parse may normalize impossible calendar dates (for example February 30).
+// Controller signoff evidence must preserve a real calendar instant and a
+// valid timezone offset; this is completeness validation, not authentication.
+function hasValidControllerSignoffTimestamp(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone, , offsetHourText, offsetMinuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysPerMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > daysPerMonth[month - 1] ||
+      hour > 23 || minute > 59 || second > 59) return false;
+  if (zone !== 'Z') {
+    const offsetHour = Number(offsetHourText);
+    const offsetMinute = Number(offsetMinuteText);
+    if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return false;
+  }
+  return Number.isFinite(Date.parse(value));
+}
+
 export function buildReconciliationCloseMetrics(
   reconciliation: ReconciliationRecord,
   bankAccount?: BankAccountRecord
@@ -172,9 +198,7 @@ export function buildReconciliationCloseMetrics(
     reconciliation.closeApprovalStatus === 'approved' && (
       typeof reconciliation.controllerSignoffName !== 'string' ||
       !reconciliation.controllerSignoffName.trim() ||
-      typeof reconciliation.controllerSignoffAt !== 'string' ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(reconciliation.controllerSignoffAt) ||
-      !Number.isFinite(Date.parse(reconciliation.controllerSignoffAt))
+      !hasValidControllerSignoffTimestamp(reconciliation.controllerSignoffAt)
     )
   ) {
     return {
