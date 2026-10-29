@@ -305,6 +305,28 @@ test('approved reconciliation with named controller and offset ISO signoff retai
   assert.equal(metrics.isReadyToApprove, true);
 });
 
+test('missing controller approval state cannot silently qualify as pending review', () => {
+  for (const closeApprovalStatus of [undefined, null, '']) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(closeApprovalStatus));
+    assert.match(metrics.blockedReason, /explicit pending or approved controller state/);
+  }
+});
+
+test('unknown or malformed controller approval states cannot authorize close', () => {
+  for (const closeApprovalStatus of ['unknown', 'PENDING', 'rejected', true, 1]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(closeApprovalStatus));
+    assert.match(metrics.blockedReason, /explicit pending or approved controller state/);
+  }
+});
+
 test('pending controller approval is still eligible for review without a signoff', () => {
   const metrics = buildReconciliationCloseMetrics(reconciliation(), account);
   assert.equal(metrics.isReadyToApprove, true);
