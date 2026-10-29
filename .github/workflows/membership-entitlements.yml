@@ -7,6 +7,8 @@ on:
     paths:
       - 'src/domain/membershipEntitlements.mjs'
       - 'tests/membershipEntitlements.test.mjs'
+      - 'src/domain/membershipWebhookFixture.mjs'
+      - 'tests/membershipWebhookFixture.test.mjs'
       - '.github/workflows/membership-entitlements.yml'
 permissions:
   contents: read
@@ -19,6 +21,6 @@ jobs:
         with:
           node-version: '22'
       - name: Check syntax
-        run: node --check src/domain/membershipEntitlements.mjs
+        run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs
       - name: Run deterministic entitlement tests
-        run: node --test tests/membershipEntitlements.test.mjs
+        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs
