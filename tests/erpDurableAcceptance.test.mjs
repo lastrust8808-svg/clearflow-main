@@ -114,7 +114,7 @@ try {
     assert.equal(response.body.capabilities.settlementExecutions.available, false);
     assert.equal(response.body.capabilities.settlementExecutions.reason, 'durable_job_store_required');
     assert.equal(response.body.counts.settlementExecutions, 0);
-    assert.doesNotMatch(source, /buildSettlementExecution\\s*\\(/);
+    assert.equal(source.includes('buildSettlementExecution('), false);
     assert.doesNotMatch(source, /settlementExecutionJobs/);
   });
 
