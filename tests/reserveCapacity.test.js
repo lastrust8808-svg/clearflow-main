@@ -104,9 +104,9 @@ test('rejects control bytes and padding in reserve provenance references', () =>
 });
 
 test('reserve classification requires a canonical underlying asset identity', () => {
-  for (const invalid of [undefined, null, '', ' ', ' padded ', 'asset\\u0000', 42]) {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'asset\u0000', 42]) {
     assert.throws(() => calculate([entry('cash-a', 100, { assetId: invalid })]),
-      /entry\\.assetId/);
+      /entry\.assetId/);
   }
   assert.equal(calculate([entry('cash-a', 100)]).unencumberedCashMinor, 100);
 });
