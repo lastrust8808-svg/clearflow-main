@@ -72,6 +72,7 @@ export function buildReconciliationCloseMetrics(
     !bankAccount ||
     bankAccount.id !== reconciliation.bankAccountId ||
     bankAccount.entityId !== reconciliation.entityId ||
+    !Number.isFinite(bankAccount.currentBalance) ||
     bookCents === null
   ) {
     return {
