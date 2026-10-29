@@ -1,15 +1,11 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
-import {
-  buildExecutionCapabilities,
-  buildSettlementExecution,
-} from '../services/paymentExecution.js';
+import { buildExecutionCapabilities } from '../services/paymentExecution.js';
 
 const router = express.Router();
 
 const statementImportJobs = [];
 const reconciliationCloseJobs = [];
-const settlementExecutionJobs = [];
 
 // Fail closed until a durable, tenant-authorized job store and delivery audit exist.
 // In particular, never send SMTP before a job has been durably accepted.
@@ -38,45 +34,14 @@ router.post('/invoice-exports', (req, res) => {
   return rejectNonDurableJob(res, 'invoice_export');
 });
 
-router.post('/settlements/execute', async (req, res) => {
-  const {
-    entityId,
-    paymentId,
-    settlementId,
-    amount,
-    currency,
-    direction,
-    method,
-    urgency,
-    sourceBankAccount,
-    sourceLedgerAccount,
-    vendorInstruction,
-    vendorReceiveMethod,
-  } = req.body || {};
-
+// Fail closed before contacting any provider: durable tenant-scoped idempotency,
+// approval and audit persistence are not yet implemented for this endpoint.
+router.post('/settlements/execute', (req, res) => {
+  const { entityId, paymentId, settlementId, amount } = req.body || {};
   if (!entityId || !paymentId || !settlementId || !amount) {
-    return res
-      .status(400)
-      .json({ success: false, error: 'Missing settlement execution payload.' });
+    return res.status(400).json({ success: false, error: 'Missing settlement execution payload.' });
   }
-
-  const execution = await buildSettlementExecution({
-    entityId,
-    paymentId,
-    settlementId,
-    amount,
-    currency,
-    direction,
-    method,
-    urgency,
-    sourceBankAccount,
-    sourceLedgerAccount,
-    vendorInstruction,
-    vendorReceiveMethod,
-  });
-
-  settlementExecutionJobs.unshift(execution);
-  return res.status(201).json({ success: true, execution });
+  return rejectNonDurableJob(res, 'settlement_execution');
 });
 
 router.get('/settlements/execution-capabilities', (_req, res) => {
@@ -136,13 +101,14 @@ router.get('/ops-status', (_req, res) => {
     capabilities: {
       invoiceDeliveries: { available: false, reason: 'durable_job_store_required' },
       invoiceExports: { available: false, reason: 'durable_job_store_required' },
+      settlementExecutions: { available: false, reason: 'durable_job_store_required' },
     },
     counts: {
       invoiceDeliveries: 0,
       invoiceExports: 0,
       statementImports: statementImportJobs.length,
       reconciliationCloses: reconciliationCloseJobs.length,
-      settlementExecutions: settlementExecutionJobs.length,
+      settlementExecutions: 0,
     },
   });
 });
