@@ -14,6 +14,8 @@ on:
       - 'tests/trustDocumentVersionPolicy.test.js'
       - 'server/services/trustDocumentQrPolicy.js'
       - 'tests/trustDocumentQrPolicy.test.js'
+      - 'server/services/trustDocumentQrRegistryPolicy.js'
+      - 'tests/trustDocumentQrRegistryPolicy.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -44,4 +46,5 @@ jobs:
       - run: node --check server/services/privateNoteLifecycle.js
       - run: node --check server/services/trustDocumentVersionPolicy.js
       - run: node --check server/services/trustDocumentQrPolicy.js
-      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js
+      - run: node --check server/services/trustDocumentQrRegistryPolicy.js
+      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrRegistryPolicy.test.js
