@@ -414,7 +414,7 @@ test('valid imported statement identifiers and legacy filename-only provenance r
 });
 
 test('malformed unmatched index never masquerades as zero outstanding exceptions', () => {
-  for (const unmatchedStatementLineIds of ['', 'line-2', null, 42, {}, [''], ['  '], ['line\\n-2'], [42]]) {
+  for (const unmatchedStatementLineIds of ['', 'line-2', null, 42, {}, [''], ['  '], ['line\n-2'], [42]]) {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({ unmatchedStatementLineIds }),
       account
@@ -429,7 +429,7 @@ test('malformed unmatched index never masquerades as zero outstanding exceptions
 });
 
 test('padded and control-character parsed or matched row identifiers cannot approve close', () => {
-  for (const id of [' line-1', 'line-1 ', 'line\\t-1', 'line\\n-1', 'line\\u0085-1']) {
+  for (const id of [' line-1', 'line-1 ', 'line\t-1', 'line\n-1', 'line\u0085-1']) {
     const parsed = buildReconciliationCloseMetrics(
       reconciliation({
         parsedStatementLines: [{ id, matchStatus: 'matched' }],
