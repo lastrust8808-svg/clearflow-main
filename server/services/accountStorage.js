@@ -90,6 +90,14 @@ async function readJsonSafely(targetPath) {
   // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
   const handle = await fs.open(targetPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
+    // O_NOFOLLOW rejects symbolic links, but hard links can still alias a
+    // different tenant's record. Refuse multi-linked or non-regular records
+    // before reading any bytes. This is a filesystem defense in depth;
+    // authenticated account authorization remains a separate requirement.
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.nlink !== 1) {
+      throw new Error('Unsafe storage record file.');
+    }
     return JSON.parse(await handle.readFile('utf8'));
   } finally {
     await handle.close();
