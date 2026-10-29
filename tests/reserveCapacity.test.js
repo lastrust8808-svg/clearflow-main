@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateReserveCapacity } from '../server/services/reserveCapacity.js';
 
 const base = { tenantId: 'tenant-a', entityId: 'trust-a', currency: 'USD' };
-const entry = (id, amountMinor, options = {}) => ({ id, evidenceRef: 'source-' + id, ...base, kind: 'cash', amountMinor, ...options });
+const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, kind: 'cash', amountMinor, ...options });
 const calculate = (entries) => calculateReserveCapacity({ ...base, entries });
 
 test('separates restricted and pledged cash from unencumbered cash', () => {
@@ -101,4 +101,27 @@ test('rejects control bytes and padding in reserve provenance references', () =>
     assert.throws(() => calculate([entry('cash-a', 100, { evidenceRef: invalid })]),
       /unpadded|control characters/);
   }
+});
+
+test('reserve classification requires a canonical underlying asset identity', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'asset\\u0000', 42]) {
+    assert.throws(() => calculate([entry('cash-a', 100, { assetId: invalid })]),
+      /entry\\.assetId/);
+  }
+  assert.equal(calculate([entry('cash-a', 100)]).unencumberedCashMinor, 100);
+});
+
+test('distinct evidence records cannot double-count the same underlying asset', () => {
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { assetId: 'same-asset', evidenceRef: 'statement-jan' }),
+    entry('cash-b', 100, { assetId: 'same-asset', evidenceRef: 'statement-feb' }),
+  ]), /Duplicate reserve asset ID/);
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { assetId: 'same-asset' }),
+    entry('collateral-b', 500, { assetId: 'same-asset', kind: 'noncash_collateral' }),
+  ]), /Duplicate reserve asset ID/);
+  assert.equal(calculate([
+    entry('cash-a', 100, { assetId: 'bank-account-a' }),
+    entry('cash-b', 200, { assetId: 'bank-account-b' }),
+  ]).unencumberedCashMinor, 300);
 });
