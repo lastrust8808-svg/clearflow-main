@@ -540,7 +540,7 @@ test('malformed imported statement financial rows cannot approve a balance-match
     { postedDate: '10/28/2026' },
     { description: undefined },
     { description: ' ' },
-    { description: 'Bank\\ntransaction' },
+    { description: 'Bank\ntransaction' },
   ];
   for (const invalid of invalidRows) {
     const metrics = buildReconciliationCloseMetrics(
