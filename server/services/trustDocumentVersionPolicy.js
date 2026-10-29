@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 /**
  * Pure, non-posting verification decision for an already authorized,
@@ -96,4 +96,26 @@ export function verifyTrustDocumentVersion(registry, proof) {
     return Object.freeze({ status: 'unknown' });
   }
   return Object.freeze({ status: target.status === 'current' ? 'valid' : target.status });
+}
+
+/**
+ * Verify a finalized document against the scoped version registry using its
+ * actual bytes. The caller must first authenticate registry access and read
+ * the immutable registry; this function does not establish signer identity,
+ * legal execution, or QR-token authorization.
+ *
+ * @param {object} registry Already-authorized, tenant-scoped version registry
+ * @param {{versionId:string,content:Buffer|Uint8Array}} proof Final document bytes
+ * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}}
+ */
+export function verifyTrustDocumentBytes(registry, proof) {
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
+    throw new TypeError('Document byte proof required');
+  }
+  const { content } = proof;
+  if ((!Buffer.isBuffer(content) && !(content instanceof Uint8Array)) || content.byteLength === 0) {
+    throw new TypeError('Nonempty finalized document bytes required');
+  }
+  const sha256 = createHash('sha256').update(content).digest('hex');
+  return verifyTrustDocumentVersion(registry, { versionId: proof.versionId, sha256 });
 }
