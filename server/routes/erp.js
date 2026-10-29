@@ -1,10 +1,7 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
 import { buildExecutionCapabilities } from '../services/paymentExecution.js';
 
 const router = express.Router();
-
-const statementImportJobs = [];
 
 // Fail closed until a durable, tenant-authorized job store and delivery audit exist.
 // In particular, never send SMTP before a job has been durably accepted.
@@ -52,25 +49,15 @@ router.get('/settlements/execution-capabilities', (_req, res) => {
 
 router.post('/reconciliations/:reconciliationId/statement-import', (req, res) => {
   const { reconciliationId } = req.params;
-  const { bankAccountId, statementEndingBalance, statementFileName, exceptionNotes } = req.body || {};
+  const { bankAccountId } = req.body || {};
 
   if (!reconciliationId || !bankAccountId) {
     return res.status(400).json({ success: false, error: 'Missing statement import payload.' });
   }
 
-  const importJob = {
-    id: randomUUID(),
-    reconciliationId,
-    bankAccountId,
-    statementEndingBalance: Number(statementEndingBalance || 0),
-    statementFileName: statementFileName || null,
-    exceptionNotes: exceptionNotes || null,
-    status: 'processed',
-    importedAt: new Date().toISOString(),
-  };
-
-  statementImportJobs.unshift(importJob);
-  return res.status(201).json({ success: true, importJob });
+  // Import acceptance must persist the statement and evidence transactionally.
+  // Do not acknowledge an import held only in process memory.
+  return rejectNonDurableJob(res, 'statement_import');
 });
 
 // Reconciliation closure must be committed transactionally with tenant-scoped
@@ -92,11 +79,12 @@ router.get('/ops-status', (_req, res) => {
       invoiceExports: { available: false, reason: 'durable_job_store_required' },
       settlementExecutions: { available: false, reason: 'durable_job_store_required' },
       reconciliationCloses: { available: false, reason: 'durable_job_store_required' },
+      statementImports: { available: false, reason: 'durable_job_store_required' },
     },
     counts: {
       invoiceDeliveries: 0,
       invoiceExports: 0,
-      statementImports: statementImportJobs.length,
+      statementImports: 0,
       reconciliationCloses: 0,
       settlementExecutions: 0,
     },
