@@ -90,6 +90,34 @@ try {
     assert.match(source, /ERP_DURABLE_JOB_STORE_REQUIRED/);
   });
 
+  await test('valid settlement execution fails closed without provider invocation', async () => {
+    const response = await invoke('POST', '/settlements/execute', {
+      entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 100,
+      method: 'ach', sourceBankAccount: { institutionName: 'Mercury' },
+    });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.success, false);
+    assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    assert.equal(response.body.operation, 'settlement_execution');
+    assert.equal(response.body.execution, undefined);
+  });
+
+  await test('missing settlement fields remain a 400 validation error', async () => {
+    const response = await invoke('POST', '/settlements/execute', { paymentId: 'pay-test' });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  await test('settlement execution capability and in-memory count are disabled', async () => {
+    const response = await invoke('GET', '/ops-status');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.capabilities.settlementExecutions.available, false);
+    assert.equal(response.body.capabilities.settlementExecutions.reason, 'durable_job_store_required');
+    assert.equal(response.body.counts.settlementExecutions, 0);
+    assert.doesNotMatch(source, /buildSettlementExecution\\s*\\(/);
+    assert.doesNotMatch(source, /settlementExecutionJobs/);
+  });
+
   await test('read-only settlement capabilities route remains available', async () => {
     const response = await invoke('GET', '/settlements/execution-capabilities');
     assert.equal(response.statusCode, 200);
