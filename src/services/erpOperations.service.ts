@@ -86,7 +86,8 @@ function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', op
   const expectedOperation = key === 'importJob' ? 'statement_import' : 'reconciliation_close';
   const completedAt = key === 'importJob' ? job.importedAt : job.closedAt;
   return job.operation === expectedOperation && job.status === 'processed' &&
-    hasDurableReceipt(job) && isUtcTimestamp(completedAt) &&
+    hasDurableReceipt(job) && isUtcTimestamp(job.persistedAt) &&
+    isUtcTimestamp(completedAt) &&
     Date.parse(completedAt) >= Date.parse(job.persistedAt);
 }
 
