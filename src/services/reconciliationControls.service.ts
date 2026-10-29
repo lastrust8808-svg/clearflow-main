@@ -128,6 +128,26 @@ export function buildReconciliationCloseMetrics(
   // Only an explicitly completed review can be considered for automatic
   // close eligibility. Missing, pending, and already-completed reviews must
   // never be inferred as ready merely because balances happen to match.
+  // A previously closed reconciliation or an already-submitted close job must
+  // never regain approval eligibility from stale imported statement data.
+  // The approved-but-not-yet-closed state remains eligible for the existing
+  // controller-approved close workflow.
+  if (
+    (reconciliation.status !== 'open' && reconciliation.status !== 'in_review') ||
+    reconciliation.closeApprovalStatus === 'closed' ||
+    Boolean(reconciliation.closedAt) ||
+    Boolean(reconciliation.closeJobId)
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'A completed reconciliation cannot be approved again.',
+    };
+  }
+
   if (reconciliation.statementReviewStatus !== 'ready_to_close') {
     return {
       bookEndingBalance,
