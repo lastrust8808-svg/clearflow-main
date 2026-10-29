@@ -73,6 +73,12 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
     if (revokedOn !== null && revokedOn < effectiveOn) {
       throw new RangeError('Revocation precedes appointment effective date');
     }
+    // Revocation is exclusive. An appointment cannot be accepted on or after
+    // its revocation date; otherwise a revoked trustee could be represented
+    // as having subsequently accepted an authority that no longer exists.
+    if (revokedOn !== null && acceptedOn !== null && acceptedOn >= revokedOn) {
+      throw new RangeError('Trustee acceptance must precede revocation');
+    }
     if (effectiveOn <= asOfDate && acceptedOn !== null && acceptedOn <= asOfDate &&
         (revokedOn === null || asOfDate < revokedOn)) {
       active.add(trusteeId);
