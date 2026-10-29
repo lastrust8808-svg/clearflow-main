@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateReserveCapacity } from '../server/services/reserveCapacity.js';
 
 const base = { tenantId: 'tenant-a', entityId: 'trust-a', currency: 'USD' };
-const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, kind: 'cash', amountMinor, ...options });
+const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
 const calculate = (entries) => calculateReserveCapacity({ ...base, entries });
 
 test('separates restricted and pledged cash from unencumbered cash', () => {
@@ -16,7 +16,7 @@ test('separates restricted and pledged cash from unencumbered cash', () => {
 });
 
 test('noncash collateral never increases unencumbered cash', () => {
-  const result = calculate([entry('cash', 10_00), entry('note', 5_000_00, { kind: 'noncash_collateral' })]);
+  const result = calculate([entry('cash', 10_00), entry('note', 5_000_00, { kind: 'noncash_collateral', sourceType: 'private_note' })]);
   assert.equal(result.unencumberedCashMinor, 10_00);
   assert.equal(result.noncashCollateralMinor, 5_000_00);
 });
@@ -40,7 +40,7 @@ test('rejects duplicate entries and unsafe aggregate overflow', () => {
 
 test('rejects unsupported kinds and noncash cash allocations', () => {
   assert.throws(() => calculate([entry('x', 10, { kind: 'promissory_note_cash' })]), /Unsupported/);
-  assert.throws(() => calculate([entry('x', 10, { kind: 'noncash_collateral', pledgedMinor: 1 })]), /Noncash collateral/);
+  assert.throws(() => calculate([entry('x', 10, { kind: 'noncash_collateral', sourceType: 'private_note', pledgedMinor: 1 })]), /Noncash collateral/);
 });
 
 test('returns immutable snapshot without mutating entries', () => {
@@ -85,7 +85,7 @@ test('same evidence cannot be replayed under different reserve entry IDs or asse
   ]), /Duplicate reserve evidence reference/);
   assert.throws(() => calculate([
     entry('cash-a', 100, { evidenceRef: source }),
-    entry('collateral-b', 500, { kind: 'noncash_collateral', evidenceRef: source }),
+    entry('collateral-b', 500, { kind: 'noncash_collateral', sourceType: 'private_note', evidenceRef: source }),
   ]), /Duplicate reserve evidence reference/);
   // Distinct pointers allow classification, but their authenticity and
   // whether they refer to independent assets must be checked by the caller.
@@ -118,10 +118,29 @@ test('distinct evidence records cannot double-count the same underlying asset', 
   ]), /Duplicate reserve asset ID/);
   assert.throws(() => calculate([
     entry('cash-a', 100, { assetId: 'same-asset' }),
-    entry('collateral-b', 500, { assetId: 'same-asset', kind: 'noncash_collateral' }),
+    entry('collateral-b', 500, { assetId: 'same-asset', kind: 'noncash_collateral', sourceType: 'private_note' }),
   ]), /Duplicate reserve asset ID/);
   assert.equal(calculate([
     entry('cash-a', 100, { assetId: 'bank-account-a' }),
     entry('cash-b', 200, { assetId: 'bank-account-b' }),
   ]).unencumberedCashMinor, 300);
+});
+
+
+test('rejects unclassified reserve sources instead of treating private notes as cash', () => {
+  for (const sourceType of [undefined, null, '', ' ', ' bank_balance ', 'private_note', 'other_collateral']) {
+    assert.throws(() => calculate([entry('cash-a', 100, { sourceType })]),
+      /entry\\.sourceType|Cash reserve entry requires a cash source classification/);
+  }
+  assert.equal(calculate([entry('cash-a', 100, { sourceType: 'physical_cash' })]).cashTotalMinor, 100);
+});
+
+test('rejects bank-balance classification for noncash collateral', () => {
+  for (const sourceType of [undefined, null, '', 'bank_balance', 'physical_cash']) {
+    assert.throws(() => calculate([entry('note-a', 100, { kind: 'noncash_collateral', sourceType })]),
+      /entry\\.sourceType|Noncash collateral requires a noncash source classification/);
+  }
+  const result = calculate([entry('note-a', 100, { kind: 'noncash_collateral', sourceType: 'private_note' })]);
+  assert.equal(result.cashTotalMinor, 0);
+  assert.equal(result.noncashCollateralMinor, 100);
 });
