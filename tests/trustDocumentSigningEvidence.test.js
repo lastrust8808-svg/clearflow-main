@@ -62,9 +62,9 @@ test('signing evidence must follow finalized document version, not an earlier dr
   assert.equal(assess({
     finalizedAt: '2026-10-28T10:00:00.000Z',
   }).status, 'evidence_ready_for_review');
-  assert.equal(assess({
+  assert.throws(() => assess({
     finalizedAt: '2026-10-28T10:00:00.001Z',
-  }).status, 'incomplete');
+  }), /predates finalized document/);
 });
 
 test('missing, invalid or future document finalization fails closed', () => {
