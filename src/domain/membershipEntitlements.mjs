@@ -144,6 +144,9 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   // Only a refund of the currently effective paid invoice may revoke it.
   // Delayed refunds for older invoices must not undo a distinct later payment.
   let activeInvoiceId = null;
+  // Track settled invoices in event-time order. A delayed failure for an
+  // earlier paid invoice cannot revoke a newer, independently paid period.
+  const previouslyPaidInvoices = new Set();
   let lastEventId = null;
   let processedEvents = 0;
   for (const event of normalized) {
@@ -155,6 +158,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
       case 'subscription_created':
         break; // never grants access, even if replayed after a payment
       case 'payment_succeeded':
+        previouslyPaidInvoices.add(event.invoiceId);
         if (refundedInvoices.has(event.invoiceId)) {
           // A replayed/out-of-order success for a refunded invoice cannot
           // reactivate access. A distinct later paid invoice may still do so.
@@ -166,6 +170,11 @@ export function projectMembershipEntitlement(scope, events, asOf) {
         activeInvoiceId = event.invoiceId;
         break;
       case 'payment_failed':
+        // A failure for an already superseded paid invoice is historical;
+        // it cannot undo an independent, newer settled invoice. A failure
+        // for the active invoice or an unsettled renewal still fails closed.
+        if (status === 'active' && event.invoiceId !== activeInvoiceId &&
+            previouslyPaidInvoices.has(event.invoiceId)) break;
         status = 'past_due';
         break;
       case 'payment_refunded':
