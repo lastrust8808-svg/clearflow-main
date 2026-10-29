@@ -388,10 +388,10 @@ test('malformed statement provenance never qualifies for automatic reconciliatio
     { statementImportId: '  ' },
     { statementImportId: ' import-a' },
     { statementImportId: 'import-a ' },
-    { statementImportId: 'import\\n-a' },
+    { statementImportId: 'import\n-a' },
     { statementImportId: 42 },
     { statementImportId: null, statementFileName: '  ' },
-    { statementImportId: null, statementFileName: 'bank\\tstatement.csv' },
+    { statementImportId: null, statementFileName: 'bank\tstatement.csv' },
     { statementImportId: null, statementFileName: false },
     { statementImportId: '  ', statementFileName: 'bank.csv' },
   ]) {
