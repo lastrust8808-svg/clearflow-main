@@ -44,9 +44,14 @@ function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', op
   const job = value[key];
   if (typeof job.id !== 'string' || job.id.trim() === '') return false;
   if (operation) {
-    return job.operation === operation &&
-      ['queued', 'sent', 'fallback_required'].includes(String(job.status)) &&
-      typeof job.queuedAt === 'string' && job.queuedAt.length > 0;
+    if (job.operation !== operation ||
+        typeof job.queuedAt !== 'string' || job.queuedAt.trim() === '') return false;
+    // A manual fallback is not accepted delivery or export. An explicit sent
+    // acknowledgement must carry completion metadata; export cannot be "sent".
+    if (job.status === 'queued') return true;
+    return operation === 'send' && job.status === 'sent' &&
+      typeof job.sentAt === 'string' && job.sentAt.trim() !== '' &&
+      (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
   return job.status === 'processed' &&
     typeof (key === 'importJob' ? job.importedAt : job.closedAt) === 'string';
