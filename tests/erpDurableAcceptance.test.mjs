@@ -29,7 +29,7 @@ writeFileSync(join(directory, 'erp.mjs'), source
   .replace("from '../services/paymentExecution.js'", "from './paymentExecution.mjs'"));
 const router = (await import(pathToFileURL(join(directory, 'erp.mjs')).href)).default;
 
-async function invoke(method, path, body = {}) {
+async function invoke(method, path, body = {}, params = {}) {
   const handler = router.routes.get(method + ' ' + path);
   assert.equal(typeof handler, 'function', 'expected registered ERP route');
   const response = {
@@ -38,7 +38,7 @@ async function invoke(method, path, body = {}) {
     status(code) { this.statusCode = code; return this; },
     json(value) { this.body = value; return this; },
   };
-  await handler({ body, params: {} }, response);
+  await handler({ body, params }, response);
   return response;
 }
 
@@ -122,6 +122,31 @@ try {
     const response = await invoke('GET', '/settlements/execution-capabilities');
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.capabilities.testOnly, true);
+  });
+  await test('reconciliation close fails closed without durable approval and audit persistence', async () => {
+    const response = await invoke('POST', '/reconciliations/:reconciliationId/close', {
+      closeSummary: 'balanced', exceptionNotes: 'test-only',
+    }, { reconciliationId: 'recon-test' });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.success, false);
+    assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    assert.equal(response.body.operation, 'reconciliation_close');
+    assert.equal(response.body.closeJob, undefined);
+  });
+
+  await test('reconciliation close preserves missing-id validation', async () => {
+    const response = await invoke('POST', '/reconciliations/:reconciliationId/close');
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.body.success, false);
+  });
+
+  await test('reconciliation close reports unavailable with no in-memory queue', async () => {
+    const response = await invoke('GET', '/ops-status');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.capabilities.reconciliationCloses.available, false);
+    assert.equal(response.body.capabilities.reconciliationCloses.reason, 'durable_job_store_required');
+    assert.equal(response.body.counts.reconciliationCloses, 0);
+    assert.doesNotMatch(source, /reconciliationCloseJobs/);
   });
 } finally {
   rmSync(directory, { recursive: true, force: true });
