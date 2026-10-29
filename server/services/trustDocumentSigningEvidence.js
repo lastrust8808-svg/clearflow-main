@@ -36,7 +36,7 @@ function digest(value, field) {
 
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
- *   versionId:string,content:Buffer|Uint8Array,evaluatedAt:string,
+ *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
  *   governance:object,attestations:Array<{
  *     tenantId:string,entityId:string,trustId:string,documentId:string,
  *     versionId:string,signerId:string,documentSha256:string,signedAt:string,
@@ -53,7 +53,14 @@ export function assessTrustDocumentSigningPacket(packet) {
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
     scope[key] = identifier(packet[key], key);
   }
+  // finalizedAt must originate from the immutable document-version record,
+  // not from an untrusted signer or request body. A signature on a draft must
+  // never be counted as evidence for a subsequently finalized document.
+  const finalizedAt = timestamp(packet.finalizedAt, 'finalizedAt');
   const evaluatedAt = timestamp(packet.evaluatedAt, 'evaluatedAt');
+  if (finalizedAt > evaluatedAt) {
+    throw new Error('Document finalization cannot follow signing packet evaluation');
+  }
   if ((!Buffer.isBuffer(packet.content) && !(packet.content instanceof Uint8Array)) ||
       packet.content.byteLength === 0) {
     throw new TypeError('Nonempty finalized document bytes required');
@@ -91,6 +98,9 @@ export function assessTrustDocumentSigningPacket(packet) {
     const signedAt = timestamp(attestation.signedAt, 'attestation.signedAt');
     if (signedAt > evaluatedAt || (lastSignedAt !== null && signedAt <= lastSignedAt)) {
       throw new Error('Signature attestations must be chronological and not future dated');
+    }
+    if (signedAt < finalizedAt) {
+      throw new Error('Signature attestation predates finalized document version');
     }
     lastSignedAt = signedAt;
     const consentEvidenceRef = identifier(attestation.consentEvidenceRef, 'consentEvidenceRef');
