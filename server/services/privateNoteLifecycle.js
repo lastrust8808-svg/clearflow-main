@@ -61,6 +61,10 @@ export function projectPrivateNoteLifecycle(snapshot) {
   let issuedEvidenceRef = null;
   const noticeDocumentRefs = new Set();
   const noticeEvidenceRefs = new Set();
+  // Evidence references identify distinct lifecycle-action provenance records.
+  // Reusing a pointer for a different action must fail closed; verification
+  // of the referenced record remains the caller's responsibility.
+  const lifecycleEvidenceRefs = new Set();
   for (const event of snapshot.events) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
@@ -114,6 +118,11 @@ export function projectPrivateNoteLifecycle(snapshot) {
     if (event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
     }
+    const lifecycleEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+    if (lifecycleEvidenceRefs.has(lifecycleEvidenceRef)) {
+      throw new Error('Private note lifecycle evidence reference must be unique across events');
+    }
+    lifecycleEvidenceRefs.add(lifecycleEvidenceRef);
     status = next;
     lastEventId = eventId;
     lastEventAt = occurredAt;
