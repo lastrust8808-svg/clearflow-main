@@ -22,12 +22,12 @@ const payloads = [
 ];
 const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.importReconciliationStatement, api.closeReconciliationJob];
 const accepted = [
-  { success: true, job: { id: 'j1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
-  { success: true, job: { id: 'j2', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
-  { success: true, importJob: { id: 'j3', operation: 'statement_import', status: 'processed',
+  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
+  { success: true, job: { id: 'j2', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
+  { success: true, importJob: { id: 'j3', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     persistence: 'durable', importedAt: '2026-10-28T00:00:02Z' } },
-  { success: true, closeJob: { id: 'j4', operation: 'reconciliation_close', status: 'processed',
+  { success: true, closeJob: { id: 'j4', reconciliationId: 'rec-1', operation: 'reconciliation_close', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     persistence: 'durable', closedAt: '2026-10-28T00:00:02Z' } },
 ];
@@ -58,6 +58,46 @@ try {
     globalThis.fetch = async () => ({ ok: true, json: async () => accepted[1] });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
   });
+  await test('invoice delivery and export acknowledgements must match requested invoice and entity', async () => {
+    for (const index of [0, 1]) {
+      for (const changes of [
+        { invoiceId: undefined }, { invoiceId: 'inv-other' },
+        { entityId: undefined }, { entityId: 'ent-other' },
+        { invoiceId: 1 }, { entityId: 1 },
+      ]) {
+        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+          success: true, job: { ...accepted[index].job, ...changes },
+        }) });
+        await assert.rejects(operations[index](payloads[index]), /not confirmed/);
+      }
+    }
+  });
+  await test('statement-import receipt must match reconciliation and bank account', async () => {
+    for (const changes of [
+      { reconciliationId: undefined }, { reconciliationId: 'rec-other' },
+      { bankAccountId: undefined }, { bankAccountId: 'bank-other' },
+      { reconciliationId: 1 }, { bankAccountId: 1 },
+    ]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, importJob: { ...accepted[2].importJob, ...changes },
+      }) });
+      await assert.rejects(api.importReconciliationStatement(payloads[2]), /not confirmed/);
+    }
+  });
+  await test('reconciliation-close receipt must match requested reconciliation', async () => {
+    for (const reconciliationId of [undefined, 'rec-other', 1]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, closeJob: { ...accepted[3].closeJob, reconciliationId },
+      }) });
+      await assert.rejects(api.closeReconciliationJob(payloads[3]), /not confirmed/);
+    }
+  });
+  await test('a valid identity-bound receipt remains accepted for each ERP operation', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[index] });
+      assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
+    }
+  });
   await test('manual fallback is not a confirmed invoice delivery or export', async () => {
     for (const [index, operation] of [[0, 'send'], [1, 'export']]) {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({
@@ -82,7 +122,7 @@ try {
     }
   });
   await test('sent delivery with explicit SMTP completion metadata remains accepted', async () => {
-    const confirmation = { success: true, job: { id: 'sent-job', operation: 'send',
+    const confirmation = { success: true, job: { id: 'sent-job', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send',
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
       persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
       sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp' } };
