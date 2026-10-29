@@ -66,7 +66,11 @@ function isUtcTimestamp(value: unknown): value is string {
   if (typeof value !== 'string' ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) return false;
   const timestamp = Date.parse(value);
+  // A receipt dated in the future is not proof that a job has already been
+  // durably accepted, sent, imported, or closed. Allow five minutes of clock
+  // skew between the browser and the authenticated backend.
   return Number.isFinite(timestamp) &&
+    timestamp <= Date.now() + 5 * 60 * 1000 &&
     new Date(timestamp).toISOString().slice(0, 19) === value.slice(0, 19);
 }
 
