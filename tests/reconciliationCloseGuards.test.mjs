@@ -203,7 +203,7 @@ test('closed reconciliation cannot regain approval eligibility from stale ready-
 
 test('controller-approved but still open reconciliation retains close eligibility', () => {
   const metrics = buildReconciliationCloseMetrics(
-    reconciliation({ closeApprovalStatus: 'approved', controllerSignoffAt: '2026-10-28T18:00:00Z' }),
+    reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt: '2026-10-28T18:00:00Z' }),
     account
   );
   assert.equal(metrics.isReadyToApprove, true);
@@ -268,4 +268,44 @@ test('valid decimal cent amounts remain eligible without rejecting floating mult
     );
     assert.equal(metrics.isReadyToApprove, true, String(amount));
   }
+});
+
+test('approved reconciliation without complete controller signoff evidence fails closed', () => {
+  const baseline = {
+    closeApprovalStatus: 'approved',
+    controllerSignoffName: 'Controller A',
+    controllerSignoffAt: '2026-10-28T18:00:00Z',
+  };
+  for (const invalid of [
+    { controllerSignoffName: undefined },
+    { controllerSignoffName: '  ' },
+    { controllerSignoffAt: undefined },
+    { controllerSignoffAt: 'not-a-date' },
+    { controllerSignoffAt: '2026-10-28' },
+    { controllerSignoffAt: '2026-13-28T18:00:00Z' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ ...baseline, ...invalid }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(invalid));
+    assert.match(metrics.blockedReason, /named controller and valid signoff timestamp/);
+  }
+});
+
+test('approved reconciliation with named controller and offset ISO signoff retains eligibility', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({
+      closeApprovalStatus: 'approved',
+      controllerSignoffName: 'Controller A',
+      controllerSignoffAt: '2026-10-28T14:00:00-04:00',
+    }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, true);
+});
+
+test('pending controller approval is still eligible for review without a signoff', () => {
+  const metrics = buildReconciliationCloseMetrics(reconciliation(), account);
+  assert.equal(metrics.isReadyToApprove, true);
 });
