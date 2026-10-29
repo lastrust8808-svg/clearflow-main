@@ -94,6 +94,19 @@ test('later revised notice drafts also require their own preparation evidence', 
   assert.equal(project([...history, event('notice_prepared', 5)]).status, 'notice_prepared');
 });
 
+test('revised notice versions cannot reuse an earlier draft preparation evidence reference', () => {
+  const history = [
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4),
+  ];
+  assert.throws(() => project([
+    ...history, event('notice_prepared', 5, { evidenceRef: 'evidence-3' }),
+  ]), /preparation evidence reference must be unique/);
+  // A distinct immutable document reference and separate evidence reference
+  // are both required; neither alone establishes authenticity or delivery.
+  assert.equal(project([...history, event('notice_prepared', 5)]).status, 'notice_prepared');
+});
+
 test('distinct notice revisions remain draft-only and require separate evidence for disputes', () => {
   const events = [
     event('issued', 1), event('presented', 2), event('notice_prepared', 3),
