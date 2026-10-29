@@ -33,13 +33,23 @@ const accepted = [
 ];
 try {
   for (let i = 0; i < operations.length; i++) {
-    await test(`ERP operation ${i + 1} rejects network failure`, async () => {
+    await test(`ERP operation ${i + 1} treats lost network response as unknown, not rejected`, async () => {
       globalThis.fetch = async () => { throw new Error('offline'); };
-      await assert.rejects(operations[i](payloads[i]), /offline/);
+      await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
     });
-    await test(`ERP operation ${i + 1} rejects HTTP failure`, async () => {
+    await test(`ERP operation ${i + 1} treats HTTP 503 as an unknown outcome`, async () => {
       globalThis.fetch = async () => ({ ok: false, status: 503 });
-      await assert.rejects(operations[i](payloads[i]), /HTTP 503/);
+      await assert.rejects(operations[i](payloads[i]), /outcome unknown \(HTTP 503\).*Verify operation status before retrying/);
+    });
+    await test(`ERP operation ${i + 1} distinguishes transient from explicit client rejection`, async () => {
+      for (const status of [408, 429, 502, 504]) {
+        globalThis.fetch = async () => ({ ok: false, status });
+        await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
+      }
+      for (const status of [400, 401, 403, 409, 422]) {
+        globalThis.fetch = async () => ({ ok: false, status });
+        await assert.rejects(operations[i](payloads[i]), /was rejected by the server.*Resolve the error before retrying/);
+      }
     });
     await test(`ERP operation ${i + 1} rejects unconfirmed response`, async () => {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true }) });
