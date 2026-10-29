@@ -244,12 +244,19 @@ test('balances outside safe integer minor-unit precision cannot approve close', 
 
 test('sub-cent drift smaller than the former rounding tolerance is never accepted', () => {
   for (const amount of [100.0000000001, 99.9999999999, -0.0000000001]) {
-    const statement = buildReconciliationCloseMetrics(
+    const invalidStatement = buildReconciliationCloseMetrics(
       reconciliation({ statementEndingBalance: amount }),
+      account
+    );
+    assert.equal(invalidStatement.isReadyToApprove, false, String(amount));
+    assert.match(invalidStatement.blockedReason, /valid statement/i);
+
+    const invalidBook = buildReconciliationCloseMetrics(
+      reconciliation(),
       { ...account, currentBalance: amount }
     );
-    assert.equal(statement.isReadyToApprove, false, String(amount));
-    assert.match(statement.blockedReason, /valid statement/i);
+    assert.equal(invalidBook.isReadyToApprove, false, String(amount));
+    assert.match(invalidBook.blockedReason, /valid book balance/i);
   }
 });
 
