@@ -1,6 +1,7 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { verifyTrustDocumentVersion } from '../server/services/trustDocumentVersionPolicy.js';
+import { verifyTrustDocumentVersion, verifyTrustDocumentBytes } from '../server/services/trustDocumentVersionPolicy.js';
 
 const digestA = 'a'.repeat(64);
 const digestB = 'b'.repeat(64);
@@ -91,4 +92,47 @@ test('requires strictly ordered canonical timestamps and does not mutate records
   { versionId: 'version-2', sha256: digestB }), /increasing registration timestamps/);
   assert.throws(() => check([version(1, { registeredAt: '2026-02-30T12:00:00.000Z' })],
     { versionId: 'version-1', sha256: digestA }), /canonical UTC timestamp/);
+});
+
+const fileDigest = bytes => createHash('sha256').update(bytes).digest('hex');
+
+test('finalized PDF bytes are hashed server-side before version verification', () => {
+  const bytes = Buffer.from('%PDF-1.7\\nfirst finalized bytes');
+  const entry = version(1, { sha256: fileDigest(bytes) });
+  const result = verifyTrustDocumentBytes(registry([entry]), { versionId: 'version-1', content: bytes });
+  assert.deepEqual(result, { status: 'valid' });
+  assert.equal(Object.isFrozen(result), true);
+  assert.deepEqual(Object.keys(result), ['status']);
+  assert.deepEqual(verifyTrustDocumentBytes(registry([entry]), {
+    versionId: 'version-1', content: Buffer.from('%PDF-1.7\\ntampered bytes'),
+    sha256: entry.sha256, // caller-provided digest must be ignored
+  }), { status: 'unknown' });
+});
+
+test('byte-level verification preserves revoked and superseded statuses', () => {
+  const bytes = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x01]);
+  const first = version(1, { status: 'superseded', sha256: fileDigest(bytes) });
+  const second = version(2, { sha256: fileDigest(Buffer.from('replacement')) });
+  assert.deepEqual(verifyTrustDocumentBytes(registry([first, second]),
+    { versionId: 'version-1', content: bytes }), { status: 'superseded' });
+  assert.deepEqual(verifyTrustDocumentBytes(registry([version(1, { status: 'revoked', sha256: fileDigest(bytes) })]),
+    { versionId: 'version-1', content: bytes }), { status: 'revoked' });
+});
+
+test('byte proof rejects absent, empty, or nonbinary documents', () => {
+  const entry = version(1);
+  for (const proof of [null, [], {}, { versionId: 'version-1', content: '' },
+    { versionId: 'version-1', content: Buffer.alloc(0) },
+    { versionId: 'version-1', content: new Uint8Array(0) }]) {
+    assert.throws(() => verifyTrustDocumentBytes(registry([entry]), proof), /proof required|bytes required/);
+  }
+  assert.throws(() => verifyTrustDocumentBytes(registry([entry]),
+    { versionId: '', content: Buffer.from('valid') }), /versionId/);
+});
+
+test('byte-level verification rejects registry scope mismatch', () => {
+  const bytes = Buffer.from('valid bytes');
+  assert.throws(() => verifyTrustDocumentBytes(registry([version(1, {
+    tenantId: 'another-tenant', sha256: fileDigest(bytes),
+  })]), { versionId: 'version-1', content: bytes }), /scope mismatch/);
 });
