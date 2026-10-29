@@ -245,3 +245,29 @@ test('failure of currently paid invoice still revokes entitlement', () => {
   assert.equal(result.status, 'past_due');
   assert.equal(result.entitled, false);
 });
+
+test('a later paid invoice cannot silently shorten an active paid-through period', () => {
+  const shorterRenewal = paid('shorter-renewal', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-11-10T12:00:00Z',
+  });
+  shorterRenewal.occurredAt = '2026-10-25T12:00:00Z';
+  assert.throws(
+    () => project(scope, [shorterRenewal, paid()], asOf),
+    /payment period regresses existing entitlement/,
+  );
+});
+
+test('distinct paid invoices may preserve or extend the verified paid-through date', () => {
+  const sameEnd = paid('same-end-renewal', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-11-20T12:00:00Z',
+  });
+  sameEnd.occurredAt = '2026-10-25T12:00:00Z';
+  const extended = paid('extended-renewal', {
+    invoiceId: 'inv-3', settlementId: 'settle-3', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  extended.occurredAt = '2026-10-27T12:00:00Z';
+  assert.equal(project(scope, [sameEnd, paid()], asOf).status, 'active');
+  const result = project(scope, [extended, paid(), sameEnd], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
