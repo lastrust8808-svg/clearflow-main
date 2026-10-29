@@ -96,8 +96,8 @@ test('same evidence cannot be replayed under different reserve entry IDs or asse
 });
 
 test('rejects control bytes and padding in reserve provenance references', () => {
-  for (const invalid of [' source', 'source ', 'source\\u0000', 'source\\u001f',
-    'source\\u007f', 'source\\u009f']) {
+  for (const invalid of [' source', 'source ', 'source\u0000', 'source\u001f',
+    'source\u007f', 'source\u009f']) {
     assert.throws(() => calculate([entry('cash-a', 100, { evidenceRef: invalid })]),
       /unpadded|control characters/);
   }
