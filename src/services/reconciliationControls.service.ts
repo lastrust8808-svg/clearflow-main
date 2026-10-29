@@ -128,6 +128,30 @@ export function buildReconciliationCloseMetrics(
       ).length
     : reconciliation.matchedStatementLineIds?.length ?? 0;
 
+  // Equality alone cannot establish a scoped reconciliation identity: a
+  // missing bankAccountId and a missing account.id (or two padded IDs) can
+  // compare equal and otherwise authorize a balance-matched close. Require
+  // canonical identifiers on both sides before evaluating account equality.
+  // This is input integrity, not authenticated tenant authorization.
+  if (
+    !isValidStatementSourceRef(reconciliation.id) ||
+    !isValidStatementSourceRef(reconciliation.entityId) ||
+    !isValidStatementSourceRef(reconciliation.bankAccountId) ||
+    (bankAccount != null && (
+      !isValidStatementSourceRef(bankAccount.id) ||
+      !isValidStatementSourceRef(bankAccount.entityId)
+    ))
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Reconciliation and bank account must have valid scoped identifiers.',
+    };
+  }
+
   if (
     !bankAccount ||
     bankAccount.id !== reconciliation.bankAccountId ||
