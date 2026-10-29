@@ -165,6 +165,12 @@ export function projectMembershipEntitlement(scope, events, asOf) {
           if (status !== 'active') status = 'past_due';
           break;
         }
+        // A newer invoice must not silently shorten an independently verified
+        // paid-through period. Reject conflicting provider periods rather than
+        // replacing a longer entitlement with an earlier expiration.
+        if (status === 'active' && instant(event.periodEnd, 'event.periodEnd') < instant(periodEnd, 'periodEnd')) {
+          throw new Error('payment period regresses existing entitlement');
+        }
         status = 'active';
         periodEnd = event.periodEnd;
         activeInvoiceId = event.invoiceId;
