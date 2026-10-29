@@ -132,3 +132,53 @@ test('blank or missing statement line identifiers cannot be approved', () => {
     assert.match(metrics.blockedReason, /unique, nonempty identifiers/);
   }
 });
+
+test('orphan matched IDs cannot certify a statement when parsed rows are different', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ matchedStatementLineIds: ['line-1', 'not-in-statement'] }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
+});
+
+test('stale matched index cannot certify a parsed matched row', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ matchedStatementLineIds: [] }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
+});
+
+test('matched index cannot include a source row still awaiting review', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({
+      parsedStatementLines: [
+        { id: 'line-1', matchStatus: 'matched' },
+        { id: 'line-2', matchStatus: 'suggested' },
+      ],
+      matchedStatementLineIds: ['line-1', 'line-2'],
+    }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
+});
+
+test('duplicate matched-index entries are rejected even if parsed rows are unique', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ matchedStatementLineIds: ['line-1', 'line-1'] }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
+});
+
+test('legacy parsed statements without a matched-index list remain eligible when fully reviewed', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ matchedStatementLineIds: undefined }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, true);
+});
