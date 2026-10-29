@@ -57,6 +57,33 @@ function isValidStatementSourceRef(value: unknown): value is string {
     !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 }
 
+// Imported statement rows must carry complete financial evidence before their
+// matched status can contribute to approval. A valid line ID alone is not
+// evidence of a valid posted transaction.
+function hasValidStatementCalendarDate(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12) return false;
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysPerMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day >= 1 && day <= daysPerMonth[month - 1];
+}
+
+function hasValidStatementFinancialFields(
+  line: NonNullable<ReconciliationRecord['parsedStatementLines']>[number]
+): boolean {
+  const amountCents = toSafeCents(line.amount);
+  return amountCents !== null &&
+    amountCents !== 0 &&
+    (line.direction === 'credit' || line.direction === 'debit') &&
+    hasValidStatementCalendarDate(line.postedDate) &&
+    isValidStatementSourceRef(line.description);
+}
+
 export function buildReconciliationCloseMetrics(
   reconciliation: ReconciliationRecord,
   bankAccount?: BankAccountRecord
@@ -199,6 +226,20 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Statement lines must have unique, nonempty identifiers.',
+    };
+  }
+
+  // Reject malformed imported amounts, directions, dates and descriptions
+  // even if all line IDs and balances tie. Do not treat a fabricated matched
+  // marker as sufficient source-row evidence.
+  if (parsedLines.some((line) => !hasValidStatementFinancialFields(line))) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Imported statement rows require valid date, description, direction and exact-cent nonzero amount.',
     };
   }
 
