@@ -94,7 +94,7 @@ export async function loadAccountAppData(accountId) {
 export async function saveAccountAppData(accountId, appData) {
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await writeJsonAtomically(appDataPath(accountId), JSON.stringify(appData, null, 2));
+  await writeJsonAtomically(appDataPath(accountId), appData);
 
   return {
     accountId,
@@ -118,15 +118,13 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountFilePath(accountId, fileId),
-    JSON.stringify(
-      {
+    {
+     
         ...payload,
         accountId,
         fileId,
         savedAt: new Date().toISOString(),
-      },
-      null,
-      2
+      }
     ));
 
   return {
@@ -152,15 +150,13 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountRemittancePath(accountId, vendorId),
-    JSON.stringify(
-      {
+    {
+     
         ...payload,
         accountId,
         vendorId,
         savedAt: new Date().toISOString(),
-      },
-      null,
-      2
+      }
     ));
 
   return {
@@ -186,14 +182,12 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountTransactionProofPath(accountId),
-    JSON.stringify(
-      {
+    {
+     
         ...payload,
         accountId,
         savedAt: new Date().toISOString(),
-      },
-      null,
-      2
+      }
     ));
 
   return {
@@ -218,14 +212,12 @@ export async function saveAccountPlaidVault(accountId, payload) {
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountPlaidPath(accountId),
-    JSON.stringify(
-      {
+    {
+     
         ...payload,
         accountId,
         savedAt: new Date().toISOString(),
-      },
-      null,
-      2
+      }
     ));
 
   return {
@@ -250,15 +242,13 @@ export async function saveAccountExtractionRecord(accountId, signature, payload)
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountExtractionPath(accountId, signature),
-    JSON.stringify(
-      {
+    {
+     
         ...payload,
         accountId,
         signature,
         savedAt: new Date().toISOString(),
-      },
-      null,
-      2
+      }
     ));
 
   return {
