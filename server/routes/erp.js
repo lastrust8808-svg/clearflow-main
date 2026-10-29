@@ -5,7 +5,6 @@ import { buildExecutionCapabilities } from '../services/paymentExecution.js';
 const router = express.Router();
 
 const statementImportJobs = [];
-const reconciliationCloseJobs = [];
 
 // Fail closed until a durable, tenant-authorized job store and delivery audit exist.
 // In particular, never send SMTP before a job has been durably accepted.
@@ -74,25 +73,15 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
   return res.status(201).json({ success: true, importJob });
 });
 
+// Reconciliation closure must be committed transactionally with tenant-scoped
+// approval, statement matching, idempotency and audit evidence. A process-local
+// queue is not a closed accounting period; never acknowledge one as processed.
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
-  const { closeSummary, exceptionNotes } = req.body || {};
-
   if (!reconciliationId) {
     return res.status(400).json({ success: false, error: 'Missing reconciliation id.' });
   }
-
-  const closeJob = {
-    id: randomUUID(),
-    reconciliationId,
-    closeSummary: closeSummary || null,
-    exceptionNotes: exceptionNotes || null,
-    status: 'processed',
-    closedAt: new Date().toISOString(),
-  };
-
-  reconciliationCloseJobs.unshift(closeJob);
-  return res.status(201).json({ success: true, closeJob });
+  return rejectNonDurableJob(res, 'reconciliation_close');
 });
 
 router.get('/ops-status', (_req, res) => {
@@ -102,12 +91,13 @@ router.get('/ops-status', (_req, res) => {
       invoiceDeliveries: { available: false, reason: 'durable_job_store_required' },
       invoiceExports: { available: false, reason: 'durable_job_store_required' },
       settlementExecutions: { available: false, reason: 'durable_job_store_required' },
+      reconciliationCloses: { available: false, reason: 'durable_job_store_required' },
     },
     counts: {
       invoiceDeliveries: 0,
       invoiceExports: 0,
       statementImports: statementImportJobs.length,
-      reconciliationCloses: reconciliationCloseJobs.length,
+      reconciliationCloses: 0,
       settlementExecutions: 0,
     },
   });
