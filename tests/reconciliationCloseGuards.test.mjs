@@ -412,3 +412,39 @@ test('valid imported statement identifiers and legacy filename-only provenance r
     assert.equal(metrics.isReadyToApprove, true, JSON.stringify(valid));
   }
 });
+
+test('malformed unmatched index never masquerades as zero outstanding exceptions', () => {
+  for (const unmatchedStatementLineIds of ['', 'line-2', null, 42, {}, [''], ['  '], ['line\\n-2'], [42]]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ unmatchedStatementLineIds }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(unmatchedStatementLineIds));
+    assert.match(metrics.blockedReason, /Unmatched statement-line identifiers/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(
+    reconciliation({ unmatchedStatementLineIds: [] }),
+    account
+  ).isReadyToApprove, true);
+});
+
+test('padded and control-character parsed or matched row identifiers cannot approve close', () => {
+  for (const id of [' line-1', 'line-1 ', 'line\\t-1', 'line\\n-1', 'line\\u0085-1']) {
+    const parsed = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [{ id, matchStatus: 'matched' }],
+        matchedStatementLineIds: [id],
+      }),
+      account
+    );
+    assert.equal(parsed.isReadyToApprove, false, JSON.stringify(id));
+    assert.match(parsed.blockedReason, /unique, nonempty identifiers/);
+
+    const indexed = buildReconciliationCloseMetrics(
+      reconciliation({ matchedStatementLineIds: [id] }),
+      account
+    );
+    assert.equal(indexed.isReadyToApprove, false, JSON.stringify(id));
+    assert.match(indexed.blockedReason, /must agree with reviewed source rows/);
+  }
+});
