@@ -293,6 +293,8 @@ export function buildReconciliationCloseMetrics(
   // review still contains unresolved items. Validate both indices explicitly:
   // malformed or duplicated cleared IDs can conceal a replayed posting, and
   // unresolved book transactions cannot be silently ignored at close.
+  // Missing unmatched-book index is NOT evidence of zero exceptions: legacy
+  // records must undergo explicit book-side review before approval.
   const clearedIds = reconciliation.clearedTransactionIds;
   const unmatchedBookIds = reconciliation.unmatchedTransactionIds;
   const validUniqueIds = (ids: unknown): ids is string[] =>
@@ -301,7 +303,7 @@ export function buildReconciliationCloseMetrics(
     new Set(ids).size === ids.length;
   if (
     !validUniqueIds(clearedIds) ||
-    (unmatchedBookIds !== undefined && !validUniqueIds(unmatchedBookIds)) ||
+    !validUniqueIds(unmatchedBookIds) ||
     (Array.isArray(clearedIds) && Array.isArray(unmatchedBookIds) &&
       unmatchedBookIds.some((id) => clearedIds.includes(id)))
   ) {
