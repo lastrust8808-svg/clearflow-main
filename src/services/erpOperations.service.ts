@@ -6,6 +6,8 @@ interface DeliveryQueueResponse {
   success: boolean;
   job: {
     id: string;
+    invoiceId: string;
+    entityId: string;
     status: OperationStatus;
     queuedAt: string;
     persistedAt: string;
@@ -21,6 +23,8 @@ interface StatementImportResponse {
   success: boolean;
   importJob: {
     id: string;
+    reconciliationId: string;
+    bankAccountId: string;
     status: 'processed';
     operation: 'statement_import';
     queuedAt: string;
@@ -34,6 +38,7 @@ interface ReconciliationCloseResponse {
   success: boolean;
   closeJob: {
     id: string;
+    reconciliationId: string;
     status: 'processed';
     operation: 'reconciliation_close';
     queuedAt: string;
@@ -67,10 +72,21 @@ function hasDurableReceipt(job: Record<string, unknown>): boolean {
     Date.parse(job.persistedAt) >= Date.parse(job.queuedAt);
 }
 
-function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', operation?: 'send' | 'export'): boolean {
+function isAcceptedJob(
+  value: unknown,
+  key: 'job' | 'importJob' | 'closeJob',
+  operation: 'send' | 'export' | undefined,
+  expectedIds: Record<string, string>,
+): boolean {
   if (!isRecord(value) || value.success !== true || !isRecord(value[key])) return false;
   const job = value[key];
   if (typeof job.id !== 'string' || job.id.trim() === '') return false;
+  // An acknowledgement for another invoice, entity, bank account, or
+  // reconciliation is not evidence that this request was durably accepted.
+  // Require the server to echo immutable request identities; never infer them
+  // from an HTTP 2xx status or a plausible-looking job identifier.
+  if (!Object.entries(expectedIds).every(([field, id]) =>
+    typeof id === 'string' && id.trim() !== '' && job[field] === id)) return false;
   if (operation) {
     if (job.operation !== operation || !hasDurableReceipt(job)) return false;
     // A manual fallback is not accepted delivery or export. An explicit sent
@@ -129,7 +145,7 @@ export async function queueInvoiceDelivery(payload: {
   replyTo?: string;
 }) {
   return postErp<DeliveryQueueResponse>('/api/erp/invoice-deliveries', payload, 'Invoice delivery',
-    (result) => isAcceptedJob(result, 'job', 'send'));
+    (result) => isAcceptedJob(result, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId }));
 }
 
 export async function queueInvoiceExport(payload: {
@@ -138,7 +154,7 @@ export async function queueInvoiceExport(payload: {
   invoiceNumber: string;
 }) {
   return postErp<DeliveryQueueResponse>('/api/erp/invoice-exports', payload, 'Invoice export',
-    (result) => isAcceptedJob(result, 'job', 'export'));
+    (result) => isAcceptedJob(result, 'job', 'export', { invoiceId: payload.invoiceId, entityId: payload.entityId }));
 }
 
 export async function importReconciliationStatement(payload: {
@@ -150,7 +166,8 @@ export async function importReconciliationStatement(payload: {
 }) {
   return postErp<StatementImportResponse>(
     `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/statement-import`,
-    payload, 'Statement import', (result) => isAcceptedJob(result, 'importJob'));
+    payload, 'Statement import', (result) => isAcceptedJob(result, 'importJob', undefined,
+      { reconciliationId: payload.reconciliationId, bankAccountId: payload.bankAccountId }));
 }
 
 export async function closeReconciliationJob(payload: {
@@ -160,5 +177,6 @@ export async function closeReconciliationJob(payload: {
 }) {
   return postErp<ReconciliationCloseResponse>(
     `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/close`,
-    payload, 'Reconciliation close', (result) => isAcceptedJob(result, 'closeJob'));
+    payload, 'Reconciliation close', (result) => isAcceptedJob(result, 'closeJob', undefined,
+      { reconciliationId: payload.reconciliationId }));
 }
