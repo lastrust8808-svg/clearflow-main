@@ -309,3 +309,53 @@ test('pending controller approval is still eligible for review without a signoff
   const metrics = buildReconciliationCloseMetrics(reconciliation(), account);
   assert.equal(metrics.isReadyToApprove, true);
 });
+
+
+test('impossible controller signoff calendar dates cannot authorize close', () => {
+  for (const controllerSignoffAt of [
+    '2026-02-30T18:00:00Z',
+    '2025-02-29T18:00:00Z',
+    '2026-04-31T18:00:00Z',
+    '2026-00-28T18:00:00Z',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, controllerSignoffAt);
+    assert.match(metrics.blockedReason, /valid signoff timestamp/);
+  }
+});
+
+test('invalid controller signoff clock times and timezone offsets fail closed', () => {
+  for (const controllerSignoffAt of [
+    '2026-10-28T24:00:00Z',
+    '2026-10-28T18:60:00Z',
+    '2026-10-28T18:00:60Z',
+    '2026-10-28T18:00:00+15:00',
+    '2026-10-28T18:00:00-14:01',
+    '2026-10-28T18:00:00+04:60',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, controllerSignoffAt);
+    assert.match(metrics.blockedReason, /valid signoff timestamp/);
+  }
+});
+
+test('real leap-day controller signoffs and valid timezone offsets remain eligible', () => {
+  for (const controllerSignoffAt of [
+    '2024-02-29T23:59:59.123Z',
+    '2026-10-28T14:00:00-04:00',
+    '2026-10-28T14:00:00+14:00',
+    '2026-10-28T14:00:00-12:45',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, true, controllerSignoffAt);
+  }
+});
