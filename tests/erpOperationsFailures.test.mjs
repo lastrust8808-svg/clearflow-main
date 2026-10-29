@@ -22,7 +22,7 @@ const payloads = [
 ];
 const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.importReconciliationStatement, api.closeReconciliationJob];
 const accepted = [
-  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send', status: 'sent', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z', sentAt: '2026-10-28T00:00:02Z', deliveryChannel: 'smtp', recipientEmail: 'alice@example.invalid' } },
+  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send', status: 'sent', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z', sentAt: '2026-10-28T00:00:02Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } },
   { success: true, job: { id: 'j2', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
   { success: true, importJob: { id: 'j3', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
@@ -125,10 +125,26 @@ try {
     const confirmation = { success: true, job: { id: 'sent-job', invoiceId: 'inv-1', entityId: 'ent-1', operation: 'send',
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
       persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
-      sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp', recipientEmail: 'alice@example.invalid' } };
+      sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } };
     globalThis.fetch = async () => ({ ok: true, json: async () => confirmation });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), confirmation);
   });
+  await test('completed delivery requires an actual transport receipt identifier', async () => {
+    const valid = accepted[0].job;
+    for (const deliveryReceiptId of [undefined, null, '', '  ', 42, 'x'.repeat(256)]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        success: true, job: { ...valid, deliveryReceiptId },
+      }) });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
+    }
+    // A nonempty provider receipt ID is required in addition to matching
+    // invoice/entity/recipient, durable persistence and sent timestamp.
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      success: true, job: { ...valid, deliveryReceiptId: 'provider-receipt-42' },
+    }) });
+    assert.equal((await api.queueInvoiceDelivery(payloads[0])).job.deliveryReceiptId, 'provider-receipt-42');
+  });
+
   await test('export cannot claim sent-delivery status', async () => {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({
       success: true, job: { id: 'export-sent', operation: 'export', status: 'sent',
