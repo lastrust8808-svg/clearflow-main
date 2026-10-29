@@ -80,3 +80,45 @@ export async function reserveErpOperationJob({
     createdAt, created, replayed: !created,
   });
 }
+
+
+// Read-only status lookup. Authentication and authorization must be established
+// by the caller; this helper additionally scopes every read to tenant + actor.
+// A returned status is NOT proof that an email was delivered or funds moved.
+export async function readErpOperationJobStatus({ db, authenticatedScope, jobId }) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedScope?.tenantId, 'authenticated tenant');
+  const actorId = requiredIdentifier(authenticatedScope?.actorId, 'authenticated actor');
+  if (typeof jobId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    throw new TypeError('Invalid ERP job id');
+  }
+  const result = await db.query(
+    `SELECT id, tenant_id, actor_id, operation, status, created_at, updated_at
+     FROM erp_operation_jobs
+     WHERE tenant_id = $1 AND actor_id = $2 AND id = $3`,
+    [tenantId, actorId, jobId],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid status result');
+  }
+  const record = result.rows[0];
+  if (!record) return null;
+  if (record.id !== jobId || record.tenant_id !== tenantId ||
+      record.actor_id !== actorId || !operations.has(record.operation) ||
+      !['queued', 'processing', 'processed', 'sent', 'failed'].includes(record.status)) {
+    throw new Error('ERP job storage returned an invalid tenant-bound status');
+  }
+  const createdAt = record.created_at instanceof Date
+    ? record.created_at.toISOString() : record.created_at;
+  const updatedAt = record.updated_at instanceof Date
+    ? record.updated_at.toISOString() : record.updated_at;
+  if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
+      typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt))) {
+    throw new Error('ERP job storage returned an invalid status timestamp');
+  }
+  return Object.freeze({
+    id: jobId, tenantId, operation: record.operation,
+    status: record.status, createdAt, updatedAt,
+  });
+}
