@@ -109,7 +109,11 @@ test('invalid or missing evidence references and document bytes are rejected', (
 });
 test('assessment never mutates evidence packet or governance snapshot', () => {
   const original = packet();
-  const before = structuredClone(original);
+  const before = {
+    ...original, content: Buffer.from(original.content),
+    governance: structuredClone(original.governance),
+    attestations: structuredClone(original.attestations),
+  };
   assessTrustDocumentSigningPacket(original);
   assert.deepEqual(original, before);
 });
