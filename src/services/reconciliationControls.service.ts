@@ -232,6 +232,30 @@ export function buildReconciliationCloseMetrics(
   // Reject malformed imported amounts, directions, dates and descriptions
   // even if all line IDs and balances tie. Do not treat a fabricated matched
   // marker as sufficient source-row evidence.
+  // Reconciliation periods and imported posting dates must be real calendar
+  // dates and refer to the same closed statement window. Otherwise an
+  // out-of-period matched row can certify an unrelated balance snapshot.
+  // This validates evidence consistency; it does not prove bank ownership.
+  if (
+    !hasValidStatementCalendarDate(reconciliation.periodStart) ||
+    !hasValidStatementCalendarDate(reconciliation.periodEnd) ||
+    reconciliation.periodStart > reconciliation.periodEnd ||
+    parsedLines.some((line) =>
+      !hasValidStatementCalendarDate(line.postedDate) ||
+      line.postedDate < reconciliation.periodStart ||
+      line.postedDate > reconciliation.periodEnd
+    )
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Statement period and imported posting dates must be valid and within the same period.',
+    };
+  }
+
   if (parsedLines.some((line) => !hasValidStatementFinancialFields(line))) {
     return {
       bookEndingBalance,
