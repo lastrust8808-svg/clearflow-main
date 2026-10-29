@@ -145,6 +145,22 @@ async function writeJsonAtomically(targetPath, value) {
   }
 }
 
+// Record identity is untrusted even when its filesystem path is contained.
+// A copied or misrouted JSON file must not be returned as another tenant's
+// document, remittance, transaction proof, Plaid vault, or extraction record.
+// This is defense in depth; it does not replace route-level authorization.
+function assertStoredRecordScope(record, expected) {
+  if (
+    !record ||
+    typeof record !== 'object' ||
+    Array.isArray(record) ||
+    Object.entries(expected).some(([key, value]) => record[key] !== value)
+  ) {
+    throw new Error('Stored record scope does not match requested account.');
+  }
+  return record;
+}
+
 export async function loadAccountAppData(accountId) {
   try {
     return await readJsonSafely(appDataPath(accountId));
@@ -169,7 +185,7 @@ export async function saveAccountAppData(accountId, appData) {
 
 export async function loadAccountDocumentFile(accountId, fileId) {
   try {
-    return await readJsonSafely(accountFilePath(accountId, fileId));
+    return assertStoredRecordScope(await readJsonSafely(accountFilePath(accountId, fileId)), { accountId, fileId });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -199,7 +215,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 
 export async function loadAccountRemittanceVault(accountId, vendorId) {
   try {
-    return await readJsonSafely(accountRemittancePath(accountId, vendorId));
+    return assertStoredRecordScope(await readJsonSafely(accountRemittancePath(accountId, vendorId)), { accountId, vendorId });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -229,7 +245,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 
 export async function loadAccountTransactionProofVault(accountId) {
   try {
-    return await readJsonSafely(accountTransactionProofPath(accountId));
+    return assertStoredRecordScope(await readJsonSafely(accountTransactionProofPath(accountId)), { accountId });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -257,7 +273,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 
 export async function loadAccountPlaidVault(accountId) {
   try {
-    return await readJsonSafely(accountPlaidPath(accountId));
+    return assertStoredRecordScope(await readJsonSafely(accountPlaidPath(accountId)), { accountId });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -285,7 +301,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
 
 export async function loadAccountExtractionRecord(accountId, signature) {
   try {
-    return await readJsonSafely(accountExtractionPath(accountId, signature));
+    return assertStoredRecordScope(await readJsonSafely(accountExtractionPath(accountId, signature)), { accountId, signature });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
