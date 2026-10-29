@@ -481,3 +481,31 @@ test('missing or empty parsed rows remain blocked by the existing import-review 
   }
   assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
 });
+
+test('reconciliation identity is required even when balances and review tie', () => {
+  for (const id of [undefined, null, '', '  ', ' reconciliation-a', 'reconciliation-a ', 'reconciliation\n-a', 42]) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation({ id }), account);
+    assert.equal(metrics.isReadyToApprove, false, String(id));
+    assert.match(metrics.blockedReason, /valid scoped identifiers/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
+});
+
+test('matching missing or malformed bank/entity IDs cannot authorize reconciliation close', () => {
+  for (const candidate of [
+    { record: { bankAccountId: undefined }, bank: { id: undefined } },
+    { record: { entityId: undefined }, bank: { entityId: undefined } },
+    { record: { bankAccountId: 'bank-a ' }, bank: { id: 'bank-a ' } },
+    { record: { entityId: ' entity-a' }, bank: { entityId: ' entity-a' } },
+    { record: { bankAccountId: 'bank-a\n' }, bank: { id: 'bank-a\n' } },
+    { record: { entityId: 42 }, bank: { entityId: 42 } },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation(candidate.record),
+      { ...account, ...candidate.bank }
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(candidate));
+    assert.match(metrics.blockedReason, /valid scoped identifiers/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
+});
