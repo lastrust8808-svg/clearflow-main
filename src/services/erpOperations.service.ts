@@ -15,6 +15,8 @@ interface DeliveryQueueResponse {
     operation: 'send' | 'export';
     sentAt?: string;
     deliveryChannel?: 'smtp' | 'manual' | 'internal';
+    recipientEmail?: string;
+    internalDeliveryTarget?: string;
     fallbackReason?: string | null;
   };
 }
@@ -107,6 +109,28 @@ function isAcceptedJob(
     Date.parse(completedAt) >= Date.parse(job.persistedAt);
 }
 
+// The Accounting UI treats a successful internal delivery acknowledgement as
+// "sent", and treats an email acknowledgement as a completed SMTP send. Never
+// allow a merely queued response (or a response for another destination) to
+// cross that UI boundary. The generic job validator still covers non-delivery
+// operations and legacy callers that do not request a delivery channel.
+function isConfirmedInvoiceDelivery(
+  value: unknown,
+  payload: { invoiceId: string; entityId: string; deliveryMethod?: string; recipientEmail?: string; internalDeliveryTarget?: string },
+): boolean {
+  if (!isAcceptedJob(value, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId })) return false;
+  if (payload.deliveryMethod !== 'email' && payload.deliveryMethod !== 'internal_user') return true;
+  if (!isRecord(value) || !isRecord(value.job) || value.job.status !== 'sent') return false;
+  if (payload.deliveryMethod === 'email') {
+    return value.job.deliveryChannel === 'smtp' &&
+      typeof payload.recipientEmail === 'string' && payload.recipientEmail.trim() !== '' &&
+      value.job.recipientEmail === payload.recipientEmail;
+  }
+  return value.job.deliveryChannel === 'internal' &&
+    typeof payload.internalDeliveryTarget === 'string' && payload.internalDeliveryTarget.trim() !== '' &&
+    value.job.internalDeliveryTarget === payload.internalDeliveryTarget;
+}
+
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
   // Never fabricate a successful job. The caller must retain the user's input for retry.
   const response = await fetch(`${ERP_API_BASE}${path}`, {
@@ -145,7 +169,7 @@ export async function queueInvoiceDelivery(payload: {
   replyTo?: string;
 }) {
   return postErp<DeliveryQueueResponse>('/api/erp/invoice-deliveries', payload, 'Invoice delivery',
-    (result) => isAcceptedJob(result, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId }));
+    (result) => isConfirmedInvoiceDelivery(result, payload));
 }
 
 export async function queueInvoiceExport(payload: {
