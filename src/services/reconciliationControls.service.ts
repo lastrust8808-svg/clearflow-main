@@ -30,6 +30,17 @@ export function buildReconciliationCloseMetrics(
     parsedLineIds.add(id);
     return false;
   });
+  // The explicit matched-ID index is optional for legacy records, but when
+  // present it must agree with the parsed source rows. A stale/orphaned index
+  // must not silently certify a statement whose review data has diverged.
+  const matchedIdList = reconciliation.matchedStatementLineIds;
+  const matchedIdSet = new Set(matchedIdList ?? []);
+  const hasInconsistentMatchedIds = matchedIdList !== undefined && (
+    !Array.isArray(matchedIdList) ||
+    matchedIdSet.size !== matchedIdList.length ||
+    matchedIdList.some((id) => typeof id !== 'string' || !id.trim() || !parsedLineIds.has(id)) ||
+    parsedLines.some((line) => matchedIdSet.has(line.id) !== (line.matchStatus === 'matched'))
+  );
   const unresolvedLineIds = new Set(reconciliation.unmatchedStatementLineIds ?? []);
   for (const line of parsedLines) {
     if (line.matchStatus !== 'matched') {
@@ -89,6 +100,17 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Statement lines must have unique, nonempty identifiers.',
+    };
+  }
+
+  if (hasInconsistentMatchedIds) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Matched statement-line identifiers must agree with reviewed source rows.',
     };
   }
 
