@@ -133,6 +133,12 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   }
 
   normalized.sort((a, b) => a.occurred - b.occurred || ORDER[a.type] - ORDER[b.type] || a.id.localeCompare(b.id));
+  // Provider events may arrive out of order. A refund invalidates the invoice's
+  // settlement even when its recorded timestamp precedes the success event.
+  // Only refunds effective at asOf participate in historical projections.
+  const refundedInvoices = new Set(normalized
+    .filter((event) => event.type === 'payment_refunded' && event.occurred <= cutoff)
+    .map((event) => event.invoiceId));
   let status = 'pending';
   let periodEnd = null;
   let lastEventId = null;
@@ -146,6 +152,12 @@ export function projectMembershipEntitlement(scope, events, asOf) {
       case 'subscription_created':
         break; // never grants access, even if replayed after a payment
       case 'payment_succeeded':
+        if (refundedInvoices.has(event.invoiceId)) {
+          // A replayed/out-of-order success for a refunded invoice cannot
+          // reactivate access. A distinct later paid invoice may still do so.
+          status = 'past_due';
+          break;
+        }
         status = 'active';
         periodEnd = event.periodEnd;
         break;
