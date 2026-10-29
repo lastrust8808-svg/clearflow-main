@@ -28,6 +28,8 @@ function reconciliation(overrides = {}) {
     periodStart: '2026-10-01',
     periodEnd: '2026-10-31',
     statementEndingBalance: 100,
+    clearedTransactionIds: ['ledger-1'],
+    unmatchedTransactionIds: [],
     statementImportId: 'import-a',
     statementReviewStatus: 'ready_to_close',
     status: 'in_review',
@@ -612,4 +614,41 @@ test('valid inclusive statement boundaries and leap-day period remain eligible',
     periodEnd: '2024-02-29',
     parsedStatementLines: [statementLine('line-1', 'matched', { postedDate: '2024-02-29' })],
   }), account).isReadyToApprove, true);
+});
+
+test('unresolved book-side transactions block close despite matched statement lines and balanced totals', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ unmatchedTransactionIds: ['ledger-unresolved'] }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /Unresolved book transactions/);
+});
+
+test('malformed, duplicate and overlapping book transaction indices cannot approve close', () => {
+  const invalid = [
+    { clearedTransactionIds: undefined },
+    { clearedTransactionIds: null },
+    { clearedTransactionIds: 'ledger-1' },
+    { clearedTransactionIds: ['ledger-1', 'ledger-1'] },
+    { clearedTransactionIds: ['ledger-1', ' ledger-2'] },
+    { clearedTransactionIds: ['ledger-1', 42] },
+    { unmatchedTransactionIds: null },
+    { unmatchedTransactionIds: 'ledger-2' },
+    { unmatchedTransactionIds: ['ledger-2', 'ledger-2'] },
+    { unmatchedTransactionIds: ['ledger-1'] },
+  ];
+  for (const overrides of invalid) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation(overrides), account);
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(overrides));
+    assert.match(metrics.blockedReason, /Cleared and unmatched book transaction identifiers/);
+  }
+});
+
+test('unique cleared book IDs with no outstanding book exceptions preserve approval eligibility', () => {
+  const metrics = buildReconciliationCloseMetrics(reconciliation({
+    clearedTransactionIds: ['ledger-1', 'ledger-2'],
+    unmatchedTransactionIds: [],
+  }), account);
+  assert.equal(metrics.isReadyToApprove, true);
 });
