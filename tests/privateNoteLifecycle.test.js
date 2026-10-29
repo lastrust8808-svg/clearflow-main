@@ -62,6 +62,17 @@ test('presentment evidence is bound to the actual issued document version', () =
   assert.throws(() => project([event('issued', 1), event('presented', 2, { documentRef: 'another-note-document' })]), /must match the issued note/);
   assert.throws(() => project([event('issued', 1), event('presented', 2, { documentRef: undefined })]), /documentRef/);
 });
+test('presentment must have its own evidence distinct from issuance provenance', () => {
+  assert.throws(() => project([
+    event('issued', 1, { evidenceRef: 'shared-evidence-record' }),
+    event('presented', 2, { evidenceRef: 'shared-evidence-record' }),
+  ]), /Presentment evidence must be distinct from issuance evidence/);
+  assert.equal(project([
+    event('issued', 1, { evidenceRef: 'signed-issuance-record' }),
+    event('presented', 2, { evidenceRef: 'independent-presentment-record' }),
+  ]).status, 'presented');
+});
+
 test('notice drafts cannot masquerade as the issued instrument or reuse a draft version', () => {
   assert.throws(() => project([
     event('issued', 1), event('presented', 2),
