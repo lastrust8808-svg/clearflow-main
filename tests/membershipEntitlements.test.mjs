@@ -145,3 +145,27 @@ test('valid leap days and timezone-offset instants remain supported', () => {
   assert.throws(() => project(scope, [paid('invalid', { periodEnd: '2027-02-29T12:00:00Z' })], asOf),
     /calendar timestamp/);
 });
+
+
+test('out-of-order success cannot reactivate an invoice already refunded', () => {
+  const refund = event('refund-before-success', 'payment_refunded', '2026-10-19T12:00:00Z', { invoiceId: 'inv-1' });
+  const result = project(scope, [paid(), refund], asOf);
+  assert.equal(result.status, 'past_due');
+  assert.equal(result.entitled, false);
+});
+
+test('a distinct later settled invoice can restore access after an older invoice refund', () => {
+  const refund = event('refund-before-success', 'payment_refunded', '2026-10-19T12:00:00Z', { invoiceId: 'inv-1' });
+  const next = paid('new-invoice', { invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z' });
+  next.occurredAt = '2026-10-25T12:00:00Z';
+  const result = project(scope, [next, paid(), refund], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.entitled, true);
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
+
+test('future refund does not retroactively revoke entitlement before its effective time', () => {
+  const futureRefund = event('future-refund', 'payment_refunded', '2026-11-10T12:00:00Z', { invoiceId: 'inv-1' });
+  assert.equal(project(scope, [futureRefund, paid()], asOf).status, 'active');
+  assert.equal(project(scope, [futureRefund, paid()], '2026-11-11T12:00:00Z').status, 'past_due');
+});
