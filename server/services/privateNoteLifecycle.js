@@ -21,6 +21,11 @@ function requiredId(value, field) {
   if (typeof value !== 'string' || !value || value.trim() !== value) {
     throw new TypeError(field + ' must be a nonempty unpadded string');
   }
+  // Match the storage-identifier control-character boundary in Security PR #23.
+  // Invisible control bytes must not be accepted as event, actor, or evidence IDs.
+  if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
+    throw new TypeError(field + ' must not contain control characters');
+  }
   return value;
 }
 
