@@ -208,3 +208,36 @@ test('controller-approved but still open reconciliation retains close eligibilit
   );
   assert.equal(metrics.isReadyToApprove, true);
 });
+
+
+test('one-cent and sub-cent differences cannot silently qualify for reconciliation close', () => {
+  for (const statementEndingBalance of [100.01, 99.99, 100.004, 99.996]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ statementEndingBalance }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(statementEndingBalance));
+    assert.match(metrics.blockedReason, /balance|valid statement/i);
+  }
+});
+
+test('fractional-cent book or statement balances are rejected instead of rounded into agreement', () => {
+  for (const candidate of [
+    { record: reconciliation({ statementEndingBalance: 100.001 }), bank: account },
+    { record: reconciliation(), bank: { ...account, currentBalance: 100.001 } },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(candidate.record, candidate.bank);
+    assert.equal(metrics.isReadyToApprove, false);
+  }
+});
+
+test('balances outside safe integer minor-unit precision cannot approve close', () => {
+  const amount = 100_000_000_000_000;
+  for (const candidate of [
+    { record: reconciliation({ statementEndingBalance: amount }), bank: { ...account, currentBalance: amount } },
+    { record: reconciliation(), bank: { ...account, currentBalance: amount } },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(candidate.record, candidate.bank);
+    assert.equal(metrics.isReadyToApprove, false);
+  }
+});
