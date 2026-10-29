@@ -59,6 +59,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   let lastEventAt = null;
   let issuedDocumentRef = null;
   const noticeDocumentRefs = new Set();
+  const noticeEvidenceRefs = new Set();
   for (const event of snapshot.events) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
@@ -93,10 +94,15 @@ export function projectPrivateNoteLifecycle(snapshot) {
       if (noticeDocumentRef === issuedDocumentRef || noticeDocumentRefs.has(noticeDocumentRef)) {
         throw new Error('Notice draft document reference must be distinct and unique');
       }
+      // A new or revised draft must have its own preparation record; a reused
+      // pointer would make two different draft versions appear to share one
+      // provenance event. This does not authenticate the evidence itself.
+      const noticeEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+      if (noticeEvidenceRefs.has(noticeEvidenceRef)) {
+        throw new Error('Notice draft preparation evidence reference must be unique');
+      }
       noticeDocumentRefs.add(noticeDocumentRef);
-      // A prepared notice is a draft artifact, but still needs a traceable
-      // preparation record. This pointer is not proof of delivery or service.
-      requiredId(event.evidenceRef, 'evidenceRef');
+      noticeEvidenceRefs.add(noticeEvidenceRef);
     }
     if (event.type === 'presented' || event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
