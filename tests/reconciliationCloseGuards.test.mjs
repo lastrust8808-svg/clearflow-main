@@ -25,6 +25,8 @@ function reconciliation(overrides = {}) {
     id: 'reconciliation-a',
     entityId: 'entity-a',
     bankAccountId: 'bank-a',
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
     statementEndingBalance: 100,
     statementImportId: 'import-a',
     statementReviewStatus: 'ready_to_close',
@@ -568,4 +570,43 @@ test('valid exact-cent statement rows and real leap dates retain eligibility', (
     );
     assert.equal(metrics.isReadyToApprove, true, JSON.stringify(valid));
   }
+});
+
+
+test('reconciliation cannot approve malformed or reversed statement periods', () => {
+  for (const invalid of [
+    { periodStart: undefined },
+    { periodEnd: null },
+    { periodStart: '2026-02-30' },
+    { periodEnd: '2026-11-31' },
+    { periodStart: '2026-10-31', periodEnd: '2026-10-01' },
+    { periodStart: '2026-10-01T00:00:00Z' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation(invalid), account);
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(invalid));
+    assert.match(metrics.blockedReason, /Statement period and imported posting dates/);
+  }
+});
+
+test('matched rows outside the reconciliation period cannot authorize close', () => {
+  for (const postedDate of ['2026-09-30', '2026-11-01']) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation({
+      parsedStatementLines: [statementLine('line-1', 'matched', { postedDate })],
+    }), account);
+    assert.equal(metrics.isReadyToApprove, false, postedDate);
+    assert.match(metrics.blockedReason, /Statement period and imported posting dates/);
+  }
+});
+
+test('valid inclusive statement boundaries and leap-day period remain eligible', () => {
+  for (const postedDate of ['2026-10-01', '2026-10-31']) {
+    assert.equal(buildReconciliationCloseMetrics(reconciliation({
+      parsedStatementLines: [statementLine('line-1', 'matched', { postedDate })],
+    }), account).isReadyToApprove, true, postedDate);
+  }
+  assert.equal(buildReconciliationCloseMetrics(reconciliation({
+    periodStart: '2024-02-01',
+    periodEnd: '2024-02-29',
+    parsedStatementLines: [statementLine('line-1', 'matched', { postedDate: '2024-02-29' })],
+  }), account).isReadyToApprove, true);
 });
