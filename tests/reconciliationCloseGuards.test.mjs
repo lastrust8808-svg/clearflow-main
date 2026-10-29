@@ -564,6 +564,9 @@ test('valid exact-cent statement rows and real leap dates retain eligibility', (
   ]) {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({
+        ...(valid.postedDate === '2024-02-29'
+          ? { periodStart: '2024-02-01', periodEnd: '2024-02-29' }
+          : {}),
         parsedStatementLines: [statementLine('line-1', 'matched', valid)],
       }),
       account
