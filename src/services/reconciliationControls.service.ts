@@ -76,7 +76,7 @@ export function buildReconciliationCloseMetrics(
   const parsedLineIds = new Set<string>();
   const hasInvalidLineIds = parsedLines.some((line) => {
     const id = line?.id;
-    if (typeof id !== 'string' || !id.trim() || parsedLineIds.has(id)) return true;
+    if (!isValidStatementSourceRef(id) || parsedLineIds.has(id)) return true;
     parsedLineIds.add(id);
     return false;
   });
@@ -84,14 +84,21 @@ export function buildReconciliationCloseMetrics(
   // present it must agree with the parsed source rows. A stale/orphaned index
   // must not silently certify a statement whose review data has diverged.
   const matchedIdList = reconciliation.matchedStatementLineIds;
-  const matchedIdSet = new Set(matchedIdList ?? []);
+  const matchedIdSet = new Set<string>(Array.isArray(matchedIdList) ? matchedIdList : []);
   const hasInconsistentMatchedIds = matchedIdList !== undefined && (
     !Array.isArray(matchedIdList) ||
     matchedIdSet.size !== matchedIdList.length ||
-    matchedIdList.some((id) => typeof id !== 'string' || !id.trim() || !parsedLineIds.has(id)) ||
+    matchedIdList.some((id) => !isValidStatementSourceRef(id) || !parsedLineIds.has(id)) ||
     parsedLines.some((line) => matchedIdSet.has(line.id) !== (line.matchStatus === 'matched'))
   );
-  const unresolvedLineIds = new Set(reconciliation.unmatchedStatementLineIds ?? []);
+  // A malformed unmatched index (including an empty string instead of [])
+  // must never be interpreted as zero exceptions and authorize close.
+  const unmatchedIdList = reconciliation.unmatchedStatementLineIds;
+  const hasInvalidUnmatchedIds = unmatchedIdList !== undefined && (
+    !Array.isArray(unmatchedIdList) ||
+    unmatchedIdList.some((id) => !isValidStatementSourceRef(id))
+  );
+  const unresolvedLineIds = new Set<string>(Array.isArray(unmatchedIdList) ? unmatchedIdList : []);
   for (const line of parsedLines) {
     if (line.matchStatus !== 'matched') {
       unresolvedLineIds.add(line.id);
@@ -162,6 +169,17 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Matched statement-line identifiers must agree with reviewed source rows.',
+    };
+  }
+
+  if (hasInvalidUnmatchedIds) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Unmatched statement-line identifiers must be a valid list of source row IDs.',
     };
   }
 
