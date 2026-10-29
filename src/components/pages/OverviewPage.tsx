@@ -163,6 +163,25 @@ export default function OverviewPage({
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
     .slice(0, 5);
 
+
+  const workspaceApps = [
+    { title: 'ERP & Accounting', detail: 'Invoices, bills, journals and reports', hash: '#accounting:dashboard', icon: '▦' },
+    { title: 'Banking & Payments', detail: 'Bank feeds, approvals and reconciliation', hash: '#accounting:bankFeed', icon: '↔' },
+    { title: 'Business Portal', detail: 'Operations, customers and vendors', hash: '#accounting:dashboard', icon: '▤', scope: 'business' },
+    { title: 'Trusts & Holdings', detail: 'Trust records, holdings and reserves', hash: '#entities', icon: '◇', scope: 'trust' },
+    { title: 'Documents & Vault', detail: 'Entity records and document uploads', hash: '#documents', icon: '▧' },
+    { title: 'Entity Creation', detail: 'Set up and review an entity', hash: '#entities:new', icon: '+' },
+    { title: 'Logo & Seal Studio', detail: 'Branding and document assets', hash: '#aiStudio', icon: '✦' },
+    { title: 'Assets & Inventory', detail: 'Equipment, property and reserves', hash: '#assets', icon: '◈' },
+    { title: 'Transactions', detail: 'Transfers and settlement records', hash: '#transactions', icon: '⇄' },
+    { title: 'Compliance & Reports', detail: 'Controls, audit and reporting', hash: '#compliance', icon: '✓' },
+    { title: 'Credit Building', detail: 'Credit accounts and review plans', hash: '#credit', icon: '▥' },
+    { title: 'Administration', detail: 'Workspace and connected services', hash: '#settings', icon: '⚙' },
+  ];
+  const visibleApps = workspaceApps.filter((app) =>
+    !activeEntity || !app.scope || app.scope === (activeEntity.type === 'trust' ? 'trust' : 'business')
+  );
+
   const deskGroups = [
     {
       title: 'Money',
@@ -265,7 +284,7 @@ export default function OverviewPage({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
               gap: 10,
             }}
           >
@@ -290,11 +309,24 @@ export default function OverviewPage({
         </PageSection>
       ) : null}
 
+      <PageSection title="Workspace Apps">
+        <div role="group" aria-label="Workspace applications" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 205px), 1fr))', gap: 12 }}>
+          {visibleApps.map((app) => (
+            <button key={app.title} type="button" onClick={() => navigate(app.hash)}
+              style={{ ...actionStyle(), display: 'grid', alignContent: 'start', gap: 8, minHeight: 140, padding: 16 }}>
+              <span aria-hidden="true" style={{ width: 42, height: 42, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, #005A9E, #4CAF50)', color: '#fff', fontSize: 23 }}>{app.icon}</span>
+              <strong style={{ fontSize: 15 }}>{app.title}</strong>
+              <span style={{ fontSize: 12, color: 'var(--cf-muted)', lineHeight: 1.45 }}>{app.detail}</span>
+            </button>
+          ))}
+        </div>
+      </PageSection>
+
       <PageSection title="Work Areas">
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
             gap: 12,
           }}
         >
@@ -346,7 +378,7 @@ export default function OverviewPage({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           gap: 12,
         }}
       >
