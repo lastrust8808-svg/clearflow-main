@@ -32,3 +32,38 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
     .digest();
   return timingSafeEqual(actual, expected);
 }
+
+
+/**
+ * TEST-ONLY scope-bound admission fixture. A valid HMAC alone must never grant
+ * another tenant's membership. This does not persist or deduplicate events,
+ * verify a real billing provider, or authorize entitlements in production.
+ * The caller must supply the authenticated scope from server-side identity,
+ * never from the webhook body itself.
+ *
+ * Returns a frozen event suitable only for deterministic projection tests,
+ * or null on invalid signatures, JSON, or tenant/member/subscription binding.
+ */
+export function verifyScopedMembershipWebhookFixture({
+  rawBody, signatureHeader, secret, nowSeconds, authenticatedScope,
+}) {
+  if (!verifyMembershipWebhookFixture({ rawBody, signatureHeader, secret, nowSeconds })) return null;
+  if (!authenticatedScope || typeof authenticatedScope !== 'object' ||
+      Array.isArray(authenticatedScope)) return null;
+  let event;
+  try {
+    event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody);
+  } catch {
+    return null;
+  }
+  if (!event || typeof event !== 'object' || Array.isArray(event) ||
+      Object.hasOwn(event, 'verified')) return null;
+  for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+    if (typeof authenticatedScope[field] !== 'string' ||
+        authenticatedScope[field].trim() === '' ||
+        event[field] !== authenticatedScope[field]) return null;
+  }
+  if (typeof event.id !== 'string' || event.id.trim() === '' ||
+      typeof event.type !== 'string' || event.type.trim() === '') return null;
+  return Object.freeze({ ...event, verified: true });
+}
