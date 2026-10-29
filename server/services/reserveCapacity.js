@@ -9,6 +9,10 @@
  * but do not prove independent assets or available bank cash.
  */
 const KINDS = new Set(['cash', 'noncash_collateral']);
+// These are structural source classifications, NOT independently verified
+// evidence of bank balances, cash custody, or collateral ownership.
+const CASH_SOURCES = new Set(['bank_balance', 'physical_cash']);
+const NONCASH_SOURCES = new Set(['private_note', 'other_collateral']);
 
 function requiredString(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
@@ -38,7 +42,7 @@ function safeAdd(left, right, field) {
 /**
  * @param {{tenantId:string, entityId:string, currency:string, entries:Array<{
  *   id:string, assetId:string, evidenceRef:string, tenantId:string, entityId:string, currency:string,
- *   kind:'cash'|'noncash_collateral', amountMinor:number,
+ *   kind:'cash'|'noncash_collateral', sourceType:string, amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
  * }>}} snapshot
  */
@@ -82,6 +86,13 @@ export function calculateReserveCapacity(snapshot) {
       throw new Error('Reserve entry scope or currency mismatch');
     }
     if (!KINDS.has(entry.kind)) throw new TypeError('Unsupported reserve kind');
+    const sourceType = requiredString(entry.sourceType, 'entry.sourceType');
+    if (entry.kind === 'cash' && !CASH_SOURCES.has(sourceType)) {
+      throw new TypeError('Cash reserve entry requires a cash source classification');
+    }
+    if (entry.kind === 'noncash_collateral' && !NONCASH_SOURCES.has(sourceType)) {
+      throw new TypeError('Noncash collateral requires a noncash source classification');
+    }
     const amount = minorUnits(entry.amountMinor, 'amountMinor');
     const restricted = minorUnits(entry.restrictedMinor ?? 0, 'restrictedMinor');
     const pledged = minorUnits(entry.pledgedMinor ?? 0, 'pledgedMinor');
