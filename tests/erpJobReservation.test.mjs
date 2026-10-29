@@ -122,7 +122,7 @@ test('status lookup is tenant-and-actor scoped and returns persisted status only
     db, authenticatedScope: scope, jobId: statusJobId,
   });
   assert.deepEqual(calls[0].params, [scope.tenantId, scope.actorId, statusJobId]);
-  assert.match(calls[0].sql, /WHERE tenant_id = \\$1 AND actor_id = \\$2 AND id = \\$3/);
+  assert.match(calls[0].sql, /WHERE tenant_id = \$1 AND actor_id = \$2 AND id = \$3/);
   assert.equal(result.status, 'queued');
   assert.equal(result.id, statusJobId);
   assert.equal(Object.isFrozen(result), true);
