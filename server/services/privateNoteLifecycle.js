@@ -58,6 +58,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   let lastEventId = null;
   let lastEventAt = null;
   let issuedDocumentRef = null;
+  let issuedEvidenceRef = null;
   const noticeDocumentRefs = new Set();
   const noticeEvidenceRefs = new Set();
   for (const event of snapshot.events) {
@@ -81,12 +82,18 @@ export function projectPrivateNoteLifecycle(snapshot) {
       issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
       // An issuance without a provenance reference must not become an issued state.
       // The caller must independently verify this evidence before accepting it.
-      requiredId(event.evidenceRef, 'evidenceRef');
+      issuedEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
     }
     if (event.type === 'presented') {
       const presentedDocumentRef = requiredId(event.documentRef, 'documentRef');
       if (presentedDocumentRef !== issuedDocumentRef) {
         throw new Error('Presented document must match the issued note document');
+      }
+      // Evidence of signing/issuance cannot also serve as evidence that the
+      // instrument was subsequently presented. Authenticity remains a caller duty.
+      const presentmentEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+      if (presentmentEvidenceRef === issuedEvidenceRef) {
+        throw new Error('Presentment evidence must be distinct from issuance evidence');
       }
     }
     if (event.type === 'notice_prepared') {
@@ -104,7 +111,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
       noticeDocumentRefs.add(noticeDocumentRef);
       noticeEvidenceRefs.add(noticeEvidenceRef);
     }
-    if (event.type === 'presented' || event.type === 'disputed') {
+    if (event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
     }
     status = next;
