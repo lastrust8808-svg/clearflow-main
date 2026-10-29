@@ -67,7 +67,8 @@ function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', op
     // acknowledgement must carry completion metadata; export cannot be "sent".
     if (job.status === 'queued') return true;
     return operation === 'send' && job.status === 'sent' &&
-      isUtcTimestamp(job.sentAt) && Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
+      isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
+      Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
       (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
   return job.status === 'processed' &&
