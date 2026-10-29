@@ -203,6 +203,63 @@ try {
       await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
     }
   });
+
+  // AccountingPage currently marks accepted internal delivery as "sent" and
+  // accepted email delivery as SMTP-sent. Queued or wrong-destination receipts
+  // must therefore reject before that UI state transition.
+  const sentDelivery = {
+    ...accepted[0].job,
+    status: 'sent',
+    sentAt: '2026-10-28T00:00:02Z',
+  };
+  const emailRequest = {
+    ...payloads[0], deliveryMethod: 'email', recipientEmail: 'alice@example.invalid',
+  };
+  const internalRequest = {
+    ...payloads[0], deliveryMethod: 'internal_user', internalDeliveryTarget: 'member-a',
+  };
+  const replyWith = (job) => {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true, job }) });
+  };
+
+  await test('email delivery cannot acknowledge queued work as already sent', async () => {
+    replyWith({ ...accepted[0].job, recipientEmail: emailRequest.recipientEmail });
+    await assert.rejects(api.queueInvoiceDelivery(emailRequest), /not confirmed/);
+  });
+
+  await test('internal delivery cannot acknowledge queued work as already sent', async () => {
+    replyWith({ ...accepted[0].job, internalDeliveryTarget: internalRequest.internalDeliveryTarget });
+    await assert.rejects(api.queueInvoiceDelivery(internalRequest), /not confirmed/);
+  });
+
+  await test('email sent receipt requires SMTP and the exact intended recipient', async () => {
+    for (const changes of [
+      { deliveryChannel: 'internal', recipientEmail: emailRequest.recipientEmail },
+      { deliveryChannel: 'smtp', recipientEmail: 'wrong@example.invalid' },
+      { deliveryChannel: 'smtp', recipientEmail: undefined },
+    ]) {
+      replyWith({ ...sentDelivery, ...changes });
+      await assert.rejects(api.queueInvoiceDelivery(emailRequest), /not confirmed/);
+    }
+    const receipt = { ...sentDelivery, deliveryChannel: 'smtp', recipientEmail: emailRequest.recipientEmail };
+    replyWith(receipt);
+    assert.deepEqual((await api.queueInvoiceDelivery(emailRequest)).job, receipt);
+  });
+
+  await test('internal sent receipt requires internal channel and exact member target', async () => {
+    for (const changes of [
+      { deliveryChannel: 'smtp', internalDeliveryTarget: internalRequest.internalDeliveryTarget },
+      { deliveryChannel: 'internal', internalDeliveryTarget: 'other-member' },
+      { deliveryChannel: 'internal', internalDeliveryTarget: undefined },
+    ]) {
+      replyWith({ ...sentDelivery, ...changes });
+      await assert.rejects(api.queueInvoiceDelivery(internalRequest), /not confirmed/);
+    }
+    const receipt = { ...sentDelivery, deliveryChannel: 'internal', internalDeliveryTarget: internalRequest.internalDeliveryTarget };
+    replyWith(receipt);
+    assert.deepEqual((await api.queueInvoiceDelivery(internalRequest)).job, receipt);
+  });
+
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(directory, { recursive: true, force: true });
