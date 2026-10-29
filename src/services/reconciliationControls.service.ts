@@ -302,7 +302,8 @@ export function buildReconciliationCloseMetrics(
   if (
     !validUniqueIds(clearedIds) ||
     (unmatchedBookIds !== undefined && !validUniqueIds(unmatchedBookIds)) ||
-    (Array.isArray(unmatchedBookIds) && unmatchedBookIds.some((id) => clearedIds.includes(id)))
+    (Array.isArray(clearedIds) && Array.isArray(unmatchedBookIds) &&
+      unmatchedBookIds.some((id) => clearedIds.includes(id)))
   ) {
     return {
       bookEndingBalance,
