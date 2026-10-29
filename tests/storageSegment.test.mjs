@@ -59,3 +59,21 @@ test('rejects reserved Windows device names including names with extensions', ()
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value), value);
   }
 });
+
+test('rejects overlong encoded segments before filesystem I/O, preserving valid boundary values', () => {
+  const maxAscii = 'a'.repeat(250);
+  assert.equal(sanitizeStorageSegment(maxAscii), maxAscii);
+  assert.equal(sanitizeStorageSegment(maxAscii).length + '.json'.length, 255);
+  for (const value of ['a'.repeat(251), 'é'.repeat(42), '🙂'.repeat(21)]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value.slice(0, 12));
+  }
+  assert.equal(sanitizeStorageSegment('é'.repeat(41)).length, 246);
+});
+
+test('rejects unpaired UTF-16 surrogates as invalid identifiers but preserves valid pairs', () => {
+  for (const value of ['\\uD800', '\\uDC00', 'member\\uD800', '\\uD800a']) {
+    const actual = value.replace(/\\u([0-9a-f]{4})/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+    assert.throws(() => sanitizeStorageSegment(actual), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('🙂'), '%F0%9F%99%82');
+});
