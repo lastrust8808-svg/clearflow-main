@@ -169,3 +169,43 @@ test('future refund does not retroactively revoke entitlement before its effecti
   assert.equal(project(scope, [futureRefund, paid()], asOf).status, 'active');
   assert.equal(project(scope, [futureRefund, paid()], '2026-11-11T12:00:00Z').status, 'past_due');
 });
+
+test('late refund for an older invoice cannot revoke a distinct newer paid invoice', () => {
+  const next = paid('new-payment', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  next.occurredAt = '2026-10-25T12:00:00Z';
+  const oldRefund = event('late-old-refund', 'payment_refunded', '2026-10-27T12:00:00Z', {
+    invoiceId: 'inv-1',
+  });
+  const result = project(scope, [oldRefund, next, paid()], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.entitled, true);
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
+
+test('refunded older invoice replay cannot override an already active newer invoice', () => {
+  const next = paid('new-payment', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  next.occurredAt = '2026-10-18T12:00:00Z';
+  const oldRefund = event('old-refund', 'payment_refunded', '2026-10-19T12:00:00Z', {
+    invoiceId: 'inv-1',
+  });
+  const result = project(scope, [paid(), oldRefund, next], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
+});
+
+test('refund of the currently effective paid invoice still revokes access', () => {
+  const next = paid('new-payment', {
+    invoiceId: 'inv-2', settlementId: 'settle-2', periodEnd: '2026-12-20T12:00:00Z',
+  });
+  next.occurredAt = '2026-10-25T12:00:00Z';
+  const refund = event('refund-current', 'payment_refunded', '2026-10-27T12:00:00Z', {
+    invoiceId: 'inv-2',
+  });
+  const result = project(scope, [paid(), next, refund], asOf);
+  assert.equal(result.status, 'past_due');
+  assert.equal(result.entitled, false);
+});
