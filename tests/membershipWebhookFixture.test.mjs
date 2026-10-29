@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { verifyMembershipWebhookFixture as verify } from '../src/domain/membershipWebhookFixture.mjs';
+import { verifyMembershipWebhookFixture as verify, verifyScopedMembershipWebhookFixture as verifyScoped } from '../src/domain/membershipWebhookFixture.mjs';
 
 const secret = 'test-only-secret-32-bytes-at-least-12345';
 const nowSeconds = 1793270400;
@@ -42,4 +42,65 @@ test('supports binary body bytes without JSON reserialization', () => {
   const binary = Buffer.from([0, 255, 1, 32, 0]);
   assert.equal(verify(input({ rawBody: binary, signatureHeader: sign(binary) })), true);
   assert.equal(verify(input({ rawBody: Buffer.from([0, 255, 1, 32, 1]), signatureHeader: sign(binary) })), false);
+});
+
+
+const authenticatedScope = { tenantId: 'tenant-test', memberId: 'member-test', subscriptionId: 'sub-test' };
+const scopedPayload = {
+  ...authenticatedScope,
+  id: 'evt-scope-test',
+  type: 'payment_succeeded',
+  occurredAt: '2026-10-29T12:00:00Z',
+  invoiceId: 'inv-test',
+  settlementId: 'settle-test',
+  periodEnd: '2026-11-29T12:00:00Z',
+};
+const scopedBody = (value) => Buffer.from(JSON.stringify(value), 'utf8');
+const scopedInput = (value = scopedPayload, overrides = {}) => {
+  const body = scopedBody(value);
+  return {
+    rawBody: body,
+    signatureHeader: sign(body),
+    secret,
+    nowSeconds,
+    authenticatedScope,
+    ...overrides,
+  };
+};
+
+test('signed fixture event is admitted only for exact authenticated scope', () => {
+  const admitted = verifyScoped(scopedInput());
+  assert.ok(admitted);
+  assert.equal(admitted.verified, true);
+  assert.equal(admitted.id, scopedPayload.id);
+  assert.equal(admitted.tenantId, authenticatedScope.tenantId);
+  assert.equal(Object.isFrozen(admitted), true);
+});
+
+test('validly signed cross-tenant, member or subscription events are rejected', () => {
+  for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, [field]: 'other' })), null, field);
+    assert.equal(verifyScoped(scopedInput(scopedPayload, {
+      authenticatedScope: { ...authenticatedScope, [field]: '' },
+    })), null, field);
+  }
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: null })), null);
+});
+
+test('scoped fixture rejects invalid signed JSON and client-declared verification', () => {
+  for (const value of [[], null, { ...scopedPayload, verified: true },
+    { ...scopedPayload, verified: false }, { ...scopedPayload, id: '' },
+    { ...scopedPayload, type: '' }]) {
+    assert.equal(verifyScoped(scopedInput(value)), null);
+  }
+  const invalidJson = Buffer.from('{not json}', 'utf8');
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: invalidJson, signatureHeader: sign(invalidJson),
+  })), null);
+});
+
+test('scope matching never overrides invalid signature or raw-byte tampering', () => {
+  const input = scopedInput();
+  assert.equal(verifyScoped({ ...input, rawBody: Buffer.from(JSON.stringify(scopedPayload) + '\\n') }), null);
+  assert.equal(verifyScoped({ ...input, signatureHeader: sign(Buffer.from('{}')) }), null);
 });
