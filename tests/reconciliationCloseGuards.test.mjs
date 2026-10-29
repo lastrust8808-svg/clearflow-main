@@ -241,3 +241,24 @@ test('balances outside safe integer minor-unit precision cannot approve close', 
     assert.equal(metrics.isReadyToApprove, false);
   }
 });
+
+test('sub-cent drift smaller than the former rounding tolerance is never accepted', () => {
+  for (const amount of [100.0000000001, 99.9999999999, -0.0000000001]) {
+    const statement = buildReconciliationCloseMetrics(
+      reconciliation({ statementEndingBalance: amount }),
+      { ...account, currentBalance: amount }
+    );
+    assert.equal(statement.isReadyToApprove, false, String(amount));
+    assert.match(statement.blockedReason, /valid statement/i);
+  }
+});
+
+test('valid decimal cent amounts remain eligible without rejecting floating multiplication noise', () => {
+  for (const amount of [0.29, -0.29, 100.01, 0]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ statementEndingBalance: amount }),
+      { ...account, currentBalance: amount }
+    );
+    assert.equal(metrics.isReadyToApprove, true, String(amount));
+  }
+});
