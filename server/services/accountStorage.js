@@ -121,7 +121,7 @@ async function writeJsonAtomically(targetPath, value) {
 
 export async function loadAccountAppData(accountId) {
   try {
-    return readJsonSafely(appDataPath(accountId));
+    return await readJsonSafely(appDataPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -143,7 +143,7 @@ export async function saveAccountAppData(accountId, appData) {
 
 export async function loadAccountDocumentFile(accountId, fileId) {
   try {
-    return readJsonSafely(accountFilePath(accountId, fileId));
+    return await readJsonSafely(accountFilePath(accountId, fileId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -173,7 +173,7 @@ export async function saveAccountDocumentFile(accountId, fileId, payload) {
 
 export async function loadAccountRemittanceVault(accountId, vendorId) {
   try {
-    return readJsonSafely(accountRemittancePath(accountId, vendorId));
+    return await readJsonSafely(accountRemittancePath(accountId, vendorId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -203,7 +203,7 @@ export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
 
 export async function loadAccountTransactionProofVault(accountId) {
   try {
-    return readJsonSafely(accountTransactionProofPath(accountId));
+    return await readJsonSafely(accountTransactionProofPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -231,7 +231,7 @@ export async function saveAccountTransactionProofVault(accountId, payload) {
 
 export async function loadAccountPlaidVault(accountId) {
   try {
-    return readJsonSafely(accountPlaidPath(accountId));
+    return await readJsonSafely(accountPlaidPath(accountId));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -259,7 +259,7 @@ export async function saveAccountPlaidVault(accountId, payload) {
 
 export async function loadAccountExtractionRecord(accountId, signature) {
   try {
-    return readJsonSafely(accountExtractionPath(accountId, signature));
+    return await readJsonSafely(accountExtractionPath(accountId, signature));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
