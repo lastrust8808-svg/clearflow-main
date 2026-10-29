@@ -40,6 +40,22 @@ test('revocation date is exclusive and removes signer eligibility', () => {
   assert.equal(evaluate({ appointments }).reason, 'signer_not_active');
   assert.equal(evaluate({ appointments, signerIds: ['b'] }).eligible, true);
 });
+test('acceptance after revocation is rejected as contradictory governance evidence', () => {
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptedOn: '2026-10-29', revokedOn: '2026-10-28' })],
+  }), /acceptance must precede revocation/);
+});
+
+test('same-day acceptance and exclusive revocation cannot confer authority', () => {
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptedOn: '2026-10-28', revokedOn: '2026-10-28' })],
+  }), /acceptance must precede revocation/);
+  // Prospective acceptance of a future-effective appointment is not forbidden.
+  assert.equal(evaluate({
+    appointments: [appointment('a', { effectiveOn: '2026-10-01', acceptedOn: '2026-09-30', revokedOn: '2026-10-29' })],
+  }).eligible, true);
+});
+
 test('future successor does not silently become a joint signer', () => {
   const appointments = [appointment('a'), appointment('successor', { effectiveOn: '2027-01-01' })];
   assert.equal(evaluate({ mode: 'joint', appointments }).eligible, true);
