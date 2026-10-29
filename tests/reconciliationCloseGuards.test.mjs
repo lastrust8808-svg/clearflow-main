@@ -448,3 +448,36 @@ test('padded and control-character parsed or matched row identifiers cannot appr
     assert.match(indexed.blockedReason, /must agree with reviewed source rows/);
   }
 });
+
+
+test('malformed parsed statement collections fail closed without throwing', () => {
+  for (const parsedStatementLines of [
+    '',
+    'line-1',
+    42,
+    {},
+    { id: 'line-1', matchStatus: 'matched' },
+    [{ id: 'line-1', matchStatus: 'matched' }, null],
+    [{ id: 'line-1', matchStatus: 'matched' }, 'line-2'],
+    [{ id: 'line-1', matchStatus: 'matched' }, ['line-2']],
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ parsedStatementLines }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(parsedStatementLines));
+    assert.match(metrics.blockedReason, /valid array of source rows/);
+  }
+});
+
+test('missing or empty parsed rows remain blocked by the existing import-review gate', () => {
+  for (const parsedStatementLines of [null, undefined, []]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ parsedStatementLines }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(parsedStatementLines));
+    assert.match(metrics.blockedReason, /Statement lines must be imported/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
+});
