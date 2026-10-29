@@ -28,3 +28,17 @@ test('different account IDs retain distinct storage paths', () => {
   const segments = identifiers.map(sanitizeStorageSegment);
   assert.equal(new Set(segments).size, identifiers.length);
 });
+
+test('rejects non-string identifiers instead of coercing distinct principals to one directory', () => {
+  for (const value of [0, 42, true, false, {}, { toString: () => 'member-a' }, ['member-a'], Symbol('member-a')]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('42'), '42');
+});
+
+test('rejects control characters in storage identifiers without altering valid unicode IDs', () => {
+  for (const value of ['a\0b', 'a\nb', 'a\rb', 'a\tb', 'a\u007fb', 'a\u0085b']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('élève@example.com'), '%C3%A9l%C3%A8ve%40example.com');
+});
