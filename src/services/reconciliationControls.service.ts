@@ -9,14 +9,28 @@ export interface ReconciliationCloseMetrics {
   blockedReason?: string;
 }
 
+// Automatic close requires exact minor-unit balances. Rounding a difference
+// to two decimals and allowing a one-cent tolerance can approve an imbalance.
+// Reject fractional cents and amounts whose cents cannot be represented safely.
+function toSafeCents(amount: number): number | null {
+  if (!Number.isFinite(amount)) return null;
+  const scaled = amount * 100;
+  const cents = Math.round(scaled);
+  return Number.isSafeInteger(cents) && Math.abs(scaled - cents) <= 1e-7
+    ? cents
+    : null;
+}
+
 export function buildReconciliationCloseMetrics(
   reconciliation: ReconciliationRecord,
   bankAccount?: BankAccountRecord
 ): ReconciliationCloseMetrics {
   const bookEndingBalance = bankAccount?.currentBalance ?? 0;
-  const differenceAmount = Number(
-    (reconciliation.statementEndingBalance - bookEndingBalance).toFixed(2)
-  );
+  const bookCents = toSafeCents(bookEndingBalance);
+  const statementCents = toSafeCents(reconciliation.statementEndingBalance);
+  const differenceAmount = bookCents === null || statementCents === null
+    ? Number.NaN
+    : (statementCents - bookCents) / 100;
   // Suggested matches are not controller-approved matches. Treat both explicit
   // unmatched IDs and unresolved parsed lines as blockers; either source can
   // be stale independently after an interrupted statement review.
@@ -58,7 +72,7 @@ export function buildReconciliationCloseMetrics(
     !bankAccount ||
     bankAccount.id !== reconciliation.bankAccountId ||
     bankAccount.entityId !== reconciliation.entityId ||
-    !Number.isFinite(bankAccount.currentBalance)
+    bookCents === null
   ) {
     return {
       bookEndingBalance,
@@ -70,7 +84,7 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
-  if (!Number.isFinite(reconciliation.statementEndingBalance)) {
+  if (statementCents === null) {
     return {
       bookEndingBalance,
       differenceAmount,
@@ -170,7 +184,7 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
-  if (Math.abs(differenceAmount) > 0.01) {
+  if (statementCents !== bookCents) {
     return {
       bookEndingBalance,
       differenceAmount,
