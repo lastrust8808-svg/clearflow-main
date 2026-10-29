@@ -40,7 +40,7 @@ function digest(value, field) {
  *   governance:object,attestations:Array<{
  *     tenantId:string,entityId:string,trustId:string,documentId:string,
  *     versionId:string,signerId:string,documentSha256:string,signedAt:string,
- *     explicitConsent:boolean,consentEvidenceRef:string,signatureEvidenceRef:string
+ *     explicitConsent:boolean,identityEvidenceRef:string,consentEvidenceRef:string,signatureEvidenceRef:string
  *   }>}} packet
  * @returns {{status:'evidence_ready_for_review'|'incomplete',
  *   reason:string,signerCount:number}} Frozen internal decision.
@@ -103,9 +103,13 @@ export function assessTrustDocumentSigningPacket(packet) {
       throw new Error('Signature attestation predates finalized document version');
     }
     lastSignedAt = signedAt;
+    // A signer identity-evidence pointer is mandatory, but is NOT proof that
+    // identity was independently verified. That remains an authenticated
+    // provider/manual-review integration gate outside this pure assessment.
+    const identityEvidenceRef = identifier(attestation.identityEvidenceRef, 'identityEvidenceRef');
     const consentEvidenceRef = identifier(attestation.consentEvidenceRef, 'consentEvidenceRef');
     const signatureEvidenceRef = identifier(attestation.signatureEvidenceRef, 'signatureEvidenceRef');
-    for (const evidenceRef of [consentEvidenceRef, signatureEvidenceRef]) {
+    for (const evidenceRef of [identityEvidenceRef, consentEvidenceRef, signatureEvidenceRef]) {
       if (evidenceRefs.has(evidenceRef)) throw new Error('Reused signing evidence reference');
       evidenceRefs.add(evidenceRef);
     }
