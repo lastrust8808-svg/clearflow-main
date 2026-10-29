@@ -38,7 +38,7 @@ function timestamp(value, field) {
 
 /**
  * @param {{tenantId:string,entityId:string,documentId:string,versions:Array<{
- *   versionId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
+ *   versionId:string,tenantId:string,entityId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
  *   registeredAt:string,evidenceRef:string}>}} registry
  * @param {{versionId:string,sha256:string}} proof sha256 MUST be computed from the supplied file bytes
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Frozen, metadata-free result
@@ -65,6 +65,9 @@ export function verifyTrustDocumentVersion(registry, proof) {
       throw new TypeError('Invalid document version');
     }
     const id = identifier(version.versionId, 'version.versionId');
+    for (const key of ['tenantId', 'entityId', 'documentId']) {
+      if (version[key] !== registry[key]) throw new Error('Document version ' + key + ' scope mismatch');
+    }
     if (seenIds.has(id)) throw new Error('Duplicate document version ID');
     seenIds.add(id);
     const evidenceRef = identifier(version.evidenceRef, 'version.evidenceRef');
@@ -78,6 +81,9 @@ export function verifyTrustDocumentVersion(registry, proof) {
     }
     lastRegisteredAt = registeredAt;
     if (!VERSION_STATUSES.has(version.status)) throw new TypeError('Invalid document version status');
+    if (i === registry.versions.length - 1 && version.status === 'superseded') {
+      throw new Error('Latest document version cannot be superseded without a successor');
+    }
     if (i < registry.versions.length - 1 && version.status === 'current') {
       throw new Error('Historical document version cannot be current');
     }
