@@ -1,7 +1,8 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { createTrustDocumentQrLink, digestTrustDocumentQrLink } from '../server/services/trustDocumentQrPolicy.js';
-import { resolveTrustDocumentQrBinding } from '../server/services/trustDocumentQrRegistryPolicy.js';
+import { resolveTrustDocumentQrBinding, verifyTrustDocumentQrBytes } from '../server/services/trustDocumentQrRegistryPolicy.js';
 
 const origin = 'https://verify.example.org';
 const issuedAt = '2026-10-28T12:00:00.000Z';
@@ -95,4 +96,65 @@ test('fails closed on malformed hashes, statuses, timestamps and revocation evid
     tokenHashSha256: 'x'.repeat(64) }), /SHA-256/);
   assert.throws(() => resolveTrustDocumentQrBinding({ ...registry, bindings: [null] }, lookup),
     /Invalid QR binding/);
+});
+
+const finalizedBytes = Buffer.from('%PDF-1.7\\nimmutable finalized document bytes');
+const finalizedDigest = createHash('sha256').update(finalizedBytes).digest('hex');
+function versionRegistry(overrides = {}) {
+  return { ...scope, documentId: 'document-1', versions: [{
+    ...scope, documentId: 'document-1', versionId: 'version-1', sequence: 1,
+    sha256: finalizedDigest, status: 'current', evidenceRef: 'registered-1',
+    registeredAt: issuedAt,
+  }], ...overrides };
+}
+
+test('QR digest resolves to authorized document version only after actual byte verification', () => {
+  const { registry, lookup } = fixture();
+  const result = verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(), finalizedBytes);
+  assert.deepEqual(result, { status: 'valid' });
+  assert.equal(Object.isFrozen(result), true);
+  assert.deepEqual(Object.keys(result), ['status']);
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(),
+    Buffer.from('%PDF-1.7\\naltered')), { status: 'unknown' });
+});
+
+test('revoked and unknown QR tokens never disclose document version status', () => {
+  const { registry, lookup } = fixture();
+  const revoked = { ...registry, bindings: [{ ...registry.bindings[0], status: 'revoked',
+    revokedAt, revocationEvidenceRef: 'revoke-1' }] };
+  const unknown = { ...lookup, tokenHashSha256: 'f'.repeat(64) };
+  const versions = versionRegistry({ versions: [{ ...versionRegistry().versions[0], status: 'revoked' }] });
+  assert.deepEqual(verifyTrustDocumentQrBytes(revoked, lookup, versions, finalizedBytes),
+    { status: 'unknown' });
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, unknown, versions, finalizedBytes),
+    { status: 'unknown' });
+});
+
+test('QR verification preserves superseded and revoked status for matching bytes', () => {
+  const { registry, lookup } = fixture();
+  const first = { ...versionRegistry().versions[0], status: 'superseded' };
+  const next = { ...first, versionId: 'version-2', sequence: 2,
+    sha256: createHash('sha256').update('new version').digest('hex'),
+    status: 'current', evidenceRef: 'registered-2', registeredAt: revokedAt };
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [first, next] }), finalizedBytes), { status: 'superseded' });
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [{ ...first, status: 'revoked' }] }), finalizedBytes),
+  { status: 'revoked' });
+});
+
+test('QR byte verification rejects registry scope substitution and invalid bytes', () => {
+  const { registry, lookup } = fixture();
+  for (const key of ['tenantId', 'entityId', 'documentId']) {
+    assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+      versionRegistry({ [key]: 'other' }), finalizedBytes), /scope mismatch/);
+  }
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(), ''),
+    /bytes required/);
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [{ ...versionRegistry().versions[0], tenantId: 'other' }] }),
+    finalizedBytes), /scope mismatch/);
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [{ ...versionRegistry().versions[0], versionId: 'other' }] }),
+    finalizedBytes), { status: 'unknown' });
 });
