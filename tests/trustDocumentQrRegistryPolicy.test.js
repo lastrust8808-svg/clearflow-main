@@ -85,7 +85,7 @@ test('fails closed on malformed hashes, statuses, timestamps and revocation evid
     { status: 'revoked', revokedAt, revocationEvidenceRef: '' },
     { revokedAt },
     { revocationEvidenceRef: 'revoke-1' },
-    { documentId: 'doc\\u0000hidden' },
+    { documentId: 'doc' + String.fromCharCode(0) + 'hidden' },
   ];
   for (const change of bad) {
     assert.throws(() => resolveTrustDocumentQrBinding({ ...registry,
