@@ -274,3 +274,49 @@ test('scoped records reject missing or incorrect record identifiers without supp
     await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
+
+test('google app-data scope rejects an independently copied workspace from another account', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimEmail = `victim-${randomUUID()}@example.test`;
+  const aliasEmail = `alias-${randomUUID()}@example.test`;
+  const victimId = `google:${victimEmail}`;
+  const aliasId = `google:${aliasEmail}`;
+  const victimPath = path.join(root, encodeURIComponent(victimId));
+  const aliasPath = path.join(root, encodeURIComponent(aliasId));
+  try {
+    await saveAccountAppData(victimId, { user: { email: victimEmail }, revision: 1 });
+    await fs.mkdir(aliasPath, { recursive: true });
+    // A normal file copy has no symlink or hardlink marker; the embedded
+    // account identity must still prevent it from being served to the alias.
+    await fs.copyFile(path.join(victimPath, 'app-data.json'), path.join(aliasPath, 'app-data.json'));
+    await assert.rejects(loadAccountAppData(aliasId), /Stored app data identity does not match requested account/);
+    assert.equal((await loadAccountAppData(victimId)).user.email, victimEmail);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
+test('google app-data scope rejects mismatched or missing identity before writing', async () => {
+  const accountEmail = `owner-${randomUUID()}@example.test`;
+  const accountId = `google:${accountEmail}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', encodeURIComponent(accountId));
+  try {
+    for (const payload of [
+      { user: { email: 'someone-else@example.test' } },
+      { user: { email: '' } },
+      { user: {} },
+      {},
+    ]) {
+      await assert.rejects(saveAccountAppData(accountId, payload), /Stored app data identity does not match requested account/);
+    }
+    await assert.rejects(fs.stat(directory), (error) => error?.code === 'ENOENT');
+    // Case/outer whitespace in a profile email is normalized; account ID
+    // itself remains canonical and the existing app-data shape is preserved.
+    const original = { user: { email: ` ${accountEmail.toUpperCase()} ` }, revision: 2 };
+    await saveAccountAppData(accountId, original);
+    assert.deepEqual(await loadAccountAppData(accountId), original);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
