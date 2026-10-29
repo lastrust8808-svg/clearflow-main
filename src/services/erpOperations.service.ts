@@ -8,6 +8,7 @@ interface DeliveryQueueResponse {
     id: string;
     invoiceId: string;
     entityId: string;
+    invoiceNumber: string;
     status: OperationStatus;
     queuedAt: string;
     persistedAt: string;
@@ -123,9 +124,9 @@ function isAcceptedJob(
 // operations and legacy callers that do not request a delivery channel.
 function isConfirmedInvoiceDelivery(
   value: unknown,
-  payload: { invoiceId: string; entityId: string; deliveryMethod?: string; recipientEmail?: string; internalDeliveryTarget?: string },
+  payload: { invoiceId: string; entityId: string; invoiceNumber: string; deliveryMethod?: string; recipientEmail?: string; internalDeliveryTarget?: string },
 ): boolean {
-  if (!isAcceptedJob(value, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId })) return false;
+  if (!isAcceptedJob(value, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId, invoiceNumber: payload.invoiceNumber })) return false;
   // Delivery is never confirmed by a generic queued receipt or an unspecified
   // destination. The UI may mark this operation "sent", so require a declared
   // delivery method and actual completed transport evidence for every caller.
@@ -188,7 +189,7 @@ export async function queueInvoiceExport(payload: {
   invoiceNumber: string;
 }) {
   return postErp<DeliveryQueueResponse>('/api/erp/invoice-exports', payload, 'Invoice export',
-    (result) => isAcceptedJob(result, 'job', 'export', { invoiceId: payload.invoiceId, entityId: payload.entityId }));
+    (result) => isAcceptedJob(result, 'job', 'export', { invoiceId: payload.invoiceId, entityId: payload.entityId, invoiceNumber: payload.invoiceNumber }));
 }
 
 export async function importReconciliationStatement(payload: {
