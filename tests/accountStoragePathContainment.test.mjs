@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import {
   loadAccountAppData,
@@ -158,5 +158,52 @@ test('account JSON reads refuse non-regular record paths', async () => {
     await assert.rejects(loadAccountAppData(accountId), /Unsafe storage record file/);
   } finally {
     await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
+
+
+test('atomic account saves fsync the containing directory and fail closed on sync errors', async () => {
+  const accountId = `directory-sync-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const originalOpen = fs.open;
+  let directorySyncs = 0;
+  let injectFailure = false;
+  // Intercept only directory handles; real file writes and real directory
+  // fsync still execute. This tests the durability acknowledgment boundary.
+  fs.open = async (target, flags, ...args) => {
+    const handle = await originalOpen(target, flags, ...args);
+    if (target !== directory || typeof flags !== 'number' ||
+        (flags & fsConstants.O_DIRECTORY) !== fsConstants.O_DIRECTORY) {
+      return handle;
+    }
+    return {
+      stat: () => handle.stat(),
+      sync: async () => {
+        directorySyncs += 1;
+        if (injectFailure) throw new Error('simulated directory sync failure');
+        await handle.sync();
+      },
+      close: () => handle.close(),
+    };
+  };
+  try {
+    await saveAccountAppData(accountId, { revision: 1 });
+    assert.equal(directorySyncs, 1, 'successful save must sync parent directory');
+    assert.deepEqual(await loadAccountAppData(accountId), { revision: 1 });
+
+    injectFailure = true;
+    await assert.rejects(
+      saveAccountAppData(accountId, { revision: 2 }),
+      /simulated directory sync failure/
+    );
+    assert.equal(directorySyncs, 2, 'failed directory sync must not be acknowledged');
+    assert.deepEqual(await fs.readdir(directory), ['app-data.json']);
+    // Rename precedes directory fsync; the new complete record may already
+    // be visible despite an error, so callers must not blindly retry a
+    // non-idempotent operation based on this error.
+    assert.deepEqual(await loadAccountAppData(accountId), { revision: 2 });
+  } finally {
+    fs.open = originalOpen;
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });
