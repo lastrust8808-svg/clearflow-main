@@ -16,6 +16,8 @@ function reconciliation(overrides = {}) {
     statementEndingBalance: 100,
     statementImportId: 'import-a',
     statementReviewStatus: 'ready_to_close',
+    status: 'in_review',
+    closeApprovalStatus: 'pending',
     matchedStatementLineIds: ['line-1'],
     unmatchedStatementLineIds: [],
     parsedStatementLines: [{ id: 'line-1', matchStatus: 'matched' }],
@@ -178,6 +180,30 @@ test('duplicate matched-index entries are rejected even if parsed rows are uniqu
 test('legacy parsed statements without a matched-index list remain eligible when fully reviewed', () => {
   const metrics = buildReconciliationCloseMetrics(
     reconciliation({ matchedStatementLineIds: undefined }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, true);
+});
+
+
+test('closed reconciliation cannot regain approval eligibility from stale ready-to-close data', () => {
+  for (const overrides of [
+    { status: 'completed' },
+    { status: undefined },
+    { status: 'unexpected' },
+    { closeApprovalStatus: 'closed' },
+    { closedAt: '2026-10-28T18:00:00Z' },
+    { closeJobId: 'already-submitted-job' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(reconciliation(overrides), account);
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(overrides));
+    assert.match(metrics.blockedReason, /completed reconciliation cannot be approved again/);
+  }
+});
+
+test('controller-approved but still open reconciliation retains close eligibility', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ closeApprovalStatus: 'approved', controllerSignoffAt: '2026-10-28T18:00:00Z' }),
     account
   );
   assert.equal(metrics.isReadyToApprove, true);
