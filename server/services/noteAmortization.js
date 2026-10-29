@@ -106,6 +106,12 @@ export function buildFixedMonthlyNoteSchedule(terms) {
     const principalPaid = index === paymentCount - 1 ? balance : (payment - interest > balance ? balance : payment - interest);
     const amount = interest + principalPaid;
     balance -= principalPaid;
+    // Rounding the scheduled payment up can extinguish very small notes
+    // before the contracted term. Do not manufacture later zero-value
+    // installments and misrepresent them as scheduled payments.
+    if (index < paymentCount - 1 && balance === 0n) {
+      throw new RangeError('Note terms would create zero-value future installments');
+    }
     totalInterest += interest;
     installments.push(Object.freeze({
       installmentNumber: index + 1,
