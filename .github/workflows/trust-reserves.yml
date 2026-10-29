@@ -10,6 +10,8 @@ on:
       - 'tests/trusteeSigningPolicy.test.js'
       - 'server/services/privateNoteLifecycle.js'
       - 'tests/privateNoteLifecycle.test.js'
+      - 'server/services/trustDocumentVersionPolicy.js'
+      - 'tests/trustDocumentVersionPolicy.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -22,6 +24,8 @@ on:
       - 'tests/trusteeSigningPolicy.test.js'
       - 'server/services/privateNoteLifecycle.js'
       - 'tests/privateNoteLifecycle.test.js'
+      - 'server/services/trustDocumentVersionPolicy.js'
+      - 'tests/trustDocumentVersionPolicy.test.js'
 permissions:
   contents: read
 jobs:
@@ -36,4 +40,5 @@ jobs:
       - run: node --check server/services/noteAmortization.js
       - run: node --check server/services/trusteeSigningPolicy.js
       - run: node --check server/services/privateNoteLifecycle.js
-      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js
+      - run: node --check server/services/trustDocumentVersionPolicy.js
+      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js
