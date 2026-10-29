@@ -122,3 +122,26 @@ test('invalid input and missing payment settlement fail closed', () => {
   assert.throws(() => project(scope, {}, asOf), /events must be an array/);
   assert.throws(() => project(scope, [paid('bad', { settlementId: '' })], asOf), /settlementId/);
 });
+
+test('invalid calendar dates cannot extend a paid-through entitlement', () => {
+  assert.throws(() => project(scope, [paid('bad', { periodEnd: '2026-11-31T12:00:00Z' })], asOf), /calendar timestamp/);
+  assert.throws(() => project(scope, [paid()], '2026-02-30T12:00:00Z'), /calendar timestamp/);
+});
+
+test('invalid event times and timezone offsets fail closed', () => {
+  const invalid = ['2026-10-20T24:00:00Z', '2026-10-20T12:60:00Z',
+    '2026-10-20T12:00:60Z', '2026-10-20T12:00:00+24:00',
+    '2026-10-20T12:00:00-05:60'];
+  for (const occurredAt of invalid) {
+    assert.throws(() => project(scope, [event('bad', 'subscription_created', occurredAt)], asOf),
+      /calendar timestamp/, occurredAt);
+  }
+});
+
+test('valid leap days and timezone-offset instants remain supported', () => {
+  const leapPaid = paid('leap', { periodEnd: '2028-02-29T12:00:00+05:30' });
+  assert.equal(project(scope, [leapPaid], asOf).status, 'active');
+  assert.equal(project(scope, [leapPaid], '2028-02-29T06:30:00Z').status, 'expired');
+  assert.throws(() => project(scope, [paid('invalid', { periodEnd: '2027-02-29T12:00:00Z' })], asOf),
+    /calendar timestamp/);
+});
