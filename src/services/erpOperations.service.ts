@@ -162,6 +162,33 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     throw new Error(`${label} outcome unknown: no server confirmation was received. Verify operation status before retrying.`);
   }
   if (!response.ok) {
+    // The ERP backend explicitly fails closed with this exact 503 contract
+    // BEFORE accepting a job. Distinguish that confirmed no-op from a generic
+    // 503 that might follow a committed operation. Never infer rejection from
+    // HTTP status alone; require the matching operation-specific response.
+    if (response.status === 503) {
+      const expectedOperation: Record<string, string> = {
+        'Invoice delivery': 'invoice_delivery',
+        'Invoice export': 'invoice_export',
+        'Statement import': 'statement_import',
+        'Reconciliation close': 'reconciliation_close',
+      };
+      let failure: unknown;
+      try {
+        failure = await response.json();
+      } catch {
+        // Malformed or missing failure evidence remains an unknown outcome.
+      }
+      if (isRecord(failure) &&
+          failure.success === false &&
+          failure.code === 'ERP_DURABLE_JOB_STORE_REQUIRED' &&
+          failure.operation === expectedOperation[label] &&
+          !Object.hasOwn(failure, 'job') &&
+          !Object.hasOwn(failure, 'importJob') &&
+          !Object.hasOwn(failure, 'closeJob')) {
+        throw new Error(`${label} is unavailable: durable job storage is not enabled. No operation was queued or completed.`);
+      }
+    }
     // A 5xx, timeout or throttled response may follow a committed operation.
     // Only an explicit non-transient client rejection can be treated as
     // rejected rather than indeterminate.
