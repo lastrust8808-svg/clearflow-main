@@ -8,6 +8,8 @@ interface DeliveryQueueResponse {
     id: string;
     status: OperationStatus;
     queuedAt: string;
+    persistedAt: string;
+    persistence: 'durable';
     operation: 'send' | 'export';
     sentAt?: string;
     deliveryChannel?: 'smtp' | 'manual' | 'internal';
@@ -19,7 +21,11 @@ interface StatementImportResponse {
   success: boolean;
   importJob: {
     id: string;
-    status: OperationStatus;
+    status: 'processed';
+    operation: 'statement_import';
+    queuedAt: string;
+    persistedAt: string;
+    persistence: 'durable';
     importedAt: string;
   };
 }
@@ -28,7 +34,11 @@ interface ReconciliationCloseResponse {
   success: boolean;
   closeJob: {
     id: string;
-    status: OperationStatus;
+    status: 'processed';
+    operation: 'reconciliation_close';
+    queuedAt: string;
+    persistedAt: string;
+    persistence: 'durable';
     closedAt: string;
   };
 }
@@ -71,8 +81,13 @@ function isAcceptedJob(value: unknown, key: 'job' | 'importJob' | 'closeJob', op
       Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
       (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
-  return job.status === 'processed' &&
-    typeof (key === 'importJob' ? job.importedAt : job.closedAt) === 'string';
+  // Imports and accounting-period closure require the same durable receipt as
+  // invoice jobs. A process-local "processed" status is never sufficient.
+  const expectedOperation = key === 'importJob' ? 'statement_import' : 'reconciliation_close';
+  const completedAt = key === 'importJob' ? job.importedAt : job.closedAt;
+  return job.operation === expectedOperation && job.status === 'processed' &&
+    hasDurableReceipt(job) && isUtcTimestamp(completedAt) &&
+    Date.parse(completedAt) >= Date.parse(job.persistedAt);
 }
 
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
