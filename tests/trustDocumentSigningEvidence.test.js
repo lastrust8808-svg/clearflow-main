@@ -18,6 +18,7 @@ const attestation = (signerId, changes = {}) => ({
   ...scope, signerId, documentSha256: sha,
   signedAt: signerId === 'a' ? '2026-10-28T10:00:00.000Z' : '2026-10-28T11:00:00.000Z',
   explicitConsent: true,
+  identityEvidenceRef: 'identity-' + signerId,
   consentEvidenceRef: 'consent-' + signerId,
   signatureEvidenceRef: 'receipt-' + signerId,
   ...changes,
@@ -93,6 +94,24 @@ test('duplicate signers and reused evidence refs fail closed', () => {
     consentEvidenceRef: 'receipt-a',
   })] }), /Reused signing evidence/);
 });
+test('identity evidence is mandatory, unique, and distinct from consent and signature receipts', () => {
+  assert.throws(() => assess({ attestations: [attestation('a', {
+    identityEvidenceRef: undefined,
+  })] }), /identityEvidenceRef/);
+  assert.throws(() => assess({ attestations: [attestation('a', {
+    identityEvidenceRef: 'consent-a',
+  })] }), /Reused signing evidence/);
+  assert.throws(() => assess({ attestations: [attestation('a', {
+    signatureEvidenceRef: 'identity-a',
+  })] }), /Reused signing evidence/);
+  assert.throws(() => assess({ attestations: [
+    attestation('a'),
+    attestation('b', { identityEvidenceRef: 'receipt-a' }),
+  ] }), /Reused signing evidence/);
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  assert.equal(Object.hasOwn(assess(), 'identityVerified'), false);
+});
+
 test('future, malformed, tied and out-of-order timestamps fail closed', () => {
   assert.throws(() => assess({ attestations: [attestation('a', {
     signedAt: '2026-10-30T10:00:00.000Z',
