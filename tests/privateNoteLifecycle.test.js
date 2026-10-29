@@ -73,6 +73,39 @@ test('presentment must have its own evidence distinct from issuance provenance',
   ]).status, 'presented');
 });
 
+test('dispute evidence cannot replay issuance or presentment provenance', () => {
+  const issued = event('issued', 1);
+  const presented = event('presented', 2);
+  for (const replayedRef of [issued.evidenceRef, presented.evidenceRef]) {
+    assert.throws(() => project([
+      issued, presented, event('disputed', 3, { evidenceRef: replayedRef }),
+    ]), /lifecycle evidence reference must be unique across events/);
+  }
+  assert.equal(project([issued, presented, event('disputed', 3)]).status, 'disputed');
+});
+
+test('notice preparation cannot reuse issuance or presentment evidence', () => {
+  const issued = event('issued', 1);
+  const presented = event('presented', 2);
+  for (const replayedRef of [issued.evidenceRef, presented.evidenceRef]) {
+    assert.throws(() => project([
+      issued, presented, event('notice_prepared', 3, { evidenceRef: replayedRef }),
+    ]), /lifecycle evidence reference must be unique across events/);
+  }
+  assert.equal(project([issued, presented, event('notice_prepared', 3)]).status, 'notice_prepared');
+});
+
+test('later disputes require fresh evidence even when the notice is revised', () => {
+  const history = [
+    event('issued', 1), event('presented', 2), event('disputed', 3),
+    event('notice_prepared', 4),
+  ];
+  assert.throws(() => project([
+    ...history, event('disputed', 5, { evidenceRef: 'evidence-3' }),
+  ]), /lifecycle evidence reference must be unique across events/);
+  assert.equal(project([...history, event('disputed', 5)]).status, 'disputed');
+});
+
 test('notice drafts cannot masquerade as the issued instrument or reuse a draft version', () => {
   assert.throws(() => project([
     event('issued', 1), event('presented', 2),
