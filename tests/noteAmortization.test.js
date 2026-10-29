@@ -73,9 +73,20 @@ test('produces immutable schedules and does not mutate input', () => {
   assert.deepEqual(input, terms);
 });
 
-test('never applies payments or changes a note balance outside the returned projection', () => {
-  const input = { ...terms, principalMinor: 1 };
+test('rejects impossible terms that would produce zero-value future installments', () => {
+  for (const overrides of [
+    { principalMinor: 1, annualRateBps: 0, paymentCount: 12 },
+    { principalMinor: 2, annualRateBps: 0, paymentCount: 3 },
+    { principalMinor: 1, annualRateBps: 600, paymentCount: 12 },
+  ]) {
+    assert.throws(() => schedule(overrides), /zero-value future installments/);
+  }
+});
+
+test('permits a one-cent single-installment note without inventing payments', () => {
+  const input = { ...terms, principalMinor: 1, annualRateBps: 0, paymentCount: 1 };
   const result = buildFixedMonthlyNoteSchedule(input);
+  assert.equal(result.installments.length, 1);
   assert.equal(result.installments[0].principalMinor, 1);
   assert.equal(result.installments[0].interestMinor, 0);
   assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
