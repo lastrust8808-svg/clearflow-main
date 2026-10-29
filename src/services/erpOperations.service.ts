@@ -119,7 +119,10 @@ function isConfirmedInvoiceDelivery(
   payload: { invoiceId: string; entityId: string; deliveryMethod?: string; recipientEmail?: string; internalDeliveryTarget?: string },
 ): boolean {
   if (!isAcceptedJob(value, 'job', 'send', { invoiceId: payload.invoiceId, entityId: payload.entityId })) return false;
-  if (payload.deliveryMethod !== 'email' && payload.deliveryMethod !== 'internal_user') return true;
+  // Delivery is never confirmed by a generic queued receipt or an unspecified
+  // destination. The UI may mark this operation "sent", so require a declared
+  // delivery method and actual completed transport evidence for every caller.
+  if (payload.deliveryMethod !== 'email' && payload.deliveryMethod !== 'internal_user') return false;
   if (!isRecord(value) || !isRecord(value.job) || value.job.status !== 'sent') return false;
   if (payload.deliveryMethod === 'email') {
     return value.job.deliveryChannel === 'smtp' &&
