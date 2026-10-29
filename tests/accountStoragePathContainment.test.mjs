@@ -107,3 +107,56 @@ test('symlinked JSON records are not followed during account reads', async () =>
     await fs.rm(victimPath, { recursive: true, force: true });
   }
 });
+
+test('hard-linked account records cannot expose another tenant data', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `hardlink-victim-${randomUUID()}`;
+  const aliasId = `hardlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountAppData(victimId, { secret: 'victim-only' });
+    await fs.mkdir(aliasPath);
+    await fs.link(path.join(victimPath, 'app-data.json'), path.join(aliasPath, 'app-data.json'));
+    await assert.rejects(loadAccountAppData(aliasId), /Unsafe storage record file/);
+    // Fail closed while a hard link exists, even for the original account.
+    await assert.rejects(loadAccountAppData(victimId), /Unsafe storage record file/);
+    await fs.unlink(path.join(aliasPath, 'app-data.json'));
+    assert.deepEqual(await loadAccountAppData(victimId), { secret: 'victim-only' });
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
+test('atomic document replacement breaks hard links without modifying the victim record', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `hardlink-document-victim-${randomUUID()}`;
+  const aliasId = `hardlink-document-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountDocumentFile(victimId, 'file-1', { contents: 'private' });
+    await fs.mkdir(path.join(aliasPath, 'files'), { recursive: true });
+    await fs.link(path.join(victimPath, 'files', 'file-1.json'), path.join(aliasPath, 'files', 'file-1.json'));
+    await assert.rejects(loadAccountDocumentFile(aliasId, 'file-1'), /Unsafe storage record file/);
+    await saveAccountDocumentFile(aliasId, 'file-1', { contents: 'replacement' });
+    assert.equal((await loadAccountDocumentFile(aliasId, 'file-1')).contents, 'replacement');
+    assert.equal((await loadAccountDocumentFile(victimId, 'file-1')).contents, 'private');
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
+test('account JSON reads refuse non-regular record paths', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const accountId = `directory-record-${randomUUID()}`;
+  const accountPath = path.join(root, accountId);
+  try {
+    await fs.mkdir(path.join(accountPath, 'app-data.json'), { recursive: true });
+    await assert.rejects(loadAccountAppData(accountId), /Unsafe storage record file/);
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
