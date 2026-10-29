@@ -94,6 +94,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
         throw new Error('Notice draft document reference must be distinct and unique');
       }
       noticeDocumentRefs.add(noticeDocumentRef);
+      // A prepared notice is a draft artifact, but still needs a traceable
+      // preparation record. This pointer is not proof of delivery or service.
+      requiredId(event.evidenceRef, 'evidenceRef');
     }
     if (event.type === 'presented' || event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
