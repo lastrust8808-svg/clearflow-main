@@ -78,6 +78,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
     if (next === null) throw new Error('Invalid private note lifecycle transition');
     if (event.type === 'issued') {
       issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
+      // An issuance without a provenance reference must not become an issued state.
+      // The caller must independently verify this evidence before accepting it.
+      requiredId(event.evidenceRef, 'evidenceRef');
     }
     if (event.type === 'presented') {
       const presentedDocumentRef = requiredId(event.documentRef, 'documentRef');
