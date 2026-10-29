@@ -51,6 +51,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
 
   const seen = new Map();
   const settlements = new Map();
+  const settledInvoices = new Map();
   const normalized = [];
   for (const event of events) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
@@ -99,6 +100,15 @@ export function projectMembershipEntitlement(scope, events, asOf) {
         seen.set(id, fingerprint);
         continue;
       }
+      // A monthly invoice represents one fully settled obligation. A different
+      // settlement ID for that invoice is not a second membership period.
+      // Reject it instead of silently accepting a double settlement or
+      // allowing a second webhook to extend the paid-through date.
+      const priorInvoiceSettlement = settledInvoices.get(normalizedEvent.invoiceId);
+      if (priorInvoiceSettlement && priorInvoiceSettlement !== normalizedEvent.settlementId) {
+        throw new Error('invoice has multiple successful settlements');
+      }
+      settledInvoices.set(normalizedEvent.invoiceId, normalizedEvent.settlementId);
       settlements.set(normalizedEvent.settlementId, {
         invoiceId: normalizedEvent.invoiceId,
         periodEnd: normalizedEvent.periodEnd,
