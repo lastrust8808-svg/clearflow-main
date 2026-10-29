@@ -173,7 +173,7 @@ export function buildReconciliationCloseMetrics(
       typeof reconciliation.controllerSignoffName !== 'string' ||
       !reconciliation.controllerSignoffName.trim() ||
       typeof reconciliation.controllerSignoffAt !== 'string' ||
-      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(reconciliation.controllerSignoffAt) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(reconciliation.controllerSignoffAt) ||
       !Number.isFinite(Date.parse(reconciliation.controllerSignoffAt))
     )
   ) {
