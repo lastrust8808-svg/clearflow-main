@@ -270,7 +270,8 @@ test('revoked and unknown QR tokens never disclose document version status', () 
   const revoked = { ...registry, bindings: [{ ...registry.bindings[0], status: 'revoked',
     revokedAt, revocationEvidenceRef: 'revoke-1' }] };
   const unknown = { ...lookup, tokenHashSha256: 'f'.repeat(64) };
-  const versions = versionRegistry({ versions: [{ ...versionRegistry().versions[0], status: 'revoked' }] });
+  const versions = versionRegistry({ versions: [{ ...versionRegistry().versions[0], status: 'revoked',
+    revocationEvidenceRef: 'version-revocation-1' }] });
   assert.deepEqual(verifyTrustDocumentQrBytes(revoked, lookup, versions, finalizedBytes),
     { status: 'unknown' });
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, unknown, versions, finalizedBytes),
@@ -286,7 +287,8 @@ test('QR verification preserves superseded and revoked status for matching bytes
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
     versionRegistry({ versions: [first, next] }), finalizedBytes), { status: 'superseded' });
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
-    versionRegistry({ versions: [{ ...first, status: 'revoked' }] }), finalizedBytes),
+    versionRegistry({ versions: [{ ...first, status: 'revoked',
+      revocationEvidenceRef: 'version-revocation-1' }] }), finalizedBytes),
   { status: 'revoked' });
 });
 
