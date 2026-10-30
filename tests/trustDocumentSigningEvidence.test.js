@@ -229,3 +229,20 @@ test('finalization timestamp must be anchored to the immutable registered versio
   }), /version.finalizedAt.*canonical/);
   assert.equal(assess().status, 'evidence_ready_for_review');
 });
+
+test('future-dated registration cannot authorize an earlier signing review', () => {
+  const version = packet().versionRegistry.versions[0];
+  const versionRegistry = registeredAt => ({
+    ...packet().versionRegistry,
+    versions: [{ ...version, registeredAt }],
+  });
+  assert.equal(assess({
+    versionRegistry: versionRegistry('2026-10-29T12:00:00.001Z'),
+  }).reason, 'document_registration_after_evaluation');
+  assert.equal(assess({
+    versionRegistry: versionRegistry('2026-10-29T12:00:00.000Z'),
+  }).status, 'evidence_ready_for_review');
+  assert.equal(assess({
+    versionRegistry: versionRegistry('2026-10-28T09:00:00.000Z'),
+  }).status, 'evidence_ready_for_review');
+});
