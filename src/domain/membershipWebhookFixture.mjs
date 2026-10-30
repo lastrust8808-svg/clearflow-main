@@ -53,7 +53,13 @@ export function verifyScopedMembershipWebhookFixture({
       Array.isArray(authenticatedScope)) return null;
   let event;
   try {
-    event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody);
+    // Buffer.toString('utf8') silently substitutes U+FFFD for malformed bytes.
+    // A signed but lossy-decoded event could alias another event identity in
+    // downstream deduplication. Reject invalid UTF-8 before JSON admission.
+    const jsonText = Buffer.isBuffer(rawBody)
+      ? new TextDecoder('utf-8', { fatal: true }).decode(rawBody)
+      : rawBody;
+    event = JSON.parse(jsonText);
   } catch {
     return null;
   }
