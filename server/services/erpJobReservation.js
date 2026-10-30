@@ -250,6 +250,67 @@ export async function renewErpOperationJobLease({
 }
 
 
+// Persist a pre-dispatch fence BEFORE calling any external provider or mailer.
+// A timeout after this point has an unknown outcome, not a confirmed failure.
+// This is NOT evidence of provider delivery, settlement, or successful export.
+// Caller MUST authenticate and authorize the worker/tenant/operation.
+export async function markErpOperationJobDispatchStarted({
+  db, authenticatedWorker, operation, jobId,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (typeof jobId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    throw new TypeError('Invalid ERP job id');
+  }
+  // The atomic fence can be recorded only once, by the owning worker while
+  // its processing lease is still valid. No fallback when storage fails.
+  const result = await db.query(
+    `UPDATE erp_operation_jobs
+     SET dispatch_started_at = now(), updated_at = now()
+     WHERE tenant_id = $1 AND operation = $2 AND id = $3
+       AND claimed_by = $4 AND status = 'processing'
+       AND lease_expires_at > now() AND dispatch_started_at IS NULL
+     RETURNING id, tenant_id, actor_id, operation, status, claimed_by,
+               claimed_at, dispatch_started_at, lease_expires_at,
+               created_at, updated_at`,
+    [tenantId, operation, jobId, workerId],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid dispatch fence result');
+  }
+  const row = result.rows[0];
+  if (!row) return null;
+  if (row.id !== jobId || row.tenant_id !== tenantId ||
+      row.operation !== operation || row.status !== 'processing' ||
+      row.claimed_by !== workerId || typeof row.actor_id !== 'string' ||
+      !row.actor_id) {
+    throw new Error('ERP job storage returned an invalid tenant-bound dispatch fence');
+  }
+  const stamp = value => value instanceof Date ? value.toISOString() : value;
+  const createdAt = stamp(row.created_at);
+  const claimedAt = stamp(row.claimed_at);
+  const dispatchStartedAt = stamp(row.dispatch_started_at);
+  const leaseExpiresAt = stamp(row.lease_expires_at);
+  const updatedAt = stamp(row.updated_at);
+  if ([createdAt, claimedAt, dispatchStartedAt, leaseExpiresAt, updatedAt].some(
+    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+  ) || Date.parse(createdAt) > Date.parse(claimedAt) ||
+       Date.parse(dispatchStartedAt) < Date.parse(claimedAt) ||
+       Date.parse(dispatchStartedAt) >= Date.parse(leaseExpiresAt) ||
+       Date.parse(updatedAt) < Date.parse(dispatchStartedAt)) {
+    throw new Error('ERP job storage returned an invalid dispatch fence timestamp');
+  }
+  return Object.freeze({
+    id: jobId, tenantId, operation, status: 'processing',
+    dispatchStartedAt, leaseExpiresAt, updatedAt,
+    outcomeMayBeUnknown: true,
+  });
+}
+
+
 // Terminal failure is a durable status transition, NOT an acknowledgement of
 // invoice delivery or financial settlement. The worker must have trusted
 // tenant/operation authorization before calling this function.
@@ -280,7 +341,7 @@ export async function failErpOperationJob({
          updated_at = now()
      WHERE tenant_id = $1 AND operation = $2 AND id = $3
        AND claimed_by = $4 AND status = 'processing'
-       AND lease_expires_at > now()
+       AND lease_expires_at > now() AND dispatch_started_at IS NULL
      RETURNING id, tenant_id, actor_id, operation, status, failure_code,
                claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
     [tenantId, operation, jobId, workerId, failureCode],
