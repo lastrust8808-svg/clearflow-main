@@ -184,7 +184,8 @@ test('only the currently registered document version can be evidence-ready', () 
   assert.equal(assess().status, 'evidence_ready_for_review');
   assert.equal(assess({ versionRegistry: {
     ...current, versions: [{ ...current.versions[0], status: 'revoked',
-      revocationEvidenceRef: 'version-revocation-1' }],
+      revocationEvidenceRef: 'version-revocation-1',
+      revokedAt: '2026-10-28T09:15:00.000Z' }],
   } }).reason, 'document_version_not_current');
   assert.equal(assess({ versionRegistry: {
     ...current, versions: [
