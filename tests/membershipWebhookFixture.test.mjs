@@ -138,3 +138,33 @@ test('fixture admits only type-specific payment fields and required identities',
     assert.equal(verifyScoped(scopedInput({ ...scopedPayload, [field]: '' })), null, field);
   }
 });
+
+test('signed fixture rejects invalid calendar timestamps before event promotion', () => {
+  for (const occurredAt of [
+    '2026-02-30T12:00:00Z', '2026-10-29T24:00:00Z',
+    '2026-10-29T12:60:00Z', '2026-10-29T12:00:00+24:00',
+    '2026-10-29', 'not-a-date',
+  ]) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, occurredAt })), null, occurredAt);
+  }
+  for (const periodEnd of [
+    '2026-11-31T12:00:00Z', '2026-11-29T12:00:60Z',
+    '2026-11-29T12:00:00-05:60', 'invalid',
+  ]) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, periodEnd })), null, periodEnd);
+  }
+});
+
+test('signed fixture requires paid-through after occurrence while accepting valid leap day', () => {
+  for (const periodEnd of [
+    scopedPayload.occurredAt, '2026-10-28T12:00:00Z',
+    '2026-10-29T08:00:00-04:00',
+  ]) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, periodEnd })), null, periodEnd);
+  }
+  assert.ok(verifyScoped(scopedInput({
+    ...scopedPayload,
+    occurredAt: '2028-02-28T12:00:00Z',
+    periodEnd: '2028-02-29T12:00:00Z',
+  })));
+});
