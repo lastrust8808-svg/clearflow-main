@@ -109,8 +109,40 @@ async function ensureDirectory(targetPath) {
   await assertSafeStorageDirectory(targetPath);
 }
 
+// Reads must not create missing directories, but must not expose legacy
+// records through permissive account/record directories either. Harden the
+// tenant parent before its child, using no-follow directory descriptors.
+// ENOENT remains observable to callers so a missing record still returns null.
+async function secureExistingReadDirectories(directory) {
+  await assertSafeStorageDirectory(directory);
+  const relative = path.relative(STORAGE_ROOT, directory);
+  const segments = relative.split(path.sep);
+  if (
+    !relative || relative === '..' || relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative) || segments.length > 2
+  ) {
+    throw new Error('Unsafe storage directory path.');
+  }
+  let current = STORAGE_ROOT;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const handle = await fs.open(
+      current,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+    );
+    try {
+      const stat = await handle.stat();
+      if (!stat.isDirectory()) throw new Error('Unsafe storage directory path.');
+      if ((stat.mode & 0o077) !== 0) await handle.chmod(0o700);
+    } finally {
+      await handle.close();
+    }
+  }
+  await assertSafeStorageDirectory(directory);
+}
+
 async function readJsonSafely(targetPath) {
-  await assertSafeStorageDirectory(path.dirname(targetPath));
+  await secureExistingReadDirectories(path.dirname(targetPath));
   // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
   const handle = await fs.open(targetPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
