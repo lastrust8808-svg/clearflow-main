@@ -12,8 +12,12 @@ const version = (sequence, overrides = {}) => ({
   sha256: sequence === 1 ? digestA : sequence === 2 ? digestB : digestC,
   status: 'current', evidenceRef: 'registration-' + sequence,
   registeredAt: '2026-10-' + String(sequence).padStart(2, '0') + 'T12:00:00.000Z',
-  ...(overrides.status === 'revoked' && !Object.hasOwn(overrides, 'revocationEvidenceRef')
-    ? { revocationEvidenceRef: 'revocation-' + sequence } : {}),
+  ...(overrides.status === 'revoked' ? {
+    ...(!Object.hasOwn(overrides, 'revocationEvidenceRef')
+      ? { revocationEvidenceRef: 'revocation-' + sequence } : {}),
+    ...(!Object.hasOwn(overrides, 'revokedAt')
+      ? { revokedAt: '2026-10-29T12:00:00.000Z' } : {}),
+  } : {}),
   ...overrides,
 });
 const registry = versions => ({
@@ -86,6 +90,24 @@ test('revoked versions require unique revocation provenance distinct from regist
   })], { versionId: 'version-1', sha256: digestA }), /Nonrevoked document version/);
   assert.deepEqual(check([version(1, { status: 'revoked' })],
     { versionId: 'version-1', sha256: digestA }), { status: 'revoked' });
+});
+
+test('core version and byte verification reject invalid revocation chronology', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  for (const revokedAt of [undefined, null, '', '2026-02-30T12:00:00.000Z',
+    '2026-10-01T12:00:00.000Z', '2026-09-30T12:00:00.000Z']) {
+    assert.throws(() => check([version(1, { status: 'revoked', revokedAt })], proof),
+      /version.revokedAt|revocation must follow registration/);
+  }
+  assert.throws(() => check([version(1, {
+    status: 'current', revokedAt: '2026-10-29T12:00:00.000Z',
+  })], proof), /Nonrevoked document version cannot carry revocation timestamp/);
+  assert.deepEqual(check([version(1, { status: 'revoked',
+    revokedAt: '2026-10-01T12:00:00.001Z' })], proof), { status: 'revoked' });
+  const bytes = Buffer.from('revoked finalized bytes');
+  assert.throws(() => verifyTrustDocumentBytes(registry([version(1, {
+    status: 'revoked', sha256: fileDigest(bytes), revokedAt: undefined,
+  })]), { versionId: 'version-1', content: bytes }), /version.revokedAt/);
 });
 
 test('rejects cross-tenant, cross-entity, cross-trust and cross-document version records', () => {
