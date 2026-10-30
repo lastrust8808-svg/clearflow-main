@@ -149,6 +149,19 @@ export function assessTrustDocumentSigningPacket(packet) {
   if (versionStatus.status !== 'valid') {
     return result('incomplete', 'document_version_not_current');
   }
+  // The finalization instant is security-sensitive. A request-supplied value
+  // alone could be backdated to make a draft signature appear valid. Bind it
+  // to the immutable, matching version record and its registration chronology.
+  // Older records without this provenance cannot be evidence-ready.
+  const currentVersion = versionRegistry.versions.find(v => v.versionId === scope.versionId);
+  if (!currentVersion || typeof currentVersion.finalizedAt !== 'string') {
+    return result('incomplete', 'document_finalization_provenance_missing');
+  }
+  const recordedFinalizedAt = timestamp(currentVersion.finalizedAt, 'version.finalizedAt');
+  const registeredAt = timestamp(currentVersion.registeredAt, 'version.registeredAt');
+  if (recordedFinalizedAt > registeredAt || recordedFinalizedAt !== finalizedAt) {
+    return result('incomplete', 'document_finalization_provenance_mismatch');
+  }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
