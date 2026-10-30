@@ -65,6 +65,10 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
   const activeVersions = new Set();
+  // Each document version has a single non-overlapping QR-token validity
+  // window. Revocation and replacement at the same instant are permitted.
+  // These windows come from the caller's trusted, immutable registry.
+  const versionWindows = new Map();
   let matched = null;
   for (const binding of registry.bindings) {
     if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
@@ -83,6 +87,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     if (issuedAt > asOfAt) {
       throw new Error('QR binding issued after lookup as-of timestamp');
     }
+    let revokedAt = null;
     if (binding.status === 'active') {
       if (binding.revokedAt != null || binding.revocationEvidenceRef != null) {
         throw new Error('Active QR binding cannot contain revocation evidence');
@@ -91,7 +96,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       if (activeVersions.has(versionKey)) throw new Error('Duplicate active QR document version');
       activeVersions.add(versionKey);
     } else if (binding.status === 'revoked') {
-      const revokedAt = timestamp(binding.revokedAt, 'binding.revokedAt');
+      revokedAt = timestamp(binding.revokedAt, 'binding.revokedAt');
       id(binding.revocationEvidenceRef, 'binding.revocationEvidenceRef');
       if (revokedAt <= issuedAt) throw new Error('QR revocation must follow issuance');
       if (revokedAt > asOfAt) {
@@ -100,6 +105,15 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     } else {
       throw new TypeError('Invalid QR binding status');
     }
+    const versionKey = JSON.stringify([documentId, versionId]);
+    const windows = versionWindows.get(versionKey) ?? [];
+    for (const prior of windows) {
+      const overlaps = (prior.revokedAt === null || issuedAt < prior.revokedAt) &&
+        (revokedAt === null || prior.issuedAt < revokedAt);
+      if (overlaps) throw new Error('Overlapping QR bindings for document version');
+    }
+    windows.push({ issuedAt, revokedAt });
+    versionWindows.set(versionKey, windows);
     if (timingSafeEqual(Buffer.from(hash, 'hex'), requested)) {
       matched = binding.status === 'active' ? { status: 'bound', documentId, versionId } : null;
     }
