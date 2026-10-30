@@ -5,7 +5,10 @@ import { evaluateTrusteeSigningPolicy } from '../server/services/trusteeSigningP
 const appointment = (trusteeId, overrides = {}) => ({
   trusteeId, tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
   effectiveOn: '2025-01-01', acceptedOn: '2025-01-02',
-  acceptanceEvidenceRef: 'acceptance-' + trusteeId, ...overrides,
+  acceptanceEvidenceRef: 'acceptance-' + trusteeId,
+  ...(overrides.revokedOn != null && !Object.hasOwn(overrides, 'revocationEvidenceRef')
+    ? { revocationEvidenceRef: 'revocation-' + trusteeId } : {}),
+  ...overrides,
 });
 const snapshot = (overrides = {}) => ({
   tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
@@ -133,4 +136,37 @@ test('different trustee appointments cannot replay the same acceptance evidence'
     signerIds: ['a'],
   }), /Duplicate trustee acceptance evidence reference/);
   assert.equal(evaluate().eligible, true);
+});
+
+
+test('trustee revocations require distinct, non-replayed evidence references', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'ref\u0000', 42]) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', {
+        revokedOn: '2026-10-28', revocationEvidenceRef: invalid,
+      })],
+    }), /appointment.revocationEvidenceRef/);
+  }
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'same-revocation' }),
+      appointment('b', { revokedOn: '2026-10-28', revocationEvidenceRef: 'same-revocation' }),
+    ],
+  }), /Reused trustee governance evidence reference/);
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'acceptance-b' }),
+      appointment('b'),
+    ],
+  }), /Reused trustee governance evidence reference/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', {
+      revokedOn: '2026-10-28', revocationEvidenceRef: 'acceptance-a',
+    })],
+  }), /Reused trustee governance evidence reference/);
+  assert.equal(evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28' }), appointment('b'),
+    ], signerIds: ['b'],
+  }).eligible, true);
 });
