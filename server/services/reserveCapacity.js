@@ -1,9 +1,9 @@
 /**
- * Pure, non-posting reserve classification for one authorized tenant/entity.
+ * Pure, non-posting reserve classification for one authorized tenant/entity/trust.
  * Amounts are integer minor currency units. A reserve snapshot is NOT a bank
  * balance, credit facility, settlement, or authorization to spend funds.
  *
- * Caller MUST authenticate/authorize the requested tenant/entity, independently
+ * Caller MUST authenticate/authorize the requested tenant/entity/trust, independently
  * verify each evidenceRef against the underlying asset/source, and persist
  * entries with audit history. Distinct evidence pointers prevent exact replay,
  * but do not prove independent assets or available bank cash.
@@ -40,8 +40,8 @@ function safeAdd(left, right, field) {
 }
 
 /**
- * @param {{tenantId:string, entityId:string, currency:string, entries:Array<{
- *   id:string, assetId:string, evidenceRef:string, tenantId:string, entityId:string, currency:string,
+ * @param {{tenantId:string, entityId:string, trustId:string, currency:string, entries:Array<{
+ *   id:string, assetId:string, evidenceRef:string, tenantId:string, entityId:string, trustId:string, currency:string,
  *   kind:'cash'|'noncash_collateral', sourceType:string, amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
  * }>}} snapshot
@@ -50,6 +50,7 @@ export function calculateReserveCapacity(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') throw new TypeError('Snapshot required');
   const tenantId = requiredString(snapshot.tenantId, 'tenantId');
   const entityId = requiredString(snapshot.entityId, 'entityId');
+  const trustId = requiredString(snapshot.trustId, 'trustId');
   const currency = requiredString(snapshot.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
   if (!Array.isArray(snapshot.entries)) throw new TypeError('entries must be an array');
@@ -82,7 +83,7 @@ export function calculateReserveCapacity(snapshot) {
       throw new Error('Duplicate reserve evidence reference');
     }
     evidenceRefs.add(evidenceRef);
-    if (entry.tenantId !== tenantId || entry.entityId !== entityId || entry.currency !== currency) {
+    if (entry.tenantId !== tenantId || entry.entityId !== entityId || entry.trustId !== trustId || entry.currency !== currency) {
       throw new Error('Reserve entry scope or currency mismatch');
     }
     if (!KINDS.has(entry.kind)) throw new TypeError('Unsupported reserve kind');
@@ -110,5 +111,5 @@ export function calculateReserveCapacity(snapshot) {
     totals.cashPledgedMinor = safeAdd(totals.cashPledgedMinor, pledged, 'cashPledgedMinor');
     totals.unencumberedCashMinor = safeAdd(totals.unencumberedCashMinor, amount - encumbered, 'unencumberedCashMinor');
   }
-  return Object.freeze({ tenantId, entityId, currency, ...totals });
+  return Object.freeze({ tenantId, entityId, trustId, currency, ...totals });
 }
