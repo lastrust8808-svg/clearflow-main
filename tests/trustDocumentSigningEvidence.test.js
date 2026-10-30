@@ -241,8 +241,31 @@ test('future-dated registration cannot authorize an earlier signing review', () 
   }).reason, 'document_registration_after_evaluation');
   assert.equal(assess({
     versionRegistry: versionRegistry('2026-10-29T12:00:00.000Z'),
-  }).status, 'evidence_ready_for_review');
+  }).reason, 'document_registered_after_signature');
   assert.equal(assess({
     versionRegistry: versionRegistry('2026-10-28T09:00:00.000Z'),
   }).status, 'evidence_ready_for_review');
+});
+
+test('version registration must precede the earliest signer attestation', () => {
+  const version = packet().versionRegistry.versions[0];
+  const withRegistration = registeredAt => ({
+    ...packet().versionRegistry,
+    versions: [{ ...version, registeredAt }],
+  });
+  // Both timestamps are after finalization and before evaluation. A signature
+  // cannot become eligible retroactively when its version is registered later.
+  assert.equal(assess({
+    versionRegistry: withRegistration('2026-10-28T10:00:00.001Z'),
+  }).reason, 'document_registered_after_signature');
+  // Registration at the exact signing instant is allowed.
+  assert.equal(assess({
+    versionRegistry: withRegistration('2026-10-28T10:00:00.000Z'),
+  }).status, 'evidence_ready_for_review');
+  // The first of multiple joint signatures also has to follow registration.
+  assert.equal(assess({
+    governance: { ...packet().governance, mode: 'joint' },
+    attestations: [attestation('a'), attestation('b')],
+    versionRegistry: withRegistration('2026-10-28T10:30:00.000Z'),
+  }).reason, 'document_registered_after_signature');
 });
