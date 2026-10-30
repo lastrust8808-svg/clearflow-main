@@ -118,6 +118,31 @@ test('QR digest resolves to authorized document version only after actual byte v
     Buffer.from('%PDF-1.7\\naltered')), { status: 'unknown' });
 });
 
+test('QR issuance cannot predate registration of its finalized document version', () => {
+  const { registry, lookup } = fixture();
+  const registeredLater = versionRegistry({
+    versions: [{
+      ...versionRegistry().versions[0],
+      registeredAt: '2026-10-28T12:00:00.001Z',
+    }],
+  });
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, lookup, registeredLater, finalizedBytes,
+  ), /QR binding issued before document version registration/);
+
+  // Exact same millisecond is permitted for an atomic registration/binding,
+  // as is issuing a new token after a previously registered version.
+  assert.deepEqual(verifyTrustDocumentQrBytes(
+    registry, lookup, versionRegistry(), finalizedBytes,
+  ), { status: 'valid' });
+  const issuedLater = { ...registry, bindings: [{
+    ...registry.bindings[0], issuedAt: '2026-10-28T12:00:00.001Z',
+  }] };
+  assert.deepEqual(verifyTrustDocumentQrBytes(
+    issuedLater, lookup, versionRegistry(), finalizedBytes,
+  ), { status: 'valid' });
+});
+
 test('revoked and unknown QR tokens never disclose document version status', () => {
   const { registry, lookup } = fixture();
   const revoked = { ...registry, bindings: [{ ...registry.bindings[0], status: 'revoked',
