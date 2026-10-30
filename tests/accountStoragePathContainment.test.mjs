@@ -455,3 +455,48 @@ test('nested Google identity accessors and cyclic objects fail before storage wr
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('lossy JSON values and hidden properties cannot overwrite account or vault records', async () => {
+  const accountId = `lossy-json-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  const hidden = Object.defineProperty({ retained: true }, 'hidden', { value: 'lost', enumerable: false });
+  const symbolKey = { retained: true, [Symbol('hidden')]: 'lost' };
+  const extraArrayProperty = Object.assign([1], { ignored: 'lost' });
+  const invalid = [
+    { data: { amount: NaN } },
+    { data: [Infinity] },
+    { data: { missing: undefined } },
+    { data: [() => 'lost'] },
+    { data: [Symbol('lost')] },
+    { data: [1n] },
+    { data: Array(1) },
+    { data: hidden },
+    { data: symbolKey },
+    { data: extraArrayProperty },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      const before = await fixture.read();
+      for (const payload of invalid) {
+        await assert.rejects(fixture.save(payload), /JSON-compatible|sparse arrays/);
+        assert.deepEqual(await fixture.read(), before, 'invalid payload must preserve the previous record');
+      }
+      await fixture.save({ data: [0, 1, 2], nested: { finite: 0.25, empty: null } });
+      const saved = await fixture.read();
+      assert.deepEqual(saved.data, [0, 1, 2]);
+      assert.deepEqual(saved.nested, { finite: 0.25, empty: null });
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
