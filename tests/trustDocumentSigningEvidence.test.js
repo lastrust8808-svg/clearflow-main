@@ -183,7 +183,8 @@ test('only the currently registered document version can be evidence-ready', () 
   const current = packet().versionRegistry;
   assert.equal(assess().status, 'evidence_ready_for_review');
   assert.equal(assess({ versionRegistry: {
-    ...current, versions: [{ ...current.versions[0], status: 'revoked' }],
+    ...current, versions: [{ ...current.versions[0], status: 'revoked',
+      revocationEvidenceRef: 'version-revocation-1' }],
   } }).reason, 'document_version_not_current');
   assert.equal(assess({ versionRegistry: {
     ...current, versions: [
