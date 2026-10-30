@@ -74,6 +74,48 @@ test('permits revoked token rotation with one new active binding', () => {
   { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
 });
 
+test('QR token rotations cannot overlap validity windows for the same document version', () => {
+  const { registry, lookup } = fixture();
+  const original = registry.bindings[0];
+  const replacement = createTrustDocumentQrLink(origin);
+  const revokedOriginal = {
+    ...original, status: 'revoked', revokedAt,
+    revocationEvidenceRef: 'revocation-1',
+  };
+  const replacementRow = {
+    ...original, tokenHashSha256: replacement.tokenHashSha256,
+  };
+  // The new token must not become valid while the old one remains valid.
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [revokedOriginal, {
+      ...replacementRow, issuedAt: '2026-10-29T11:59:59.999Z',
+    }],
+  }, lookup), /Overlapping QR bindings/);
+  // Reversed registry order must not bypass the check.
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [{
+      ...replacementRow, issuedAt: '2026-10-29T11:59:59.999Z',
+    }, revokedOriginal],
+  }, lookup), /Overlapping QR bindings/);
+  // A revocation and replacement at the exact same instant are allowed.
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings: [revokedOriginal, {
+      ...replacementRow, issuedAt: revokedAt,
+    }],
+  }, { ...lookup, tokenHashSha256: replacement.tokenHashSha256 }), {
+    status: 'bound', documentId: 'document-1', versionId: 'version-1',
+  });
+  // Overlap between two already-revoked tokens is also invalid.
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [revokedOriginal, {
+      ...replacementRow, status: 'revoked',
+      issuedAt: '2026-10-29T11:59:59.999Z',
+      revokedAt: '2026-10-30T11:00:00.000Z',
+      revocationEvidenceRef: 'revocation-2',
+    }],
+  }, lookup), /Overlapping QR bindings/);
+});
+
 test('fails closed on malformed hashes, statuses, timestamps and revocation evidence', () => {
   const { registry, lookup } = fixture();
   const original = registry.bindings[0];
