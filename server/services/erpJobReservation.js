@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 
 // Database-backed reservation primitive. NOT connected to HTTP routes yet.
+// Until independently verified durable completion evidence is persisted, no
+// successful terminal state ('sent'/'processed') may be acknowledged.
 // The caller MUST authenticate the session and authorize the tenant, actor,
 // entity and target record. Do not treat this as a delivery or payment receipt.
 const operations = new Set([
@@ -67,7 +69,7 @@ export async function reserveErpOperationJob({
     throw new Error('ERP job storage returned an invalid tenant-bound receipt');
   }
   if (typeof record.id !== 'string' || !record.id ||
-      !['queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown'].includes(record.status)) {
+      !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid job record');
   }
   const createdAt = record.created_at instanceof Date
@@ -106,7 +108,7 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
   if (!record) return null;
   if (record.id !== jobId || record.tenant_id !== tenantId ||
       record.actor_id !== actorId || !operations.has(record.operation) ||
-      !['queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown'].includes(record.status)) {
+      !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid tenant-bound status');
   }
   const createdAt = record.created_at instanceof Date
