@@ -12,7 +12,10 @@ const sha = createHash('sha256').update(content).digest('hex');
 const appointment = (trusteeId, changes = {}) => ({
   tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId,
   trusteeId, effectiveOn: '2026-01-01', acceptedOn: '2026-01-02',
-  acceptanceEvidenceRef: 'appointment-' + trusteeId, ...changes,
+  acceptanceEvidenceRef: 'appointment-' + trusteeId,
+  ...(changes.revokedOn != null && !Object.hasOwn(changes, 'revocationEvidenceRef')
+    ? { revocationEvidenceRef: 'revocation-' + trusteeId } : {}),
+  ...changes,
 });
 const attestation = (signerId, changes = {}) => ({
   ...scope, signerId, documentSha256: sha,
@@ -378,4 +381,24 @@ test('consent cannot precede immutable version registration, including joint sig
       attestation('b', { consentedAt: '2026-10-28T09:29:59.999Z' }),
     ],
   }).reason, 'document_registered_after_consent');
+});
+
+
+test('trustee revocation evidence cannot be recycled as signing or version evidence', () => {
+  const withRevocation = ref => ({
+    ...packet().governance,
+    appointments: [
+      appointment('a'),
+      appointment('b', { revokedOn: '2026-10-28', revocationEvidenceRef: ref }),
+    ],
+  });
+  assert.equal(assess({ governance: withRevocation('revocation-b') }).status,
+    'evidence_ready_for_review');
+  for (const reused of ['identity-a', 'consent-a', 'receipt-a', 'version-registration-1', 'appointment-a']) {
+    assert.throws(() => assess({ governance: withRevocation(reused) }),
+      /Reused cross-role signing provenance reference|Reused trustee governance evidence reference/);
+  }
+  assert.throws(() => assess({
+    governance: withRevocation(undefined),
+  }), /appointment.revocationEvidenceRef/);
 });
