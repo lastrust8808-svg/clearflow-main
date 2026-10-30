@@ -559,3 +559,73 @@ export async function quarantineExpiredErpOperationJobsBatch({
   });
   return Object.freeze(quarantined);
 }
+
+
+// Read-only, bounded reconciliation backlog for independently authenticated
+// tenant-authorized recovery workers. Quarantined jobs must be investigated,
+// never automatically retried or reported delivered. No payload, recipient,
+// or financial details are returned by this helper.
+// UUID keyset pagination avoids lossy timestamp cursors (PostgreSQL stores
+// microseconds; JavaScript Date ordinarily preserves only milliseconds).
+export async function listErpOperationJobsNeedingReconciliation({
+  db, authenticatedWorker, operation, maxJobs = 25, afterJobId = null,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 100) {
+    throw new TypeError('Invalid ERP reconciliation page size');
+  }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (afterJobId !== null && (typeof afterJobId !== 'string' || !uuid.test(afterJobId))) {
+    throw new TypeError('Invalid ERP reconciliation cursor');
+  }
+  const cursor = afterJobId === null ? null : afterJobId.toLowerCase();
+  const result = await db.query(
+    `SELECT id, tenant_id, actor_id, operation, status,
+            dispatch_started_at, created_at, updated_at
+     FROM erp_operation_jobs
+     WHERE tenant_id = $1 AND operation = $2 AND status = 'outcome_unknown'
+       AND ($4::uuid IS NULL OR id > $4::uuid)
+     ORDER BY id ASC LIMIT $3`,
+    [tenantId, operation, maxJobs, cursor],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > maxJobs) {
+    throw new Error('ERP job storage returned an invalid reconciliation backlog');
+  }
+  let previousId = cursor;
+  const jobs = result.rows.map(row => {
+    if (!row || typeof row.id !== 'string' || !uuid.test(row.id) ||
+        row.id !== row.id.toLowerCase() ||
+        (previousId !== null && row.id <= previousId) ||
+        row.tenant_id !== tenantId || row.operation !== operation ||
+        row.status !== 'outcome_unknown' ||
+        typeof row.actor_id !== 'string' || !row.actor_id) {
+      throw new Error('ERP job storage returned an invalid tenant-bound reconciliation record');
+    }
+    previousId = row.id;
+    const stamp = value => value instanceof Date ? value.toISOString() : value;
+    const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
+    const dispatchStartedAt = row.dispatch_started_at == null
+      ? null : stamp(row.dispatch_started_at);
+    if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
+        typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt)) ||
+        Date.parse(updatedAt) < Date.parse(createdAt) ||
+        (dispatchStartedAt !== null &&
+         (typeof dispatchStartedAt !== 'string' ||
+          !Number.isFinite(Date.parse(dispatchStartedAt)) ||
+          Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
+          Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
+      throw new Error('ERP job storage returned an invalid reconciliation timestamp');
+    }
+    return Object.freeze({
+      id: row.id, tenantId, operation, status: 'outcome_unknown',
+      requiresReconciliation: true, dispatchStartedAt, createdAt, updatedAt,
+    });
+  });
+  return Object.freeze({
+    jobs: Object.freeze(jobs),
+    nextAfterJobId: jobs.length === maxJobs ? jobs[jobs.length - 1].id : null,
+  });
+}
