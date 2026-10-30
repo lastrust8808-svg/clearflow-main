@@ -89,7 +89,10 @@ function isAcceptedJob(
 ): boolean {
   if (!isRecord(value) || value.success !== true || !isRecord(value[key])) return false;
   const job = value[key];
-  if (typeof job.id !== 'string' || job.id.trim() === '') return false;
+  // The PostgreSQL reservation store returns canonical UUIDs, never synthetic
+  // in-memory job IDs. A nonempty arbitrary string is not durable evidence.
+  if (typeof job.id !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(job.id)) return false;
   // An acknowledgement for another invoice, entity, bank account, or
   // reconciliation is not evidence that this request was durably accepted.
   // Require the server to echo immutable request identities; never infer them
