@@ -31,6 +31,7 @@ function reconciliation(overrides = {}) {
     clearedTransactionIds: ['ledger-1'],
     unmatchedTransactionIds: [],
     statementImportId: 'import-a',
+    statementImportedAt: '2026-10-27T12:00:00Z',
     statementReviewStatus: 'ready_to_close',
     status: 'in_review',
     closeApprovalStatus: 'pending',
@@ -420,7 +421,14 @@ test('real leap-day controller signoffs and valid timezone offsets remain eligib
     '2026-10-28T14:00:00-12:45',
   ]) {
     const metrics = buildReconciliationCloseMetrics(
-      reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt }),
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName: 'Controller A',
+        controllerSignoffAt,
+        ...(controllerSignoffAt.startsWith('2024-')
+          ? { statementImportedAt: '2024-02-28T12:00:00Z', periodStart: '2024-02-01', periodEnd: '2024-02-29' }
+          : {}),
+      }),
       account
     );
     assert.equal(metrics.isReadyToApprove, true, controllerSignoffAt);
@@ -757,4 +765,49 @@ test('approved controller signoff rejects padded and control-character names', (
       account
     ).isReadyToApprove, true, controllerSignoffName);
   }
+});
+
+test('approved close requires an imported statement timestamp rather than replaying legacy signoff', () => {
+  for (const statementImportedAt of [undefined, null, '', 'not-a-date', '2026-02-30T12:00:00Z', '2999-01-01T00:00:00Z']) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName: 'Controller A',
+        controllerSignoffAt: '2026-10-28T18:00:00Z',
+        statementImportedAt,
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(statementImportedAt));
+    assert.match(metrics.blockedReason, /valid statement import timestamp/);
+  }
+});
+
+test('controller signoff must occur after statement import even across timezone offsets', () => {
+  for (const [statementImportedAt, controllerSignoffAt, allowed] of [
+    ['2026-10-28T19:00:00Z', '2026-10-28T18:00:00Z', false],
+    ['2026-10-28T14:00:01-04:00', '2026-10-28T18:00:00Z', false],
+    ['2026-10-28T18:00:00Z', '2026-10-28T18:00:00Z', true],
+    ['2026-10-28T14:00:00-04:00', '2026-10-28T18:01:00Z', true],
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName: 'Controller A',
+        statementImportedAt,
+        controllerSignoffAt,
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, allowed, JSON.stringify({ statementImportedAt, controllerSignoffAt }));
+    if (!allowed) assert.match(metrics.blockedReason, /must follow a valid statement import timestamp/);
+  }
+});
+
+test('pending controller review does not require an approval timestamp', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ closeApprovalStatus: 'pending', statementImportedAt: undefined }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, true);
 });
