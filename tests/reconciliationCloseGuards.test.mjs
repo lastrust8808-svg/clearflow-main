@@ -929,7 +929,7 @@ test('format-control descriptions and controller names fail closed without rejec
 
 
 test('raw imported amount must agree with normalized statement cents before close eligibility', () => {
-  for (const rawAmountText of ['25.76', '0.25', '25.751', '25.75 CR', '25.75\\u200b', '', ' 25.75', '25.75 ', '$25,75', '1,23.45', 25.75]) {
+  for (const rawAmountText of ['25.76', '0.25', '25.751', '25.75 CR', '25.75​', '', ' 25.75', '25.75 ', '$25,75', '1,23.45', 25.75]) {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({
         parsedStatementLines: [statementLine('line-1', 'matched', { rawAmountText })],
