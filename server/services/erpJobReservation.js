@@ -10,8 +10,12 @@ const operations = new Set([
   'invoice_delivery', 'invoice_export', 'statement_import', 'reconciliation_close',
 ]);
 
+// Authenticated identity fields must not contain invisible controls, bidi
+// overrides, malformed surrogate code units or boundary whitespace. These can
+// make distinct tenant/actor/worker identities appear identical in audits.
 function requiredIdentifier(value, label) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 255) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
+      value !== value.trim() || /[\\p{Cc}\\p{Cf}\\p{Cs}]/u.test(value)) {
     throw new TypeError(`Invalid ${label}`);
   }
   return value;
