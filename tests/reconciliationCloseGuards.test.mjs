@@ -732,8 +732,8 @@ test('future-dated controller signoffs cannot certify completed approval', () =>
 
 test('approved controller signoff rejects padded and control-character names', () => {
   for (const controllerSignoffName of [
-    ' Controller A', 'Controller A ', 'Controller\\nA', 'Controller\\tA',
-    'Controller\\u0085A', 42,
+    ' Controller A', 'Controller A ', 'Controller\nA', 'Controller\tA',
+    'Controller\u0085A', 42,
   ]) {
     const metrics = buildReconciliationCloseMetrics(
       reconciliation({
