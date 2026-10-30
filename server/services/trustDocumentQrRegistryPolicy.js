@@ -123,8 +123,24 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
       versionRegistry.versions.some(version => !version || version.trustId !== qrRegistry.trustId)) {
     throw new Error('QR document registry scope mismatch');
   }
-  return verifyTrustDocumentBytes(versionRegistry, {
+  const decision = verifyTrustDocumentBytes(versionRegistry, {
     versionId: binding.versionId,
     content,
   });
+  // A QR locator cannot predate registration of the immutable document version
+  // it claims to identify. Do not let a token created for an earlier draft be
+  // retroactively attached to finalized bytes. Registry timestamps must come
+  // from trusted, append-only storage; this pure check does not authenticate them.
+  if (decision.status !== 'unknown') {
+    const tokenBinding = qrRegistry.bindings.find(
+      row => row.tokenHashSha256 === lookup.tokenHashSha256,
+    );
+    const documentVersion = versionRegistry.versions.find(
+      row => row.versionId === binding.versionId,
+    );
+    if (tokenBinding.issuedAt < documentVersion.registeredAt) {
+      throw new Error('QR binding issued before document version registration');
+    }
+  }
+  return decision;
 }
