@@ -122,3 +122,69 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
     status: record.status, createdAt, updatedAt,
   });
 }
+
+
+// Atomically claim ONE queued job for an independently authenticated worker.
+// This helper does not execute the job, send mail, or move funds. The worker
+// must be authorized to process this tenant and operation before invocation.
+// Expired leases must be recovered by a separately reviewed recovery gate.
+export async function claimErpOperationJob({
+  db, authenticatedWorker, operation, leaseSeconds = 60,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 300) {
+    throw new TypeError('Invalid ERP worker lease');
+  }
+  // One SQL statement provides an atomic claim even with concurrent workers.
+  // SKIP LOCKED prevents two workers claiming the same queued row.
+  const result = await db.query(
+    `WITH next_job AS (
+       SELECT id FROM erp_operation_jobs
+       WHERE tenant_id = $1 AND operation = $2 AND status = 'queued'
+       ORDER BY created_at, id
+       FOR UPDATE SKIP LOCKED LIMIT 1
+     )
+     UPDATE erp_operation_jobs AS job
+     SET status = 'processing', claimed_by = $3, claimed_at = now(),
+         lease_expires_at = now() + ($4 * interval '1 second'),
+         updated_at = now()
+     FROM next_job
+     WHERE job.id = next_job.id AND job.tenant_id = $1
+       AND job.operation = $2 AND job.status = 'queued'
+     RETURNING job.id, job.tenant_id, job.actor_id, job.operation,
+               job.status, job.claimed_by, job.claimed_at,
+               job.lease_expires_at, job.created_at, job.updated_at`,
+    [tenantId, operation, workerId, leaseSeconds],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid worker claim');
+  }
+  const record = result.rows[0];
+  if (!record) return null;
+  if (typeof record.id !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.id) ||
+      record.tenant_id !== tenantId || record.operation !== operation ||
+      record.claimed_by !== workerId || record.status !== 'processing' ||
+      typeof record.actor_id !== 'string' || !record.actor_id) {
+    throw new Error('ERP job storage returned an invalid tenant-bound worker claim');
+  }
+  const timestamp = (value) => value instanceof Date ? value.toISOString() : value;
+  const claimedAt = timestamp(record.claimed_at);
+  const leaseExpiresAt = timestamp(record.lease_expires_at);
+  const createdAt = timestamp(record.created_at);
+  const updatedAt = timestamp(record.updated_at);
+  if ([claimedAt, leaseExpiresAt, createdAt, updatedAt].some(
+    (value) => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+  ) || Date.parse(leaseExpiresAt) <= Date.parse(claimedAt) ||
+       Date.parse(updatedAt) < Date.parse(createdAt)) {
+    throw new Error('ERP job storage returned an invalid worker lease timestamp');
+  }
+  return Object.freeze({
+    id: record.id, tenantId, operation, status: 'processing',
+    claimedBy: workerId, claimedAt, leaseExpiresAt,
+    createdAt, updatedAt,
+  });
+}
