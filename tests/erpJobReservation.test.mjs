@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { reserveErpOperationJob as reserve } from '../server/services/erpJobReservation.js';
+import { reserveErpOperationJob as reserve, claimErpOperationJob as claim, listErpOperationJobsNeedingReconciliation as list } from '../server/services/erpJobReservation.js';
 
 const scope = { tenantId: 'tenant-a', actorId: 'actor-a' };
 const args = { authenticatedScope: scope, operation: 'invoice_delivery',
@@ -920,4 +920,48 @@ test('reconciliation backlog fails closed on database errors, forged rows and am
   await assert.rejects(list({ ...input, afterJobId: secondId, db: {
     query: async () => ({ rows: [quarantineRow()] }),
   } }), /invalid tenant-bound reconciliation record/);
+});
+
+
+test('authenticated ERP identities reject control, bidi and malformed Unicode before storage', async () => {
+  const db = fakeDatabase();
+  const invalid = [
+    ' tenant-a', 'tenant-a ', 'tenant\0a',
+    'tenant\u200ba', 'tenant\u202ea', 'tenant\u2060a',
+    'tenant' + String.fromCharCode(0xd800) + 'a',
+    'tenant' + String.fromCharCode(0xdc00) + 'a',
+  ];
+  for (const id of invalid) {
+    await assert.rejects(reserve({
+      db, ...args, authenticatedScope: { ...scope, tenantId: id },
+    }), /Invalid authenticated tenant/);
+    await assert.rejects(reserve({
+      db, ...args, authenticatedScope: { ...scope, actorId: id },
+    }), /Invalid authenticated actor/);
+  }
+  assert.equal(db.calls, 0, 'invalid identity must not reach persistence');
+});
+
+test('ERP worker claims and reconciliation reads reject ambiguous worker identities', async () => {
+  const db = fakeDatabase();
+  for (const workerId of ['worker\u200ba', 'worker\u202ea', 'worker\nx',
+    'worker' + String.fromCharCode(0xd800)]) {
+    const authenticatedWorker = { tenantId: 'tenant-a', workerId };
+    await assert.rejects(claim({
+      db, authenticatedWorker, operation: 'invoice_delivery',
+    }), /Invalid authenticated worker/);
+    await assert.rejects(list({
+      db, authenticatedWorker, operation: 'invoice_delivery',
+    }), /Invalid authenticated worker/);
+  }
+  assert.equal(db.calls, 0, 'invalid worker identity must not query storage');
+});
+
+test('ERP identity validation preserves ordinary Unicode identifiers', async () => {
+  const db = fakeDatabase();
+  const authenticatedScope = { tenantId: 'société-a', actorId: 'élève-a' };
+  const result = await reserve({ db, ...args, authenticatedScope });
+  assert.equal(result.created, true);
+  assert.equal(result.tenantId, authenticatedScope.tenantId);
+  assert.equal(db.calls, 1);
 });
