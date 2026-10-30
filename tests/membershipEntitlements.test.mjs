@@ -271,3 +271,27 @@ test('distinct paid invoices may preserve or extend the verified paid-through da
   assert.equal(result.status, 'active');
   assert.equal(result.periodEnd, '2026-12-20T12:00:00Z');
 });
+
+test('billing identities reject padded, invisible, malformed and oversized values', () => {
+  const invalid = [
+    ' padded', 'padded ', 'zero\\u200bwidth', 'bidi\\u202eoverride',
+    'line\\nbreak', 'x'.repeat(256), '\\ud800',
+  ];
+  for (const value of invalid) {
+    for (const field of ['id', 'invoiceId', 'settlementId']) {
+      assert.throws(
+        () => project(scope, [paid('evt-test', { [field]: value })], asOf),
+        /canonical nonempty string/, field + ': ' + JSON.stringify(value),
+      );
+    }
+    for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+      const invalidScope = { ...scope, [field]: value };
+      const matchingEvent = { ...paid(), [field]: value };
+      assert.throws(
+        () => project(invalidScope, [matchingEvent], asOf),
+        /canonical nonempty string/, field + ': ' + JSON.stringify(value),
+      );
+    }
+  }
+  assert.equal(project(scope, [paid()], asOf).entitled, true);
+});
