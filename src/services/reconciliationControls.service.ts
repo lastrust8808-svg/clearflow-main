@@ -124,24 +124,22 @@ export function buildReconciliationCloseMetrics(
     parsedLineIds.add(id);
     return false;
   });
-  // The explicit matched-ID index is optional for legacy records, but when
-  // present it must agree with the parsed source rows. A stale/orphaned index
-  // must not silently certify a statement whose review data has diverged.
+  // Both review indices must be explicit before a statement can qualify
+  // for approval. Missing legacy indices are not evidence of completed review:
+  // a parsed row marked "matched" is not independently verified by itself.
+  // An explicit empty unmatched list is valid after review.
   const matchedIdList = reconciliation.matchedStatementLineIds;
   const matchedIdSet = new Set<string>(Array.isArray(matchedIdList) ? matchedIdList : []);
-  const hasInconsistentMatchedIds = matchedIdList !== undefined && (
-    !Array.isArray(matchedIdList) ||
+  const hasInconsistentMatchedIds = !Array.isArray(matchedIdList) ||
     matchedIdSet.size !== matchedIdList.length ||
     matchedIdList.some((id) => !isValidStatementSourceRef(id) || !parsedLineIds.has(id)) ||
-    parsedLines.some((line) => matchedIdSet.has(line.id) !== (line.matchStatus === 'matched'))
-  );
-  // A malformed unmatched index (including an empty string instead of [])
-  // must never be interpreted as zero exceptions and authorize close.
+    parsedLines.some((line) => matchedIdSet.has(line.id) !== (line.matchStatus === 'matched'));
+  // A missing, malformed or duplicated unmatched index must not masquerade
+  // as an explicitly reviewed zero-exception statement.
   const unmatchedIdList = reconciliation.unmatchedStatementLineIds;
-  const hasInvalidUnmatchedIds = unmatchedIdList !== undefined && (
-    !Array.isArray(unmatchedIdList) ||
-    unmatchedIdList.some((id) => !isValidStatementSourceRef(id))
-  );
+  const hasInvalidUnmatchedIds = !Array.isArray(unmatchedIdList) ||
+    unmatchedIdList.some((id) => !isValidStatementSourceRef(id)) ||
+    new Set(unmatchedIdList).size !== unmatchedIdList.length;
   const unresolvedLineIds = new Set<string>(Array.isArray(unmatchedIdList) ? unmatchedIdList : []);
   for (const line of parsedLines) {
     if (line.matchStatus !== 'matched') {
