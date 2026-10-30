@@ -112,7 +112,9 @@ test('signed fixture cannot promote unexpected entitlement, role, or provider cl
   ]) {
     assert.equal(verifyScoped(scopedInput({ ...scopedPayload, ...claim })), null);
   }
-  assert.equal(verifyScoped(scopedInput({ ...scopedPayload, type: 'unknown_event' })), null);
+  for (const type of ['unknown_event', 'toString', 'constructor', '__proto__']) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, type })), null, type);
+  }
 });
 
 test('fixture admits only type-specific payment fields and required identities', () => {
