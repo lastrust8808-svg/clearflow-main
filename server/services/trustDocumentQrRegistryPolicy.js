@@ -64,6 +64,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
   const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
+  const seenRevocationEvidence = new Set();
   const activeVersions = new Set();
   // Each document version has a single non-overlapping QR-token validity
   // window. Revocation and replacement at the same instant are permitted.
@@ -97,7 +98,14 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       activeVersions.add(versionKey);
     } else if (binding.status === 'revoked') {
       revokedAt = timestamp(binding.revokedAt, 'binding.revokedAt');
-      id(binding.revocationEvidenceRef, 'binding.revocationEvidenceRef');
+      const revocationEvidenceRef = id(binding.revocationEvidenceRef, 'binding.revocationEvidenceRef');
+      // One revocation receipt must not be replayed as proof that a second
+      // token was independently revoked, even across document versions.
+      // The caller still must authenticate the underlying receipt.
+      if (seenRevocationEvidence.has(revocationEvidenceRef)) {
+        throw new Error('Duplicate QR revocation evidence reference');
+      }
+      seenRevocationEvidence.add(revocationEvidenceRef);
       if (revokedAt <= issuedAt) throw new Error('QR revocation must follow issuance');
       if (revokedAt > asOfAt) {
         throw new Error('QR revocation occurs after lookup as-of timestamp');
