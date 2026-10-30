@@ -162,6 +162,12 @@ export function assessTrustDocumentSigningPacket(packet) {
   if (recordedFinalizedAt > registeredAt || recordedFinalizedAt !== finalizedAt) {
     return result('incomplete', 'document_finalization_provenance_mismatch');
   }
+  // A version registered after the review instant cannot establish current
+  // signing readiness at that earlier instant, even if its bytes and hash
+  // match. Registration timestamps MUST come from immutable storage.
+  if (registeredAt > evaluatedAt) {
+    return result('incomplete', 'document_registration_after_evaluation');
+  }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
