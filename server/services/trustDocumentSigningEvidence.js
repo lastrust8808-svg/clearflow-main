@@ -138,9 +138,21 @@ export function assessTrustDocumentSigningPacket(packet) {
       Array.isArray(versionRegistry)) {
     throw new TypeError('Immutable document version registry required');
   }
-  for (const key of ['tenantId', 'entityId', 'documentId']) {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
     if (versionRegistry[key] !== scope[key]) {
       throw new Error('Signing document version registry ' + key + ' scope mismatch');
+    }
+  }
+  // A tenant may own multiple trusts. A matching tenant/entity/document ID
+  // does not authorize substituting a version registered for another trust.
+  // Require trust ownership on the registry AND every historical version.
+  // Legacy records lacking this provenance intentionally fail closed.
+  if (Array.isArray(versionRegistry.versions)) {
+    for (const version of versionRegistry.versions) {
+      if (!version || typeof version !== 'object' || Array.isArray(version) ||
+          version.trustId !== scope.trustId) {
+        throw new Error('Signing document version trustId scope mismatch');
+      }
     }
   }
   const versionStatus = verifyTrustDocumentBytes(versionRegistry, {
