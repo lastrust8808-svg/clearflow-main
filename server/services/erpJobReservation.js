@@ -16,6 +16,42 @@ function requiredIdentifier(value, label) {
   return value;
 }
 
+// Reject values that JSON.stringify silently drops or coerces. In an accounting
+// operation, { amount: NaN } must never become { amount: null }, and a missing
+// recipient must not hash identically to a deliberately omitted field.
+// Only explicit, plain JSON data is accepted; no getters or custom toJSON.
+function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
+  if (depth > 32) throw new TypeError('ERP job payload nesting limit exceeded');
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError('ERP job payload contains a non-finite number');
+    return;
+  }
+  if (typeof value !== 'object') throw new TypeError('ERP job payload contains a non-JSON value');
+  if (seen.has(value)) throw new TypeError('ERP job payload contains a circular or shared reference');
+  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null) {
+    throw new TypeError('ERP job payload must contain plain JSON objects');
+  }
+  seen.add(value);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (!Object.hasOwn(descriptors, i)) throw new TypeError('ERP job payload contains a sparse array');
+      assertJsonSafe(value[i], seen, depth + 1);
+    }
+  } else {
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (!Object.hasOwn(descriptor, 'value') ||
+          ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key)) {
+        throw new TypeError('ERP job payload contains an unsafe property');
+      }
+      assertJsonSafe(descriptor.value, seen, depth + 1);
+    }
+  }
+  seen.delete(value);
+}
+
 export async function reserveErpOperationJob({
   db, authenticatedScope, operation, idempotencyKey, payload,
 }) {
@@ -29,6 +65,7 @@ export async function reserveErpOperationJob({
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new TypeError('ERP job payload must be an object');
   }
+  assertJsonSafe(payload);
   const json = JSON.stringify(payload);
   if (typeof json !== 'string' || Buffer.byteLength(json) > 65536) {
     throw new TypeError('ERP job payload is invalid or too large');
