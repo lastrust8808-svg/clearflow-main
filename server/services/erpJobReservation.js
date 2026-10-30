@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { types as nodeTypes } from 'node:util';
 
 // Database-backed reservation primitive. NOT connected to HTTP routes yet.
 // Until independently verified durable completion evidence is persisted, no
@@ -28,6 +29,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     return;
   }
   if (typeof value !== 'object') throw new TypeError('ERP job payload contains a non-JSON value');
+  // Proxy traps can mutate values or execute code during descriptor inspection
+  // and JSON.stringify. Reject them before any property reflection or access.
+  if (nodeTypes.isProxy(value)) throw new TypeError('ERP job payload contains a Proxy');
   if (seen.has(value)) throw new TypeError('ERP job payload contains a circular or shared reference');
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype &&
       Object.getPrototypeOf(value) !== null) {
