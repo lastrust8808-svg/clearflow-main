@@ -404,6 +404,47 @@ test('trustee revocation evidence cannot be recycled as signing or version evide
   }), /appointment.revocationEvidenceRef/);
 });
 
+function historicalRevocationReview(revokedAt) {
+  const original = packet();
+  const first = original.versionRegistry.versions[0];
+  return {
+    versionId: 'version-2',
+    attestations: [attestation('a', { versionId: 'version-2' })],
+    versionRegistry: {
+      ...original.versionRegistry,
+      versions: [
+        { ...first, status: 'revoked', revokedAt,
+          revocationEvidenceRef: 'historical-revocation-evidence' },
+        { ...first, versionId: 'version-2', sequence: 2, status: 'current',
+          registeredAt: '2026-10-28T09:30:00.000Z',
+          evidenceRef: 'version-registration-2' },
+      ],
+    },
+  };
+}
+
+test('historical revoked versions require a canonical revocation timestamp for signing review', () => {
+  assert.equal(assess(historicalRevocationReview('2026-10-28T09:15:00.000Z')).status,
+    'evidence_ready_for_review');
+  for (const invalid of [undefined, null, '', '2026-10-28',
+    '2026-02-30T09:15:00.000Z']) {
+    assert.throws(() => assess(historicalRevocationReview(invalid)),
+      /version.revokedAt.*canonical/);
+  }
+});
+
+test('historical revocation must follow registration and cannot be future-dated', () => {
+  for (const invalid of ['2026-10-28T08:59:59.999Z', '2026-10-28T09:00:00.000Z',
+    '2026-10-29T12:00:00.001Z']) {
+    assert.equal(assess(historicalRevocationReview(invalid)).reason,
+      'historical_revocation_chronology_invalid');
+  }
+  // The exact evaluation instant is allowed; authenticated provenance is
+  // still required before any real signing or execution decision.
+  assert.equal(assess(historicalRevocationReview('2026-10-29T12:00:00.000Z')).status,
+    'evidence_ready_for_review');
+});
+
 test('historical document revocation receipts cannot be replayed as signing or trustee evidence', () => {
   const original = packet();
   const registeredVersion = original.versionRegistry.versions[0];
@@ -414,7 +455,8 @@ test('historical document revocation receipts cannot be replayed as signing or t
     versionRegistry: {
       ...original.versionRegistry,
       versions: [
-        { ...registeredVersion, status: 'revoked', revocationEvidenceRef },
+        { ...registeredVersion, status: 'revoked', revocationEvidenceRef,
+          revokedAt: '2026-10-28T09:15:00.000Z' },
         {
           ...registeredVersion, versionId: 'version-2', sequence: 2,
           status: 'current', evidenceRef: 'version-registration-2',
