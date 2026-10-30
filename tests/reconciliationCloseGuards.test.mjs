@@ -710,3 +710,22 @@ test('unique cleared book IDs with no outstanding book exceptions preserve appro
   }), account);
   assert.equal(metrics.isReadyToApprove, true);
 });
+
+
+test('future-dated controller signoffs cannot certify completed approval', () => {
+  const future = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const skew = new Date(Date.now() + 60 * 1000).toISOString();
+  for (const controllerSignoffAt of [future, '2999-01-01T00:00:00Z']) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, controllerSignoffAt);
+    assert.match(metrics.blockedReason, /valid signoff timestamp/);
+  }
+  const allowedSkew = buildReconciliationCloseMetrics(
+    reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt: skew }),
+    account
+  );
+  assert.equal(allowedSkew.isReadyToApprove, true, 'one-minute clock skew should remain eligible');
+});
