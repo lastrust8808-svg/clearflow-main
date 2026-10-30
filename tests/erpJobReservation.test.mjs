@@ -498,3 +498,41 @@ test('actor status lookup can report outcome_unknown without claiming delivery',
   const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
   assert.match(sql, /'outcome_unknown'/);
 });
+
+
+test('job replay cannot acknowledge sent or processed without durable completion evidence', async () => {
+  const db = fakeDatabase();
+  await reserve({ db, ...args });
+  const row = [...db.rows.values()][0];
+  for (const status of ['sent', 'processed']) {
+    row.status = status;
+    await assert.rejects(reserve({ db, ...args }), /invalid job record/);
+  }
+  row.status = 'outcome_unknown';
+  const quarantined = await reserve({ db, ...args });
+  assert.equal(quarantined.status, 'outcome_unknown');
+  assert.equal(quarantined.replayed, true);
+});
+
+test('actor status lookup rejects fabricated successful terminal states', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  const base = {
+    id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+    operation: 'invoice_delivery',
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:01:00Z'),
+  };
+  for (const status of ['sent', 'processed']) {
+    const db = { query: async () => ({ rows: [{ ...base, status }] }) };
+    await assert.rejects(readErpOperationJobStatus({
+      db, authenticatedScope: scope, jobId: statusJobId,
+    }), /invalid tenant-bound status/);
+  }
+});
+
+test('unapplied ERP schema forbids evidence-free successful terminal states', () => {
+  const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
+  assert.match(sql, /status IN \('queued', 'processing', 'failed', 'outcome_unknown'\)/);
+  assert.doesNotMatch(sql, /status IN \([^)]*'sent'/);
+  assert.doesNotMatch(sql, /status IN \([^)]*'processed'/);
+});
