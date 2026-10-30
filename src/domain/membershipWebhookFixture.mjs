@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { parseMembershipInstant } from './membershipEntitlements.mjs';
 
 /**
  * TEST-ONLY signed webhook fixture for deterministic adapter acceptance tests.
@@ -85,5 +86,14 @@ export function verifyScopedMembershipWebhookFixture({
   if (event.type === 'payment_succeeded' &&
       (typeof event.settlementId !== 'string' || event.settlementId.trim() === '' ||
        typeof event.periodEnd !== 'string' || event.periodEnd.trim() === '')) return null;
+  // A valid fixture HMAC is not sufficient to promote malformed dates into
+  // verified membership events. Reuse the projector's strict calendar parser.
+  try {
+    const occurred = parseMembershipInstant(event.occurredAt, 'event.occurredAt');
+    if (event.type === 'payment_succeeded' &&
+        parseMembershipInstant(event.periodEnd, 'event.periodEnd') <= occurred) return null;
+  } catch {
+    return null;
+  }
   return Object.freeze({ ...event, verified: true });
 }
