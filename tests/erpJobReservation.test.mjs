@@ -824,3 +824,100 @@ test('restart recovery rejects duplicate job identities in the same batch', asyn
     db: { query: async () => ({ rows: [quarantineRow(), quarantineRow()] }) },
   }), /invalid tenant-bound recovery record/);
 });
+
+
+test('reconciliation backlog lists bounded tenant-scoped unknown outcomes without payload or success claims', async () => {
+  const { listErpOperationJobsNeedingReconciliation: list } =
+    await import('../server/services/erpJobReservation.js');
+  const secondId = '123e4567-e89b-42d3-a456-426614174001';
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params };
+    return { rows: [
+      quarantineRow({ dispatch_started_at: null }),
+      quarantineRow({ id: secondId, dispatch_started_at: new Date('2026-10-29T12:01:30Z') }),
+    ] };
+  } };
+  const result = await list({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', maxJobs: 2 });
+  assert.deepEqual(captured.params, ['tenant-a', 'invoice_delivery', 2, null]);
+  assert.match(captured.sql, /tenant_id = \$1 AND operation = \$2 AND status = 'outcome_unknown'/);
+  assert.match(captured.sql, /AND \(\$4::uuid IS NULL OR id > \$4::uuid\)/);
+  assert.match(captured.sql, /ORDER BY id ASC LIMIT \$3/);
+  assert.equal(result.jobs.length, 2);
+  assert.equal(result.nextAfterJobId, secondId);
+  assert.equal(result.jobs[0].status, 'outcome_unknown');
+  assert.equal(result.jobs[0].requiresReconciliation, true);
+  assert.equal(result.jobs[0].dispatchStartedAt, null);
+  assert.equal(result.jobs[1].dispatchStartedAt, '2026-10-29T12:01:30.000Z');
+  assert.equal('payload' in result.jobs[0], false);
+  assert.equal('recipient' in result.jobs[0], false);
+  assert.equal('delivered' in result.jobs[0], false);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(Object.isFrozen(result.jobs), true);
+  assert.equal(Object.isFrozen(result.jobs[0]), true);
+});
+
+test('reconciliation backlog supports stable UUID keyset pagination and empty pages', async () => {
+  const { listErpOperationJobsNeedingReconciliation: list } =
+    await import('../server/services/erpJobReservation.js');
+  const secondId = '123e4567-e89b-42d3-a456-426614174001';
+  let params;
+  const db = { async query(_sql, values) {
+    params = values;
+    return { rows: [quarantineRow({ id: secondId })] };
+  } };
+  const result = await list({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', afterJobId: claimedJobId, maxJobs: 2 });
+  assert.deepEqual(params, ['tenant-a', 'invoice_delivery', 2, claimedJobId]);
+  assert.equal(result.jobs[0].id, secondId);
+  assert.equal(result.nextAfterJobId, null);
+  const empty = await list({ db: { query: async () => ({ rows: [] }) },
+    authenticatedWorker: workerScope, operation: 'invoice_delivery' });
+  assert.deepEqual(empty.jobs, []);
+  assert.equal(empty.nextAfterJobId, null);
+});
+
+test('reconciliation backlog validates worker scope, operation, page size and cursor before querying', async () => {
+  const { listErpOperationJobsNeedingReconciliation: list } =
+    await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const input = { db, authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' },
+    { maxJobs: 0 }, { maxJobs: 101 }, { maxJobs: 2.5 },
+    { afterJobId: 'invalid' }, { afterJobId: 3 },
+  ]) await assert.rejects(list({ ...input, ...invalid }));
+  assert.equal(calls, 0);
+});
+
+test('reconciliation backlog fails closed on database errors, forged rows and ambiguous ordering', async () => {
+  const { listErpOperationJobsNeedingReconciliation: list } =
+    await import('../server/services/erpJobReservation.js');
+  const secondId = '123e4567-e89b-42d3-a456-426614174001';
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', maxJobs: 2 };
+  await assert.rejects(list({ ...input, db: {
+    query: async () => { throw new Error('database offline'); },
+  } }), /database offline/);
+  for (const rows of [
+    null,
+    [quarantineRow(), quarantineRow(), quarantineRow()],
+    [quarantineRow(), quarantineRow()],
+    [quarantineRow({ id: secondId }), quarantineRow()],
+    [quarantineRow({ tenant_id: 'foreign' })],
+    [quarantineRow({ actor_id: '' })],
+    [quarantineRow({ operation: 'invoice_export' })],
+    [quarantineRow({ status: 'sent' })],
+    [quarantineRow({ updated_at: 'invalid' })],
+    [quarantineRow({ dispatch_started_at: new Date('2026-10-29T12:05:00Z') })],
+  ]) await assert.rejects(list({ ...input, db: {
+    query: async () => ({ rows }),
+  } }), /invalid/);
+  await assert.rejects(list({ ...input, afterJobId: secondId, db: {
+    query: async () => ({ rows: [quarantineRow()] }),
+  } }), /invalid tenant-bound reconciliation record/);
+});
