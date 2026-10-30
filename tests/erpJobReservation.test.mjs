@@ -173,3 +173,98 @@ test('status lookup fails closed on missing scope, invalid ids, malformed or for
     authenticatedScope: scope, jobId: statusJobId,
   }), /invalid status result/);
 });
+
+
+const workerScope = { tenantId: 'tenant-a', workerId: 'worker-a' };
+const claimedJobId = '123e4567-e89b-42d3-a456-426614174000';
+function claimedRow(overrides = {}) {
+  return {
+    id: claimedJobId, tenant_id: workerScope.tenantId,
+    actor_id: 'actor-a', operation: 'invoice_delivery',
+    status: 'processing', claimed_by: workerScope.workerId,
+    claimed_at: new Date('2026-10-29T12:01:00Z'),
+    lease_expires_at: new Date('2026-10-29T12:02:00Z'),
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:01:00Z'),
+    ...overrides,
+  };
+}
+
+test('atomic worker claim is tenant-scoped, queued-only and locked across workers', async () => {
+  const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params };
+    return { rows: [claimedRow()] };
+  } };
+  const result = await claimErpOperationJob({
+    db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+  });
+  assert.deepEqual(captured.params, ['tenant-a', 'invoice_delivery', 'worker-a', 60]);
+  assert.match(captured.sql, /FOR UPDATE SKIP LOCKED LIMIT 1/);
+  assert.match(captured.sql, /WHERE tenant_id = \$1 AND operation = \$2 AND status = 'queued'/);
+  assert.match(captured.sql, /job\.status = 'queued'/);
+  assert.match(captured.sql, /SET status = 'processing'/);
+  assert.equal(result.id, claimedJobId);
+  assert.equal(result.claimedBy, 'worker-a');
+  assert.equal(result.leaseExpiresAt, '2026-10-29T12:02:00.000Z');
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal('delivered' in result, false);
+});
+
+test('no queued job returns null; storage errors are never successful claims', async () => {
+  const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
+  const args = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  assert.equal(await claimErpOperationJob({
+    ...args, db: { query: async () => ({ rows: [] }) },
+  }), null);
+  await assert.rejects(claimErpOperationJob({
+    ...args, db: { query: async () => { throw new Error('database offline'); } },
+  }), /database offline/);
+  await assert.rejects(claimErpOperationJob({
+    ...args, db: { query: async () => ({ rows: [claimedRow(), claimedRow()] }) },
+  }), /invalid worker claim/);
+});
+
+test('worker claims reject missing identity, invalid operations and leases before DB access', async () => {
+  const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const args = { db, authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' },
+    { leaseSeconds: 0 }, { leaseSeconds: 301 }, { leaseSeconds: 1.5 },
+  ]) {
+    await assert.rejects(claimErpOperationJob({ ...args, ...invalid }));
+  }
+  assert.equal(calls, 0);
+});
+
+test('worker claims reject foreign or fabricated records and invalid leases', async () => {
+  const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
+  const args = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  for (const row of [
+    claimedRow({ tenant_id: 'tenant-b' }),
+    claimedRow({ claimed_by: 'worker-b' }),
+    claimedRow({ status: 'sent' }),
+    claimedRow({ id: 'fake-job' }),
+    claimedRow({ actor_id: '' }),
+    claimedRow({ lease_expires_at: new Date('2026-10-29T12:01:00Z') }),
+    claimedRow({ lease_expires_at: 'invalid' }),
+    claimedRow({ updated_at: new Date('2026-10-29T11:00:00Z') }),
+  ]) {
+    await assert.rejects(claimErpOperationJob({
+      ...args, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid/);
+  }
+});
+
+test('proposed schema requires durable claim ownership and indexes queued work', () => {
+  const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
+  assert.match(sql, /claimed_by text/);
+  assert.match(sql, /lease_expires_at timestamptz/);
+  assert.match(sql, /CONSTRAINT erp_worker_claim_consistency CHECK/);
+  assert.match(sql, /WHERE status = 'queued'/);
+});
