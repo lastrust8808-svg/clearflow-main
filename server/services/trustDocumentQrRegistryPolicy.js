@@ -40,7 +40,7 @@ function timestamp(value, field) {
  *   tenantId:string,entityId:string,trustId:string,documentId:string,versionId:string,
  *   tokenHashSha256:string,status:'active'|'revoked',issuedAt:string,
  *   revokedAt?:string,revocationEvidenceRef?:string}>}} registry
- * @param {{tenantId:string,entityId:string,trustId:string,tokenHashSha256:string}} lookup
+ * @param {{tenantId:string,entityId:string,trustId:string,tokenHashSha256:string,asOfAt:string}} lookup
  * @returns {{status:'bound',documentId:string,versionId:string}|{status:'unknown'}}
  */
 export function resolveTrustDocumentQrBinding(registry, lookup) {
@@ -59,6 +59,9 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       id(lookup.trustId, 'lookup.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
+  // The caller MUST supply this instant from its trusted server clock and load
+  // an as-of registry snapshot. A client-provided timestamp is not authority.
+  const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
   const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
   const activeVersions = new Set();
@@ -77,6 +80,9 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     if (seenHashes.has(hash)) throw new Error('Duplicate QR token hash');
     seenHashes.add(hash);
     const issuedAt = timestamp(binding.issuedAt, 'binding.issuedAt');
+    if (issuedAt > asOfAt) {
+      throw new Error('QR binding issued after lookup as-of timestamp');
+    }
     if (binding.status === 'active') {
       if (binding.revokedAt != null || binding.revocationEvidenceRef != null) {
         throw new Error('Active QR binding cannot contain revocation evidence');
@@ -88,6 +94,9 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       const revokedAt = timestamp(binding.revokedAt, 'binding.revokedAt');
       id(binding.revocationEvidenceRef, 'binding.revocationEvidenceRef');
       if (revokedAt <= issuedAt) throw new Error('QR revocation must follow issuance');
+      if (revokedAt > asOfAt) {
+        throw new Error('QR revocation occurs after lookup as-of timestamp');
+      }
     } else {
       throw new TypeError('Invalid QR binding status');
     }
@@ -122,6 +131,15 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
       !Array.isArray(versionRegistry.versions) ||
       versionRegistry.versions.some(version => !version || version.trustId !== qrRegistry.trustId)) {
     throw new Error('QR document registry scope mismatch');
+  }
+  // A later version must not retroactively supersede an earlier version in
+  // a historical QR lookup. A trusted store must supply an as-of snapshot;
+  // rejecting future registrations is safer than inferring historical status.
+  const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
+  for (const version of versionRegistry.versions) {
+    if (timestamp(version.registeredAt, 'version.registeredAt') > asOfAt) {
+      throw new Error('QR document version registered after lookup as-of timestamp');
+    }
   }
   const decision = verifyTrustDocumentBytes(versionRegistry, {
     versionId: binding.versionId,
