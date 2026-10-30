@@ -35,6 +35,46 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
 }
 
 
+// JSON.parse silently keeps the last occurrence of a duplicate object key.
+// A signed payload with conflicting event IDs, tenant IDs, or paid-through
+// dates must not be admitted under the last value. Compare decoded key names
+// so escaped aliases (e.g. "\\u0069d" and "id") are also detected.
+// JSON.parse below remains responsible for full JSON syntax validation.
+function containsDuplicateObjectKeys(jsonText) {
+  const frames = [];
+  let quoteStart = -1;
+  let escaped = false;
+  for (let i = 0; i < jsonText.length; i++) {
+    const char = jsonText[i];
+    if (quoteStart >= 0) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        const frame = frames[frames.length - 1];
+        if (frame?.kind === 'object' && frame.expectKey) {
+          const key = JSON.parse(jsonText.slice(quoteStart, i + 1));
+          if (frame.keys.has(key)) return true;
+          frame.keys.add(key);
+          frame.expectKey = false;
+        }
+        quoteStart = -1;
+      }
+      continue;
+    }
+    if (char === '"') quoteStart = i;
+    else if (char === '{') frames.push({ kind: 'object', expectKey: true, keys: new Set() });
+    else if (char === '[') frames.push({ kind: 'array' });
+    else if (char === '}' || char === ']') frames.pop();
+    else if (char === ',' && frames[frames.length - 1]?.kind === 'object') {
+      frames[frames.length - 1].expectKey = true;
+    }
+  }
+  return false;
+}
+
+
 /**
  * TEST-ONLY scope-bound admission fixture. A valid HMAC alone must never grant
  * another tenant's membership. This does not persist or deduplicate events,
@@ -59,6 +99,7 @@ export function verifyScopedMembershipWebhookFixture({
     const jsonText = Buffer.isBuffer(rawBody)
       ? new TextDecoder('utf-8', { fatal: true }).decode(rawBody)
       : rawBody;
+    if (containsDuplicateObjectKeys(jsonText)) return null;
     event = JSON.parse(jsonText);
   } catch {
     return null;
