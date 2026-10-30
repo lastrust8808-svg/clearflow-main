@@ -816,3 +816,56 @@ test('pending controller review does not require an approval timestamp', () => {
   );
   assert.equal(metrics.isReadyToApprove, true);
 });
+
+test('controller approval rejects statement-row resolutions outside the import-to-signoff window', () => {
+  const approval = {
+    closeApprovalStatus: 'approved',
+    controllerSignoffName: 'Controller A',
+    controllerSignoffAt: '2026-10-28T18:00:00Z',
+  };
+  for (const resolvedAt of [
+    '2026-10-27T11:59:59Z', // resolution before statement import
+    '2026-10-28T18:00:01Z', // resolution after controller approval
+    '2026-02-30T12:00:00Z', // normalized impossible date
+    'not-a-timestamp',
+    '',
+    '2999-01-01T00:00:00Z',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        ...approval,
+        parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt })],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, resolvedAt);
+    assert.match(metrics.blockedReason, /resolutions must follow import and precede controller approval/);
+  }
+});
+
+test('valid row resolution evidence preserves approval eligibility across timezone offsets', () => {
+  const approval = {
+    closeApprovalStatus: 'approved',
+    controllerSignoffName: 'Controller A',
+    controllerSignoffAt: '2026-10-28T14:00:00-04:00',
+  };
+  for (const resolvedAt of [
+    undefined, // legacy row without a resolution timestamp
+    '2026-10-27T12:00:00Z', // import boundary
+    '2026-10-28T17:59:59Z',
+    '2026-10-28T14:00:00-04:00', // approval boundary
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        ...approval,
+        parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt })],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, true, String(resolvedAt));
+  }
+  // Pending controller review remains eligible for review; it is not a close.
+  assert.equal(buildReconciliationCloseMetrics(reconciliation({
+    parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt: '2026-10-28T19:00:00Z' })],
+  }), account).isReadyToApprove, true);
+});
