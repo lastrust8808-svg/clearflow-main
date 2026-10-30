@@ -190,3 +190,24 @@ test('signed fixture rejects malformed UTF-8 bytes rather than normalizing event
   const unicode = { ...scopedPayload, id: 'evt-café' };
   assert.equal(verifyScoped(scopedInput(unicode)).id, unicode.id);
 });
+
+
+test('signed fixture rejects duplicate JSON object keys and escaped aliases', () => {
+  const canonical = JSON.stringify(scopedPayload).slice(1);
+  // The last duplicate matches the authenticated scope. JSON.parse alone
+  // would silently discard the conflicting first occurrence.
+  for (const firstField of [
+    '"tenantId":"foreign-tenant"',
+    '"\\u0074enantId":"foreign-tenant"',
+    '"id":"evt-shadow"',
+    '"periodEnd":"2099-01-01T00:00:00Z"',
+  ]) {
+    const body = Buffer.from(`{${firstField},${canonical}`, 'utf8');
+    assert.equal(verify(input({ rawBody: body, signatureHeader: sign(body) })), true);
+    assert.equal(verifyScoped(scopedInput(scopedPayload, {
+      rawBody: body, signatureHeader: sign(body),
+    })), null, firstField);
+  }
+  // Ordinary signed events remain accepted.
+  assert.equal(verifyScoped(scopedInput(scopedPayload)).id, scopedPayload.id);
+});
