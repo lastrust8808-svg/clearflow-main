@@ -35,10 +35,20 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   }
   seen.add(value);
   const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(descriptors).some(key => typeof key === 'symbol')) {
+    throw new TypeError('ERP job payload contains a symbol property');
+  }
   if (Array.isArray(value)) {
+    for (const key of Object.keys(descriptors)) {
+      if (key !== 'length' && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length)) {
+        throw new TypeError('ERP job payload contains an ignored array property');
+      }
+    }
     for (let i = 0; i < value.length; i++) {
       if (!Object.hasOwn(descriptors, i)) throw new TypeError('ERP job payload contains a sparse array');
-      assertJsonSafe(value[i], seen, depth + 1);
+      const descriptor = descriptors[i];
+      if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('ERP job payload contains an accessor');
+      assertJsonSafe(descriptor.value, seen, depth + 1);
     }
   } else {
     for (const [key, descriptor] of Object.entries(descriptors)) {
