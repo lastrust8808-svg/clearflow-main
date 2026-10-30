@@ -571,3 +571,71 @@ test('conflicting scoped identities cannot create new account directories', asyn
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('Proxy-backed top-level payloads cannot execute traps or replace any tenant record', async () => {
+  const accountId = `proxy-top-level-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'sig-1', value), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  let trapCalls = 0;
+  const handler = {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    ownKeys() { trapCalls++; return ['retained']; },
+    get(target, key) { trapCalls++; return Reflect.get(target, key); },
+  };
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      const before = await fixture.read();
+      const proxy = new Proxy({ retained: false }, handler);
+      await assert.rejects(fixture.save(proxy), /must not contain Proxy objects/);
+      assert.deepEqual(await fixture.read(), before);
+    }
+    assert.equal(trapCalls, 0, 'validation must not invoke Proxy traps');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('nested and revoked Proxy objects fail before serialization and preserve tenant data', async () => {
+  const accountId = `proxy-nested-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  let trapCalls = 0;
+  const handler = {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    ownKeys() { trapCalls++; return ['amount']; },
+    get(target, key) { trapCalls++; return Reflect.get(target, key); },
+  };
+  const revoked = Proxy.revocable({ amount: 2 }, handler);
+  revoked.revoke();
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'sig-1', value), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: { amount: 1 } });
+      const before = await fixture.read();
+      for (const nested of [new Proxy({ amount: 2 }, handler), new Proxy([2], handler), revoked.proxy]) {
+        await assert.rejects(fixture.save({ retained: [nested] }), /must not contain Proxy objects/);
+        assert.deepEqual(await fixture.read(), before);
+      }
+      await fixture.save({ retained: [{ amount: 3 }] });
+      assert.deepEqual((await fixture.read()).retained, [{ amount: 3 }]);
+    }
+    assert.equal(trapCalls, 0, 'nested Proxy traps must not run during validation');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
