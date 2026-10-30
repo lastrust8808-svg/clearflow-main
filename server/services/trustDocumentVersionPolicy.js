@@ -81,6 +81,19 @@ export function verifyTrustDocumentVersion(registry, proof) {
     }
     lastRegisteredAt = registeredAt;
     if (!VERSION_STATUSES.has(version.status)) throw new TypeError('Invalid document version status');
+    // A revoked document version must have its own independently verifiable
+    // revocation receipt. Registration evidence cannot double as revocation
+    // evidence, and one receipt cannot revoke multiple versions. The caller
+    // must authenticate this pointer against durable append-only records.
+    if (version.status === 'revoked') {
+      const revocationEvidenceRef = identifier(version.revocationEvidenceRef, 'version.revocationEvidenceRef');
+      if (seenEvidence.has(revocationEvidenceRef)) {
+        throw new Error('Reused document version revocation evidence reference');
+      }
+      seenEvidence.add(revocationEvidenceRef);
+    } else if (version.revocationEvidenceRef != null) {
+      throw new Error('Nonrevoked document version cannot carry revocation evidence');
+    }
     if (i === registry.versions.length - 1 && version.status === 'superseded') {
       throw new Error('Latest document version cannot be superseded without a successor');
     }
