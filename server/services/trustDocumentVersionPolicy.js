@@ -86,13 +86,25 @@ export function verifyTrustDocumentVersion(registry, proof) {
     // evidence, and one receipt cannot revoke multiple versions. The caller
     // must authenticate this pointer against durable append-only records.
     if (version.status === 'revoked') {
+      // Direct byte/version verification must enforce the same revocation
+      // chronology as QR and signing review, even without a QR lookup.
+      // The caller must authenticate these immutable timestamps separately.
+      const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
+      if (revokedAt <= registeredAt) {
+        throw new Error('Document revocation must follow registration');
+      }
       const revocationEvidenceRef = identifier(version.revocationEvidenceRef, 'version.revocationEvidenceRef');
       if (seenEvidence.has(revocationEvidenceRef)) {
         throw new Error('Reused document version revocation evidence reference');
       }
       seenEvidence.add(revocationEvidenceRef);
-    } else if (version.revocationEvidenceRef != null) {
-      throw new Error('Nonrevoked document version cannot carry revocation evidence');
+    } else {
+      if (version.revocationEvidenceRef != null) {
+        throw new Error('Nonrevoked document version cannot carry revocation evidence');
+      }
+      if (version.revokedAt != null) {
+        throw new Error('Nonrevoked document version cannot carry revocation timestamp');
+      }
     }
     if (i === registry.versions.length - 1 && version.status === 'superseded') {
       throw new Error('Latest document version cannot be superseded without a successor');
