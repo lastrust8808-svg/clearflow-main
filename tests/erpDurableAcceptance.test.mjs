@@ -21,7 +21,7 @@ export default {
 };
 `);
 writeFileSync(join(directory, 'paymentExecution.mjs'), `
-export function buildExecutionCapabilities() { return { testOnly: true }; }
+export function buildExecutionCapabilities() { return { testOnly: true, provider: 'mercury', executionMode: 'staged', mercuryApprovalReady: true, achOriginationReady: true, wireOriginationReady: true, liveBankExecutionReady: true, printableCheckReady: true, positivePayReady: true, supportedMethods: ['ach', 'wire', 'check'], notes: ['token configured'] }; }
 export async function buildSettlementExecution() { throw new Error('unexpected settlement execution'); }
 `);
 writeFileSync(join(directory, 'erp.mjs'), source
@@ -118,10 +118,32 @@ try {
     assert.doesNotMatch(source, /settlementExecutionJobs/);
   });
 
-  await test('read-only settlement capabilities route remains available', async () => {
+  await test('settlement capability probe cannot advertise executable rails while POST is disabled', async () => {
+    // The mocked provider advertises every rail as ready, as it could when
+    // credentials exist. Route readiness must reflect the disabled endpoint,
+    // not the presence of credentials or a staged provider adapter.
     const response = await invoke('GET', '/settlements/execution-capabilities');
     assert.equal(response.statusCode, 200);
+    assert.equal(response.body.success, true); // read-only probe succeeded
     assert.equal(response.body.capabilities.testOnly, true);
+    assert.equal(response.body.capabilities.provider, 'manual');
+    assert.equal(response.body.capabilities.executionMode, 'disabled');
+    assert.equal(response.body.capabilities.settlementExecutionAvailable, false);
+    assert.equal(response.body.capabilities.unavailableReason, 'durable_job_store_required');
+    for (const flag of [
+      'liveBankExecutionReady', 'mercuryApprovalReady', 'achOriginationReady',
+      'wireOriginationReady', 'billerDirectReady', 'printableCheckReady',
+      'positivePayReady',
+    ]) {
+      assert.equal(response.body.capabilities[flag], false, flag);
+    }
+    assert.deepEqual(response.body.capabilities.supportedMethods, []);
+    assert.match(response.body.capabilities.notes.join(' '), /No payment request can be queued/);
+    const post = await invoke('POST', '/settlements/execute', {
+      entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 100,
+    });
+    assert.equal(post.statusCode, 503);
+    assert.equal(post.body.operation, 'settlement_execution');
   });
   await test('reconciliation close fails closed without durable approval and audit persistence', async () => {
     const response = await invoke('POST', '/reconciliations/:reconciliationId/close', {
