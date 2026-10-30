@@ -268,3 +268,56 @@ test('proposed schema requires durable claim ownership and indexes queued work',
   assert.match(sql, /CONSTRAINT erp_worker_claim_consistency CHECK/);
   assert.match(sql, /WHERE status = 'queued'/);
 });
+
+test('lease renewal is atomic and limited to the owning worker and unexpired processing job', async () => {
+  const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
+  let query;
+  const db = { async query(sql, params) {
+    query = { sql, params };
+    return { rows: [claimedRow({ lease_expires_at: new Date('2026-10-29T12:04:00Z') })] };
+  } };
+  const result = await renew({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId });
+  assert.deepEqual(query.params, ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a', 60]);
+  assert.match(query.sql, /claimed_by = \$4 AND status = 'processing'/);
+  assert.match(query.sql, /lease_expires_at > now\(\)/);
+  assert.match(query.sql, /UPDATE erp_operation_jobs/);
+  assert.equal(result.leaseExpiresAt, '2026-10-29T12:04:00.000Z');
+  assert.equal(result.status, 'processing');
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal('delivered' in result, false);
+});
+
+test('expired, finished or foreign leases cannot be renewed; database failure is not success', async () => {
+  const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery', jobId: claimedJobId };
+  assert.equal(await renew({ ...input, db: { query: async () => ({ rows: [] }) } }), null);
+  await assert.rejects(renew({ ...input,
+    db: { query: async () => { throw new Error('database offline'); } },
+  }), /database offline/);
+  await assert.rejects(renew({ ...input,
+    db: { query: async () => ({ rows: [claimedRow(), claimedRow()] }) },
+  }), /invalid lease renewal result/);
+  for (const row of [
+    claimedRow({ tenant_id: 'other' }), claimedRow({ claimed_by: 'other' }),
+    claimedRow({ status: 'sent' }), claimedRow({ id: 'other' }),
+    claimedRow({ lease_expires_at: new Date('2026-10-29T12:01:00Z') }),
+    claimedRow({ updated_at: 'not-a-date' }),
+  ]) await assert.rejects(renew({
+    ...input, db: { query: async () => ({ rows: [row] }) },
+  }), /invalid/);
+});
+
+test('lease renewal rejects missing identities, invalid operations, IDs and bounds before DB access', async () => {
+  const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const input = { db, authenticatedWorker: workerScope, operation: 'invoice_delivery', jobId: claimedJobId };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' }, { jobId: 'bad' },
+    { leaseSeconds: 0 }, { leaseSeconds: 301 }, { leaseSeconds: 1.5 },
+  ]) await assert.rejects(renew({ ...input, ...invalid }));
+  assert.equal(calls, 0);
+});

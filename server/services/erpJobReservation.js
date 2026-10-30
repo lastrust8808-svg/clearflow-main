@@ -188,3 +188,61 @@ export async function claimErpOperationJob({
     createdAt, updatedAt,
   });
 }
+
+// Extend only a still-valid, exclusively owned worker lease. This helper does
+// not execute work, retry expired jobs, or represent provider delivery.
+// Caller MUST authenticate and authorize the worker's tenant/operation.
+export async function renewErpOperationJobLease({
+  db, authenticatedWorker, operation, jobId, leaseSeconds = 60,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (typeof jobId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    throw new TypeError('Invalid ERP job id');
+  }
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 300) {
+    throw new TypeError('Invalid ERP worker lease');
+  }
+  // Compare-and-swap in one SQL statement: no resurrection of an expired
+  // lease, no takeover by another worker, and no renewal of a finished job.
+  const result = await db.query(
+    `UPDATE erp_operation_jobs
+     SET lease_expires_at = now() + ($5 * interval '1 second'),
+         updated_at = now()
+     WHERE tenant_id = $1 AND operation = $2 AND id = $3
+       AND claimed_by = $4 AND status = 'processing'
+       AND lease_expires_at > now()
+     RETURNING id, tenant_id, actor_id, operation, status, claimed_by,
+               claimed_at, lease_expires_at, created_at, updated_at`,
+    [tenantId, operation, jobId, workerId, leaseSeconds],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid lease renewal result');
+  }
+  const record = result.rows[0];
+  if (!record) return null;
+  if (record.id !== jobId || record.tenant_id !== tenantId ||
+      record.operation !== operation || record.status !== 'processing' ||
+      record.claimed_by !== workerId || typeof record.actor_id !== 'string' ||
+      !record.actor_id) {
+    throw new Error('ERP job storage returned an invalid tenant-bound lease renewal');
+  }
+  const stamp = value => value instanceof Date ? value.toISOString() : value;
+  const claimedAt = stamp(record.claimed_at);
+  const leaseExpiresAt = stamp(record.lease_expires_at);
+  const updatedAt = stamp(record.updated_at);
+  const createdAt = stamp(record.created_at);
+  if ([claimedAt, leaseExpiresAt, updatedAt, createdAt].some(
+    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+  ) || Date.parse(leaseExpiresAt) <= Date.parse(claimedAt) ||
+       Date.parse(updatedAt) < Date.parse(createdAt)) {
+    throw new Error('ERP job storage returned an invalid lease renewal timestamp');
+  }
+  return Object.freeze({
+    id: jobId, tenantId, operation, status: 'processing',
+    claimedBy: workerId, claimedAt, leaseExpiresAt, updatedAt,
+  });
+}
