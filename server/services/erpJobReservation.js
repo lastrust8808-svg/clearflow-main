@@ -40,7 +40,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   }
   if (Array.isArray(value)) {
     for (const key of Object.keys(descriptors)) {
-      if (key !== 'length' && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length)) {
+      if (key !== 'length' && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) {
         throw new TypeError('ERP job payload contains an ignored array property');
       }
     }
