@@ -42,7 +42,7 @@ function digest(value, field) {
  *   governance:object,versionRegistry:object,attestations:Array<{
  *     tenantId:string,entityId:string,trustId:string,documentId:string,
  *     versionId:string,signerId:string,documentSha256:string,signedAt:string,
- *     explicitConsent:boolean,identityEvidenceRef:string,consentEvidenceRef:string,signatureEvidenceRef:string
+ *     explicitConsent:boolean,consentedAt:string,identityEvidenceRef:string,consentEvidenceRef:string,signatureEvidenceRef:string
  *   }>}} packet
  * @returns {{status:'evidence_ready_for_review'|'incomplete',
  *   reason:string,signerCount:number}} Frozen internal decision.
@@ -83,6 +83,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   const signers = new Set();
   const evidenceRefs = new Set();
   let lastSignedAt = null;
+  let earliestConsentAt = null;
   const result = (status, reason) => Object.freeze({ status, reason, signerCount: signers.size });
 
   for (const attestation of packet.attestations) {
@@ -117,6 +118,16 @@ export function assessTrustDocumentSigningPacket(packet) {
     }
     if (attestation.explicitConsent !== true) {
       return result('incomplete', 'explicit_consent_not_recorded');
+    }
+    // Explicit consent must be recorded for these finalized bytes no later
+    // than the signing instant. These timestamps are only structural inputs:
+    // integration must authenticate the consent record and its server clock.
+    const consentedAt = timestamp(attestation.consentedAt, 'attestation.consentedAt');
+    if (consentedAt < finalizedAt || consentedAt > signedAt) {
+      return result('incomplete', 'consent_chronology_invalid');
+    }
+    if (earliestConsentAt === null || consentedAt < earliestConsentAt) {
+      earliestConsentAt = consentedAt;
     }
     if (!timingSafeEqual(digest(attestation.documentSha256, 'documentSha256'), documentHash)) {
       return result('incomplete', 'document_bytes_mismatch');
@@ -186,6 +197,11 @@ export function assessTrustDocumentSigningPacket(packet) {
   // Registration and signature timestamps must come from trusted storage.
   if (packet.attestations[0].signedAt < registeredAt) {
     return result('incomplete', 'document_registered_after_signature');
+  }
+  // A later registration must not retroactively validate consent collected
+  // against an unregistered document. Check all signers, not just the first.
+  if (earliestConsentAt < registeredAt) {
+    return result('incomplete', 'document_registered_after_consent');
   }
   // A signature identity/consent/receipt record must not be recycled as
   // trustee-appointment acceptance or document-version registration evidence.
