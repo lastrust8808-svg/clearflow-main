@@ -10,7 +10,7 @@ const event = (type, index, overrides = {}) => ({
   evidenceRef: 'evidence-' + index,
   ...overrides,
 });
-const project = events => projectPrivateNoteLifecycle({ ...scope, events });
+const project = events => projectPrivateNoteLifecycle({ ...scope, asOfAt: '2026-11-01T00:00:00.000Z', events });
 
 test('empty history is a draft, not an issued or funded note', () => {
   assert.deepEqual(project([]), { status: 'draft', eventCount: 0, lastEventId: null, lastEventAt: null });
@@ -160,6 +160,32 @@ test('distinct notice revisions remain draft-only and require separate evidence 
   assert.throws(() => project(events.map((entry, index) =>
     index === 3 ? { ...entry, evidenceRef: null } : entry)), /evidenceRef/);
 });
+test('rejects future-dated note events rather than projecting a later lifecycle state', () => {
+  const issued = event('issued', 1);
+  const presented = event('presented', 2);
+  assert.throws(() => projectPrivateNoteLifecycle({
+    ...scope, asOfAt: '2026-10-01T11:59:59.999Z', events: [issued],
+  }), /after snapshot as-of timestamp/);
+  assert.equal(projectPrivateNoteLifecycle({
+    ...scope, asOfAt: issued.occurredAt, events: [issued],
+  }).status, 'issued');
+  assert.throws(() => projectPrivateNoteLifecycle({
+    ...scope, asOfAt: issued.occurredAt, events: [issued, presented],
+  }), /after snapshot as-of timestamp/);
+});
+
+test('requires a canonical snapshot as-of time even for an empty note history', () => {
+  for (const invalid of [undefined, null, '', '2026-11-01', '2026-11-01T00:00:00Z',
+    '2026-11-01T00:00:00.000+00:00', '2026-02-30T00:00:00.000Z']) {
+    assert.throws(() => projectPrivateNoteLifecycle({
+      ...scope, asOfAt: invalid, events: [],
+    }), /asOfAt/);
+  }
+  assert.deepEqual(project([]), {
+    status: 'draft', eventCount: 0, lastEventId: null, lastEventAt: null,
+  });
+});
+
 test('rejects missing actor, malformed timestamps, out-of-order or tied events', () => {
   assert.throws(() => project([event('issued', 1, { actorId: ' ' })]), /actorId/);
   assert.throws(() => project([event('issued', 1, { occurredAt: '2026-02-30T12:00:00.000Z' })]), /timestamp/);
