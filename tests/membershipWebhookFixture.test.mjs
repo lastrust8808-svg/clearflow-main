@@ -223,14 +223,14 @@ test('signed webhook fixture rejects oversized bodies before event admission', (
 });
 
 test('signed string bodies with unpaired UTF-16 surrogates are rejected without aliasing identities', () => {
-  for (const invalid of ['\\uD800', '\\uDC00', 'evt-\\uD800x', 'evt-\\uDC00x']) {
+  for (const invalid of ['\uD800', '\uDC00', 'evt-\uD800x', 'evt-\uDC00x']) {
     const body = JSON.stringify(scopedPayload).replace('evt-scope-test', invalid);
     assert.equal(verify(input({ rawBody: body, signatureHeader: sign(body) })), false);
     assert.equal(verifyScoped(scopedInput(scopedPayload, {
       rawBody: body, signatureHeader: sign(body),
     })), null);
   }
-  const valid = JSON.stringify({ ...scopedPayload, id: 'evt-\\uD83D\\uDE00' });
+  const valid = JSON.stringify({ ...scopedPayload, id: 'evt-\uD83D\uDE00' });
   assert.equal(verify(input({ rawBody: valid, signatureHeader: sign(valid) })), true);
   assert.ok(verifyScoped(scopedInput(scopedPayload, {
     rawBody: valid, signatureHeader: sign(valid),
