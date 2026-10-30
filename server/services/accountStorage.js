@@ -80,7 +80,28 @@ async function assertSafeStorageDirectory(directory) {
   }
 }
 
+// The shared accounts root must also be private. Tightening only tenant
+// directories leaves tenant names exposed through a legacy 0755/0777 root.
+// Validate the path and chmod the opened directory without following symlinks.
+async function secureStorageRoot() {
+  await assertSafeStorageDirectory(STORAGE_ROOT);
+  const handle = await fs.open(
+    STORAGE_ROOT,
+    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+  );
+  try {
+    const stat = await handle.stat();
+    if (!stat.isDirectory()) throw new Error('Unsafe storage directory path.');
+    if ((stat.mode & 0o077) !== 0) await handle.chmod(0o700);
+  } finally {
+    await handle.close();
+  }
+}
+
 async function ensureDirectory(targetPath) {
+  await assertSafeStorageDirectory(STORAGE_ROOT);
+  await fs.mkdir(STORAGE_ROOT, { recursive: true, mode: 0o700 });
+  await secureStorageRoot();
   // An existing account directory may predate private-directory creation.
   // Secure the tenant parent before creating a child record directory, so
   // legacy group/world permissions cannot expose newly saved records.
@@ -114,6 +135,7 @@ async function ensureDirectory(targetPath) {
 // tenant parent before its child, using no-follow directory descriptors.
 // ENOENT remains observable to callers so a missing record still returns null.
 async function secureExistingReadDirectories(directory) {
+  await secureStorageRoot();
   await assertSafeStorageDirectory(directory);
   const relative = path.relative(STORAGE_ROOT, directory);
   const segments = relative.split(path.sep);
