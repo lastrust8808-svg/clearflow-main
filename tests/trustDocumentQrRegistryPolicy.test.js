@@ -288,7 +288,7 @@ test('QR verification preserves superseded and revoked status for matching bytes
     versionRegistry({ versions: [first, next] }), finalizedBytes), { status: 'superseded' });
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
     versionRegistry({ versions: [{ ...first, status: 'revoked',
-      revocationEvidenceRef: 'version-revocation-1' }] }), finalizedBytes),
+      revokedAt, revocationEvidenceRef: 'version-revocation-1' }] }), finalizedBytes),
   { status: 'revoked' });
 });
 
@@ -326,4 +326,35 @@ test('QR trust scope is mandatory even within the same tenant and entity', () =>
     finalizedBytes), /scope mismatch/);
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(), finalizedBytes),
     { status: 'valid' });
+});
+
+test('QR historical verification rejects future, malformed and pre-registration document revocations', () => {
+  const { registry, lookup } = fixture();
+  const base = versionRegistry().versions[0];
+  const revokedVersion = changes => versionRegistry({ versions: [{
+    ...base, status: 'revoked', revocationEvidenceRef: 'document-revocation-1',
+    revokedAt, ...changes,
+  }] });
+  const asOf = '2026-10-29T11:59:59.999Z';
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, { ...lookup, asOfAt: asOf }, revokedVersion(), finalizedBytes,
+  ), /revocation occurs after lookup as-of/);
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, lookup, revokedVersion({ revokedAt: undefined }), finalizedBytes,
+  ), /version.revokedAt.*canonical/);
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, lookup, revokedVersion({ revokedAt: '2026-02-30T12:00:00.000Z' }), finalizedBytes,
+  ), /version.revokedAt.*canonical/);
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, lookup, revokedVersion({ revokedAt: issuedAt }), finalizedBytes,
+  ), /revocation must follow registration/);
+  assert.deepEqual(verifyTrustDocumentQrBytes(
+    registry, { ...lookup, asOfAt: revokedAt }, revokedVersion(), finalizedBytes,
+  ), { status: 'revoked' });
+  assert.throws(() => verifyTrustDocumentQrBytes(
+    registry, lookup, versionRegistry({ versions: [{ ...base, revokedAt }] }), finalizedBytes,
+  ), /Nonrevoked QR document version/);
+  assert.deepEqual(verifyTrustDocumentQrBytes(
+    registry, lookup, versionRegistry(), finalizedBytes,
+  ), { status: 'valid' });
 });
