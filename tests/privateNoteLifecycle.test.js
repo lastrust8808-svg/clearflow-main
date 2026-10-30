@@ -113,7 +113,7 @@ test('notice drafts cannot masquerade as the issued instrument or reuse a draft 
   ]), /distinct and unique/);
   assert.throws(() => project([
     event('issued', 1), event('presented', 2), event('notice_prepared', 3),
-    event('disputed', 4), event('notice_prepared', 5, { documentRef: 'document-3' }),
+    event('disputed', 4), event('notice_prepared', 5, { documentRef: 'document-3', supersedesDocumentRef: 'document-3' }),
   ]), /distinct and unique/);
 });
 test('prepared notice drafts require a provenance reference without claiming delivery', () => {
@@ -133,9 +133,9 @@ test('later revised notice drafts also require their own preparation evidence', 
     event('notice_prepared', 3), event('disputed', 4),
   ];
   assert.throws(() => project([
-    ...history, event('notice_prepared', 5, { evidenceRef: undefined }),
+    ...history, event('notice_prepared', 5, { evidenceRef: undefined, supersedesDocumentRef: 'document-3' }),
   ]), /evidenceRef/);
-  assert.equal(project([...history, event('notice_prepared', 5)]).status, 'notice_prepared');
+  assert.equal(project([...history, event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' })]).status, 'notice_prepared');
 });
 
 test('revised notice versions cannot reuse an earlier draft preparation evidence reference', () => {
@@ -144,17 +144,17 @@ test('revised notice versions cannot reuse an earlier draft preparation evidence
     event('notice_prepared', 3), event('disputed', 4),
   ];
   assert.throws(() => project([
-    ...history, event('notice_prepared', 5, { evidenceRef: 'evidence-3' }),
+    ...history, event('notice_prepared', 5, { evidenceRef: 'evidence-3', supersedesDocumentRef: 'document-3' }),
   ]), /preparation evidence reference must be unique/);
   // A distinct immutable document reference and separate evidence reference
   // are both required; neither alone establishes authenticity or delivery.
-  assert.equal(project([...history, event('notice_prepared', 5)]).status, 'notice_prepared');
+  assert.equal(project([...history, event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' })]).status, 'notice_prepared');
 });
 
 test('distinct notice revisions remain draft-only and require separate evidence for disputes', () => {
   const events = [
     event('issued', 1), event('presented', 2), event('notice_prepared', 3),
-    event('disputed', 4), event('notice_prepared', 5),
+    event('disputed', 4), event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' }),
   ];
   assert.equal(project(events).status, 'notice_prepared');
   assert.throws(() => project(events.map((entry, index) =>
@@ -226,4 +226,37 @@ test('rejects control characters in lifecycle event, actor, document and evidenc
     }
   }
   assert.equal(project([event('issued', 1), event('presented', 2)]).status, 'presented');
+});
+
+test('revised notices must identify the immediate preceding draft, not merely any earlier notice', () => {
+  const history = [
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4),
+  ];
+  for (const invalid of [undefined, null, '', 'document-1', 'document-2', 'document-unknown',
+    ' document-3 ', 'document-3\\u0000']) {
+    assert.throws(() => project([
+      ...history, event('notice_prepared', 5, { supersedesDocumentRef: invalid }),
+    ]), /supersedesDocumentRef|must supersede the latest prepared draft/);
+  }
+  const revised = [...history, event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' })];
+  assert.equal(project(revised).status, 'notice_prepared');
+  assert.throws(() => project([
+    ...revised, event('disputed', 6),
+    event('notice_prepared', 7, { supersedesDocumentRef: 'document-3' }),
+  ]), /must supersede the latest prepared draft/);
+  assert.equal(project([
+    ...revised, event('disputed', 6),
+    event('notice_prepared', 7, { supersedesDocumentRef: 'document-5' }),
+  ]).status, 'notice_prepared');
+});
+
+test('initial notice draft cannot falsely claim a predecessor', () => {
+  const history = [event('issued', 1), event('presented', 2)];
+  for (const invalid of ['document-1', 'document-unknown', '']) {
+    assert.throws(() => project([
+      ...history, event('notice_prepared', 3, { supersedesDocumentRef: invalid }),
+    ]), /Initial notice draft cannot supersede/);
+  }
+  assert.equal(project([...history, event('notice_prepared', 3)]).status, 'notice_prepared');
 });
