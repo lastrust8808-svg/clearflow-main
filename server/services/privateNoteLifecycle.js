@@ -68,6 +68,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   let issuedDocumentRef = null;
   let issuedEvidenceRef = null;
   const noticeDocumentRefs = new Set();
+  let latestNoticeDocumentRef = null;
   const noticeEvidenceRefs = new Set();
   // Evidence references identify distinct lifecycle-action provenance records.
   // Reusing a pointer for a different action must fail closed; verification
@@ -116,6 +117,19 @@ export function projectPrivateNoteLifecycle(snapshot) {
       if (noticeDocumentRef === issuedDocumentRef || noticeDocumentRefs.has(noticeDocumentRef)) {
         throw new Error('Notice draft document reference must be distinct and unique');
       }
+      // Revised notices must explicitly identify the immediately preceding
+      // draft. This is a document lineage check, not proof of service or legal
+      // effectiveness. Initial drafts must not claim an earlier notice.
+      if (latestNoticeDocumentRef === null) {
+        if (event.supersedesDocumentRef != null) {
+          throw new Error('Initial notice draft cannot supersede another document');
+        }
+      } else {
+        const supersedes = requiredId(event.supersedesDocumentRef, 'supersedesDocumentRef');
+        if (supersedes !== latestNoticeDocumentRef) {
+          throw new Error('Notice revision must supersede the latest prepared draft');
+        }
+      }
       // A new or revised draft must have its own preparation record; a reused
       // pointer would make two different draft versions appear to share one
       // provenance event. This does not authenticate the evidence itself.
@@ -125,6 +139,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
       }
       noticeDocumentRefs.add(noticeDocumentRef);
       noticeEvidenceRefs.add(noticeEvidenceRef);
+      latestNoticeDocumentRef = noticeDocumentRef;
     }
     if (event.type === 'disputed') {
       requiredId(event.evidenceRef, 'evidenceRef');
