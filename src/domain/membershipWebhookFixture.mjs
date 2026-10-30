@@ -27,17 +27,7 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   // Node's UTF-8 encoding replaces lone UTF-16 surrogates with U+FFFD.
   // Reject such strings so distinct raw event identities cannot share the
   // same signed bytes after a lossy conversion. Valid pairs remain accepted.
-  if (typeof rawBody === 'string') {
-    for (let i = 0; i < rawBody.length; i++) {
-      const code = rawBody.charCodeAt(i);
-      if (code >= 0xd800 && code <= 0xdbff) {
-        const next = rawBody.charCodeAt(++i);
-        if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      } else if (code >= 0xdc00 && code <= 0xdfff) {
-        return false;
-      }
-    }
-  }
+  if (typeof rawBody === 'string' && hasUnpairedSurrogate(rawBody)) return false;
   if (typeof signatureHeader !== 'string') return false;
   const match = /^t=(0|[1-9]\d*),v1=([a-f0-9]{64})$/.exec(signatureHeader);
   if (!match) return false;
@@ -51,6 +41,22 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   return timingSafeEqual(actual, expected);
 }
 
+
+// JSON escape sequences can decode into unpaired UTF-16 surrogates even when
+// the raw signed body contains only valid UTF-8 ASCII. Such identities must
+// not cross the fixture verification boundary as malformed Unicode.
+function hasUnpairedSurrogate(value) {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(++i);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // JSON.parse silently keeps the last occurrence of a duplicate object key.
 // A signed payload with conflicting event IDs, tenant IDs, or paid-through
@@ -123,6 +129,10 @@ export function verifyScopedMembershipWebhookFixture({
   }
   if (!event || typeof event !== 'object' || Array.isArray(event) ||
       Object.hasOwn(event, 'verified')) return null;
+  // JSON.parse accepts escaped lone surrogates (e.g. "\\uD800"), which
+  // bypasses the raw-body UTF-16 guard. Reject decoded malformed identities.
+  if (Object.values(event).some(value =>
+    typeof value === 'string' && hasUnpairedSurrogate(value))) return null;
   for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
     if (typeof authenticatedScope[field] !== 'string' ||
         authenticatedScope[field].trim() === '' ||
