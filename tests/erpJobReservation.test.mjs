@@ -708,3 +708,36 @@ test('reservation rejects Proxy payloads before triggering reflection traps or d
   assert.equal(traps, 0);
   assert.equal(db.calls, 0);
 });
+
+
+test('ambiguous reservation insert or replay lookup rows fail closed', async () => {
+  // A malformed adapter must not turn multiple database records into a
+  // single durable acknowledgement by silently selecting rows[0].
+  const inserted = {
+    id: 'job-1', tenant_id: scope.tenantId, actor_id: scope.actorId,
+    operation: args.operation, idempotency_key: args.idempotencyKey,
+    payload_sha256: 'a'.repeat(64), status: 'queued',
+    created_at: new Date('2026-10-29T12:00:00Z'),
+  };
+  let calls = 0;
+  const duplicateInsert = { query: async () => {
+    calls++;
+    return { rows: [inserted, inserted] };
+  } };
+  await assert.rejects(reserve({ db: duplicateInsert, ...args }), /invalid reservation result/);
+  assert.equal(calls, 1, 'ambiguous insert must not trigger a replay lookup');
+
+  calls = 0;
+  const duplicateLookup = { query: async () => {
+    calls++;
+    return calls === 1 ? { rows: [] } : { rows: [inserted, inserted] };
+  } };
+  await assert.rejects(reserve({ db: duplicateLookup, ...args }), /invalid reservation lookup/);
+  assert.equal(calls, 2);
+
+  for (const invalidRows of [null, {}, { rows: null }, { rows: {} }]) {
+    await assert.rejects(reserve({
+      db: { query: async () => invalidRows }, ...args,
+    }), /invalid reservation result/);
+  }
+});
