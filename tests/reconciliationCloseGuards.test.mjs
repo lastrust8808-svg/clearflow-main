@@ -426,7 +426,12 @@ test('real leap-day controller signoffs and valid timezone offsets remain eligib
         controllerSignoffName: 'Controller A',
         controllerSignoffAt,
         ...(controllerSignoffAt.startsWith('2024-')
-          ? { statementImportedAt: '2024-02-28T12:00:00Z', periodStart: '2024-02-01', periodEnd: '2024-02-29' }
+          ? {
+              statementImportedAt: '2024-02-28T12:00:00Z',
+              periodStart: '2024-02-01',
+              periodEnd: '2024-02-29',
+              parsedStatementLines: [statementLine('line-1', 'matched', { postedDate: '2024-02-29' })],
+            }
           : {}),
       }),
       account
