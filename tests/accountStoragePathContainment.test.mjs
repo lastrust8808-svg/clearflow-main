@@ -279,7 +279,7 @@ test('scoped records reject missing or incorrect record identifiers without supp
     await fs.writeFile(filePath, JSON.stringify({ accountId, fileId: 'other-doc', contents: 'wrong fileId' }));
     await assert.rejects(loadAccountDocumentFile(accountId, 'doc-1'), /Stored record scope does not match requested account/);
     await fs.writeFile(filePath, JSON.stringify(['not a record']));
-    await assert.rejects(loadAccountDocumentFile(accountId, 'doc-1'), /Stored record scope does not match requested account/);
+    await assert.rejects(loadAccountDocumentFile(accountId, 'doc-1'), /Unsafe storage record payload/);
   } finally {
     await fs.rm(accountPath, { recursive: true, force: true });
   }
