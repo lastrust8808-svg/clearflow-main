@@ -238,6 +238,15 @@ function assertWritableRecordPayload(payload) {
 // resource's identity. Do not silently replace that evidence with the route
 // parameters and acknowledge the write as if the scopes had agreed.
 // Omitted scope fields are allowed for new records; supplied fields must agree.
+// Capture an inert JSON snapshot synchronously, before the first filesystem
+// await. Otherwise a caller can mutate a previously validated object while
+// directory creation is pending, changing identity or financial evidence
+// between validation and the eventual JSON.stringify.
+function snapshotWritableRecord(payload) {
+  assertWritableRecordPayload(payload);
+  return JSON.parse(JSON.stringify(payload));
+}
+
 function assertWritableRecordScope(payload, expected) {
   for (const [key, value] of Object.entries(expected)) {
     if (Object.hasOwn(payload, key) && payload[key] !== value) {
@@ -280,11 +289,11 @@ export async function loadAccountAppData(accountId) {
 }
 
 export async function saveAccountAppData(accountId, appData) {
-  assertWritableRecordPayload(appData);
-  assertGoogleAppDataScope(accountId, appData);
+  const snapshot = snapshotWritableRecord(appData);
+  assertGoogleAppDataScope(accountId, snapshot);
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
-  await writeJsonAtomically(appDataPath(accountId), appData);
+  await writeJsonAtomically(appDataPath(accountId), snapshot);
 
   return {
     accountId,
@@ -304,13 +313,13 @@ export async function loadAccountDocumentFile(accountId, fileId) {
 }
 
 export async function saveAccountDocumentFile(accountId, fileId, payload) {
-  assertWritableRecordPayload(payload);
-  assertWritableRecordScope(payload, { accountId, fileId });
+  const snapshot = snapshotWritableRecord(payload);
+  assertWritableRecordScope(snapshot, { accountId, fileId });
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountFilePath(accountId, fileId),
     {
-        ...payload,
+        ...snapshot,
         accountId,
         fileId,
         savedAt: new Date().toISOString(),
@@ -336,13 +345,13 @@ export async function loadAccountRemittanceVault(accountId, vendorId) {
 }
 
 export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
-  assertWritableRecordPayload(payload);
-  assertWritableRecordScope(payload, { accountId, vendorId });
+  const snapshot = snapshotWritableRecord(payload);
+  assertWritableRecordScope(snapshot, { accountId, vendorId });
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountRemittancePath(accountId, vendorId),
     {
-        ...payload,
+        ...snapshot,
         accountId,
         vendorId,
         savedAt: new Date().toISOString(),
@@ -368,13 +377,13 @@ export async function loadAccountTransactionProofVault(accountId) {
 }
 
 export async function saveAccountTransactionProofVault(accountId, payload) {
-  assertWritableRecordPayload(payload);
-  assertWritableRecordScope(payload, { accountId });
+  const snapshot = snapshotWritableRecord(payload);
+  assertWritableRecordScope(snapshot, { accountId });
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountTransactionProofPath(accountId),
     {
-        ...payload,
+        ...snapshot,
         accountId,
         savedAt: new Date().toISOString(),
       }
@@ -398,13 +407,13 @@ export async function loadAccountPlaidVault(accountId) {
 }
 
 export async function saveAccountPlaidVault(accountId, payload) {
-  assertWritableRecordPayload(payload);
-  assertWritableRecordScope(payload, { accountId });
+  const snapshot = snapshotWritableRecord(payload);
+  assertWritableRecordScope(snapshot, { accountId });
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountPlaidPath(accountId),
     {
-        ...payload,
+        ...snapshot,
         accountId,
         savedAt: new Date().toISOString(),
       }
@@ -428,13 +437,13 @@ export async function loadAccountExtractionRecord(accountId, signature) {
 }
 
 export async function saveAccountExtractionRecord(accountId, signature, payload) {
-  assertWritableRecordPayload(payload);
-  assertWritableRecordScope(payload, { accountId, signature });
+  const snapshot = snapshotWritableRecord(payload);
+  assertWritableRecordScope(snapshot, { accountId, signature });
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountExtractionPath(accountId, signature),
     {
-        ...payload,
+        ...snapshot,
         accountId,
         signature,
         savedAt: new Date().toISOString(),
