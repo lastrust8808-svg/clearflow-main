@@ -940,3 +940,34 @@ test('stored account JSON rejects prototype-polluting keys on writes and legacy 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('deeply nested records fail closed on writes and legacy reads across all storage categories', async () => {
+  const accountId = `depth-guard-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (data) => saveAccountAppData(accountId, data), load: () => loadAccountAppData(accountId) },
+    { file: path.join('files', 'doc-1.json'), save: (data) => saveAccountDocumentFile(accountId, 'doc-1', data), load: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: path.join('remittance', 'vendor-1.json'), save: (data) => saveAccountRemittanceVault(accountId, 'vendor-1', data), load: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: path.join('transaction-proof-chains', 'chains.json'), save: (data) => saveAccountTransactionProofVault(accountId, data), load: () => loadAccountTransactionProofVault(accountId) },
+    { file: path.join('plaid', 'connections.json'), save: (data) => saveAccountPlaidVault(accountId, data), load: () => loadAccountPlaidVault(accountId) },
+    { file: path.join('extractions', 'sig-1.json'), save: (data) => saveAccountExtractionRecord(accountId, 'sig-1', data), load: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  let deep = { amountMinor: 1250 };
+  for (let index = 0; index < 130; index++) deep = { nested: deep };
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ revision: 1 });
+      const before = await fixture.load();
+      await assert.rejects(fixture.save({ evidence: deep }), /nesting exceeds safety limit/);
+      assert.deepEqual(await fixture.load(), before, 'rejected write must retain existing record');
+      // Simulate a legacy writer bypassing today's write validator.
+      await fs.writeFile(path.join(root, fixture.file), JSON.stringify({ evidence: deep }));
+      await assert.rejects(fixture.load(), /nesting exceeds safety limit/);
+      await fixture.save({ evidence: { nested: { amountMinor: 1250 } } });
+      assert.equal((await fixture.load()).evidence.nested.amountMinor, 1250);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
