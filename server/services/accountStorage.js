@@ -5,6 +5,9 @@ import { types as nodeTypes } from 'node:util';
 import { sanitizeStorageSegment as sanitizeSegment } from '../utils/storageSegment.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+// Never admit JSON object keys that can mutate prototypes when records are
+// subsequently merged into application state by downstream consumers.
+const UNSAFE_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 
 function accountDirectory(accountId) {
@@ -187,7 +190,10 @@ async function readJsonSafely(targetPath) {
     // Do not return a JSON primitive or array as a tenant workspace/vault;
     // all account storage APIs persist top-level JSON objects. In particular,
     // non-Google app-data has no separate embedded identity scope check.
-    const record = JSON.parse(await handle.readFile('utf8'));
+    const record = JSON.parse(await handle.readFile('utf8'), (key, value) => {
+      if (UNSAFE_JSON_KEYS.has(key)) throw new Error('Unsafe storage record property.');
+      return value;
+    });
     if (!record || typeof record !== 'object' || Array.isArray(record)) {
       throw new Error('Unsafe storage record payload.');
     }
@@ -289,6 +295,9 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
     // The built-in array length is not serialized. Other hidden or symbol
     // properties, including a hidden toJSON method, must not be discarded.
     if (isArray && key === 'length') continue;
+    if (UNSAFE_JSON_KEYS.has(key)) {
+      throw new TypeError('Unsafe storage record property.');
+    }
     const descriptor = descriptors[key];
     if (typeof key !== 'string' || !descriptor.enumerable ||
         (isArray && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))) {
