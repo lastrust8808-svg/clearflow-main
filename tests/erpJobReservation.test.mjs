@@ -536,3 +536,92 @@ test('unapplied ERP schema forbids evidence-free successful terminal states', ()
   assert.doesNotMatch(sql, /status IN \([^)]*'sent'/);
   assert.doesNotMatch(sql, /status IN \([^)]*'processed'/);
 });
+
+
+function dispatchedRow(overrides = {}) {
+  return {
+    ...claimedRow({
+      dispatch_started_at: new Date('2026-10-29T12:01:30Z'),
+      updated_at: new Date('2026-10-29T12:01:30Z'),
+    }),
+    ...overrides,
+  };
+}
+
+test('pre-dispatch fence is atomic, tenant-bound, lease-bound, and not a delivery receipt', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params };
+    return { rows: [dispatchedRow()] };
+  } };
+  const result = await mark({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId });
+  assert.deepEqual(captured.params, ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a']);
+  assert.match(captured.sql, /SET dispatch_started_at = now\(\)/);
+  assert.match(captured.sql, /claimed_by = \$4 AND status = 'processing'/);
+  assert.match(captured.sql, /lease_expires_at > now\(\) AND dispatch_started_at IS NULL/);
+  assert.equal(result.dispatchStartedAt, '2026-10-29T12:01:30.000Z');
+  assert.equal(result.outcomeMayBeUnknown, true);
+  assert.equal('delivered' in result, false);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('expired or already dispatched lease cannot start another dispatch; database failures propagate', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  assert.equal(await mark({ ...input, db: { query: async () => ({ rows: [] }) } }), null);
+  await assert.rejects(mark({ ...input, db: {
+    query: async () => { throw new Error('database offline'); },
+  } }), /database offline/);
+  await assert.rejects(mark({ ...input, db: {
+    query: async () => ({ rows: [dispatchedRow(), dispatchedRow()] }),
+  } }), /invalid dispatch fence result/);
+});
+
+test('dispatch fence rejects foreign receipts, invalid chronology, and invalid identity', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  for (const row of [
+    dispatchedRow({ tenant_id: 'foreign' }),
+    dispatchedRow({ claimed_by: 'foreign-worker' }),
+    dispatchedRow({ actor_id: '' }),
+    dispatchedRow({ operation: 'invoice_export' }),
+    dispatchedRow({ status: 'failed' }),
+    dispatchedRow({ dispatch_started_at: 'invalid' }),
+    dispatchedRow({ dispatch_started_at: new Date('2026-10-29T12:00:30Z') }),
+    dispatchedRow({ dispatch_started_at: new Date('2026-10-29T12:02:00Z') }),
+    dispatchedRow({ updated_at: new Date('2026-10-29T12:01:00Z') }),
+  ]) await assert.rejects(mark({ ...input,
+    db: { query: async () => ({ rows: [row] }) },
+  }), /invalid/);
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' }, { jobId: 'bad' },
+  ]) await assert.rejects(mark({ ...input, db, ...invalid }));
+  assert.equal(calls, 0);
+});
+
+test('terminal failure is forbidden once an external dispatch might have started', async () => {
+  const { failErpOperationJob: fail } =
+    await import('../server/services/erpJobReservation.js');
+  let sql;
+  await fail({
+    db: { query: async (statement) => { sql = statement; return { rows: [] }; } },
+    authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR',
+  });
+  assert.match(sql, /lease_expires_at > now\(\) AND dispatch_started_at IS NULL/);
+  const schema = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
+  assert.match(schema, /dispatch_started_at timestamptz/);
+  assert.match(schema, /CONSTRAINT erp_dispatch_fence_consistency CHECK/);
+  assert.match(schema, /dispatch_started_at IS NULL OR status IN \('processing', 'outcome_unknown'\)/);
+});
