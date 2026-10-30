@@ -297,3 +297,37 @@ test('signing registry and all historical versions must belong to the same trust
     },
   }), /version trustId scope mismatch/);
 });
+
+test('signing receipts and identity evidence cannot replay appointment acceptance or version registration', () => {
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  for (const evidenceRef of ['appointment-a', 'version-registration-1']) {
+    for (const key of ['identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
+      assert.throws(() => assess({
+        attestations: [attestation('a', { [key]: evidenceRef })],
+      }), /Reused cross-role signing provenance reference/);
+    }
+  }
+});
+
+test('appointment acceptance and document registration require distinct provenance events', () => {
+  const current = packet();
+  assert.throws(() => assess({
+    versionRegistry: {
+      ...current.versionRegistry,
+      versions: [{
+        ...current.versionRegistry.versions[0],
+        evidenceRef: 'appointment-b',
+      }],
+    },
+  }), /Reused cross-role signing provenance reference/);
+  // Independent, unrelated references remain valid for review.
+  assert.equal(assess({
+    versionRegistry: {
+      ...current.versionRegistry,
+      versions: [{
+        ...current.versionRegistry.versions[0],
+        evidenceRef: 'registration-distinct',
+      }],
+    },
+  }).status, 'evidence_ready_for_review');
+});
