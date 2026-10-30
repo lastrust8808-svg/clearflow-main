@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 /**
  * Pure, non-posting verification decision for an already authorized,
- * tenant-scoped document-version registry.
+ * tenant/entity/trust-scoped document-version registry.
  *
  * The caller MUST authenticate/authorize registry access, compute the SHA-256
  * digest from the actual document bytes, verify registration/revocation evidence,
@@ -37,8 +37,8 @@ function timestamp(value, field) {
 }
 
 /**
- * @param {{tenantId:string,entityId:string,documentId:string,versions:Array<{
- *   versionId:string,tenantId:string,entityId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
+ * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,versions:Array<{
+ *   versionId:string,tenantId:string,entityId:string,trustId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
  *   registeredAt:string,evidenceRef:string}>}} registry
  * @param {{versionId:string,sha256:string}} proof sha256 MUST be computed from the supplied file bytes
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Frozen, metadata-free result
@@ -47,7 +47,7 @@ export function verifyTrustDocumentVersion(registry, proof) {
   if (!registry || typeof registry !== 'object' || Array.isArray(registry)) {
     throw new TypeError('Document registry required');
   }
-  for (const key of ['tenantId', 'entityId', 'documentId']) identifier(registry[key], key);
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) identifier(registry[key], key);
   if (!Array.isArray(registry.versions)) throw new TypeError('versions must be an array');
   if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
     throw new TypeError('Document proof required');
@@ -65,7 +65,7 @@ export function verifyTrustDocumentVersion(registry, proof) {
       throw new TypeError('Invalid document version');
     }
     const id = identifier(version.versionId, 'version.versionId');
-    for (const key of ['tenantId', 'entityId', 'documentId']) {
+    for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
       if (version[key] !== registry[key]) throw new Error('Document version ' + key + ' scope mismatch');
     }
     if (seenIds.has(id)) throw new Error('Duplicate document version ID');
@@ -100,7 +100,7 @@ export function verifyTrustDocumentVersion(registry, proof) {
 
 /**
  * Verify a finalized document against the scoped version registry using its
- * actual bytes. The caller must first authenticate registry access and read
+ * actual bytes. The caller must first authenticate tenant/entity/trust registry access and read
  * the immutable registry; this function does not establish signer identity,
  * legal execution, or QR-token authorization.
  *
