@@ -22,12 +22,12 @@ const payloads = [
 ];
 const operations = [api.queueInvoiceDelivery, api.queueInvoiceExport, api.importReconciliationStatement, api.closeReconciliationJob];
 const accepted = [
-  { success: true, job: { id: 'j1', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'send', status: 'sent', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z', sentAt: '2026-10-28T00:00:02Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } },
-  { success: true, job: { id: 'j2', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
-  { success: true, importJob: { id: 'j3', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
+  { success: true, job: { id: '123e4567-e89b-42d3-a456-426614174000', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'send', status: 'sent', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z', sentAt: '2026-10-28T00:00:02Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } },
+  { success: true, job: { id: '123e4567-e89b-42d3-a456-426614174001', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
+  { success: true, importJob: { id: '123e4567-e89b-42d3-a456-426614174002', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     persistence: 'durable', importedAt: '2026-10-28T00:00:02Z' } },
-  { success: true, closeJob: { id: 'j4', reconciliationId: 'rec-1', operation: 'reconciliation_close', status: 'processed',
+  { success: true, closeJob: { id: '123e4567-e89b-42d3-a456-426614174003', reconciliationId: 'rec-1', operation: 'reconciliation_close', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     persistence: 'durable', closedAt: '2026-10-28T00:00:02Z' } },
 ];
@@ -177,6 +177,25 @@ try {
       assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
     }
   });
+  await test('synthetic or malformed job IDs cannot be treated as durable ERP receipts', async () => {
+    // Even otherwise well-formed server responses must not revive the old
+    // process-local queue convention of fabricated job identifiers.
+    const invalidIds = [
+      undefined, null, '', 'job-1', 'sent-job', '123e4567-e89b-42d3-a456-426614174000'.toUpperCase(),
+      '123e4567-e89b-02d3-a456-426614174000',
+      '123e4567-e89b-42d3-7456-426614174000',
+    ];
+    for (let index = 0; index < operations.length; index++) {
+      const key = index < 2 ? 'job' : index === 2 ? 'importJob' : 'closeJob';
+      for (const id of invalidIds) {
+        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+          success: true, [key]: { ...accepted[index][key], id },
+        }) });
+        await assert.rejects(operations[index](payloads[index]), /not confirmed/,
+          `operation ${index + 1} accepted malformed job ID ${String(id)}`);
+      }
+    }
+  });
   await test('manual fallback is not a confirmed invoice delivery or export', async () => {
     for (const [index, operation] of [[0, 'send'], [1, 'export']]) {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({
@@ -193,7 +212,7 @@ try {
       { sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'manual' }]) {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({
         success: true,
-        job: { id: 'sent-job', operation: 'send', status: 'sent',
+        job: { id: '123e4567-e89b-42d3-a456-426614174004', operation: 'send', status: 'sent',
           queuedAt: '2026-10-29T00:00:00Z', persistence: 'durable',
           persistedAt: '2026-10-29T00:00:01Z', ...metadata },
       }) });
@@ -201,7 +220,7 @@ try {
     }
   });
   await test('sent delivery with explicit SMTP completion metadata remains accepted', async () => {
-    const confirmation = { success: true, job: { id: 'sent-job', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'send',
+    const confirmation = { success: true, job: { id: '123e4567-e89b-42d3-a456-426614174004', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'send',
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
       persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
       sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } };
@@ -289,7 +308,7 @@ try {
     for (const sentAt of ['not-a-date', '2026-10-28T23:59:59Z', '2026-02-30T00:00:02Z']) {
       globalThis.fetch = async () => ({ ok: true, json: async () => ({
         success: true, job: {
-          id: 'sent-job', operation: 'send', status: 'sent',
+          id: '123e4567-e89b-42d3-a456-426614174004', operation: 'send', status: 'sent',
           queuedAt: '2026-10-29T00:00:00Z',
           persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
           sentAt, deliveryChannel: 'smtp',
