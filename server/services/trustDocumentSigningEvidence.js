@@ -166,6 +166,19 @@ export function assessTrustDocumentSigningPacket(packet) {
       }
     }
   }
+  // Historical revocations must have a dated, independently verifiable
+  // record before they can contribute to an as-of signing review. A future
+  // revocation cannot be applied retroactively. The caller must authenticate
+  // these timestamps against an append-only registry; this is only a
+  // structural chronology check over supplied records.
+  for (const version of versionRegistry.versions ?? []) {
+    if (version.status !== 'revoked' || version.versionId === scope.versionId) continue;
+    const registeredAt = timestamp(version.registeredAt, 'version.registeredAt');
+    const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
+    if (revokedAt <= registeredAt || revokedAt > evaluatedAt) {
+      return result('incomplete', 'historical_revocation_chronology_invalid');
+    }
+  }
   const versionStatus = verifyTrustDocumentBytes(versionRegistry, {
     versionId: scope.versionId, content: packet.content,
   });
