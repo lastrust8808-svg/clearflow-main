@@ -171,6 +171,18 @@ function assertWritableRecordPayload(payload) {
   ) {
     throw new TypeError('Storage record payload must be a plain JSON object.');
   }
+  // JSON.stringify invokes a top-level toJSON method, which can silently
+  // replace a validated object (including its account scope) with an array,
+  // primitive or unrelated record. Accessor properties can similarly change
+  // between validation and serialization. Refuse both before filesystem I/O.
+  if (
+    typeof Object.getOwnPropertyDescriptor(payload, 'toJSON')?.value === 'function' ||
+    Object.values(Object.getOwnPropertyDescriptors(payload)).some(
+      (descriptor) => !Object.hasOwn(descriptor, 'value')
+    )
+  ) {
+    throw new TypeError('Storage record payload must not contain custom serialization or accessors.');
+  }
   return payload;
 }
 
