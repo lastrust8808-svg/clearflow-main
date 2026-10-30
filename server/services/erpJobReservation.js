@@ -67,7 +67,7 @@ export async function reserveErpOperationJob({
     throw new Error('ERP job storage returned an invalid tenant-bound receipt');
   }
   if (typeof record.id !== 'string' || !record.id ||
-      !['queued', 'processing', 'processed', 'sent', 'failed'].includes(record.status)) {
+      !['queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid job record');
   }
   const createdAt = record.created_at instanceof Date
@@ -106,7 +106,7 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
   if (!record) return null;
   if (record.id !== jobId || record.tenant_id !== tenantId ||
       record.actor_id !== actorId || !operations.has(record.operation) ||
-      !['queued', 'processing', 'processed', 'sent', 'failed'].includes(record.status)) {
+      !['queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid tenant-bound status');
   }
   const createdAt = record.created_at instanceof Date
@@ -307,5 +307,56 @@ export async function failErpOperationJob({
   return Object.freeze({
     id: jobId, tenantId, operation, status: 'failed',
     failureCode, createdAt, updatedAt,
+  });
+}
+
+
+// An expired worker lease does not prove an external side effect failed.
+// Quarantine for reconciliation; never retry, requeue or claim delivery here.
+// Caller MUST independently authenticate and authorize recovery worker scope.
+export async function quarantineExpiredErpOperationJob({
+  db, authenticatedWorker, operation, jobId,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (typeof jobId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    throw new TypeError('Invalid ERP job id');
+  }
+  const result = await db.query(
+    `UPDATE erp_operation_jobs
+     SET status = 'outcome_unknown',
+         claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL,
+         updated_at = now()
+     WHERE tenant_id = $1 AND operation = $2 AND id = $3
+       AND status = 'processing' AND lease_expires_at <= now()
+     RETURNING id, tenant_id, actor_id, operation, status, failure_code,
+               claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
+    [tenantId, operation, jobId],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid quarantine result');
+  }
+  const row = result.rows[0];
+  if (!row) return null;
+  if (row.id !== jobId || row.tenant_id !== tenantId ||
+      row.operation !== operation || row.status !== 'outcome_unknown' ||
+      row.failure_code != null || row.claimed_by != null ||
+      row.claimed_at != null || row.lease_expires_at != null ||
+      typeof row.actor_id !== 'string' || !row.actor_id) {
+    throw new Error('ERP job storage returned an invalid tenant-bound quarantine');
+  }
+  const stamp = value => value instanceof Date ? value.toISOString() : value;
+  const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
+  if ([createdAt, updatedAt].some(
+    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+  ) || Date.parse(updatedAt) < Date.parse(createdAt)) {
+    throw new Error('ERP job storage returned an invalid quarantine timestamp');
+  }
+  return Object.freeze({
+    id: jobId, tenantId, operation, status: 'outcome_unknown',
+    requiresReconciliation: true, createdAt, updatedAt,
   });
 }

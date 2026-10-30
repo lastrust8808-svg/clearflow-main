@@ -410,3 +410,91 @@ test('worker failure validates scope, operation, ID and reason before database a
   assert.match(sql, /failure_code text CHECK/);
   assert.match(sql, /CONSTRAINT erp_failure_reason_consistency CHECK/);
 });
+
+
+function quarantineRow(overrides = {}) {
+  return {
+    id: claimedJobId, tenant_id: workerScope.tenantId, actor_id: 'actor-a',
+    operation: 'invoice_delivery', status: 'outcome_unknown', failure_code: null,
+    claimed_by: null, claimed_at: null, lease_expires_at: null,
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:04:00Z'), ...overrides,
+  };
+}
+
+test('expired lease is atomically quarantined, not requeued or marked delivered', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params }; return { rows: [quarantineRow()] };
+  } };
+  const result = await quarantine({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId });
+  assert.deepEqual(captured.params, ['tenant-a', 'invoice_delivery', claimedJobId]);
+  assert.match(captured.sql, /status = 'processing' AND lease_expires_at <= now\(\)/);
+  assert.match(captured.sql, /SET status = 'outcome_unknown'/);
+  assert.match(captured.sql, /claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL/);
+  assert.equal(result.status, 'outcome_unknown');
+  assert.equal(result.requiresReconciliation, true);
+  assert.equal('sent' in result, false);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('no expired lease returns null; database errors and duplicate receipts fail closed', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  assert.equal(await quarantine({ ...input, db: { query: async () => ({ rows: [] }) } }), null);
+  await assert.rejects(quarantine({ ...input, db: {
+    query: async () => { throw new Error('database offline'); },
+  } }), /database offline/);
+  await assert.rejects(quarantine({ ...input, db: {
+    query: async () => ({ rows: [quarantineRow(), quarantineRow()] }),
+  } }), /invalid quarantine result/);
+});
+
+test('quarantine rejects foreign or fabricated receipts and malformed timestamps', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  for (const row of [
+    quarantineRow({ tenant_id: 'other' }), quarantineRow({ operation: 'invoice_export' }),
+    quarantineRow({ id: 'other' }), quarantineRow({ status: 'sent' }),
+    quarantineRow({ failure_code: 'ERP_WORKER_ERROR' }),
+    quarantineRow({ claimed_by: 'worker-a' }),
+    quarantineRow({ lease_expires_at: new Date() }),
+    quarantineRow({ actor_id: '' }), quarantineRow({ updated_at: 'bad' }),
+    quarantineRow({ updated_at: new Date('2026-10-29T11:00:00Z') }),
+  ]) await assert.rejects(quarantine({
+    ...input, db: { query: async () => ({ rows: [row] }) },
+  }), /invalid/);
+});
+
+test('quarantine rejects invalid scope, operation and job ID without querying', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const input = { db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  for (const invalid of [
+    { authenticatedWorker: null }, { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' }, { jobId: 'invalid' },
+  ]) await assert.rejects(quarantine({ ...input, ...invalid }));
+  assert.equal(calls, 0);
+});
+
+test('actor status lookup can report outcome_unknown without claiming delivery', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  const result = await readErpOperationJobStatus({
+    db: { query: async () => ({ rows: [quarantineRow()] }) },
+    authenticatedScope: scope, jobId: claimedJobId,
+  });
+  assert.equal(result.status, 'outcome_unknown');
+  assert.equal('delivered' in result, false);
+  const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
+  assert.match(sql, /'outcome_unknown'/);
+});

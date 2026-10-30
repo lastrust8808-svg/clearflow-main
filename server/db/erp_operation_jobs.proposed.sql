@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS erp_operation_jobs (
   payload_sha256 char(64) NOT NULL,
   payload jsonb NOT NULL,
   status text NOT NULL DEFAULT 'queued' CHECK (
-    status IN ('queued', 'processing', 'processed', 'sent', 'failed')
+    status IN ('queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown')
   ),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -42,5 +42,6 @@ CREATE INDEX IF NOT EXISTS erp_operation_jobs_tenant_status_idx
 -- No public read/write grants. The API must authenticate and authorize the
 -- tenant, actor, entity and invoice/reconciliation before invoking the store.
 -- Atomic queued-job claiming is proposed but not yet wired to a worker.
--- Lease expiry recovery, successful worker completion, delivery receipts and audit trail
--- remain separate gates. This file is NOT an applied migration.
+-- Expired worker leases can be quarantined as outcome_unknown, never automatically requeued.
+-- Successful worker completion, delivery receipts and audit trail remain separate gates.
+-- This file is NOT an applied migration.
