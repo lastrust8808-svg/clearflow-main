@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateReserveCapacity } from '../server/services/reserveCapacity.js';
 
-const base = { tenantId: 'tenant-a', entityId: 'trust-a', currency: 'USD' };
+const base = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', currency: 'USD' };
 const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
 const calculate = (entries) => calculateReserveCapacity({ ...base, entries });
 
@@ -27,10 +27,22 @@ test('rejects overpledged or negative and fractional balances', () => {
   assert.throws(() => calculate([entry('x', 1.5)]), /safe integer/);
 });
 
-test('rejects mixed tenant, entity or currency rather than silently mixing books', () => {
-  for (const change of [{ tenantId: 'tenant-b' }, { entityId: 'trust-b' }, { currency: 'EUR' }]) {
+test('rejects mixed tenant, entity, trust or currency rather than silently mixing books', () => {
+  for (const change of [{ tenantId: 'tenant-b' }, { entityId: 'entity-b' }, { trustId: 'trust-b' }, { currency: 'EUR' }]) {
     assert.throws(() => calculate([entry('x', 100, change)]), /scope or currency mismatch/);
   }
+});
+
+test('trust scope is mandatory even when tenant and entity match', () => {
+  assert.throws(() => calculateReserveCapacity({
+    tenantId: base.tenantId, entityId: base.entityId, currency: 'USD',
+    entries: [entry('cash-a', 100)],
+  }), /trustId/);
+  assert.throws(() => calculate([entry('cash-a', 100, { trustId: undefined })]), /scope or currency mismatch/);
+  assert.throws(() => calculate([entry('cash-a', 100, { trustId: 'trust-b' })]), /scope or currency mismatch/);
+  const result = calculate([entry('cash-a', 100)]);
+  assert.equal(result.trustId, 'trust-a');
+  assert.equal(result.unencumberedCashMinor, 100);
 });
 
 test('rejects duplicate entries and unsafe aggregate overflow', () => {
@@ -52,8 +64,8 @@ test('returns immutable snapshot without mutating entries', () => {
   assert.deepEqual(calculate([]).unencumberedCashMinor, 0);
 });
 
-test('rejects padded or control-character tenant and entity identifiers', () => {
-  for (const key of ['tenantId', 'entityId']) {
+test('rejects padded or control-character tenant, entity and trust identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
     for (const bad of [' ' + base[key], base[key] + ' ', base[key] + '\u0000',
       base[key] + '\u001f', base[key] + '\u007f', base[key] + '\u009f']) {
       assert.throws(() => calculateReserveCapacity({ ...base, [key]: bad, entries: [] }),
