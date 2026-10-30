@@ -122,6 +122,13 @@ async function readJsonSafely(targetPath) {
     if (!stat.isFile() || stat.nlink !== 1) {
       throw new Error('Unsafe storage record file.');
     }
+    // Records written by older versions may still be group/world readable.
+    // Tighten permissions on the already-validated, O_NOFOLLOW descriptor
+    // before exposing their contents. Fail closed if hardening fails; do not
+    // follow a pathname that could be swapped between check and chmod.
+    if ((stat.mode & 0o077) !== 0) {
+      await handle.chmod(0o600);
+    }
     return JSON.parse(await handle.readFile('utf8'));
   } finally {
     await handle.close();
