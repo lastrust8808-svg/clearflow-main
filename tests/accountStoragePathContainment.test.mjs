@@ -705,3 +705,24 @@ test('new account and record directories restrict access to their owning OS user
     await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
+
+
+test('existing permissive tenant directories are tightened before saving records', async () => {
+  const accountId = `legacy-permissions-${randomUUID()}`;
+  const accountPath = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const filesPath = path.join(accountPath, 'files');
+  try {
+    await fs.mkdir(filesPath, { recursive: true, mode: 0o700 });
+    // Simulate legacy directories created under a permissive umask.
+    await fs.chmod(accountPath, 0o755);
+    await fs.chmod(filesPath, 0o777);
+    await saveAccountDocumentFile(accountId, 'doc-1', { contents: 'private' });
+    for (const directory of [accountPath, filesPath]) {
+      const stat = await fs.stat(directory);
+      assert.equal(stat.mode & 0o077, 0, `${directory} must be private after save`);
+    }
+    assert.equal((await loadAccountDocumentFile(accountId, 'doc-1')).contents, 'private');
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
