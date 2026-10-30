@@ -5,8 +5,10 @@
  *
  * Caller MUST authenticate/authorize the requested tenant/entity/trust, independently
  * verify each evidenceRef against the underlying asset/source, and persist
- * entries with audit history. Supplied as-of timestamps are not authenticated
- * evidence or a guarantee that reserve values are current. Distinct evidence
+ * entries with audit history. The caller MUST supply maxEvidenceAgeMs from
+ * trusted server-side policy, never from an untrusted request. Supplied as-of
+ * timestamps are not authenticated evidence or a guarantee that reserve
+ * values are current. Distinct evidence
  * pointers prevent exact replay,
  * but do not prove independent assets or available bank cash.
  */
@@ -51,7 +53,7 @@ function safeAdd(left, right, field) {
 }
 
 /**
- * @param {{tenantId:string, entityId:string, trustId:string, currency:string, asOfAt:string, entries:Array<{
+ * @param {{tenantId:string, entityId:string, trustId:string, currency:string, asOfAt:string, maxEvidenceAgeMs:number, entries:Array<{
  *   id:string, assetId:string, evidenceRef:string, observedAt:string, tenantId:string, entityId:string, trustId:string, currency:string,
  *   kind:'cash'|'noncash_collateral', sourceType:string, amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
@@ -65,6 +67,11 @@ export function calculateReserveCapacity(snapshot) {
   const currency = requiredString(snapshot.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
   const asOfAt = canonicalInstant(snapshot.asOfAt, 'asOfAt');
+  const maxEvidenceAgeMs = snapshot.maxEvidenceAgeMs;
+  if (!Number.isSafeInteger(maxEvidenceAgeMs) || maxEvidenceAgeMs < 0) {
+    throw new RangeError('maxEvidenceAgeMs must be a nonnegative safe integer');
+  }
+  const asOfEpochMs = Date.parse(asOfAt);
   if (!Array.isArray(snapshot.entries)) throw new TypeError('entries must be an array');
 
   const totals = {
@@ -100,6 +107,9 @@ export function calculateReserveCapacity(snapshot) {
     if (observedAt > asOfAt) {
       throw new Error('Reserve evidence observed after snapshot as-of timestamp');
     }
+    if (asOfEpochMs - Date.parse(observedAt) > maxEvidenceAgeMs) {
+      throw new Error('Reserve evidence exceeds configured maximum age');
+    }
     if (oldestEvidenceAt === null || observedAt < oldestEvidenceAt) oldestEvidenceAt = observedAt;
     if (entry.tenantId !== tenantId || entry.entityId !== entityId || entry.trustId !== trustId || entry.currency !== currency) {
       throw new Error('Reserve entry scope or currency mismatch');
@@ -129,5 +139,5 @@ export function calculateReserveCapacity(snapshot) {
     totals.cashPledgedMinor = safeAdd(totals.cashPledgedMinor, pledged, 'cashPledgedMinor');
     totals.unencumberedCashMinor = safeAdd(totals.unencumberedCashMinor, amount - encumbered, 'unencumberedCashMinor');
   }
-  return Object.freeze({ tenantId, entityId, trustId, currency, asOfAt, oldestEvidenceAt, ...totals });
+  return Object.freeze({ tenantId, entityId, trustId, currency, asOfAt, maxEvidenceAgeMs, oldestEvidenceAt, ...totals });
 }
