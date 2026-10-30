@@ -1,4 +1,6 @@
 -- Proposed ERP job persistence schema. NOT applied to any environment by this PR.
+-- Fail closed: 'sent'/'processed' are prohibited until a separate reviewed
+-- migration introduces durable, operation-bound completion evidence and audit.
 -- Apply only through the versioned migration/restore gate after Security review.
 CREATE TABLE IF NOT EXISTS erp_operation_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -11,7 +13,7 @@ CREATE TABLE IF NOT EXISTS erp_operation_jobs (
   payload_sha256 char(64) NOT NULL,
   payload jsonb NOT NULL,
   status text NOT NULL DEFAULT 'queued' CHECK (
-    status IN ('queued', 'processing', 'processed', 'sent', 'failed', 'outcome_unknown')
+    status IN ('queued', 'processing', 'failed', 'outcome_unknown')
   ),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
