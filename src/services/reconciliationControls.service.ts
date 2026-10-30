@@ -445,6 +445,31 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
+  // A controller signoff cannot certify statement-row resolutions made after
+  // that signoff (or before the statement was imported). Optional legacy
+  // resolution timestamps remain optional, but any supplied evidence must be
+  // a valid instant within the import-to-approval window. This is client-side
+  // consistency only; server-side immutable audit is still required.
+  if (
+    reconciliation.closeApprovalStatus === 'approved' &&
+    parsedLines.some((line) =>
+      line.resolvedAt != null && (
+        !hasValidControllerSignoffTimestamp(line.resolvedAt) ||
+        Date.parse(line.resolvedAt) < Date.parse(reconciliation.statementImportedAt!) ||
+        Date.parse(line.resolvedAt) > Date.parse(reconciliation.controllerSignoffAt!)
+      )
+    )
+  ) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Statement row resolutions must follow import and precede controller approval.',
+    };
+  }
+
   if (reconciliation.statementReviewStatus !== 'ready_to_close') {
     return {
       bookEndingBalance,
