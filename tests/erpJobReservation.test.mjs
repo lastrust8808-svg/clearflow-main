@@ -690,3 +690,21 @@ test('terminal failure is forbidden once an external dispatch might have started
   assert.match(schema, /CONSTRAINT erp_dispatch_fence_consistency CHECK/);
   assert.match(schema, /dispatch_started_at IS NULL OR status IN \('processing', 'outcome_unknown'\)/);
 });
+
+test('reservation rejects Proxy payloads before triggering reflection traps or database writes', async () => {
+  const db = fakeDatabase();
+  let traps = 0;
+  const trap = {
+    getPrototypeOf() { traps++; throw new Error('unexpected prototype trap'); },
+    ownKeys() { traps++; throw new Error('unexpected ownKeys trap'); },
+    get() { traps++; throw new Error('unexpected get trap'); },
+  };
+  const root = new Proxy({ invoiceId: 'invoice-123' }, trap);
+  const nested = { invoiceId: 'invoice-123', line: new Proxy({ amount: 125 }, trap) };
+  const array = { invoiceId: 'invoice-123', lines: new Proxy([{ amount: 125 }], trap) };
+  for (const payload of [root, nested, array]) {
+    await assert.rejects(reserve({ db, ...args, payload }), /ERP job payload contains a Proxy/);
+  }
+  assert.equal(traps, 0);
+  assert.equal(db.calls, 0);
+});
