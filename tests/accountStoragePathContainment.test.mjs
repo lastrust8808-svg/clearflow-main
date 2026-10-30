@@ -686,3 +686,22 @@ test('Google workspace identity cannot change after save validation while filesy
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('new account and record directories restrict access to their owning OS user', async () => {
+  const accountId = `private-directory-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const accountPath = path.join(root, accountId);
+  try {
+    await saveAccountAppData(accountId, { revision: 1 });
+    await saveAccountDocumentFile(accountId, 'doc-1', { contents: 'private' });
+    for (const directory of [accountPath, path.join(accountPath, 'files')]) {
+      const stat = await fs.stat(directory);
+      assert.ok(stat.isDirectory());
+      assert.equal(stat.mode & 0o077, 0, `${directory} must not allow group/other access`);
+    }
+    assert.deepEqual(await loadAccountAppData(accountId), { revision: 1 });
+    assert.equal((await loadAccountDocumentFile(accountId, 'doc-1')).contents, 'private');
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
