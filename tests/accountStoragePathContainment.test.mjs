@@ -639,3 +639,50 @@ test('nested and revoked Proxy objects fail before serialization and preserve te
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('storage writers snapshot validated nested evidence before asynchronous filesystem I/O', async () => {
+  const accountId = `snapshot-write-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      const submitted = { evidence: { amountMinor: 1250 }, status: 'reviewed' };
+      const pending = fixture.save(submitted);
+      // save() has already validated the object but has yielded at its first
+      // filesystem await. A caller may legitimately reuse or mutate it now.
+      submitted.evidence.amountMinor = 999999;
+      submitted.status = 'tampered';
+      await pending;
+      const stored = await fixture.read();
+      assert.deepEqual(stored.evidence, { amountMinor: 1250 });
+      assert.equal(stored.status, 'reviewed');
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Google workspace identity cannot change after save validation while filesystem work is pending', async () => {
+  const email = `snapshot-owner-${randomUUID()}@example.test`;
+  const accountId = `google:${email}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', encodeURIComponent(accountId));
+  try {
+    const submitted = { user: { email }, settings: { revision: 1 } };
+    const pending = saveAccountAppData(accountId, submitted);
+    submitted.user.email = 'other@example.test';
+    submitted.settings.revision = 2;
+    await pending;
+    const stored = await loadAccountAppData(accountId);
+    assert.equal(stored.user.email, email);
+    assert.deepEqual(stored.settings, { revision: 1 });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
