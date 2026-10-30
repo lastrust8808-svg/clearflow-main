@@ -406,8 +406,10 @@ export function buildReconciliationCloseMetrics(
   // immutable approval audit remain mandatory before any actual close.
   if (
     reconciliation.closeApprovalStatus === 'approved' && (
-      typeof reconciliation.controllerSignoffName !== 'string' ||
-      !reconciliation.controllerSignoffName.trim() ||
+      // A padded or control-character controller name is ambiguous audit
+      // evidence. Validate the same canonical identifier shape used for
+      // statement provenance; this is not proof of controller identity.
+      !isValidStatementSourceRef(reconciliation.controllerSignoffName) ||
       !hasValidControllerSignoffTimestamp(reconciliation.controllerSignoffAt)
     )
   ) {
