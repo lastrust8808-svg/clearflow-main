@@ -52,7 +52,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     }
   } else {
     for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (!Object.hasOwn(descriptor, 'value') ||
+      // JSON.stringify silently omits non-enumerable object properties.
+      // Reject them rather than hashing/storing a different financial payload.
+      if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key)) {
         throw new TypeError('ERP job payload contains an unsafe property');
       }
