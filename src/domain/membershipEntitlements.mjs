@@ -49,6 +49,9 @@ function instant(value, label) {
   return ms;
 }
 
+// Shared strict calendar parser for the test-only signed admission fixture.
+export { instant as parseMembershipInstant };
+
 /**
  * @param {{tenantId:string, memberId:string, subscriptionId:string}} scope
  * @param {Array<object>} events Already authenticated, provider-verified events.
