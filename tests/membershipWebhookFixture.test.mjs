@@ -168,3 +168,25 @@ test('signed fixture requires paid-through after occurrence while accepting vali
     periodEnd: '2028-02-29T12:00:00Z',
   })));
 });
+
+test('signed fixture rejects malformed UTF-8 bytes rather than normalizing event identity', () => {
+  const valid = scopedBody(scopedPayload);
+  const marker = Buffer.from('evt-scope-test');
+  const at = valid.indexOf(marker);
+  assert.ok(at >= 0);
+  for (const invalid of [Buffer.from([0xff]), Buffer.from([0xc0, 0xaf]), Buffer.from([0xed, 0xa0, 0x80])]) {
+    const body = Buffer.concat([
+      valid.subarray(0, at),
+      Buffer.from('evt-'),
+      invalid,
+      valid.subarray(at + marker.length),
+    ]);
+    // Signature matches the exact malformed bytes; decoding must still fail.
+    assert.equal(verify({ ...input(), rawBody: body, signatureHeader: sign(body) }), true);
+    assert.equal(verifyScoped(scopedInput(scopedPayload, {
+      rawBody: body, signatureHeader: sign(body),
+    })), null);
+  }
+  const unicode = { ...scopedPayload, id: 'evt-café' };
+  assert.equal(verifyScoped(scopedInput(unicode)).id, unicode.id);
+});
