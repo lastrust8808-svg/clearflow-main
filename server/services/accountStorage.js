@@ -161,9 +161,36 @@ function assertStoredRecordScope(record, expected) {
   return record;
 }
 
+// Validate the full JSON tree before account-scope checks or filesystem I/O.
+// A nested getter can change the Google identity between validation and
+// serialization; a nested toJSON can silently replace persisted financial
+// evidence. Inspect property descriptors without invoking accessors. Reject
+// non-plain nested instances whose inherited serializers would run.
+function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
+  if (value === null || typeof value !== 'object') return;
+  if (ancestors.has(value)) {
+    throw new TypeError('Storage record payload must be acyclic JSON data.');
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value)
+    ? prototype !== Array.prototype
+    : prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Storage record payload must contain plain nested JSON objects and arrays.');
+  }
+  ancestors.add(value);
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    if (!Object.hasOwn(descriptor, 'value') ||
+        (key === 'toJSON' && typeof descriptor.value === 'function')) {
+      throw new TypeError('Storage record payload must not contain custom serialization or accessors.');
+    }
+    assertNoCustomSerialization(descriptor.value, ancestors);
+  }
+  ancestors.delete(value);
+}
+
 // Reject malformed top-level records before opening or replacing any file.
-// A primitive, array, or class instance can otherwise be serialized or spread
-// into a plausible-looking empty record and silently overwrite valid data.
+// Nested values must also be inert JSON data: top-level validation alone does
+// not protect app-data identities or scoped records from nested serializers.
 function assertWritableRecordPayload(payload) {
   if (
     !payload || typeof payload !== 'object' || Array.isArray(payload) ||
@@ -171,18 +198,7 @@ function assertWritableRecordPayload(payload) {
   ) {
     throw new TypeError('Storage record payload must be a plain JSON object.');
   }
-  // JSON.stringify invokes a top-level toJSON method, which can silently
-  // replace a validated object (including its account scope) with an array,
-  // primitive or unrelated record. Accessor properties can similarly change
-  // between validation and serialization. Refuse both before filesystem I/O.
-  if (
-    typeof Object.getOwnPropertyDescriptor(payload, 'toJSON')?.value === 'function' ||
-    Object.values(Object.getOwnPropertyDescriptors(payload)).some(
-      (descriptor) => !Object.hasOwn(descriptor, 'value')
-    )
-  ) {
-    throw new TypeError('Storage record payload must not contain custom serialization or accessors.');
-  }
+  assertNoCustomSerialization(payload);
   return payload;
 }
 
