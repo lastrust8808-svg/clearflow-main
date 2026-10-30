@@ -18,6 +18,7 @@ const attestation = (signerId, changes = {}) => ({
   ...scope, signerId, documentSha256: sha,
   signedAt: signerId === 'a' ? '2026-10-28T10:00:00.000Z' : '2026-10-28T11:00:00.000Z',
   explicitConsent: true,
+  consentedAt: signerId === 'a' ? '2026-10-28T10:00:00.000Z' : '2026-10-28T11:00:00.000Z',
   identityEvidenceRef: 'identity-' + signerId,
   consentEvidenceRef: 'consent-' + signerId,
   signatureEvidenceRef: 'receipt-' + signerId,
@@ -330,4 +331,51 @@ test('appointment acceptance and document registration require distinct provenan
       }],
     },
   }).status, 'evidence_ready_for_review');
+});
+
+test('consent must be timestamped for finalized bytes and no later than signing', () => {
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  assert.throws(() => assess({
+    attestations: [attestation('a', { consentedAt: undefined })],
+  }), /attestation.consentedAt.*canonical/);
+  assert.throws(() => assess({
+    attestations: [attestation('a', { consentedAt: '2026-02-30T10:00:00.000Z' })],
+  }), /attestation.consentedAt.*canonical/);
+  assert.equal(assess({
+    attestations: [attestation('a', { consentedAt: '2026-10-28T10:00:00.001Z' })],
+  }).reason, 'consent_chronology_invalid');
+  assert.equal(assess({
+    attestations: [attestation('a', { consentedAt: '2026-10-28T08:59:59.999Z' })],
+  }).reason, 'consent_chronology_invalid');
+  // Exact document finalization and signing boundaries are allowed.
+  assert.equal(assess({
+    attestations: [attestation('a', { consentedAt: '2026-10-28T09:00:00.000Z' })],
+  }).status, 'evidence_ready_for_review');
+});
+
+test('consent cannot precede immutable version registration, including joint signing', () => {
+  const original = packet();
+  const registry = {
+    ...original.versionRegistry,
+    versions: [{ ...original.versionRegistry.versions[0],
+      registeredAt: '2026-10-28T09:30:00.000Z' }],
+  };
+  assert.equal(assess({
+    versionRegistry: registry,
+    attestations: [attestation('a', { consentedAt: '2026-10-28T09:29:59.999Z' })],
+  }).reason, 'document_registered_after_consent');
+  assert.equal(assess({
+    versionRegistry: registry,
+    attestations: [attestation('a', { consentedAt: '2026-10-28T09:30:00.000Z' })],
+  }).status, 'evidence_ready_for_review');
+  // The earliest consent can belong to the second signer even though signing
+  // attestations themselves are strictly chronological.
+  assert.equal(assess({
+    versionRegistry: registry,
+    governance: { ...original.governance, mode: 'joint' },
+    attestations: [
+      attestation('a'),
+      attestation('b', { consentedAt: '2026-10-28T09:29:59.999Z' }),
+    ],
+  }).reason, 'document_registered_after_consent');
 });
