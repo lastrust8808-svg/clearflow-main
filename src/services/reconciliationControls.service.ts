@@ -44,7 +44,12 @@ function hasValidControllerSignoffTimestamp(value: unknown): boolean {
     const offsetMinute = Number(offsetMinuteText);
     if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return false;
   }
-  return Number.isFinite(Date.parse(value));
+  const parsedTimestamp = Date.parse(value);
+  // A future-dated signoff is not evidence of an approval already given.
+  // Permit five minutes of client/server clock skew, but never treat a
+  // materially future timestamp as completed controller review. This is
+  // client-side evidence validation, not authenticated approval.
+  return Number.isFinite(parsedTimestamp) && parsedTimestamp <= Date.now() + 5 * 60 * 1000;
 }
 
 // A filename-only legacy import is still allowed, but blank, padded, or
