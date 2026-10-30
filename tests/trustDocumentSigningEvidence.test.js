@@ -26,6 +26,13 @@ const attestation = (signerId, changes = {}) => ({
 const packet = (changes = {}) => ({
   ...scope, content, finalizedAt: '2026-10-28T09:00:00.000Z',
   evaluatedAt: '2026-10-29T12:00:00.000Z',
+  versionRegistry: {
+    tenantId: scope.tenantId, entityId: scope.entityId, documentId: scope.documentId,
+    versions: [{
+      ...scope, sequence: 1, sha256: sha, status: 'current',
+      registeredAt: '2026-10-28T09:00:00.000Z', evidenceRef: 'version-registration-1',
+    }],
+  },
   governance: {
     tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId,
     mode: 'independent', appointments: [appointment('a'), appointment('b')],
@@ -157,4 +164,36 @@ test('assessment never mutates evidence packet or governance snapshot', () => {
   };
   assessTrustDocumentSigningPacket(original);
   assert.deepEqual(original, before);
+});
+
+test('only the currently registered document version can be evidence-ready', () => {
+  const current = packet().versionRegistry;
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  assert.equal(assess({ versionRegistry: {
+    ...current, versions: [{ ...current.versions[0], status: 'revoked' }],
+  } }).reason, 'document_version_not_current');
+  assert.equal(assess({ versionRegistry: {
+    ...current, versions: [
+      { ...current.versions[0], status: 'superseded' },
+      { ...current.versions[0], versionId: 'version-2', sequence: 2,
+        status: 'current', registeredAt: '2026-10-29T09:00:00.000Z',
+        evidenceRef: 'version-registration-2' },
+    ],
+  } }).reason, 'document_version_not_current');
+  assert.equal(assess({ versionRegistry: {
+    ...current, versions: [{ ...current.versions[0], versionId: 'other-version' }],
+  } }).reason, 'document_version_not_current');
+});
+
+test('document version registry is required, scoped and bound to finalized bytes', () => {
+  const current = packet().versionRegistry;
+  assert.throws(() => assess({ versionRegistry: undefined }), /version registry required/);
+  for (const key of ['tenantId', 'entityId', 'documentId']) {
+    assert.throws(() => assess({ versionRegistry: { ...current, [key]: 'other' } }),
+      /registry .* scope mismatch/);
+  }
+  assert.equal(assess({ versionRegistry: {
+    ...current, versions: [{ ...current.versions[0], sha256: '0'.repeat(64) }],
+  } }).reason, 'document_version_not_current');
+  assert.equal(Object.hasOwn(assess(), 'documentVerified'), false);
 });
