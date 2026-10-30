@@ -104,3 +104,35 @@ test('scope matching never overrides invalid signature or raw-byte tampering', (
   assert.equal(verifyScoped({ ...input, rawBody: Buffer.from(JSON.stringify(scopedPayload) + '\\n') }), null);
   assert.equal(verifyScoped({ ...input, signatureHeader: sign(Buffer.from('{}')) }), null);
 });
+
+test('signed fixture cannot promote unexpected entitlement, role, or provider claims', () => {
+  for (const claim of [
+    { entitled: true }, { role: 'owner' }, { paid: true },
+    { providerVerified: true }, { __unexpected: 'value' },
+  ]) {
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, ...claim })), null);
+  }
+  assert.equal(verifyScoped(scopedInput({ ...scopedPayload, type: 'unknown_event' })), null);
+});
+
+test('fixture admits only type-specific payment fields and required identities', () => {
+  const base = {
+    ...authenticatedScope, id: 'evt-valid', occurredAt: '2026-10-29T12:00:00Z',
+  };
+  for (const type of ['subscription_created', 'subscription_cancelled']) {
+    assert.ok(verifyScoped(scopedInput({ ...base, type })), type);
+    assert.equal(verifyScoped(scopedInput({ ...base, type, invoiceId: 'inv-test' })), null);
+  }
+  for (const type of ['payment_failed', 'payment_refunded']) {
+    assert.ok(verifyScoped(scopedInput({ ...base, type, invoiceId: 'inv-test' })), type);
+    assert.equal(verifyScoped(scopedInput({ ...base, type })), null);
+    assert.equal(verifyScoped(scopedInput({ ...base, type, invoiceId: 'inv-test', periodEnd: '2026-11-29T12:00:00Z' })), null);
+  }
+  assert.ok(verifyScoped(scopedInput(scopedPayload)));
+  for (const field of ['invoiceId', 'settlementId', 'periodEnd', 'occurredAt']) {
+    const missing = { ...scopedPayload };
+    delete missing[field];
+    assert.equal(verifyScoped(scopedInput(missing)), null, field);
+    assert.equal(verifyScoped(scopedInput({ ...scopedPayload, [field]: '' })), null, field);
+  }
+});
