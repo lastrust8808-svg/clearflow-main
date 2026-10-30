@@ -43,6 +43,22 @@ test('rejects control characters in storage identifiers without altering valid u
   assert.equal(sanitizeStorageSegment('élève@example.com'), '%C3%A9l%C3%A8ve%40example.com');
 });
 
+test('rejects invisible Unicode format controls in account and file identifiers', () => {
+  for (const value of [
+    'acct\u200B-one', // zero-width space
+    'acct\u200C-one', // zero-width non-joiner
+    'acct\u200D-one', // zero-width joiner
+    'acct\u202E-one', // right-to-left override
+    'acct\u2066-one', // left-to-right isolate
+    'acct\uFEFF-one', // byte-order mark / zero-width no-break space
+  ]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, JSON.stringify(value));
+  }
+  for (const value of ['élève@example.com', '商店-一号', '🙂', 'member@example.com']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value), value);
+  }
+});
+
 test('rejects trailing periods that alias another directory on Windows', () => {
   for (const value of ['member.', 'member..', 'folder.name.', '..\\..']) {
     assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
