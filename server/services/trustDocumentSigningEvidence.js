@@ -225,6 +225,16 @@ export function assessTrustDocumentSigningPacket(packet) {
     const ref = identifier(version.evidenceRef, 'version.evidenceRef');
     if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
     provenanceRefs.add(ref);
+    // A historical document revocation is a separate governance-sensitive
+    // event. Its receipt cannot double as signing, trustee or registration
+    // evidence even when the currently signed version remains valid.
+    if (version.status === 'revoked') {
+      const revocationRef = identifier(version.revocationEvidenceRef, 'version.revocationEvidenceRef');
+      if (provenanceRefs.has(revocationRef)) {
+        throw new Error('Reused cross-role signing provenance reference');
+      }
+      provenanceRefs.add(revocationRef);
+    }
   }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
