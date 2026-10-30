@@ -187,6 +187,24 @@ export function assessTrustDocumentSigningPacket(packet) {
   if (packet.attestations[0].signedAt < registeredAt) {
     return result('incomplete', 'document_registered_after_signature');
   }
+  // A signature identity/consent/receipt record must not be recycled as
+  // trustee-appointment acceptance or document-version registration evidence.
+  // These represent distinct provenance events even when the same signer and
+  // document are involved. References remain unverified until authenticated
+  // storage and evidence-provider integration.
+  const provenanceRefs = new Set(evidenceRefs);
+  for (const appointment of packet.governance.appointments) {
+    if (appointment.acceptedOn != null) {
+      const ref = identifier(appointment.acceptanceEvidenceRef, 'appointment.acceptanceEvidenceRef');
+      if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
+      provenanceRefs.add(ref);
+    }
+  }
+  for (const version of versionRegistry.versions) {
+    const ref = identifier(version.evidenceRef, 'version.evidenceRef');
+    if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
+    provenanceRefs.add(ref);
+  }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
