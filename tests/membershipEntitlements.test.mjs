@@ -274,8 +274,8 @@ test('distinct paid invoices may preserve or extend the verified paid-through da
 
 test('billing identities reject padded, invisible, malformed and oversized values', () => {
   const invalid = [
-    ' padded', 'padded ', 'zero\\u200bwidth', 'bidi\\u202eoverride',
-    'line\\nbreak', 'x'.repeat(256), '\\ud800',
+    ' padded', 'padded ', 'zero\u200bwidth', 'bidi\u202eoverride',
+    'line\nbreak', 'x'.repeat(256), '\ud800',
   ];
   for (const value of invalid) {
     for (const field of ['id', 'invoiceId', 'settlementId']) {
