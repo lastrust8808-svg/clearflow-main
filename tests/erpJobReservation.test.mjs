@@ -20,7 +20,7 @@ function fakeDatabase() {
         const id = [tenantId, operationOrKey, key].join('|');
         if (rows.has(id)) return { rows: [] };
         const row = {
-          id: 'job-' + (rows.size + 1), tenant_id: tenantId,
+          id: '123e4567-e89b-42d3-a456-' + String(rows.size + 1).padStart(12, '0'), tenant_id: tenantId,
           actor_id: actorIdOrOperation, operation: operationOrKey,
           idempotency_key: key, payload_sha256: params[4],
           status: 'queued', created_at: new Date('2026-10-29T12:00:00Z'),
@@ -54,6 +54,28 @@ test('first reservation is recorded, identical replay returns the original job',
   assert.equal(first.id, second.id);
   assert.equal(db.rows.size, 1);
   assert.equal(db.calls, 3);
+});
+
+test('reservation never acknowledges fabricated or noncanonical database job IDs', async () => {
+  // UUID is the proposed schema's primary key. A synthetic ID is not
+  // durable database evidence, whether returned by INSERT or replay SELECT.
+  for (const badId of ['job-1', '123e4567-e89b-42d3-a456-42661417400z',
+    '123E4567-E89B-42D3-A456-426614174000', '', null]) {
+    const inserted = fakeDatabase();
+    const originalQuery = inserted.query.bind(inserted);
+    inserted.query = async (...queryArgs) => {
+      const result = await originalQuery(...queryArgs);
+      return { rows: result.rows.map(row => ({ ...row, id: badId })) };
+    };
+    await assert.rejects(reserve({ db: inserted, ...args }), /invalid job record/,
+      'inserted ID: ' + String(badId));
+
+    const replay = fakeDatabase();
+    await reserve({ db: replay, ...args });
+    [...replay.rows.values()][0].id = badId;
+    await assert.rejects(reserve({ db: replay, ...args }), /invalid job record/,
+      'replayed ID: ' + String(badId));
+  }
 });
 
 test('same idempotency key with different payload or actor fails closed', async () => {
