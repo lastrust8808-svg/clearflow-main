@@ -210,7 +210,7 @@ export async function renewErpOperationJobLease({
   // lease, no takeover by another worker, and no renewal of a finished job.
   const result = await db.query(
     `UPDATE erp_operation_jobs
-     SET lease_expires_at = now() + ($5 * interval '1 second'),
+     SET lease_expires_at = GREATEST(lease_expires_at, now() + ($5 * interval '1 second')),
          updated_at = now()
      WHERE tenant_id = $1 AND operation = $2 AND id = $3
        AND claimed_by = $4 AND status = 'processing'

@@ -282,6 +282,7 @@ test('lease renewal is atomic and limited to the owning worker and unexpired pro
   assert.match(query.sql, /claimed_by = \$4 AND status = 'processing'/);
   assert.match(query.sql, /lease_expires_at > now\(\)/);
   assert.match(query.sql, /UPDATE erp_operation_jobs/);
+  assert.match(query.sql, /GREATEST/); // renewing early must never shorten an existing lease
   assert.equal(result.leaseExpiresAt, '2026-10-29T12:04:00.000Z');
   assert.equal(result.status, 'processing');
   assert.equal(Object.isFrozen(result), true);
