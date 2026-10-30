@@ -397,3 +397,61 @@ test('custom JSON serialization and accessors cannot replace valid tenant storag
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('nested serializers and accessors cannot replace persisted account records', async () => {
+  const accountId = `nested-serialization-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: { revision: 1 } });
+      const before = await fixture.read();
+      let accessorCalls = 0;
+      const nestedAccessor = { get revision() { accessorCalls += 1; return 2; } };
+      const invalid = [
+        { retained: { toJSON() { return { revision: 2 }; } } },
+        { retained: [nestedAccessor] },
+        { retained: [new Date()] },
+      ];
+      for (const payload of invalid) {
+        await assert.rejects(fixture.save(payload), /custom serialization or accessors|plain nested JSON/);
+        assert.deepEqual(await fixture.read(), before);
+      }
+      assert.equal(accessorCalls, 0, 'nested getter must not execute during validation');
+      await fixture.save({ retained: [{ revision: 2 }] });
+      assert.deepEqual((await fixture.read()).retained, [{ revision: 2 }]);
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('nested Google identity accessors and cyclic objects fail before storage writes', async () => {
+  const email = `nested-google-${randomUUID()}@example.test`;
+  const accountId = `google:${email}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', encodeURIComponent(accountId));
+  let getterCalls = 0;
+  const cyclic = { user: { email } };
+  cyclic.self = cyclic;
+  try {
+    await assert.rejects(
+      saveAccountAppData(accountId, { user: { get email() { getterCalls += 1; return email; } } }),
+      /custom serialization or accessors/
+    );
+    assert.equal(getterCalls, 0, 'identity getter must not execute during scope validation');
+    await assert.rejects(saveAccountAppData(accountId, cyclic), /acyclic JSON data/);
+    await assert.rejects(fs.stat(directory), (error) => error?.code === 'ENOENT');
+    await saveAccountAppData(accountId, { user: { email }, settings: [{ enabled: true }] });
+    assert.deepEqual((await loadAccountAppData(accountId)).settings, [{ enabled: true }]);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
