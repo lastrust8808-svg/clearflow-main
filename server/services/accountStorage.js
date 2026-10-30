@@ -82,7 +82,10 @@ async function assertSafeStorageDirectory(directory) {
 
 async function ensureDirectory(targetPath) {
   await assertSafeStorageDirectory(targetPath);
-  await fs.mkdir(targetPath, { recursive: true });
+  // Newly created account and record directories must not be traversable by
+  // other OS users, even when the host's default umask would permit it.
+  // Existing directory permissions are not changed by this operation.
+  await fs.mkdir(targetPath, { recursive: true, mode: 0o700 });
   await assertSafeStorageDirectory(targetPath);
 }
 
