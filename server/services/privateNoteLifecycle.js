@@ -41,7 +41,7 @@ function utcInstant(value, field) {
 
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,noteId:string,
- *   events:Array<{eventId:string,tenantId:string,entityId:string,
+ *   asOfAt:string,events:Array<{eventId:string,tenantId:string,entityId:string,
  *   trustId:string,noteId:string,type:string,occurredAt:string,actorId:string,
  *   documentRef?:string,evidenceRef?:string}>}} snapshot
  * @returns {{status:string,eventCount:number,lastEventId:string|null,
@@ -58,6 +58,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
     noteId: requiredId(snapshot.noteId, 'noteId'),
   };
   if (!Array.isArray(snapshot.events)) throw new TypeError('events must be an array');
+  // Snapshot time is supplied by the caller; runtime integration must use a
+  // trusted server-side clock, not an untrusted request parameter.
+  const asOfAt = utcInstant(snapshot.asOfAt, 'asOfAt');
   const seen = new Set();
   let status = 'draft';
   let lastEventId = null;
@@ -82,6 +85,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
     }
     requiredId(event.actorId, 'actorId');
     const occurredAt = utcInstant(event.occurredAt, 'occurredAt');
+    if (occurredAt > asOfAt) {
+      throw new Error('Private note event occurs after snapshot as-of timestamp');
+    }
     if (lastEventAt !== null && occurredAt <= lastEventAt) {
       throw new Error('Private note events must have strictly increasing timestamps');
     }
