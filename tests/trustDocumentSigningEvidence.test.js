@@ -27,7 +27,7 @@ const packet = (changes = {}) => ({
   ...scope, content, finalizedAt: '2026-10-28T09:00:00.000Z',
   evaluatedAt: '2026-10-29T12:00:00.000Z',
   versionRegistry: {
-    tenantId: scope.tenantId, entityId: scope.entityId, documentId: scope.documentId,
+    tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId, documentId: scope.documentId,
     versions: [{
       ...scope, sequence: 1, sha256: sha, status: 'current',
       finalizedAt: '2026-10-28T09:00:00.000Z',
@@ -268,4 +268,32 @@ test('version registration must precede the earliest signer attestation', () => 
     attestations: [attestation('a'), attestation('b')],
     versionRegistry: withRegistration('2026-10-28T10:30:00.000Z'),
   }).reason, 'document_registered_after_signature');
+});
+
+test('signing registry and all historical versions must belong to the same trust', () => {
+  const registry = packet().versionRegistry;
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  for (const trustId of [undefined, 'trust-b']) {
+    assert.throws(() => assess({
+      versionRegistry: { ...registry, trustId },
+    }), /registry trustId scope mismatch/);
+    assert.throws(() => assess({
+      versionRegistry: {
+        ...registry, versions: [{ ...registry.versions[0], trustId }],
+      },
+    }), /version trustId scope mismatch/);
+  }
+  // Reject a foreign historical version even when the latest version and
+  // registry carry the correct trust ID. No mixed-trust version histories.
+  assert.throws(() => assess({
+    versionRegistry: {
+      ...registry,
+      versions: [
+        { ...registry.versions[0], trustId: 'trust-b', status: 'superseded' },
+        { ...registry.versions[0], versionId: 'version-2', sequence: 2,
+          registeredAt: '2026-10-29T09:00:00.000Z',
+          evidenceRef: 'registration-2' },
+      ],
+    },
+  }), /version trustId scope mismatch/);
 });
