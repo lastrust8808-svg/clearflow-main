@@ -193,12 +193,41 @@ test('duplicate matched-index entries are rejected even if parsed rows are uniqu
   assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
 });
 
-test('legacy parsed statements without a matched-index list remain eligible when fully reviewed', () => {
+test('legacy parsed statements missing matched-index evidence require re-review', () => {
+  for (const matchedStatementLineIds of [undefined, null, 'line-1', {}]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ matchedStatementLineIds }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(matchedStatementLineIds));
+    assert.match(metrics.blockedReason, /must agree with reviewed source rows/);
+  }
+});
+
+test('missing unmatched statement index cannot be mistaken for zero exceptions', () => {
+  for (const unmatchedStatementLineIds of [undefined, null]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ unmatchedStatementLineIds }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(unmatchedStatementLineIds));
+    assert.match(metrics.blockedReason, /Unmatched statement-line identifiers/);
+  }
+});
+
+test('duplicate unmatched statement IDs are rejected as invalid review evidence', () => {
   const metrics = buildReconciliationCloseMetrics(
-    reconciliation({ matchedStatementLineIds: undefined }),
+    reconciliation({
+      parsedStatementLines: [
+        statementLine('line-1', 'matched'),
+        statementLine('line-2', 'exception'),
+      ],
+      unmatchedStatementLineIds: ['line-2', 'line-2'],
+    }),
     account
   );
-  assert.equal(metrics.isReadyToApprove, true);
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.match(metrics.blockedReason, /Unmatched statement-line identifiers/);
 });
 
 
