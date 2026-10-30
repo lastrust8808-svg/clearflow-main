@@ -21,6 +21,23 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   if (!Number.isSafeInteger(nowSeconds) || nowSeconds < 0) {
     throw new TypeError('nowSeconds must be a nonnegative integer');
   }
+  // Bound signature verification and JSON admission to prevent oversized
+  // signed fixtures from exhausting the test adapter's CPU or memory.
+  if (Buffer.byteLength(rawBody, 'utf8') > 65536) return false;
+  // Node's UTF-8 encoding replaces lone UTF-16 surrogates with U+FFFD.
+  // Reject such strings so distinct raw event identities cannot share the
+  // same signed bytes after a lossy conversion. Valid pairs remain accepted.
+  if (typeof rawBody === 'string') {
+    for (let i = 0; i < rawBody.length; i++) {
+      const code = rawBody.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = rawBody.charCodeAt(++i);
+        if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      } else if (code >= 0xdc00 && code <= 0xdfff) {
+        return false;
+      }
+    }
+  }
   if (typeof signatureHeader !== 'string') return false;
   const match = /^t=(0|[1-9]\d*),v1=([a-f0-9]{64})$/.exec(signatureHeader);
   if (!match) return false;
