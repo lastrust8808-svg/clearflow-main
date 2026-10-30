@@ -877,3 +877,33 @@ test('read-only access hardens legacy tenant directories without creating missin
     await fs.rm(absentAccountPath, { recursive: true, force: true });
   }
 });
+
+test('legacy malformed JSON roots fail closed across all account storage readers', async () => {
+  const accountId = `legacy-json-root-${randomUUID()}`;
+  const accountPath = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: () => saveAccountAppData(accountId, { revision: 1 }), load: () => loadAccountAppData(accountId) },
+    { file: path.join('files', 'doc-1.json'), save: () => saveAccountDocumentFile(accountId, 'doc-1', { revision: 1 }), load: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: path.join('remittance', 'vendor-1.json'), save: () => saveAccountRemittanceVault(accountId, 'vendor-1', { revision: 1 }), load: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: path.join('transaction-proof-chains', 'chains.json'), save: () => saveAccountTransactionProofVault(accountId, { revision: 1 }), load: () => loadAccountTransactionProofVault(accountId) },
+    { file: path.join('plaid', 'connections.json'), save: () => saveAccountPlaidVault(accountId, { revision: 1 }), load: () => loadAccountPlaidVault(accountId) },
+    { file: path.join('extractions', 'sig-1.json'), save: () => saveAccountExtractionRecord(accountId, 'sig-1', { revision: 1 }), load: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save();
+      const recordPath = path.join(accountPath, fixture.file);
+      for (const malformedRoot of ['null', '[]', '"text"', '42', 'true']) {
+        // Simulate an older writer or external corruption bypassing today's
+        // strict write validation; never return these as valid tenant data.
+        await fs.writeFile(recordPath, malformedRoot);
+        await assert.rejects(fixture.load(), /Unsafe storage record payload/);
+      }
+      await fixture.save();
+      assert.equal((await fixture.load()).revision, 1);
+    }
+    assert.equal(await loadAccountAppData(`absent-json-root-${randomUUID()}`), null);
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
