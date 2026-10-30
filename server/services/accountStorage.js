@@ -8,6 +8,9 @@ const STORAGE_ROOT = path.resolve(process.cwd(), 'server', 'storage-data', 'acco
 // Never admit JSON object keys that can mutate prototypes when records are
 // subsequently merged into application state by downstream consumers.
 const UNSAFE_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+// Bound nested records before serialization and after legacy JSON parsing.
+// Deeply nested user data can otherwise exhaust recursive application code.
+const MAX_RECORD_NESTING_DEPTH = 128;
 
 
 function accountDirectory(accountId) {
@@ -166,6 +169,23 @@ async function secureExistingReadDirectories(directory) {
   await assertSafeStorageDirectory(directory);
 }
 
+// Iterate rather than recurse: even hostile legacy JSON must fail with a
+// controlled error instead of overflowing the JavaScript call stack.
+function assertBoundedParsedRecordDepth(record) {
+  const pending = [[record, 0]];
+  while (pending.length) {
+    const [value, depth] = pending.pop();
+    if (depth > MAX_RECORD_NESTING_DEPTH) {
+      throw new TypeError('Storage record nesting exceeds safety limit.');
+    }
+    if (value && typeof value === 'object') {
+      for (const child of Object.values(value)) {
+        if (child && typeof child === 'object') pending.push([child, depth + 1]);
+      }
+    }
+  }
+}
+
 async function readJsonSafely(targetPath) {
   await secureExistingReadDirectories(path.dirname(targetPath));
   // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
@@ -197,6 +217,7 @@ async function readJsonSafely(targetPath) {
     if (!record || typeof record !== 'object' || Array.isArray(record)) {
       throw new Error('Unsafe storage record payload.');
     }
+    assertBoundedParsedRecordDepth(record);
     return record;
   } finally {
     await handle.close();
@@ -265,7 +286,7 @@ function assertStoredRecordScope(record, expected) {
 // serialization; a nested toJSON can silently replace persisted financial
 // evidence. Inspect property descriptors without invoking accessors. Reject
 // non-plain nested instances whose inherited serializers would run.
-function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
+function assertNoCustomSerialization(value, ancestors = new WeakSet(), depth = 0) {
   // JSON.stringify silently drops undefined/functions/symbols, changes
   // non-finite numbers to null, and throws on bigint. Do not acknowledge a
   // durable save whose data is silently different from the submitted record.
@@ -273,6 +294,9 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
   if (typeof value === 'number' && Number.isFinite(value)) return;
   if (typeof value !== 'object') {
     throw new TypeError('Storage record payload must contain JSON-compatible values.');
+  }
+  if (depth > MAX_RECORD_NESTING_DEPTH) {
+    throw new TypeError('Storage record nesting exceeds safety limit.');
   }
   // Proxy traps can change a previously inspected identity or payload before
   // JSON serialization. Node's native check does not invoke user traps.
@@ -307,7 +331,7 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
         (key === 'toJSON' && typeof descriptor.value === 'function')) {
       throw new TypeError('Storage record payload must not contain custom serialization or accessors.');
     }
-    assertNoCustomSerialization(descriptor.value, ancestors);
+    assertNoCustomSerialization(descriptor.value, ancestors, depth + 1);
   }
   // Sparse arrays serialize holes as null, so they must be rejected as well.
   if (isArray && Object.keys(value).length !== value.length) {
