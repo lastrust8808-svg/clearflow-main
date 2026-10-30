@@ -1,6 +1,7 @@
 import { promises as fs, constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { types as nodeTypes } from 'node:util';
 import { sanitizeStorageSegment as sanitizeSegment } from '../utils/storageSegment.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
@@ -175,6 +176,11 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
   if (typeof value !== 'object') {
     throw new TypeError('Storage record payload must contain JSON-compatible values.');
   }
+  // Proxy traps can change a previously inspected identity or payload before
+  // JSON serialization. Node's native check does not invoke user traps.
+  if (nodeTypes.isProxy(value)) {
+    throw new TypeError('Storage record payload must not contain Proxy objects.');
+  }
   if (ancestors.has(value)) {
     throw new TypeError('Storage record payload must be acyclic JSON data.');
   }
@@ -213,6 +219,11 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
 // Nested values must also be inert JSON data: top-level validation alone does
 // not protect app-data identities or scoped records from nested serializers.
 function assertWritableRecordPayload(payload) {
+  // Check before getPrototypeOf/Array.isArray, which may invoke or reject
+  // revoked Proxy objects. A Proxy must not execute traps during validation.
+  if (nodeTypes.isProxy(payload)) {
+    throw new TypeError('Storage record payload must not contain Proxy objects.');
+  }
   if (
     !payload || typeof payload !== 'object' || Array.isArray(payload) ||
     (Object.getPrototypeOf(payload) !== Object.prototype && Object.getPrototypeOf(payload) !== null)
