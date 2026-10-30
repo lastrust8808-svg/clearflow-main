@@ -64,6 +64,26 @@ export function verifyScopedMembershipWebhookFixture({
         event[field] !== authenticatedScope[field]) return null;
   }
   if (typeof event.id !== 'string' || event.id.trim() === '' ||
-      typeof event.type !== 'string' || event.type.trim() === '') return null;
+      typeof event.type !== 'string' || event.type.trim() === '' ||
+      typeof event.occurredAt !== 'string' || event.occurredAt.trim() === '') return null;
+  // Only admit the documented event contract. A signed but unexpected claim
+  // (e.g. entitled, role, paid, or a payment field on a cancellation) must
+  // not cross this test adapter's verification boundary as trusted data.
+  const common = ['id', 'type', 'tenantId', 'memberId', 'subscriptionId', 'occurredAt'];
+  const payment = ['invoiceId'];
+  const allowedByType = {
+    subscription_created: common,
+    subscription_cancelled: common,
+    payment_failed: [...common, ...payment],
+    payment_refunded: [...common, ...payment],
+    payment_succeeded: [...common, ...payment, 'settlementId', 'periodEnd'],
+  };
+  const allowed = allowedByType[event.type];
+  if (!allowed || Object.keys(event).some((key) => !allowed.includes(key))) return null;
+  if (event.type.startsWith('payment_') &&
+      (typeof event.invoiceId !== 'string' || event.invoiceId.trim() === '')) return null;
+  if (event.type === 'payment_succeeded' &&
+      (typeof event.settlementId !== 'string' || event.settlementId.trim() === '' ||
+       typeof event.periodEnd !== 'string' || event.periodEnd.trim() === '')) return null;
   return Object.freeze({ ...event, verified: true });
 }
