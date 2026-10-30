@@ -185,6 +185,7 @@ test('atomic account saves fsync the containing directory and fail closed on syn
     }
     return {
       stat: () => handle.stat(),
+      chmod: (mode) => handle.chmod(mode),
       sync: async () => {
         directorySyncs += 1;
         if (injectFailure) throw new Error('simulated directory sync failure');
