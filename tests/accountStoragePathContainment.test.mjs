@@ -907,3 +907,36 @@ test('legacy malformed JSON roots fail closed across all account storage readers
     await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
+
+
+test('stored account JSON rejects prototype-polluting keys on writes and legacy reads', async () => {
+  const accountId = `unsafe-json-key-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/signature-1.json', save: (v) => saveAccountExtractionRecord(accountId, 'signature-1', v), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      for (const key of ['__proto__', 'constructor', 'prototype']) {
+        // JSON.parse preserves these own keys without invoking JS setters.
+        const unsafe = JSON.parse(`{"nested":{"${key}":{"polluted":true}}}`);
+        const before = await fixture.read();
+        await assert.rejects(fixture.save(unsafe), /Unsafe storage record property/);
+        assert.deepEqual(await fixture.read(), before, 'rejected write preserves prior record');
+        // Older or externally modified records must also fail closed on read.
+        await fs.writeFile(path.join(directory, fixture.file), JSON.stringify({ ...before, ...unsafe }));
+        await assert.rejects(fixture.read(), /Unsafe storage record property/);
+        await fixture.save({ retained: true });
+      }
+    }
+    assert.equal({}.polluted, undefined, 'no prototype mutation escapes validation');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
