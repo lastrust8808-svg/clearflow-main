@@ -78,7 +78,7 @@ export function verifyScopedMembershipWebhookFixture({
     payment_refunded: [...common, ...payment],
     payment_succeeded: [...common, ...payment, 'settlementId', 'periodEnd'],
   };
-  const allowed = allowedByType[event.type];
+  const allowed = Object.hasOwn(allowedByType, event.type) ? allowedByType[event.type] : null;
   if (!allowed || Object.keys(event).some((key) => !allowed.includes(key))) return null;
   if (event.type.startsWith('payment_') &&
       (typeof event.invoiceId !== 'string' || event.invoiceId.trim() === '')) return null;
