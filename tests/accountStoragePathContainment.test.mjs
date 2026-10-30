@@ -366,3 +366,34 @@ test('malformed top-level write payloads never overwrite scoped vault and docume
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('custom JSON serialization and accessors cannot replace valid tenant storage records', async () => {
+  const accountId = `serialization-guard-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      const before = await fixture.read();
+      const customSerializer = { retained: false, toJSON() { return []; } };
+      const accessor = { get retained() { return false; } };
+      for (const invalid of [customSerializer, accessor]) {
+        await assert.rejects(
+          fixture.save(invalid),
+          /Storage record payload must not contain custom serialization or accessors/
+        );
+        assert.deepEqual(await fixture.read(), before);
+      }
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
