@@ -5,7 +5,9 @@
  *
  * Caller MUST authenticate/authorize the requested tenant/entity/trust, independently
  * verify each evidenceRef against the underlying asset/source, and persist
- * entries with audit history. Distinct evidence pointers prevent exact replay,
+ * entries with audit history. Supplied as-of timestamps are not authenticated
+ * evidence or a guarantee that reserve values are current. Distinct evidence
+ * pointers prevent exact replay,
  * but do not prove independent assets or available bank cash.
  */
 const KINDS = new Set(['cash', 'noncash_collateral']);
@@ -26,6 +28,15 @@ function requiredString(value, field) {
   return value;
 }
 
+function canonicalInstant(value, field) {
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) {
+    throw new TypeError(`${field} must be a canonical UTC ISO timestamp`);
+  }
+  return value;
+}
+
 function minorUnits(value, field) {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${field} must be a nonnegative safe integer`);
@@ -40,8 +51,8 @@ function safeAdd(left, right, field) {
 }
 
 /**
- * @param {{tenantId:string, entityId:string, trustId:string, currency:string, entries:Array<{
- *   id:string, assetId:string, evidenceRef:string, tenantId:string, entityId:string, trustId:string, currency:string,
+ * @param {{tenantId:string, entityId:string, trustId:string, currency:string, asOfAt:string, entries:Array<{
+ *   id:string, assetId:string, evidenceRef:string, observedAt:string, tenantId:string, entityId:string, trustId:string, currency:string,
  *   kind:'cash'|'noncash_collateral', sourceType:string, amountMinor:number,
  *   restrictedMinor?:number, pledgedMinor?:number
  * }>}} snapshot
@@ -53,6 +64,7 @@ export function calculateReserveCapacity(snapshot) {
   const trustId = requiredString(snapshot.trustId, 'trustId');
   const currency = requiredString(snapshot.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
+  const asOfAt = canonicalInstant(snapshot.asOfAt, 'asOfAt');
   if (!Array.isArray(snapshot.entries)) throw new TypeError('entries must be an array');
 
   const totals = {
@@ -67,6 +79,7 @@ export function calculateReserveCapacity(snapshot) {
   // asset count twice. The caller still must verify canonical asset identity.
   const assetIds = new Set();
   const evidenceRefs = new Set();
+  let oldestEvidenceAt = null;
   for (const entry of snapshot.entries) {
     if (!entry || typeof entry !== 'object') throw new TypeError('Invalid reserve entry');
     const id = requiredString(entry.id, 'entry.id');
@@ -83,6 +96,11 @@ export function calculateReserveCapacity(snapshot) {
       throw new Error('Duplicate reserve evidence reference');
     }
     evidenceRefs.add(evidenceRef);
+    const observedAt = canonicalInstant(entry.observedAt, 'entry.observedAt');
+    if (observedAt > asOfAt) {
+      throw new Error('Reserve evidence observed after snapshot as-of timestamp');
+    }
+    if (oldestEvidenceAt === null || observedAt < oldestEvidenceAt) oldestEvidenceAt = observedAt;
     if (entry.tenantId !== tenantId || entry.entityId !== entityId || entry.trustId !== trustId || entry.currency !== currency) {
       throw new Error('Reserve entry scope or currency mismatch');
     }
@@ -111,5 +129,5 @@ export function calculateReserveCapacity(snapshot) {
     totals.cashPledgedMinor = safeAdd(totals.cashPledgedMinor, pledged, 'cashPledgedMinor');
     totals.unencumberedCashMinor = safeAdd(totals.unencumberedCashMinor, amount - encumbered, 'unencumberedCashMinor');
   }
-  return Object.freeze({ tenantId, entityId, trustId, currency, ...totals });
+  return Object.freeze({ tenantId, entityId, trustId, currency, asOfAt, oldestEvidenceAt, ...totals });
 }
