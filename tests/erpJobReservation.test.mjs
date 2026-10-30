@@ -91,6 +91,49 @@ test('rejects unauthenticated, invalid and oversized requests before querying', 
   assert.equal(db.calls, 0);
 });
 
+test('reservation rejects lossy JSON payload values before any database write', async () => {
+  const db = fakeDatabase();
+  const sparse = []; sparse[1] = 'value';
+  const extra = ['item']; extra.note = 'ignored by JSON.stringify';
+  const withSymbol = { invoiceId: 'invoice-123', [Symbol('hidden')]: 'value' };
+  const cyclic = { invoiceId: 'invoice-123' }; cyclic.self = cyclic;
+  const bad = [
+    { amount: NaN }, { amount: Infinity }, { amount: -Infinity },
+    { recipient: undefined }, { recipient: () => 'test' },
+    { recipient: Symbol('secret') }, { lines: [1, undefined] },
+    { lines: sparse }, { lines: extra }, withSymbol, cyclic,
+    { issuedAt: new Date('2026-10-30T00:00:00Z') },
+    { toJSON: () => ({ invoiceId: 'different' }) },
+  ];
+  for (const payload of bad) {
+    await assert.rejects(reserve({ db, ...args, payload }), /ERP job payload/);
+  }
+  assert.equal(db.calls, 0);
+});
+
+test('reservation rejects accessors without invoking them', async () => {
+  const db = fakeDatabase();
+  let invoked = 0;
+  const payload = { invoiceId: 'invoice-123' };
+  Object.defineProperty(payload, 'recipient', { enumerable: true, get() {
+    invoked++; throw new Error('getter must never execute');
+  } });
+  await assert.rejects(reserve({ db, ...args, payload }), /ERP job payload/);
+  assert.equal(invoked, 0);
+  assert.equal(db.calls, 0);
+});
+
+test('reservation accepts explicit finite JSON amounts and dense line arrays', async () => {
+  const db = fakeDatabase();
+  const payload = { invoiceId: 'invoice-123', amount: 123.45,
+    lines: [{ description: 'service', quantity: 2, unitPrice: 61.725 }] };
+  const first = await reserve({ db, ...args, payload });
+  const replay = await reserve({ db, ...args, payload });
+  assert.equal(first.created, true);
+  assert.equal(replay.replayed, true);
+  assert.equal(first.id, replay.id);
+});
+
 test('database errors and missing/conflicting receipts never return success', async () => {
   const broken = { query: async () => { throw new Error('database offline'); } };
   await assert.rejects(reserve({ db: broken, ...args }), /database offline/);
