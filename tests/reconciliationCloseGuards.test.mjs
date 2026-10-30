@@ -926,3 +926,39 @@ test('format-control descriptions and controller names fail closed without rejec
   );
   assert.equal(valid.isReadyToApprove, true);
 });
+
+
+test('raw imported amount must agree with normalized statement cents before close eligibility', () => {
+  for (const rawAmountText of ['25.76', '0.25', '25.751', '25.75 CR', '25.75\\u200b', '', ' 25.75', '25.75 ', '$25,75', '1,23.45', 25.75]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [statementLine('line-1', 'matched', { rawAmountText })],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, `conflicting raw amount ${String(rawAmountText)} must block`);
+    assert.match(metrics.blockedReason, /Imported statement rows require valid/);
+  }
+});
+
+test('exact-cent raw bank amount formats preserve eligible reviewed rows', () => {
+  for (const rawAmountText of ['25.75', '$25.75', '-25.75', '(25.75)', '+$25.75', '025.75']) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [statementLine('line-1', 'matched', { rawAmountText })],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, true, `valid raw amount ${rawAmountText} should match`);
+  }
+  const grouped = buildReconciliationCloseMetrics(
+    reconciliation({
+      parsedStatementLines: [statementLine('line-1', 'matched', {
+        amount: 1234.56,
+        rawAmountText: '$1,234.56',
+      })],
+    }),
+    account
+  );
+  assert.equal(grouped.isReadyToApprove, true);
+});
