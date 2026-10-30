@@ -36,6 +36,15 @@ test('storage writes reject traversal account IDs before creating directories', 
 });
 
 
+test('invisible Unicode account identifiers are rejected before storage access', async () => {
+  for (const accountId of ['tenant\u200B-a', 'tenant\u202E-a', 'tenant\u2066-a']) {
+    await assert.rejects(loadAccountAppData(accountId), TypeError);
+    await assert.rejects(saveAccountAppData(accountId, { data: 'private' }), TypeError);
+    await assert.rejects(loadAccountDocumentFile(accountId, 'file-1'), TypeError);
+    await assert.rejects(saveAccountDocumentFile(accountId, 'file-1', { data: 'private' }), TypeError);
+  }
+});
+
 test('account JSON replacements are atomic and preserve object payloads during concurrent writes', async () => {
   const accountId = `atomic-regression-${randomUUID()}`;
   const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
