@@ -98,7 +98,10 @@ export async function reserveErpOperationJob({
                payload_sha256, status, created_at`,
     [tenantId, actorId, operation, idempotencyKey, digest, json],
   );
-  let record = insert.rows?.[0];
+  if (!Array.isArray(insert?.rows) || insert.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid reservation result');
+  }
+  let record = insert.rows[0];
   const created = Boolean(record);
   if (!record) {
     const existing = await db.query(
@@ -108,7 +111,10 @@ export async function reserveErpOperationJob({
        WHERE tenant_id = $1 AND operation = $2 AND idempotency_key = $3`,
       [tenantId, operation, idempotencyKey],
     );
-    record = existing.rows?.[0];
+    if (!Array.isArray(existing?.rows) || existing.rows.length > 1) {
+      throw new Error('ERP job storage returned an invalid reservation lookup');
+    }
+    record = existing.rows[0];
     if (!record) throw new Error('ERP job reservation could not be verified');
     if (record.actor_id !== actorId || record.payload_sha256 !== digest) {
       const error = new Error('ERP idempotency key conflicts with an existing job');
