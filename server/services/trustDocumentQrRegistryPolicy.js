@@ -4,7 +4,7 @@ import { verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 /**
  * Pure, INTERNAL binding resolver for QR token SHA-256 digests.
  *
- * The caller MUST authenticate and authorize the tenant/entity before reading
+ * The caller MUST authenticate and authorize the tenant/entity/trust before reading
  * the immutable registry. The caller MUST NOT expose the returned documentId
  * or versionId to a public QR visitor. Resolve the document's actual current
  * status with the document-version policy after loading immutable bytes.
@@ -37,10 +37,10 @@ function timestamp(value, field) {
 
 /**
  * @param {{tenantId:string,entityId:string,bindings:Array<{
- *   tenantId:string,entityId:string,documentId:string,versionId:string,
+ *   tenantId:string,entityId:string,trustId:string,documentId:string,versionId:string,
  *   tokenHashSha256:string,status:'active'|'revoked',issuedAt:string,
  *   revokedAt?:string,revocationEvidenceRef?:string}>}} registry
- * @param {{tenantId:string,entityId:string,tokenHashSha256:string}} lookup
+ * @param {{tenantId:string,entityId:string,trustId:string,tokenHashSha256:string}} lookup
  * @returns {{status:'bound',documentId:string,versionId:string}|{status:'unknown'}}
  */
 export function resolveTrustDocumentQrBinding(registry, lookup) {
@@ -50,11 +50,13 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   }
   const tenantId = id(registry.tenantId, 'registry.tenantId');
   const entityId = id(registry.entityId, 'registry.entityId');
+  const trustId = id(registry.trustId, 'registry.trustId');
   if (!lookup || typeof lookup !== 'object' || Array.isArray(lookup)) {
     throw new TypeError('QR lookup required');
   }
   if (id(lookup.tenantId, 'lookup.tenantId') !== tenantId ||
-      id(lookup.entityId, 'lookup.entityId') !== entityId) {
+      id(lookup.entityId, 'lookup.entityId') !== entityId ||
+      id(lookup.trustId, 'lookup.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
   const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
@@ -65,7 +67,8 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
       throw new TypeError('Invalid QR binding');
     }
-    if (binding.tenantId !== tenantId || binding.entityId !== entityId) {
+    if (binding.tenantId !== tenantId || binding.entityId !== entityId ||
+        binding.trustId !== trustId) {
       throw new Error('QR binding tenant/entity scope mismatch');
     }
     const documentId = id(binding.documentId, 'binding.documentId');
@@ -100,7 +103,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
  * finalized document bytes. Neither the token nor a caller-supplied hash is
  * evidence of document authenticity, execution, signature or notarization.
  *
- * The caller MUST authenticate tenant/entity access before reading both
+ * The caller MUST authenticate tenant/entity/trust access before reading both
  * registries, fetch immutable version records and finalized bytes from trusted
  * durable storage, and enforce its own rate limits and public disclosure policy.
  * Do not return the internal QR binding's document/version identifiers publicly.
@@ -114,7 +117,10 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   if (!versionRegistry || typeof versionRegistry !== 'object' || Array.isArray(versionRegistry) ||
       versionRegistry.tenantId !== qrRegistry.tenantId ||
       versionRegistry.entityId !== qrRegistry.entityId ||
-      versionRegistry.documentId !== binding.documentId) {
+      versionRegistry.trustId !== qrRegistry.trustId ||
+      versionRegistry.documentId !== binding.documentId ||
+      !Array.isArray(versionRegistry.versions) ||
+      versionRegistry.versions.some(version => !version || version.trustId !== qrRegistry.trustId)) {
     throw new Error('QR document registry scope mismatch');
   }
   return verifyTrustDocumentBytes(versionRegistry, {
