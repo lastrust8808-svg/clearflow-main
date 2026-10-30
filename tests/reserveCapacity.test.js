@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { calculateReserveCapacity } from '../server/services/reserveCapacity.js';
 
 const base = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', currency: 'USD' };
-const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
-const calculate = (entries) => calculateReserveCapacity({ ...base, entries });
+const asOfAt = '2026-10-30T06:00:00.000Z';
+const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, observedAt: '2026-10-30T05:00:00.000Z', kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
+const calculate = (entries) => calculateReserveCapacity({ ...base, asOfAt, entries });
 
 test('separates restricted and pledged cash from unencumbered cash', () => {
   const result = calculate([entry('one', 100_00, { restrictedMinor: 25_00, pledgedMinor: 30_00 })]);
@@ -60,8 +61,11 @@ test('returns immutable snapshot without mutating entries', () => {
   const result = calculate(entries);
   assert.equal(Object.isFrozen(result), true);
   assert.equal(result.unencumberedCashMinor, 123);
+  assert.equal(result.asOfAt, asOfAt);
+  assert.equal(result.oldestEvidenceAt, '2026-10-30T05:00:00.000Z');
   assert.equal(entries[0].amountMinor, 123);
   assert.deepEqual(calculate([]).unencumberedCashMinor, 0);
+  assert.equal(calculate([]).oldestEvidenceAt, null);
 });
 
 test('rejects padded or control-character tenant, entity and trust identifiers', () => {
@@ -155,4 +159,26 @@ test('rejects bank-balance classification for noncash collateral', () => {
   const result = calculate([entry('note-a', 100, { kind: 'noncash_collateral', sourceType: 'private_note' })]);
   assert.equal(result.cashTotalMinor, 0);
   assert.equal(result.noncashCollateralMinor, 100);
+});
+
+test('requires canonical UTC snapshot and source-observation timestamps', () => {
+  for (const invalid of [undefined, null, '', '2026-10-30', '2026-10-30T06:00:00Z',
+    '2026-10-30T06:00:00.000+00:00', '2026-02-30T06:00:00.000Z']) {
+    assert.throws(() => calculateReserveCapacity({ ...base, asOfAt: invalid, entries: [] }), /asOfAt/);
+    assert.throws(() => calculate([entry('cash-a', 100, { observedAt: invalid })]), /entry.observedAt/);
+  }
+});
+
+test('rejects future source observations and exposes oldest evidence for freshness review', () => {
+  assert.throws(() => calculate([entry('cash-a', 100, {
+    observedAt: '2026-10-30T06:00:00.001Z',
+  })]), /Reserve evidence observed after snapshot as-of timestamp/);
+  const result = calculate([
+    entry('cash-a', 100, { observedAt: asOfAt }),
+    entry('cash-b', 200, { observedAt: '2026-10-28T00:00:00.000Z' }),
+  ]);
+  assert.equal(result.unencumberedCashMinor, 300);
+  assert.equal(result.oldestEvidenceAt, '2026-10-28T00:00:00.000Z');
+  assert.equal(result.asOfAt, asOfAt);
+  assert.equal(Object.isFrozen(result), true);
 });
