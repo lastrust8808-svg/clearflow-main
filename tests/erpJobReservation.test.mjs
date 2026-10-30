@@ -348,9 +348,9 @@ test('worker terminal failure is atomic, tenant-scoped, lease-bound and clears c
     failureCode: 'ERP_WORKER_ERROR' });
   assert.deepEqual(captured.params,
     ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a', 'ERP_WORKER_ERROR']);
-  assert.match(captured.sql, /claimed_by = \\$4 AND status = 'processing'/);
-  assert.match(captured.sql, /lease_expires_at > now\\(\\)/);
-  assert.match(captured.sql, /status = 'failed', failure_code = \\$5/);
+  assert.match(captured.sql, /claimed_by = \$4 AND status = 'processing'/);
+  assert.match(captured.sql, /lease_expires_at > now\(\)/);
+  assert.match(captured.sql, /status = 'failed', failure_code = \$5/);
   assert.match(captured.sql, /claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL/);
   assert.equal(result.status, 'failed');
   assert.equal(result.failureCode, 'ERP_WORKER_ERROR');
