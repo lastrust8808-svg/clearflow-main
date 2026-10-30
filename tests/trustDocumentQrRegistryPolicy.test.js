@@ -14,7 +14,8 @@ function fixture() {
   const binding = { ...scope, documentId: 'document-1', versionId: 'version-1',
     tokenHashSha256: link.tokenHashSha256, status: 'active', issuedAt };
   const registry = { ...scope, bindings: [binding] };
-  const lookup = { ...scope, tokenHashSha256: digestTrustDocumentQrLink(link.url, origin) };
+  const lookup = { ...scope, asOfAt: '2026-10-30T12:00:00.000Z',
+    tokenHashSha256: digestTrustDocumentQrLink(link.url, origin) };
   return { link, binding, registry, lookup };
 }
 
@@ -98,6 +99,34 @@ test('fails closed on malformed hashes, statuses, timestamps and revocation evid
     /Invalid QR binding/);
 });
 
+test('QR resolution requires canonical as-of time and rejects future-issued bindings', () => {
+  const { registry, lookup } = fixture();
+  for (const invalid of [undefined, null, '', '2026-10-30', '2026-02-30T12:00:00.000Z']) {
+    assert.throws(() => resolveTrustDocumentQrBinding(registry, { ...lookup, asOfAt: invalid }),
+      /lookup.asOfAt/);
+  }
+  assert.throws(() => resolveTrustDocumentQrBinding(registry, {
+    ...lookup, asOfAt: '2026-10-28T11:59:59.999Z',
+  }), /issued after lookup as-of/);
+  assert.deepEqual(resolveTrustDocumentQrBinding(registry, {
+    ...lookup, asOfAt: issuedAt,
+  }), { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
+});
+
+test('QR lookup cannot apply a revocation recorded after the requested as-of time', () => {
+  const { registry, lookup } = fixture();
+  const revoked = { ...registry, bindings: [{
+    ...registry.bindings[0], status: 'revoked', revokedAt,
+    revocationEvidenceRef: 'revoke-1',
+  }] };
+  assert.throws(() => resolveTrustDocumentQrBinding(revoked, {
+    ...lookup, asOfAt: '2026-10-29T11:59:59.999Z',
+  }), /revocation occurs after lookup as-of/);
+  assert.deepEqual(resolveTrustDocumentQrBinding(revoked, {
+    ...lookup, asOfAt: revokedAt,
+  }), { status: 'unknown' });
+});
+
 const finalizedBytes = Buffer.from('%PDF-1.7\\nimmutable finalized document bytes');
 const finalizedDigest = createHash('sha256').update(finalizedBytes).digest('hex');
 function versionRegistry(overrides = {}) {
@@ -141,6 +170,24 @@ test('QR issuance cannot predate registration of its finalized document version'
   assert.deepEqual(verifyTrustDocumentQrBytes(
     issuedLater, lookup, versionRegistry(), finalizedBytes,
   ), { status: 'valid' });
+});
+
+test('QR byte verification rejects document versions registered after historical lookup time', () => {
+  const { registry, lookup } = fixture();
+  const historicalLookup = { ...lookup, asOfAt: issuedAt };
+  const first = { ...versionRegistry().versions[0], status: 'superseded' };
+  const later = { ...first, versionId: 'version-2', sequence: 2,
+    sha256: createHash('sha256').update('later document').digest('hex'),
+    status: 'current', evidenceRef: 'registered-2', registeredAt: revokedAt };
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, historicalLookup,
+    versionRegistry({ versions: [first, later] }), finalizedBytes),
+  /version registered after lookup as-of/);
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry,
+    { ...lookup, asOfAt: revokedAt },
+    versionRegistry({ versions: [first, later] }), finalizedBytes),
+  { status: 'superseded' });
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, historicalLookup,
+    versionRegistry(), finalizedBytes), { status: 'valid' });
 });
 
 test('revoked and unknown QR tokens never disclose document version status', () => {
