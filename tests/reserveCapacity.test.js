@@ -5,7 +5,8 @@ import { calculateReserveCapacity } from '../server/services/reserveCapacity.js'
 const base = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', currency: 'USD' };
 const asOfAt = '2026-10-30T06:00:00.000Z';
 const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, observedAt: '2026-10-30T05:00:00.000Z', kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
-const calculate = (entries) => calculateReserveCapacity({ ...base, asOfAt, entries });
+const calculate = (entries, maxEvidenceAgeMs = 7 * 24 * 60 * 60 * 1000) =>
+  calculateReserveCapacity({ ...base, asOfAt, maxEvidenceAgeMs, entries });
 
 test('separates restricted and pledged cash from unencumbered cash', () => {
   const result = calculate([entry('one', 100_00, { restrictedMinor: 25_00, pledgedMinor: 30_00 })]);
@@ -181,4 +182,34 @@ test('rejects future source observations and exposes oldest evidence for freshne
   assert.equal(result.oldestEvidenceAt, '2026-10-28T00:00:00.000Z');
   assert.equal(result.asOfAt, asOfAt);
   assert.equal(Object.isFrozen(result), true);
+});
+
+
+test('requires an explicit nonnegative safe-integer reserve freshness limit', () => {
+  for (const invalid of [undefined, null, '', '3600000', -1, 1.5,
+    Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => calculateReserveCapacity({
+      ...base, asOfAt, maxEvidenceAgeMs: invalid, entries: [],
+    }), /maxEvidenceAgeMs/);
+  }
+  const result = calculate([], 0);
+  assert.equal(result.maxEvidenceAgeMs, 0);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('rejects stale cash and noncash reserve evidence at the exact millisecond boundary', () => {
+  // Evidence at 05:00 is exactly one hour old in the 06:00 snapshot.
+  const boundary = calculate([entry('cash-a', 100)], 60 * 60 * 1000);
+  assert.equal(boundary.unencumberedCashMinor, 100);
+  assert.equal(boundary.maxEvidenceAgeMs, 60 * 60 * 1000);
+  assert.throws(() => calculate([entry('cash-a', 100)], 60 * 60 * 1000 - 1),
+    /exceeds configured maximum age/);
+  assert.throws(() => calculate([entry('note-a', 500, {
+    kind: 'noncash_collateral', sourceType: 'private_note',
+  })], 60 * 60 * 1000 - 1), /exceeds configured maximum age/);
+  assert.deepEqual(calculate([entry('cash-a', 100, { observedAt: asOfAt })], 0)
+    .unencumberedCashMinor, 100);
+  assert.throws(() => calculate([entry('cash-a', 100, {
+    observedAt: '2026-10-30T05:59:59.999Z',
+  })], 0), /exceeds configured maximum age/);
 });
