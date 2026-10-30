@@ -1,11 +1,13 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { evaluateTrusteeSigningPolicy } from './trusteeSigningPolicy.js';
+import { verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 
 /**
  * INTERNAL, non-posting signature-evidence readiness assessment. The caller
  * MUST authenticate the tenant/trust, verify appointment and acceptance
  * evidence, independently validate signer identity, consent and signature
- * provider receipts, and load finalized bytes from immutable storage.
+ * provider receipts, and load finalized bytes plus version registry from
+ * immutable storage. An untrusted caller-supplied registry is NOT proof.
  *
  * "evidence_ready_for_review" is NOT a verified signature, notarization,
  * legally executed instrument or authorization to issue, enforce or pay.
@@ -37,7 +39,7 @@ function digest(value, field) {
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
  *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
- *   governance:object,attestations:Array<{
+ *   governance:object,versionRegistry:object,attestations:Array<{
  *     tenantId:string,entityId:string,trustId:string,documentId:string,
  *     versionId:string,signerId:string,documentSha256:string,signedAt:string,
  *     explicitConsent:boolean,identityEvidenceRef:string,consentEvidenceRef:string,signatureEvidenceRef:string
@@ -128,6 +130,25 @@ export function assessTrustDocumentSigningPacket(packet) {
     if (!atSigning.eligible) return result('incomplete', 'signer_ineligible_at_signing');
   }
   if (signers.size === 0) return result('incomplete', 'no_signing_attestations');
+  // A signature packet for a superseded/revoked/unregistered version must not
+  // be marked ready for current-document review. The registry and bytes MUST
+  // be loaded from authenticated, immutable storage by the caller.
+  const versionRegistry = packet.versionRegistry;
+  if (!versionRegistry || typeof versionRegistry !== 'object' ||
+      Array.isArray(versionRegistry)) {
+    throw new TypeError('Immutable document version registry required');
+  }
+  for (const key of ['tenantId', 'entityId', 'documentId']) {
+    if (versionRegistry[key] !== scope[key]) {
+      throw new Error('Signing document version registry ' + key + ' scope mismatch');
+    }
+  }
+  const versionStatus = verifyTrustDocumentBytes(versionRegistry, {
+    versionId: scope.versionId, content: packet.content,
+  });
+  if (versionStatus.status !== 'valid') {
+    return result('incomplete', 'document_version_not_current');
+  }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
