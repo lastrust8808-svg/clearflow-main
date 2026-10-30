@@ -74,6 +74,39 @@ test('permits revoked token rotation with one new active binding', () => {
   { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
 });
 
+test('QR revocation evidence cannot be replayed for multiple token revocations', () => {
+  const { registry, lookup } = fixture();
+  const original = registry.bindings[0];
+  const replacement = createTrustDocumentQrLink(origin);
+  const first = {
+    ...original, status: 'revoked', revokedAt,
+    revocationEvidenceRef: 'revocation-receipt-1',
+  };
+  const second = {
+    ...original, tokenHashSha256: replacement.tokenHashSha256,
+    issuedAt: revokedAt, status: 'revoked',
+    revokedAt: '2026-10-30T11:00:00.000Z',
+    revocationEvidenceRef: 'revocation-receipt-1',
+  };
+  // Even non-overlapping validity windows require independent revocation
+  // provenance. Registry row order must not affect replay detection.
+  for (const bindings of [[first, second], [second, first]]) {
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, bindings,
+    }, lookup), /Duplicate QR revocation evidence reference/);
+  }
+  // A receipt cannot be reused for an unrelated document either.
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [first, { ...second, documentId: 'document-2' }],
+  }, lookup), /Duplicate QR revocation evidence reference/);
+  // Distinct evidence references preserve legitimate completed rotations.
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings: [first, {
+      ...second, revocationEvidenceRef: 'revocation-receipt-2',
+    }],
+  }, lookup), { status: 'unknown' });
+});
+
 test('QR token rotations cannot overlap validity windows for the same document version', () => {
   const { registry, lookup } = fixture();
   const original = registry.bindings[0];
