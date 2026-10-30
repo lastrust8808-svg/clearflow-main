@@ -193,7 +193,7 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
     if (isArray && key === 'length') continue;
     const descriptor = descriptors[key];
     if (typeof key !== 'string' || !descriptor.enumerable ||
-        (isArray && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length))) {
+        (isArray && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))) {
       throw new TypeError('Storage record payload must contain JSON-compatible enumerable properties.');
     }
     if (!Object.hasOwn(descriptor, 'value') ||
