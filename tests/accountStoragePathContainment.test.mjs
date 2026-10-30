@@ -727,3 +727,54 @@ test('existing permissive tenant directories are tightened before saving records
     await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
+
+test('legacy permissive record files become owner-only before their contents are returned', async () => {
+  const accountId = `legacy-record-mode-${randomUUID()}`;
+  const accountPath = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    {
+      file: 'app-data.json',
+      save: () => saveAccountAppData(accountId, { revision: 1 }),
+      load: () => loadAccountAppData(accountId),
+    },
+    {
+      file: path.join('files', 'doc-1.json'),
+      save: () => saveAccountDocumentFile(accountId, 'doc-1', { revision: 1 }),
+      load: () => loadAccountDocumentFile(accountId, 'doc-1'),
+    },
+    {
+      file: path.join('remittance', 'vendor-1.json'),
+      save: () => saveAccountRemittanceVault(accountId, 'vendor-1', { revision: 1 }),
+      load: () => loadAccountRemittanceVault(accountId, 'vendor-1'),
+    },
+    {
+      file: path.join('transaction-proof-chains', 'chains.json'),
+      save: () => saveAccountTransactionProofVault(accountId, { revision: 1 }),
+      load: () => loadAccountTransactionProofVault(accountId),
+    },
+    {
+      file: path.join('plaid', 'connections.json'),
+      save: () => saveAccountPlaidVault(accountId, { revision: 1 }),
+      load: () => loadAccountPlaidVault(accountId),
+    },
+    {
+      file: path.join('extractions', 'sig-1.json'),
+      save: () => saveAccountExtractionRecord(accountId, 'sig-1', { revision: 1 }),
+      load: () => loadAccountExtractionRecord(accountId, 'sig-1'),
+    },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save();
+      const recordPath = path.join(accountPath, fixture.file);
+      // Emulate a legacy installation where record files were world-readable
+      // or writable. The read path must harden the actual opened inode.
+      await fs.chmod(recordPath, 0o666);
+      assert.equal((await fs.stat(recordPath)).mode & 0o077, 0o066);
+      assert.equal((await fixture.load()).revision, 1);
+      assert.equal((await fs.stat(recordPath)).mode & 0o777, 0o600);
+    }
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
