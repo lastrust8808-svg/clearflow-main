@@ -246,3 +246,66 @@ export async function renewErpOperationJobLease({
     claimedBy: workerId, claimedAt, leaseExpiresAt, updatedAt,
   });
 }
+
+
+// Terminal failure is a durable status transition, NOT an acknowledgement of
+// invoice delivery or financial settlement. The worker must have trusted
+// tenant/operation authorization before calling this function.
+const failureCodes = new Set([
+  'ERP_WORKER_ERROR', 'ERP_PROVIDER_REJECTED',
+  'ERP_VALIDATION_REJECTED', 'ERP_RETRY_EXHAUSTED',
+]);
+
+export async function failErpOperationJob({
+  db, authenticatedWorker, operation, jobId, failureCode,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (typeof jobId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    throw new TypeError('Invalid ERP job id');
+  }
+  if (!failureCodes.has(failureCode)) throw new TypeError('Invalid ERP failure code');
+
+  // Atomic compare-and-swap: only the current worker holding a live lease
+  // may persist a terminal failure. Never requeue, dispatch, or report sent.
+  const result = await db.query(
+    `UPDATE erp_operation_jobs
+     SET status = 'failed', failure_code = $5,
+         claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL,
+         updated_at = now()
+     WHERE tenant_id = $1 AND operation = $2 AND id = $3
+       AND claimed_by = $4 AND status = 'processing'
+       AND lease_expires_at > now()
+     RETURNING id, tenant_id, actor_id, operation, status, failure_code,
+               claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
+    [tenantId, operation, jobId, workerId, failureCode],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > 1) {
+    throw new Error('ERP job storage returned an invalid failure result');
+  }
+  const record = result.rows[0];
+  if (!record) return null;
+  if (record.id !== jobId || record.tenant_id !== tenantId ||
+      record.operation !== operation || record.status !== 'failed' ||
+      record.failure_code !== failureCode ||
+      record.claimed_by != null || record.claimed_at != null ||
+      record.lease_expires_at != null ||
+      typeof record.actor_id !== 'string' || !record.actor_id) {
+    throw new Error('ERP job storage returned an invalid tenant-bound failure');
+  }
+  const stamp = value => value instanceof Date ? value.toISOString() : value;
+  const createdAt = stamp(record.created_at);
+  const updatedAt = stamp(record.updated_at);
+  if ([createdAt, updatedAt].some(
+    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+  ) || Date.parse(updatedAt) < Date.parse(createdAt)) {
+    throw new Error('ERP job storage returned an invalid failure timestamp');
+  }
+  return Object.freeze({
+    id: jobId, tenantId, operation, status: 'failed',
+    failureCode, createdAt, updatedAt,
+  });
+}
