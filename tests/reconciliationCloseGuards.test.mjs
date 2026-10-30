@@ -692,6 +692,17 @@ test('malformed, duplicate and overlapping book transaction indices cannot appro
   }
 });
 
+test('matched statement rows without any cleared book transaction cannot approve close', () => {
+  const metrics = buildReconciliationCloseMetrics(
+    reconciliation({ clearedTransactionIds: [], unmatchedTransactionIds: [] }),
+    account
+  );
+  assert.equal(metrics.isReadyToApprove, false);
+  assert.equal(metrics.matchedLineCount, 1);
+  assert.match(metrics.blockedReason, /require at least one reviewed cleared book transaction/);
+  assert.equal(buildReconciliationCloseMetrics(reconciliation(), account).isReadyToApprove, true);
+});
+
 test('unique cleared book IDs with no outstanding book exceptions preserve approval eligibility', () => {
   const metrics = buildReconciliationCloseMetrics(reconciliation({
     clearedTransactionIds: ['ledger-1', 'ledger-2'],
