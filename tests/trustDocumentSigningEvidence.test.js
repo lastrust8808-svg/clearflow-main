@@ -30,6 +30,7 @@ const packet = (changes = {}) => ({
     tenantId: scope.tenantId, entityId: scope.entityId, documentId: scope.documentId,
     versions: [{
       ...scope, sequence: 1, sha256: sha, status: 'current',
+      finalizedAt: '2026-10-28T09:00:00.000Z',
       registeredAt: '2026-10-28T09:00:00.000Z', evidenceRef: 'version-registration-1',
     }],
   },
@@ -69,6 +70,14 @@ test('signing evidence must follow finalized document version, not an earlier dr
   })] }), /predates finalized document/);
   assert.equal(assess({
     finalizedAt: '2026-10-28T10:00:00.000Z',
+    versionRegistry: {
+      ...packet().versionRegistry,
+      versions: [{
+        ...packet().versionRegistry.versions[0],
+        finalizedAt: '2026-10-28T10:00:00.000Z',
+        registeredAt: '2026-10-28T10:00:00.000Z',
+      }],
+    },
   }).status, 'evidence_ready_for_review');
   assert.throws(() => assess({
     finalizedAt: '2026-10-28T10:00:00.001Z',
@@ -196,4 +205,27 @@ test('document version registry is required, scoped and bound to finalized bytes
     ...current, versions: [{ ...current.versions[0], sha256: '0'.repeat(64) }],
   } }).reason, 'document_version_not_current');
   assert.equal(Object.hasOwn(assess(), 'documentVerified'), false);
+});
+
+test('finalization timestamp must be anchored to the immutable registered version', () => {
+  const version = packet().versionRegistry.versions[0];
+  const registryWith = changes => ({
+    ...packet().versionRegistry,
+    versions: [{ ...version, ...changes }],
+  });
+  assert.equal(assess({
+    versionRegistry: registryWith({ finalizedAt: undefined }),
+  }).reason, 'document_finalization_provenance_missing');
+  assert.equal(assess({
+    finalizedAt: '2026-10-28T08:00:00.000Z',
+  }).reason, 'document_finalization_provenance_mismatch');
+  assert.equal(assess({
+    versionRegistry: registryWith({
+      finalizedAt: '2026-10-28T10:00:00.000Z',
+    }),
+  }).reason, 'document_finalization_provenance_mismatch');
+  assert.throws(() => assess({
+    versionRegistry: registryWith({ finalizedAt: '2026-02-30T09:00:00.000Z' }),
+  }), /version.finalizedAt.*canonical/);
+  assert.equal(assess().status, 'evidence_ready_for_review');
 });
