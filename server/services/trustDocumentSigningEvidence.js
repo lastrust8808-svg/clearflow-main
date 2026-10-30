@@ -168,6 +168,13 @@ export function assessTrustDocumentSigningPacket(packet) {
   if (registeredAt > evaluatedAt) {
     return result('incomplete', 'document_registration_after_evaluation');
   }
+  // A later registry entry must not retroactively authenticate a signature
+  // recorded against an unregistered version. The first attestation is the
+  // earliest because signing timestamps are validated in strict order above.
+  // Registration and signature timestamps must come from trusted storage.
+  if (packet.attestations[0].signedAt < registeredAt) {
+    return result('incomplete', 'document_registered_after_signature');
+  }
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
