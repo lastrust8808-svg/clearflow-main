@@ -167,23 +167,44 @@ function assertStoredRecordScope(record, expected) {
 // evidence. Inspect property descriptors without invoking accessors. Reject
 // non-plain nested instances whose inherited serializers would run.
 function assertNoCustomSerialization(value, ancestors = new WeakSet()) {
-  if (value === null || typeof value !== 'object') return;
+  // JSON.stringify silently drops undefined/functions/symbols, changes
+  // non-finite numbers to null, and throws on bigint. Do not acknowledge a
+  // durable save whose data is silently different from the submitted record.
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number' && Number.isFinite(value)) return;
+  if (typeof value !== 'object') {
+    throw new TypeError('Storage record payload must contain JSON-compatible values.');
+  }
   if (ancestors.has(value)) {
     throw new TypeError('Storage record payload must be acyclic JSON data.');
   }
+  const isArray = Array.isArray(value);
   const prototype = Object.getPrototypeOf(value);
-  if (Array.isArray(value)
+  if (isArray
     ? prototype !== Array.prototype
     : prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('Storage record payload must contain plain nested JSON objects and arrays.');
   }
   ancestors.add(value);
-  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    // The built-in array length is not serialized. Other hidden or symbol
+    // properties, including a hidden toJSON method, must not be discarded.
+    if (isArray && key === 'length') continue;
+    const descriptor = descriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable ||
+        (isArray && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length))) {
+      throw new TypeError('Storage record payload must contain JSON-compatible enumerable properties.');
+    }
     if (!Object.hasOwn(descriptor, 'value') ||
         (key === 'toJSON' && typeof descriptor.value === 'function')) {
       throw new TypeError('Storage record payload must not contain custom serialization or accessors.');
     }
     assertNoCustomSerialization(descriptor.value, ancestors);
+  }
+  // Sparse arrays serialize holes as null, so they must be rejected as well.
+  if (isArray && Object.keys(value).length !== value.length) {
+    throw new TypeError('Storage record payload must not contain sparse arrays.');
   }
   ancestors.delete(value);
 }
