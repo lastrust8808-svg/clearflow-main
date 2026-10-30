@@ -40,7 +40,7 @@ function calendarDate(value, field) {
  * @param {{tenantId:string, entityId:string, trustId:string,
  *   asOfDate:string, mode:'independent'|'joint', signerIds:string[],
  *   appointments:Array<{trusteeId:string,tenantId:string,entityId:string,
- *     trustId:string,effectiveOn:string,acceptedOn?:string,acceptanceEvidenceRef?:string,revokedOn?:string}>}} snapshot
+ *     trustId:string,effectiveOn:string,acceptedOn?:string,acceptanceEvidenceRef?:string,revokedOn?:string,revocationEvidenceRef?:string}>}} snapshot
  * @returns {{eligible:boolean,reason:string,activeTrusteeCount:number,
  *   signerCount:number}} Frozen policy assessment, not an authorization token.
  */
@@ -63,6 +63,9 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   // A date alone cannot stand in for a distinct acceptance record. The caller
   // must independently authenticate and authorize every referenced record.
   const acceptanceEvidenceRefs = new Set();
+  // Every acceptance and revocation must have separate provenance, including
+  // across trustees. References are structural only until verified by storage.
+  const governanceEvidenceRefs = new Set();
   for (const appointment of snapshot.appointments) {
     if (!appointment || typeof appointment !== 'object' || Array.isArray(appointment)) {
       throw new TypeError('Invalid trustee appointment');
@@ -85,6 +88,17 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
         throw new Error('Duplicate trustee acceptance evidence reference');
       }
       acceptanceEvidenceRefs.add(acceptanceEvidenceRef);
+      if (governanceEvidenceRefs.has(acceptanceEvidenceRef)) {
+        throw new Error('Reused trustee governance evidence reference');
+      }
+      governanceEvidenceRefs.add(acceptanceEvidenceRef);
+    }
+    if (revokedOn !== null) {
+      const revocationEvidenceRef = id(appointment.revocationEvidenceRef, 'appointment.revocationEvidenceRef');
+      if (governanceEvidenceRefs.has(revocationEvidenceRef)) {
+        throw new Error('Reused trustee governance evidence reference');
+      }
+      governanceEvidenceRefs.add(revocationEvidenceRef);
     }
     if (revokedOn !== null && revokedOn < effectiveOn) {
       throw new RangeError('Revocation precedes appointment effective date');
