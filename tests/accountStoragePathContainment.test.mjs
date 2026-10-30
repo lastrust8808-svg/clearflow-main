@@ -778,3 +778,64 @@ test('legacy permissive record files become owner-only before their contents are
     await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
+
+
+test('read-only access hardens legacy tenant directories without creating missing records', async () => {
+  const accountId = `legacy-read-directories-${randomUUID()}`;
+  const accountPath = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    {
+      file: 'app-data.json',
+      save: () => saveAccountAppData(accountId, { revision: 1 }),
+      load: () => loadAccountAppData(accountId),
+    },
+    {
+      file: path.join('files', 'doc-1.json'),
+      save: () => saveAccountDocumentFile(accountId, 'doc-1', { revision: 1 }),
+      load: () => loadAccountDocumentFile(accountId, 'doc-1'),
+    },
+    {
+      file: path.join('remittance', 'vendor-1.json'),
+      save: () => saveAccountRemittanceVault(accountId, 'vendor-1', { revision: 1 }),
+      load: () => loadAccountRemittanceVault(accountId, 'vendor-1'),
+    },
+    {
+      file: path.join('transaction-proof-chains', 'chains.json'),
+      save: () => saveAccountTransactionProofVault(accountId, { revision: 1 }),
+      load: () => loadAccountTransactionProofVault(accountId),
+    },
+    {
+      file: path.join('plaid', 'connections.json'),
+      save: () => saveAccountPlaidVault(accountId, { revision: 1 }),
+      load: () => loadAccountPlaidVault(accountId),
+    },
+    {
+      file: path.join('extractions', 'sig-1.json'),
+      save: () => saveAccountExtractionRecord(accountId, 'sig-1', { revision: 1 }),
+      load: () => loadAccountExtractionRecord(accountId, 'sig-1'),
+    },
+  ];
+  const absentAccountId = `missing-read-directory-${randomUUID()}`;
+  const absentAccountPath = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', absentAccountId);
+  try {
+    for (const fixture of fixtures) await fixture.save();
+    await fs.chmod(accountPath, 0o755);
+    for (const fixture of fixtures) {
+      const directory = path.dirname(path.join(accountPath, fixture.file));
+      if (directory !== accountPath) await fs.chmod(directory, 0o777);
+    }
+    for (const fixture of fixtures) {
+      assert.equal((await fixture.load()).revision, 1);
+      const directory = path.dirname(path.join(accountPath, fixture.file));
+      for (const candidate of [accountPath, directory]) {
+        assert.equal((await fs.stat(candidate)).mode & 0o777, 0o700, candidate);
+      }
+    }
+    assert.equal(await loadAccountDocumentFile(accountId, 'missing-document'), null);
+    assert.equal(await loadAccountAppData(absentAccountId), null);
+    await assert.rejects(fs.stat(absentAccountPath), { code: 'ENOENT' });
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
+    await fs.rm(absentAccountPath, { recursive: true, force: true });
+  }
+});
