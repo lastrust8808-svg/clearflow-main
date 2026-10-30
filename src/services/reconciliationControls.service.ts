@@ -314,6 +314,22 @@ export function buildReconciliationCloseMetrics(
       blockedReason: 'Cleared and unmatched book transaction identifiers must be valid, unique and disjoint.',
     };
   }
+  // A statement line cannot be considered matched to the books when the
+  // explicitly reviewed cleared-book index contains no transactions. This
+  // guards against a stale/fabricated matched flag with no corresponding
+  // book-side review. It does not prove that individual IDs truly match;
+  // server-side ledger linkage and authenticated approval are still required.
+  if (matchedLineCount > 0 && clearedIds.length === 0) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Matched statement rows require at least one reviewed cleared book transaction.',
+    };
+  }
+
   if (unmatchedBookIds?.length) {
     return {
       bookEndingBalance,
