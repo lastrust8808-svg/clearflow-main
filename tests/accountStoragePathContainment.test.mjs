@@ -320,3 +320,49 @@ test('google app-data scope rejects mismatched or missing identity before writin
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('malformed top-level write payloads never overwrite existing app data', async () => {
+  const accountId = `payload-app-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  try {
+    const original = { revision: 1, settings: { retained: true } };
+    await saveAccountAppData(accountId, original);
+    for (const invalid of [null, [], ['bad'], 'bad', 42, new Date()]) {
+      await assert.rejects(
+        saveAccountAppData(accountId, invalid),
+        /Storage record payload must be a plain JSON object/
+      );
+      assert.deepEqual(await loadAccountAppData(accountId), original);
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('malformed top-level write payloads never overwrite scoped vault and document records', async () => {
+  const accountId = `payload-scoped-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value), read: () => loadAccountExtractionRecord(accountId, 'signature-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      const before = await fixture.read();
+      for (const invalid of [null, [], 'bad', 42, new Date()]) {
+        await assert.rejects(
+          fixture.save(invalid),
+          /Storage record payload must be a plain JSON object/
+        );
+        assert.deepEqual(await fixture.read(), before);
+      }
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
