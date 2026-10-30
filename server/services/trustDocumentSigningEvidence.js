@@ -215,6 +215,11 @@ export function assessTrustDocumentSigningPacket(packet) {
       if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
       provenanceRefs.add(ref);
     }
+    if (appointment.revokedOn != null) {
+      const ref = identifier(appointment.revocationEvidenceRef, 'appointment.revocationEvidenceRef');
+      if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
+      provenanceRefs.add(ref);
+    }
   }
   for (const version of versionRegistry.versions) {
     const ref = identifier(version.evidenceRef, 'version.evidenceRef');
