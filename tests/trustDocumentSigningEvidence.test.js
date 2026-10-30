@@ -403,3 +403,46 @@ test('trustee revocation evidence cannot be recycled as signing or version evide
     governance: withRevocation(undefined),
   }), /appointment.revocationEvidenceRef/);
 });
+
+test('historical document revocation receipts cannot be replayed as signing or trustee evidence', () => {
+  const original = packet();
+  const registeredVersion = original.versionRegistry.versions[0];
+  const withHistory = (revocationEvidenceRef, governance = original.governance) => ({
+    versionId: 'version-2',
+    attestations: [attestation('a', { versionId: 'version-2' })],
+    governance,
+    versionRegistry: {
+      ...original.versionRegistry,
+      versions: [
+        { ...registeredVersion, status: 'revoked', revocationEvidenceRef },
+        {
+          ...registeredVersion, versionId: 'version-2', sequence: 2,
+          status: 'current', evidenceRef: 'version-registration-2',
+          registeredAt: '2026-10-28T09:30:00.000Z',
+        },
+      ],
+    },
+  });
+  // A distinct receipt for a historical revoked version does not block
+  // independent trustee signing of the later, currently registered version.
+  assert.equal(assess(withHistory('historical-revocation-1')).status,
+    'evidence_ready_for_review');
+  for (const reused of [
+    'identity-a', 'consent-a', 'receipt-a', 'appointment-a', 'appointment-b',
+  ]) {
+    assert.throws(() => assess(withHistory(reused)),
+      /Reused cross-role signing provenance reference/);
+  }
+  const governanceWithRevocation = {
+    ...original.governance,
+    appointments: [
+      appointment('a'),
+      appointment('b', {
+        revokedOn: '2026-10-28',
+        revocationEvidenceRef: 'trustee-revocation-b',
+      }),
+    ],
+  };
+  assert.throws(() => assess(withHistory('trustee-revocation-b', governanceWithRevocation)),
+    /Reused cross-role signing provenance reference/);
+});
