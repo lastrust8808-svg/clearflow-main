@@ -211,3 +211,28 @@ test('signed fixture rejects duplicate JSON object keys and escaped aliases', ()
   // Ordinary signed events remain accepted.
   assert.equal(verifyScoped(scopedInput(scopedPayload)).id, scopedPayload.id);
 });
+
+test('signed webhook fixture rejects oversized bodies before event admission', () => {
+  const huge = Buffer.from('x'.repeat(65537), 'utf8');
+  assert.equal(verify(input({ rawBody: huge, signatureHeader: sign(huge) })), false);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: huge, signatureHeader: sign(huge),
+  })), null);
+  const boundary = Buffer.alloc(65536, 0x20);
+  assert.equal(verify(input({ rawBody: boundary, signatureHeader: sign(boundary) })), true);
+});
+
+test('signed string bodies with unpaired UTF-16 surrogates are rejected without aliasing identities', () => {
+  for (const invalid of ['\\uD800', '\\uDC00', 'evt-\\uD800x', 'evt-\\uDC00x']) {
+    const body = JSON.stringify(scopedPayload).replace('evt-scope-test', invalid);
+    assert.equal(verify(input({ rawBody: body, signatureHeader: sign(body) })), false);
+    assert.equal(verifyScoped(scopedInput(scopedPayload, {
+      rawBody: body, signatureHeader: sign(body),
+    })), null);
+  }
+  const valid = JSON.stringify({ ...scopedPayload, id: 'evt-\\uD83D\\uDE00' });
+  assert.equal(verify(input({ rawBody: valid, signatureHeader: sign(valid) })), true);
+  assert.ok(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: valid, signatureHeader: sign(valid),
+  })));
+});
