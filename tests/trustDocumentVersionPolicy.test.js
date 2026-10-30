@@ -8,14 +8,14 @@ const digestB = 'b'.repeat(64);
 const digestC = 'c'.repeat(64);
 const version = (sequence, overrides = {}) => ({
   versionId: 'version-' + sequence, sequence,
-  tenantId: 'tenant-a', entityId: 'trust-a', documentId: 'doc-a',
+  tenantId: 'tenant-a', entityId: 'trust-a', trustId: 'trust-a', documentId: 'doc-a',
   sha256: sequence === 1 ? digestA : sequence === 2 ? digestB : digestC,
   status: 'current', evidenceRef: 'registration-' + sequence,
   registeredAt: '2026-10-' + String(sequence).padStart(2, '0') + 'T12:00:00.000Z',
   ...overrides,
 });
 const registry = versions => ({
-  tenantId: 'tenant-a', entityId: 'trust-a', documentId: 'doc-a', versions,
+  tenantId: 'tenant-a', entityId: 'trust-a', trustId: 'trust-a', documentId: 'doc-a', versions,
 });
 const check = (versions, proof) => verifyTrustDocumentVersion(registry(versions), proof);
 
@@ -62,11 +62,31 @@ test('rejects duplicate immutable version and registration identifiers', () => {
   /Duplicate document version evidence reference/);
 });
 
-test('rejects cross-tenant, cross-entity and cross-document version records', () => {
-  for (const key of ['tenantId', 'entityId', 'documentId']) {
+test('rejects cross-tenant, cross-entity, cross-trust and cross-document version records', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
     assert.throws(() => check([version(1, { [key]: 'other' })],
       { versionId: 'version-1', sha256: digestA }), /scope mismatch/);
   }
+});
+
+test('core byte and digest verification fail closed on missing or mixed trust ownership', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  for (const trustId of [undefined, null, '', 'trust-b']) {
+    const alteredRegistry = { ...registry([version(1)]), trustId };
+    assert.throws(() => verifyTrustDocumentVersion(alteredRegistry, proof),
+      /trustId|scope mismatch/);
+    assert.throws(() => verifyTrustDocumentVersion(registry([
+      version(1, { trustId }),
+    ]), proof), /trustId scope mismatch/);
+  }
+  const bytes = Buffer.from('finalized bytes');
+  const historical = version(1, { trustId: 'trust-b', status: 'superseded' });
+  const current = version(2, { sha256: fileDigest(bytes) });
+  assert.throws(() => verifyTrustDocumentBytes(registry([historical, current]), {
+    versionId: 'version-2', content: bytes,
+  }), /trustId scope mismatch/);
+  assert.deepEqual(verifyTrustDocumentVersion(registry([version(1)]), proof),
+    { status: 'valid' });
 });
 
 test('rejects malformed scope, version metadata and hash digests', () => {
