@@ -500,3 +500,74 @@ test('lossy JSON values and hidden properties cannot overwrite account or vault 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('conflicting scoped payload identities fail before replacing tenant records', async () => {
+  const accountId = `payload-scope-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    {
+      save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value),
+      read: () => loadAccountDocumentFile(accountId, 'doc-1'),
+      identity: { accountId, fileId: 'doc-1' },
+      conflictingResource: { fileId: 'doc-2' },
+    },
+    {
+      save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value),
+      read: () => loadAccountRemittanceVault(accountId, 'vendor-1'),
+      identity: { accountId, vendorId: 'vendor-1' },
+      conflictingResource: { vendorId: 'vendor-2' },
+    },
+    {
+      save: (value) => saveAccountTransactionProofVault(accountId, value),
+      read: () => loadAccountTransactionProofVault(accountId),
+      identity: { accountId },
+    },
+    {
+      save: (value) => saveAccountPlaidVault(accountId, value),
+      read: () => loadAccountPlaidVault(accountId),
+      identity: { accountId },
+    },
+    {
+      save: (value) => saveAccountExtractionRecord(accountId, 'signature-1', value),
+      read: () => loadAccountExtractionRecord(accountId, 'signature-1'),
+      identity: { accountId, signature: 'signature-1' },
+      conflictingResource: { signature: 'signature-2' },
+    },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      // Existing clients may omit identity fields or supply matching ones.
+      await fixture.save({ retained: true });
+      const original = await fixture.read();
+      await assert.rejects(
+        fixture.save({ accountId: 'another-tenant', retained: false }),
+        /Storage record payload scope does not match requested account/
+      );
+      if (fixture.conflictingResource) {
+        await assert.rejects(
+          fixture.save({ ...fixture.conflictingResource, retained: false }),
+          /Storage record payload scope does not match requested account/
+        );
+      }
+      assert.deepEqual(await fixture.read(), original, 'rejected scope must preserve existing data');
+      await fixture.save({ ...fixture.identity, retained: 'valid' });
+      assert.equal((await fixture.read()).retained, 'valid');
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('conflicting scoped identities cannot create new account directories', async () => {
+  const accountId = `payload-scope-new-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  try {
+    await assert.rejects(
+      saveAccountPlaidVault(accountId, { accountId: 'other-tenant', connections: [] }),
+      /Storage record payload scope does not match requested account/
+    );
+    await assert.rejects(fs.stat(root), (error) => error?.code === 'ENOENT');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
