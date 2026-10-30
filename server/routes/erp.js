@@ -40,10 +40,32 @@ router.post('/settlements/execute', (req, res) => {
   return rejectNonDurableJob(res, 'settlement_execution');
 });
 
+// The provider configuration probe is not an execution-readiness signal.
+// This route deliberately blocks ALL settlement execution until durable,
+// tenant-authorized approval and audit persistence are integrated. Do not
+// advertise ACH/wire/check as executable merely because a token is present.
 router.get('/settlements/execution-capabilities', (_req, res) => {
+  const configured = buildExecutionCapabilities();
   return res.status(200).json({
     success: true,
-    capabilities: buildExecutionCapabilities(),
+    capabilities: {
+      ...configured,
+      provider: 'manual',
+      executionMode: 'disabled',
+      settlementExecutionAvailable: false,
+      unavailableReason: 'durable_job_store_required',
+      liveBankExecutionReady: false,
+      mercuryApprovalReady: false,
+      achOriginationReady: false,
+      wireOriginationReady: false,
+      billerDirectReady: false,
+      printableCheckReady: false,
+      positivePayReady: false,
+      supportedMethods: [],
+      notes: [
+        'Settlement execution is disabled: authenticated durable job storage, approval and audit persistence are required. No payment request can be queued through this endpoint.',
+      ],
+    },
   });
 });
 
