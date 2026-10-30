@@ -482,3 +482,80 @@ export async function quarantineExpiredErpOperationJob({
     requiresReconciliation: true, createdAt, updatedAt,
   });
 }
+
+
+// Restart-recovery safety gate: atomically quarantine a bounded batch of
+// expired processing leases. A lease timeout is NOT evidence of provider
+// failure; every selected job becomes outcome_unknown, never queued/failed.
+// The caller MUST independently authenticate and authorize this worker for
+// the tenant and operation. No provider action or automatic retry occurs.
+export async function quarantineExpiredErpOperationJobsBatch({
+  db, authenticatedWorker, operation, maxJobs = 25,
+}) {
+  if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
+  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
+  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
+  if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 100) {
+    throw new TypeError('Invalid ERP recovery batch size');
+  }
+  // SKIP LOCKED lets concurrent recovery workers partition expired leases.
+  // The second status/expiry predicate prevents races with lease renewal.
+  const result = await db.query(
+    `WITH expired AS (
+       SELECT id FROM erp_operation_jobs
+       WHERE tenant_id = $1 AND operation = $2 AND status = 'processing'
+         AND lease_expires_at <= now()
+       ORDER BY lease_expires_at, id
+       FOR UPDATE SKIP LOCKED LIMIT $3
+     )
+     UPDATE erp_operation_jobs AS job
+     SET status = 'outcome_unknown',
+         claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL,
+         updated_at = now()
+     FROM expired
+     WHERE job.id = expired.id AND job.tenant_id = $1
+       AND job.operation = $2 AND job.status = 'processing'
+       AND job.lease_expires_at <= now()
+     RETURNING job.id, job.tenant_id, job.actor_id, job.operation,
+               job.status, job.failure_code, job.claimed_by,
+               job.claimed_at, job.lease_expires_at,
+               job.dispatch_started_at, job.created_at, job.updated_at`,
+    [tenantId, operation, maxJobs],
+  );
+  if (!Array.isArray(result?.rows) || result.rows.length > maxJobs) {
+    throw new Error('ERP job storage returned an invalid recovery batch');
+  }
+  const seenIds = new Set();
+  const quarantined = result.rows.map(row => {
+    if (!row || typeof row.id !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id) ||
+        seenIds.has(row.id) || row.tenant_id !== tenantId ||
+        row.operation !== operation || row.status !== 'outcome_unknown' ||
+        typeof row.actor_id !== 'string' || !row.actor_id ||
+        row.failure_code != null || row.claimed_by != null ||
+        row.claimed_at != null || row.lease_expires_at != null) {
+      throw new Error('ERP job storage returned an invalid tenant-bound recovery record');
+    }
+    seenIds.add(row.id);
+    const stamp = value => value instanceof Date ? value.toISOString() : value;
+    const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
+    const dispatchStartedAt = row.dispatch_started_at == null
+      ? null : stamp(row.dispatch_started_at);
+    if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
+        typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt)) ||
+        Date.parse(updatedAt) < Date.parse(createdAt) ||
+        (dispatchStartedAt !== null &&
+         (typeof dispatchStartedAt !== 'string' ||
+          !Number.isFinite(Date.parse(dispatchStartedAt)) ||
+          Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
+          Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
+      throw new Error('ERP job storage returned an invalid recovery timestamp');
+    }
+    return Object.freeze({
+      id: row.id, tenantId, operation, status: 'outcome_unknown',
+      requiresReconciliation: true, dispatchStartedAt, createdAt, updatedAt,
+    });
+  });
+  return Object.freeze(quarantined);
+}
