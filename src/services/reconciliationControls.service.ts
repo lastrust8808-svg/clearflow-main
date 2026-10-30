@@ -65,6 +65,29 @@ function isValidStatementSourceRef(value: unknown): value is string {
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
+// When the import preserves the bank's raw amount text, it must agree with
+// the normalized numeric amount before a matched row can qualify for close.
+// Compare absolute cents because banks encode debit/credit signs differently;
+// direction is reviewed separately. Unrecognized raw formats require manual
+// review rather than silently accepting conflicting source evidence.
+function hasConsistentRawStatementAmount(
+  line: NonNullable<ReconciliationRecord['parsedStatementLines']>[number]
+): boolean {
+  if (line.rawAmountText == null) return true;
+  const raw = line.rawAmountText;
+  if (typeof raw !== 'string' || raw !== raw.trim() || !raw) return false;
+  const unwrapped = raw.startsWith('(') && raw.endsWith(')')
+    ? raw.slice(1, -1)
+    : raw;
+  if (!/^[+-]?\$?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(unwrapped)) {
+    return false;
+  }
+  const rawCents = toSafeCents(Number(unwrapped.replace(/[$,]/g, '')));
+  const normalizedCents = toSafeCents(line.amount);
+  return rawCents !== null && normalizedCents !== null &&
+    Math.abs(rawCents) === Math.abs(normalizedCents);
+}
+
 // Imported statement rows must carry complete financial evidence before their
 // matched status can contribute to approval. A valid line ID alone is not
 // evidence of a valid posted transaction.
@@ -89,7 +112,8 @@ function hasValidStatementFinancialFields(
     amountCents !== 0 &&
     (line.direction === 'credit' || line.direction === 'debit') &&
     hasValidStatementCalendarDate(line.postedDate) &&
-    isValidStatementSourceRef(line.description);
+    isValidStatementSourceRef(line.description) &&
+    hasConsistentRawStatementAmount(line);
 }
 
 export function buildReconciliationCloseMetrics(
