@@ -729,3 +729,32 @@ test('future-dated controller signoffs cannot certify completed approval', () =>
   );
   assert.equal(allowedSkew.isReadyToApprove, true, 'one-minute clock skew should remain eligible');
 });
+
+test('approved controller signoff rejects padded and control-character names', () => {
+  for (const controllerSignoffName of [
+    ' Controller A', 'Controller A ', 'Controller\\nA', 'Controller\\tA',
+    'Controller\\u0085A', 42,
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName,
+        controllerSignoffAt: '2026-10-28T18:00:00Z',
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(controllerSignoffName));
+    assert.match(metrics.blockedReason, /named controller and valid signoff timestamp/);
+  }
+
+  for (const controllerSignoffName of ['Controller A', 'María García']) {
+    assert.equal(buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName,
+        controllerSignoffAt: '2026-10-28T18:00:00Z',
+      }),
+      account
+    ).isReadyToApprove, true, controllerSignoffName);
+  }
+});
