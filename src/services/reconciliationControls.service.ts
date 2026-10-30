@@ -54,12 +54,15 @@ function hasValidControllerSignoffTimestamp(value: unknown): boolean {
 
 // A filename-only legacy import is still allowed, but blank, padded, or
 // control-character provenance must never certify an automatic close.
+// Unicode format controls (including zero-width and bidirectional overrides)
+// are also rejected: trim() does not remove them, and they can conceal or
+// visually reorder distinct account, statement, or controller identifiers.
 // This is record-shape validation, not proof that a statement was imported.
 function isValidStatementSourceRef(value: unknown): value is string {
   return typeof value === 'string' &&
     value.length > 0 &&
     value === value.trim() &&
-    !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
 // Imported statement rows must carry complete financial evidence before their
