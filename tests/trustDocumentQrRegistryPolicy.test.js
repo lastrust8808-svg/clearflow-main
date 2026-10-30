@@ -7,7 +7,7 @@ import { resolveTrustDocumentQrBinding, verifyTrustDocumentQrBytes } from '../se
 const origin = 'https://verify.example.org';
 const issuedAt = '2026-10-28T12:00:00.000Z';
 const revokedAt = '2026-10-29T12:00:00.000Z';
-const scope = { tenantId: 'tenant-A', entityId: 'trust-A' };
+const scope = { tenantId: 'tenant-A', entityId: 'entity-A', trustId: 'trust-A' };
 
 function fixture() {
   const link = createTrustDocumentQrLink(origin);
@@ -37,9 +37,9 @@ test('revoked and unrecognized tokens are indistinguishable to the resolver', ()
   assert.equal(Object.isFrozen(resolveTrustDocumentQrBinding(registry, unknown)), true);
 });
 
-test('rejects cross-tenant and cross-entity lookup and registry rows', () => {
+test('rejects cross-tenant, cross-entity and cross-trust lookup and registry rows', () => {
   const { registry, lookup } = fixture();
-  for (const key of ['tenantId', 'entityId']) {
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
     assert.throws(() => resolveTrustDocumentQrBinding(registry, { ...lookup, [key]: 'other' }),
       /scope mismatch/);
     assert.throws(() => resolveTrustDocumentQrBinding({ ...registry,
@@ -145,16 +145,36 @@ test('QR verification preserves superseded and revoked status for matching bytes
 
 test('QR byte verification rejects registry scope substitution and invalid bytes', () => {
   const { registry, lookup } = fixture();
-  for (const key of ['tenantId', 'entityId', 'documentId']) {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
     assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
       versionRegistry({ [key]: 'other' }), finalizedBytes), /scope mismatch/);
   }
   assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(), ''),
     /bytes required/);
-  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
-    versionRegistry({ versions: [{ ...versionRegistry().versions[0], tenantId: 'other' }] }),
-    finalizedBytes), /scope mismatch/);
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+      versionRegistry({ versions: [{ ...versionRegistry().versions[0], [key]: 'other' }] }),
+      finalizedBytes), /scope mismatch/);
+  }
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
     versionRegistry({ versions: [{ ...versionRegistry().versions[0], versionId: 'other' }] }),
     finalizedBytes), { status: 'unknown' });
+});
+
+
+test('QR trust scope is mandatory even within the same tenant and entity', () => {
+  const { registry, lookup } = fixture();
+  assert.throws(() => resolveTrustDocumentQrBinding({ ...registry, trustId: undefined }, lookup),
+    /registry.trustId/);
+  assert.throws(() => resolveTrustDocumentQrBinding(registry, { ...lookup, trustId: undefined }),
+    /lookup.trustId/);
+  assert.throws(() => resolveTrustDocumentQrBinding({ ...registry,
+    bindings: [{ ...registry.bindings[0], trustId: undefined }] }, lookup), /scope mismatch/);
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ trustId: undefined }), finalizedBytes), /scope mismatch/);
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [{ ...versionRegistry().versions[0], trustId: undefined }] }),
+    finalizedBytes), /scope mismatch/);
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup, versionRegistry(), finalizedBytes),
+    { status: 'valid' });
 });
