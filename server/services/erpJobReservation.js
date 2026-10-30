@@ -15,7 +15,7 @@ const operations = new Set([
 // make distinct tenant/actor/worker identities appear identical in audits.
 function requiredIdentifier(value, label) {
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
-      value !== value.trim() || /[\\p{Cc}\\p{Cf}\\p{Cs}]/u.test(value)) {
+      value !== value.trim() || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
     throw new TypeError(`Invalid ${label}`);
   }
   return value;
