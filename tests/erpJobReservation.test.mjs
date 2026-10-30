@@ -322,3 +322,91 @@ test('lease renewal rejects missing identities, invalid operations, IDs and boun
   ]) await assert.rejects(renew({ ...input, ...invalid }));
   assert.equal(calls, 0);
 });
+
+
+function failedRow(overrides = {}) {
+  return {
+    id: claimedJobId, tenant_id: workerScope.tenantId,
+    actor_id: 'actor-a', operation: 'invoice_delivery',
+    status: 'failed', failure_code: 'ERP_WORKER_ERROR',
+    claimed_by: null, claimed_at: null, lease_expires_at: null,
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:03:00Z'),
+    ...overrides,
+  };
+}
+
+test('worker terminal failure is atomic, tenant-scoped, lease-bound and clears claim', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params };
+    return { rows: [failedRow()] };
+  } };
+  const result = await fail({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId,
+    failureCode: 'ERP_WORKER_ERROR' });
+  assert.deepEqual(captured.params,
+    ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a', 'ERP_WORKER_ERROR']);
+  assert.match(captured.sql, /claimed_by = \\$4 AND status = 'processing'/);
+  assert.match(captured.sql, /lease_expires_at > now\\(\\)/);
+  assert.match(captured.sql, /status = 'failed', failure_code = \\$5/);
+  assert.match(captured.sql, /claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL/);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.failureCode, 'ERP_WORKER_ERROR');
+  assert.equal('sent' in result, false);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('expired or already finished job cannot be failed again; database errors propagate', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR' };
+  assert.equal(await fail({ ...input, db: { query: async () => ({ rows: [] }) } }), null);
+  await assert.rejects(fail({ ...input, db: {
+    query: async () => { throw new Error('database offline'); },
+  } }), /database offline/);
+  await assert.rejects(fail({ ...input, db: {
+    query: async () => ({ rows: [failedRow(), failedRow()] }),
+  } }), /invalid failure result/);
+});
+
+test('worker failure rejects forged receipts and malformed timestamps', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR' };
+  for (const row of [
+    failedRow({ tenant_id: 'foreign' }),
+    failedRow({ operation: 'invoice_export' }),
+    failedRow({ id: 'foreign' }),
+    failedRow({ status: 'sent' }),
+    failedRow({ failure_code: 'ERP_PROVIDER_REJECTED' }),
+    failedRow({ claimed_by: 'worker-a' }),
+    failedRow({ lease_expires_at: new Date() }),
+    failedRow({ actor_id: '' }),
+    failedRow({ updated_at: 'invalid' }),
+    failedRow({ updated_at: new Date('2026-10-29T11:00:00Z') }),
+  ]) await assert.rejects(fail({
+    ...input, db: { query: async () => ({ rows: [row] }) },
+  }), /invalid/);
+});
+
+test('worker failure validates scope, operation, ID and reason before database access', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const input = { db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR' };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' },
+    { jobId: 'bad' },
+    { failureCode: 'SENT' },
+    { failureCode: 'ERP_PROVIDER_REJECTED; DROP TABLE' },
+  ]) await assert.rejects(fail({ ...input, ...invalid }));
+  assert.equal(calls, 0);
+  const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
+  assert.match(sql, /failure_code text CHECK/);
+  assert.match(sql, /CONSTRAINT erp_failure_reason_consistency CHECK/);
+});
