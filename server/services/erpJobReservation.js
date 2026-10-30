@@ -131,7 +131,8 @@ export async function reserveErpOperationJob({
       record.payload_sha256 !== digest) {
     throw new Error('ERP job storage returned an invalid tenant-bound receipt');
   }
-  if (typeof record.id !== 'string' || !record.id ||
+  if (typeof record.id !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(record.id) ||
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid job record');
   }
