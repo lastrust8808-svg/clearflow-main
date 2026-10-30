@@ -159,8 +159,23 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   // rejecting future registrations is safer than inferring historical status.
   const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
   for (const version of versionRegistry.versions) {
-    if (timestamp(version.registeredAt, 'version.registeredAt') > asOfAt) {
+    const registeredAt = timestamp(version.registeredAt, 'version.registeredAt');
+    if (registeredAt > asOfAt) {
       throw new Error('QR document version registered after lookup as-of timestamp');
+    }
+    // A future revocation must not rewrite a historical QR verification.
+    // Revocation timestamps and status must come from an authenticated
+    // append-only as-of registry; this structural check cannot prove either.
+    if (version.status === 'revoked') {
+      const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
+      if (revokedAt <= registeredAt) {
+        throw new Error('QR document revocation must follow registration');
+      }
+      if (revokedAt > asOfAt) {
+        throw new Error('QR document revocation occurs after lookup as-of timestamp');
+      }
+    } else if (version.revokedAt != null) {
+      throw new Error('Nonrevoked QR document version cannot carry revocation timestamp');
     }
   }
   const decision = verifyTrustDocumentBytes(versionRegistry, {
