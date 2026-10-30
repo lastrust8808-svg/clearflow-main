@@ -741,3 +741,86 @@ test('ambiguous reservation insert or replay lookup rows fail closed', async () 
     }), /invalid reservation result/);
   }
 });
+
+
+test('restart recovery quarantines a bounded batch atomically without retry or provider calls', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const secondId = '123e4567-e89b-42d3-a456-426614174001';
+  let captured;
+  const db = { async query(sql, params) {
+    captured = { sql, params };
+    return { rows: [
+      quarantineRow({ dispatch_started_at: new Date('2026-10-29T12:01:30Z') }),
+      quarantineRow({ id: secondId, dispatch_started_at: null }),
+    ] };
+  } };
+  const rows = await sweep({ db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', maxJobs: 2 });
+  assert.deepEqual(captured.params, ['tenant-a', 'invoice_delivery', 2]);
+  assert.match(captured.sql, /tenant_id = \$1 AND operation = \$2 AND status = 'processing'/);
+  assert.match(captured.sql, /lease_expires_at <= now\(\)/);
+  assert.match(captured.sql, /FOR UPDATE SKIP LOCKED LIMIT \$3/);
+  assert.match(captured.sql, /SET status = 'outcome_unknown'/);
+  assert.match(captured.sql, /claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL/);
+  assert.doesNotMatch(captured.sql, /SET status = 'queued'|SET status = 'failed'/);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].status, 'outcome_unknown');
+  assert.equal(rows[0].requiresReconciliation, true);
+  assert.equal(rows[0].dispatchStartedAt, '2026-10-29T12:01:30.000Z');
+  assert.equal(rows[1].dispatchStartedAt, null);
+  assert.equal(Object.isFrozen(rows), true);
+  assert.equal(Object.isFrozen(rows[0]), true);
+  assert.equal('sent' in rows[0], false);
+});
+
+test('restart recovery rejects invalid worker scope and unbounded batches before database access', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  let calls = 0;
+  const db = { query: async () => { calls++; return { rows: [] }; } };
+  const input = { db, authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  for (const invalid of [
+    { authenticatedWorker: null },
+    { authenticatedWorker: { tenantId: 'tenant-a' } },
+    { operation: 'settlement_execution' },
+    { maxJobs: 0 }, { maxJobs: 101 }, { maxJobs: 1.5 },
+  ]) await assert.rejects(sweep({ ...input, ...invalid }));
+  assert.equal(calls, 0);
+  assert.deepEqual(await sweep(input), []);
+  assert.equal(calls, 1);
+});
+
+test('restart recovery fails closed on database failure, oversized and forged results', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', maxJobs: 1 };
+  await assert.rejects(sweep({ ...input, db: {
+    query: async () => { throw new Error('database offline'); },
+  } }), /database offline/);
+  for (const rows of [
+    null,
+    [quarantineRow(), quarantineRow()],
+    [quarantineRow({ tenant_id: 'foreign' })],
+    [quarantineRow({ operation: 'invoice_export' })],
+    [quarantineRow({ status: 'sent' })],
+    [quarantineRow({ claimed_by: 'worker-a' })],
+    [quarantineRow({ failure_code: 'ERP_WORKER_ERROR' })],
+    [quarantineRow({ dispatch_started_at: 'invalid' })],
+    [quarantineRow({ dispatch_started_at: new Date('2026-10-29T12:05:00Z') })],
+  ]) {
+    await assert.rejects(sweep({ ...input, db: {
+      query: async () => ({ rows }),
+    } }), /invalid/);
+  }
+});
+
+test('restart recovery rejects duplicate job identities in the same batch', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  await assert.rejects(sweep({
+    authenticatedWorker: workerScope, operation: 'invoice_delivery', maxJobs: 2,
+    db: { query: async () => ({ rows: [quarantineRow(), quarantineRow()] }) },
+  }), /invalid tenant-bound recovery record/);
+});
