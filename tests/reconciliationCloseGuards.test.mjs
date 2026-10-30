@@ -869,3 +869,60 @@ test('valid row resolution evidence preserves approval eligibility across timezo
     parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt: '2026-10-28T19:00:00Z' })],
   }), account).isReadyToApprove, true);
 });
+
+test('invisible Unicode format controls cannot spoof reconciliation scope or source identities', () => {
+  for (const hidden of ['\u200b', '\u200d', '\u202e', '\u2066', '\u2069']) {
+    for (const field of ['id', 'entityId', 'bankAccountId']) {
+      const metrics = buildReconciliationCloseMetrics(
+        reconciliation({ [field]: `valid${hidden}identity` }), account
+      );
+      assert.equal(metrics.isReadyToApprove, false, `${field} ${hidden.codePointAt(0).toString(16)}`);
+      assert.match(metrics.blockedReason, /valid scoped identifiers/);
+    }
+    const imported = buildReconciliationCloseMetrics(
+      reconciliation({ statementImportId: `import${hidden}a` }), account
+    );
+    assert.equal(imported.isReadyToApprove, false);
+    assert.match(imported.blockedReason, /Import a statement/);
+    const row = buildReconciliationCloseMetrics(
+      reconciliation({
+        parsedStatementLines: [statementLine(`line${hidden}1`, 'matched')],
+        matchedStatementLineIds: [`line${hidden}1`],
+      }), account
+    );
+    assert.equal(row.isReadyToApprove, false);
+    assert.match(row.blockedReason, /unique, nonempty identifiers/);
+  }
+});
+
+test('format-control descriptions and controller names fail closed without rejecting ordinary Unicode', () => {
+  for (const hidden of ['\u200b', '\u202e', '\u2066']) {
+    const row = buildReconciliationCloseMetrics(
+      reconciliation({ parsedStatementLines: [statementLine('line-1', 'matched', {
+        description: `Bank${hidden}payment`,
+      })] }), account
+    );
+    assert.equal(row.isReadyToApprove, false);
+    assert.match(row.blockedReason, /Imported statement rows require valid/);
+    const controller = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'approved',
+        controllerSignoffName: `Controller${hidden}A`,
+        controllerSignoffAt: '2026-10-28T18:00:00Z',
+      }), account
+    );
+    assert.equal(controller.isReadyToApprove, false);
+    assert.match(controller.blockedReason, /named controller and valid signoff timestamp/);
+  }
+  const valid = buildReconciliationCloseMetrics(
+    reconciliation({
+      closeApprovalStatus: 'approved',
+      controllerSignoffName: 'María García',
+      controllerSignoffAt: '2026-10-28T18:00:00Z',
+      parsedStatementLines: [statementLine('line-1', 'matched', {
+        description: 'Café – dépôt reçu',
+      })],
+    }), account
+  );
+  assert.equal(valid.isReadyToApprove, true);
+});
