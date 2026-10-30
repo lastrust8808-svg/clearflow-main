@@ -12,6 +12,8 @@ const version = (sequence, overrides = {}) => ({
   sha256: sequence === 1 ? digestA : sequence === 2 ? digestB : digestC,
   status: 'current', evidenceRef: 'registration-' + sequence,
   registeredAt: '2026-10-' + String(sequence).padStart(2, '0') + 'T12:00:00.000Z',
+  ...(overrides.status === 'revoked' && !Object.hasOwn(overrides, 'revocationEvidenceRef')
+    ? { revocationEvidenceRef: 'revocation-' + sequence } : {}),
   ...overrides,
 });
 const registry = versions => ({
@@ -60,6 +62,30 @@ test('rejects duplicate immutable version and registration identifiers', () => {
   assert.throws(() => check([version(1, { status: 'superseded' }),
     version(2, { evidenceRef: 'registration-1' })], { versionId: 'version-2', sha256: digestB }),
   /Duplicate document version evidence reference/);
+});
+
+test('revoked versions require unique revocation provenance distinct from registration', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'bad\\u0000', 42]) {
+    assert.throws(() => check([version(1, {
+      status: 'revoked', revocationEvidenceRef: invalid,
+    })], { versionId: 'version-1', sha256: digestA }), /version.revocationEvidenceRef/);
+  }
+  assert.throws(() => check([version(1, {
+    status: 'revoked', revocationEvidenceRef: 'registration-1',
+  })], { versionId: 'version-1', sha256: digestA }), /Reused document version revocation evidence/);
+  assert.throws(() => check([
+    version(1, { status: 'revoked', revocationEvidenceRef: 'shared-revocation' }),
+    version(2, { status: 'revoked', revocationEvidenceRef: 'shared-revocation' }),
+  ], { versionId: 'version-2', sha256: digestB }), /Reused document version revocation evidence/);
+  assert.throws(() => check([
+    version(1, { status: 'superseded', evidenceRef: 'revocation-2' }),
+    version(2, { status: 'revoked', revocationEvidenceRef: 'revocation-2' }),
+  ], { versionId: 'version-2', sha256: digestB }), /Reused document version revocation evidence/);
+  assert.throws(() => check([version(1, {
+    status: 'current', revocationEvidenceRef: 'unexpected-revocation',
+  })], { versionId: 'version-1', sha256: digestA }), /Nonrevoked document version/);
+  assert.deepEqual(check([version(1, { status: 'revoked' })],
+    { versionId: 'version-1', sha256: digestA }), { status: 'revoked' });
 });
 
 test('rejects cross-tenant, cross-entity, cross-trust and cross-document version records', () => {
