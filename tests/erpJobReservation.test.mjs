@@ -123,6 +123,28 @@ test('reservation rejects accessors without invoking them', async () => {
   assert.equal(db.calls, 0);
 });
 
+test('reservation rejects hidden object fields before hashing or storing an ERP job', async () => {
+  const db = fakeDatabase();
+  const hiddenRecipient = { invoiceId: 'invoice-123' };
+  Object.defineProperty(hiddenRecipient, 'recipient', {
+    value: 'member@example.test', enumerable: false,
+  });
+  const hiddenNestedAmount = { invoiceId: 'invoice-123', line: { description: 'work' } };
+  Object.defineProperty(hiddenNestedAmount.line, 'amount', {
+    value: 125, enumerable: false,
+  });
+  let getterCalls = 0;
+  const hiddenGetter = { invoiceId: 'invoice-123' };
+  Object.defineProperty(hiddenGetter, 'recipient', {
+    enumerable: false, get() { getterCalls++; throw new Error('must not execute'); },
+  });
+  for (const payload of [hiddenRecipient, hiddenNestedAmount, hiddenGetter]) {
+    await assert.rejects(reserve({ db, ...args, payload }), /ERP job payload/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.equal(db.calls, 0);
+});
+
 test('reservation accepts explicit finite JSON amounts and dense line arrays', async () => {
   const db = fakeDatabase();
   const payload = { invoiceId: 'invoice-123', amount: 123.45,
