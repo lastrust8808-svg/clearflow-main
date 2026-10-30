@@ -65,7 +65,7 @@ test('rejects duplicate immutable version and registration identifiers', () => {
 });
 
 test('revoked versions require unique revocation provenance distinct from registration', () => {
-  for (const invalid of [undefined, null, '', ' ', ' padded ', 'bad\\u0000', 42]) {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'bad\u0000', 42]) {
     assert.throws(() => check([version(1, {
       status: 'revoked', revocationEvidenceRef: invalid,
     })], { versionId: 'version-1', sha256: digestA }), /version.revocationEvidenceRef/);
