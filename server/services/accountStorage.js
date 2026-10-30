@@ -183,7 +183,15 @@ async function readJsonSafely(targetPath) {
     if ((stat.mode & 0o077) !== 0) {
       await handle.chmod(0o600);
     }
-    return JSON.parse(await handle.readFile('utf8'));
+    // Legacy or externally altered app-data may bypass the write validator.
+    // Do not return a JSON primitive or array as a tenant workspace/vault;
+    // all account storage APIs persist top-level JSON objects. In particular,
+    // non-Google app-data has no separate embedded identity scope check.
+    const record = JSON.parse(await handle.readFile('utf8'));
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      throw new Error('Unsafe storage record payload.');
+    }
+    return record;
   } finally {
     await handle.close();
   }
