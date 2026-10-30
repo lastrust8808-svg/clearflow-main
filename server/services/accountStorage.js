@@ -161,6 +161,19 @@ function assertStoredRecordScope(record, expected) {
   return record;
 }
 
+// Reject malformed top-level records before opening or replacing any file.
+// A primitive, array, or class instance can otherwise be serialized or spread
+// into a plausible-looking empty record and silently overwrite valid data.
+function assertWritableRecordPayload(payload) {
+  if (
+    !payload || typeof payload !== 'object' || Array.isArray(payload) ||
+    (Object.getPrototypeOf(payload) !== Object.prototype && Object.getPrototypeOf(payload) !== null)
+  ) {
+    throw new TypeError('Storage record payload must be a plain JSON object.');
+  }
+  return payload;
+}
+
 // Google-backed workspaces must retain the authenticated account's email in
 // their stored app-data identity. A regular file copied into a different
 // account directory is otherwise readable even without a symlink/hard link.
@@ -195,6 +208,7 @@ export async function loadAccountAppData(accountId) {
 }
 
 export async function saveAccountAppData(accountId, appData) {
+  assertWritableRecordPayload(appData);
   assertGoogleAppDataScope(accountId, appData);
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
@@ -218,6 +232,7 @@ export async function loadAccountDocumentFile(accountId, fileId) {
 }
 
 export async function saveAccountDocumentFile(accountId, fileId, payload) {
+  assertWritableRecordPayload(payload);
   const targetDirectory = accountFilesDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountFilePath(accountId, fileId),
@@ -248,6 +263,7 @@ export async function loadAccountRemittanceVault(accountId, vendorId) {
 }
 
 export async function saveAccountRemittanceVault(accountId, vendorId, payload) {
+  assertWritableRecordPayload(payload);
   const targetDirectory = accountRemittanceDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountRemittancePath(accountId, vendorId),
@@ -278,6 +294,7 @@ export async function loadAccountTransactionProofVault(accountId) {
 }
 
 export async function saveAccountTransactionProofVault(accountId, payload) {
+  assertWritableRecordPayload(payload);
   const targetDirectory = accountTransactionProofDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountTransactionProofPath(accountId),
@@ -306,6 +323,7 @@ export async function loadAccountPlaidVault(accountId) {
 }
 
 export async function saveAccountPlaidVault(accountId, payload) {
+  assertWritableRecordPayload(payload);
   const targetDirectory = accountPlaidDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountPlaidPath(accountId),
@@ -334,6 +352,7 @@ export async function loadAccountExtractionRecord(accountId, signature) {
 }
 
 export async function saveAccountExtractionRecord(accountId, signature, payload) {
+  assertWritableRecordPayload(payload);
   const targetDirectory = accountExtractionDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(accountExtractionPath(accountId, signature),
