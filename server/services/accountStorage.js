@@ -81,11 +81,31 @@ async function assertSafeStorageDirectory(directory) {
 }
 
 async function ensureDirectory(targetPath) {
+  // An existing account directory may predate private-directory creation.
+  // Secure the tenant parent before creating a child record directory, so
+  // legacy group/world permissions cannot expose newly saved records.
+  const relative = path.relative(STORAGE_ROOT, targetPath);
+  const segments = relative.split(path.sep);
+  if (segments.length === 2) {
+    await ensureDirectory(path.join(STORAGE_ROOT, segments[0]));
+  }
   await assertSafeStorageDirectory(targetPath);
-  // Newly created account and record directories must not be traversable by
-  // other OS users, even when the host's default umask would permit it.
-  // Existing directory permissions are not changed by this operation.
   await fs.mkdir(targetPath, { recursive: true, mode: 0o700 });
+  await assertSafeStorageDirectory(targetPath);
+  // chmod through an O_NOFOLLOW directory descriptor, not a pathname that
+  // could be redirected to a symlink between validation and chmod.
+  // Fail closed if legacy permissions cannot be tightened.
+  const handle = await fs.open(
+    targetPath,
+    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+  );
+  try {
+    const stat = await handle.stat();
+    if (!stat.isDirectory()) throw new Error('Unsafe storage directory path.');
+    await handle.chmod(0o700);
+  } finally {
+    await handle.close();
+  }
   await assertSafeStorageDirectory(targetPath);
 }
 
