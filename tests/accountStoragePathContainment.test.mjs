@@ -688,6 +688,35 @@ test('Google workspace identity cannot change after save validation while filesy
   }
 });
 
+test('shared account storage root is private for writes and legacy reads', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const accountId = `private-storage-root-${randomUUID()}`;
+  const accountPath = path.join(root, accountId);
+  const absentId = `missing-storage-root-record-${randomUUID()}`;
+  try {
+    await saveAccountAppData(accountId, { revision: 1 });
+    assert.equal((await fs.stat(root)).mode & 0o777, 0o700);
+
+    // A legacy installation may have made the shared root world-writable.
+    // Writes must harden it before acknowledging another saved record.
+    await fs.chmod(root, 0o777);
+    await saveAccountDocumentFile(accountId, 'doc-1', { revision: 2 });
+    assert.equal((await fs.stat(root)).mode & 0o777, 0o700);
+
+    // Reads must harden the root too, without manufacturing missing records.
+    await fs.chmod(root, 0o755);
+    assert.deepEqual(await loadAccountAppData(accountId), { revision: 1 });
+    assert.equal((await fs.stat(root)).mode & 0o777, 0o700);
+    assert.equal(await loadAccountAppData(absentId), null);
+    await assert.rejects(fs.stat(path.join(root, absentId)), { code: 'ENOENT' });
+  } finally {
+    await fs.chmod(root, 0o700).catch((error) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+    await fs.rm(accountPath, { recursive: true, force: true });
+  }
+});
+
 test('new account and record directories restrict access to their owning OS user', async () => {
   const accountId = `private-directory-${randomUUID()}`;
   const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
