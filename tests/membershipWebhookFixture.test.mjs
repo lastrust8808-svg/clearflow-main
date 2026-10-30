@@ -240,11 +240,15 @@ test('signed string bodies with unpaired UTF-16 surrogates are rejected without 
 test('signed JSON Unicode escapes cannot smuggle lone surrogates into verified identities', () => {
   const source = JSON.stringify(scopedPayload);
   for (const field of ['id', 'invoiceId', 'settlementId']) {
-    for (const escape of ['\\\\ud800', '\\\\udc00']) {
+    for (const escape of ['\\ud800', '\\udc00']) {
       const body = Buffer.from(source.replace(
         JSON.stringify(scopedPayload[field]),
         '"value-' + escape + '"',
       ), 'utf8');
+      // Guard the test fixture itself: JSON must decode the escape into a
+      // lone surrogate, not a literal backslash-u string.
+      assert.equal(JSON.parse(body.toString('utf8'))[field],
+        'value-' + String.fromCharCode(Number.parseInt(escape.slice(2), 16)));
       // Exact raw bytes are valid UTF-8 and correctly signed; the decoded
       // string is malformed and must not be admitted as a trusted identity.
       assert.equal(verify(input({ rawBody: body, signatureHeader: sign(body) })), true);
@@ -254,8 +258,9 @@ test('signed JSON Unicode escapes cannot smuggle lone surrogates into verified i
     }
   }
   const valid = Buffer.from(source.replace(
-    JSON.stringify(scopedPayload.id), '"evt-\\\\ud83d\\\\ude00"',
+    JSON.stringify(scopedPayload.id), '"evt-\\ud83d\\ude00"',
   ), 'utf8');
+  assert.equal(JSON.parse(valid.toString('utf8')).id, 'evt-😀');
   assert.equal(verifyScoped(scopedInput(scopedPayload, {
     rawBody: valid, signatureHeader: sign(valid),
   })).id, 'evt-😀');
