@@ -450,3 +450,38 @@ export function planBankFeedCursorPage(input: FeedCursorPageInput): FeedCursorPa
     commitRequired: true,
   };
 }
+
+
+/**
+ * Compute a fingerprint over the EXACT raw provider transaction bytes, before
+ * JSON parsing, normalization, or redaction. A trusted server-side adapter
+ * must obtain those bytes directly from the provider response and bind the
+ * resulting digest to its authenticated tenant/connection transaction record.
+ * This helper does not authenticate the provider or persist the digest.
+ */
+export async function hashRawProviderPayloadBytes(rawPayload: Uint8Array): Promise<string> {
+  // A bounded snapshot prevents callers from changing the bytes while the
+  // asynchronous digest is pending and rejects unbounded/empty evidence.
+  if (!(rawPayload instanceof Uint8Array) ||
+      rawPayload.byteLength === 0 || rawPayload.byteLength > 1024 * 1024) {
+    throw new Error('Raw provider payload must be 1 to 1048576 bytes.');
+  }
+  const snapshot = Uint8Array.from(rawPayload);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', snapshot);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Verify a supplied fingerprint against the actual raw bytes, fail closed. */
+export async function verifyRawProviderPayloadHash(
+  rawPayload: Uint8Array, expectedHash: string,
+): Promise<string> {
+  if (!validPayloadHash(expectedHash)) {
+    throw new Error('Invalid provider payload fingerprint.');
+  }
+  const actualHash = await hashRawProviderPayloadBytes(rawPayload);
+  if (actualHash !== expectedHash) {
+    throw new Error('Raw provider payload does not match its fingerprint.');
+  }
+  return actualHash;
+}
