@@ -50,6 +50,31 @@ function requirePlainGovernanceRecord(record, allowed, required, label) {
   }
 }
 
+// Reject sparse or accessor-backed lists before any array element is read.
+// Otherwise a supplied trustee/signer list could execute getters or hide
+// additional claims in symbol and non-index properties.
+function requirePlainGovernanceList(list, label) {
+  if (!Array.isArray(list) || Object.getPrototypeOf(list) !== Array.prototype) {
+    throw new TypeError(label + ' must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(list);
+  const length = descriptors.length.value;
+  let indexed = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError(label + ' must contain only array indices');
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError(label + ' must contain enumerable data elements');
+    }
+    indexed++;
+  }
+  if (indexed !== length) throw new TypeError(label + ' must not contain holes');
+}
+
 function id(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new TypeError(`${field} must be a nonempty unpadded string`);
@@ -95,6 +120,8 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   if (!Array.isArray(snapshot.appointments) || !Array.isArray(snapshot.signerIds)) {
     throw new TypeError('appointments and signerIds must be arrays');
   }
+  requirePlainGovernanceList(snapshot.appointments, 'appointments');
+  requirePlainGovernanceList(snapshot.signerIds, 'signerIds');
   const trustees = new Set();
   const active = new Set();
   // A date alone cannot stand in for a distinct acceptance record. The caller
