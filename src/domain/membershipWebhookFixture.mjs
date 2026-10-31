@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { parseMembershipInstant } from './membershipEntitlements.mjs';
+import { parseMembershipIdentifier, parseMembershipInstant } from './membershipEntitlements.mjs';
 
 /**
  * TEST-ONLY signed webhook fixture for deterministic adapter acceptance tests.
@@ -155,11 +155,26 @@ export function verifyScopedMembershipWebhookFixture({
   };
   const allowed = Object.hasOwn(allowedByType, event.type) ? allowedByType[event.type] : null;
   if (!allowed || Object.keys(event).some((key) => !allowed.includes(key))) return null;
-  if (event.type.startsWith('payment_') &&
-      (typeof event.invoiceId !== 'string' || event.invoiceId.trim() === '')) return null;
-  if (event.type === 'payment_succeeded' &&
-      (typeof event.settlementId !== 'string' || event.settlementId.trim() === '' ||
-       typeof event.periodEnd !== 'string' || event.periodEnd.trim() === '')) return null;
+  // A valid fixture signature must not mark ambiguous IDs as verified.
+  // Apply the same canonical identity policy used by entitlement projection
+  // to BOTH authenticated scope and all admitted event identity fields.
+  // This remains a test-only adapter, not real provider authorization.
+  try {
+    for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+      parseMembershipIdentifier(authenticatedScope[field], 'authenticatedScope.' + field);
+    }
+    for (const field of ['id', 'tenantId', 'memberId', 'subscriptionId']) {
+      parseMembershipIdentifier(event[field], 'event.' + field);
+    }
+    if (event.type.startsWith('payment_')) {
+      parseMembershipIdentifier(event.invoiceId, 'event.invoiceId');
+    }
+    if (event.type === 'payment_succeeded') {
+      parseMembershipIdentifier(event.settlementId, 'event.settlementId');
+    }
+  } catch {
+    return null;
+  }
   // A valid fixture HMAC is not sufficient to promote malformed dates into
   // verified membership events. Reuse the projector's strict calendar parser.
   try {
