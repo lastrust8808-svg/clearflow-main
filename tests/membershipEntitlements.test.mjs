@@ -398,3 +398,19 @@ test('inherited verification and accessor-backed claims cannot authorize members
   assert.equal(project(scope, [validNullPrototype], asOf).status, 'active');
   assert.equal(project(scope, [paid()], asOf).status, 'active');
 });
+
+test('authenticated membership scope rejects extra privilege or billing claims', () => {
+  for (const claim of [
+    { entitled: true }, { verified: true }, { role: 'owner' },
+    { periodEnd: '2099-01-01T00:00:00Z' }, { invoiceId: 'inv-spoof' },
+  ]) {
+    // Even without any events, the scope must contain only the identity tuple.
+    assert.throws(() => project({ ...scope, ...claim }, [], asOf),
+      /unexpected membership scope claim/);
+    assert.throws(() => project({ ...scope, ...claim }, [paid()], asOf),
+      /unexpected membership scope claim/);
+  }
+  const nullPrototypeScope = Object.assign(Object.create(null), scope);
+  assert.equal(project(nullPrototypeScope, [paid()], asOf).entitled, true);
+  assert.equal(project(scope, [], asOf).status, 'pending');
+});
