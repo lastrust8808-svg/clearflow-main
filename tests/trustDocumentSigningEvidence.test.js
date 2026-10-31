@@ -516,3 +516,55 @@ test('historical document revocation receipts cannot be replayed as signing or t
   assert.throws(() => assess(withHistory('trustee-revocation-b', governanceWithRevocation)),
     /Reused cross-role signing provenance reference/);
 });
+
+test('signing preflights the entire version list before reading historical fields', () => {
+  const valid = packet().versionRegistry.versions[0];
+  const registryWith = versions => ({ ...packet().versionRegistry, versions });
+  const sparse = new Array(1);
+  assert.throws(() => assess({ versionRegistry: registryWith(sparse) }),
+    /must not contain holes/);
+  let getterCalls = 0;
+  const accessorList = [valid];
+  Object.defineProperty(accessorList, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('Version list getter executed'); },
+  });
+  assert.throws(() => assess({ versionRegistry: registryWith(accessorList) }),
+    /enumerable data elements/);
+  assert.equal(getterCalls, 0);
+  const hidden = [valid];
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => assess({ versionRegistry: registryWith(hidden) }),
+    /only array indices/);
+  const inherited = [valid];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  assert.throws(() => assess({ versionRegistry: registryWith(inherited) }),
+    /plain array/);
+  assert.equal(assess({ versionRegistry: registryWith(Object.freeze([Object.freeze({ ...valid })])) }).status,
+    'evidence_ready_for_review');
+});
+
+test('signing rejects accessor-backed and hidden historical version records without executing getters', () => {
+  const valid = packet().versionRegistry.versions[0];
+  const registryWith = version => ({
+    ...packet().versionRegistry, versions: [version],
+  });
+  for (const key of ['trustId', 'status', 'registeredAt', 'versionId']) {
+    let getterCalls = 0;
+    const malicious = { ...valid };
+    Object.defineProperty(malicious, key, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Historical version getter executed'); },
+    });
+    assert.throws(() => assess({ versionRegistry: registryWith(malicious) }),
+      /enumerable own data properties/);
+    assert.equal(getterCalls, 0);
+  }
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'settledMinor', { value: 100, enumerable: false });
+  assert.throws(() => assess({ versionRegistry: registryWith(hidden) }),
+    /unsupported fields/);
+  const symbol = { ...valid, [Symbol('paymentAuthorized')]: true };
+  assert.throws(() => assess({ versionRegistry: registryWith(symbol) }),
+    /unsupported fields/);
+});
