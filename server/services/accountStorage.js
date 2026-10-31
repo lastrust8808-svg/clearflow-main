@@ -11,6 +11,10 @@ const UNSAFE_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 // Bound nested records before serialization and after legacy JSON parsing.
 // Deeply nested user data can otherwise exhaust recursive application code.
 const MAX_RECORD_NESTING_DEPTH = 128;
+// Bound legacy JSON reads and new writes. Account metadata is not a binary
+// file store; oversized records require a reviewed migration, not unbounded
+// memory allocation during parsing or serialization.
+const MAX_RECORD_JSON_BYTES = 32 * 1024 * 1024;
 
 
 function accountDirectory(accountId) {
@@ -186,6 +190,27 @@ function assertBoundedParsedRecordDepth(record) {
   }
 }
 
+// Read at most the configured byte budget, even if another process appends
+// after fstat. A size-only check followed by readFile() is not a memory bound.
+async function readBoundedRecordText(handle, stat) {
+  if (stat.size > MAX_RECORD_JSON_BYTES) {
+    throw new Error('Storage record exceeds size limit.');
+  }
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, MAX_RECORD_JSON_BYTES + 1 - total));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, total);
+    if (bytesRead === 0) break;
+    total += bytesRead;
+    if (total > MAX_RECORD_JSON_BYTES) {
+      throw new Error('Storage record exceeds size limit.');
+    }
+    chunks.push(buffer.subarray(0, bytesRead));
+  }
+  return Buffer.concat(chunks, total).toString('utf8');
+}
+
 async function readJsonSafely(targetPath) {
   await secureExistingReadDirectories(path.dirname(targetPath));
   // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
@@ -210,7 +235,7 @@ async function readJsonSafely(targetPath) {
     // Do not return a JSON primitive or array as a tenant workspace/vault;
     // all account storage APIs persist top-level JSON objects. In particular,
     // non-Google app-data has no separate embedded identity scope check.
-    const record = JSON.parse(await handle.readFile('utf8'), (key, value) => {
+    const record = JSON.parse(await readBoundedRecordText(handle, stat), (key, value) => {
       if (UNSAFE_JSON_KEYS.has(key)) throw new Error('Unsafe storage record property.');
       return value;
     });
@@ -231,11 +256,15 @@ async function readJsonSafely(targetPath) {
 // transaction durability remain separate acceptance gates.
 async function writeJsonAtomically(targetPath, value) {
   await assertSafeStorageDirectory(path.dirname(targetPath));
+  const serialized = JSON.stringify(value, null, 2);
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_RECORD_JSON_BYTES) {
+    throw new Error('Storage record exceeds size limit.');
+  }
   const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
   let handle;
   try {
     handle = await fs.open(temporaryPath, 'wx', 0o600);
-    await handle.writeFile(JSON.stringify(value, null, 2), 'utf8');
+    await handle.writeFile(serialized, 'utf8');
     await handle.sync();
     await handle.close();
     handle = null;
