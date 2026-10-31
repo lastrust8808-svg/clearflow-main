@@ -1017,3 +1017,42 @@ test('oversized multibyte JSON writes preserve existing records', async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('malformed UTF-8 legacy records fail closed without replacing bank evidence', async () => {
+  const accountId = `invalid-utf8-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), load: () => loadAccountAppData(accountId) },
+    { file: path.join('files', 'doc-1.json'), save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), load: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: path.join('remittance', 'vendor-1.json'), save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), load: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: path.join('transaction-proof-chains', 'chains.json'), save: (v) => saveAccountTransactionProofVault(accountId, v), load: () => loadAccountTransactionProofVault(accountId) },
+    { file: path.join('plaid', 'connections.json'), save: (v) => saveAccountPlaidVault(accountId, v), load: () => loadAccountPlaidVault(accountId) },
+    { file: path.join('extractions', 'sig-1.json'), save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), load: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ memo: 'valid' });
+      const recordPath = path.join(root, fixture.file);
+      const original = await fs.readFile(recordPath);
+      const marker = Buffer.from('"valid"');
+      const offset = original.indexOf(marker);
+      assert.ok(offset >= 0, 'test fixture must contain the memo marker');
+      // A lossy UTF-8 decoder would replace these invalid bytes with U+FFFD
+      // and JSON.parse would still accept the altered financial memo.
+      const corrupted = Buffer.concat([
+        original.subarray(0, offset + 1),
+        Buffer.from([0xc3, 0x28]),
+        original.subarray(offset + marker.length - 1),
+      ]);
+      assert.equal(JSON.parse(corrupted.toString('utf8')).memo, '\uFFFD(');
+      await fs.writeFile(recordPath, corrupted);
+      await assert.rejects(fixture.load(), /invalid UTF-8|encoded data was not valid/i);
+      // Legitimate multibyte names and descriptions must remain supported.
+      await fixture.save({ memo: 'é 漢字 💳' });
+      assert.equal((await fixture.load()).memo, 'é 漢字 💳');
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
