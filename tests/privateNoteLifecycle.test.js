@@ -396,7 +396,7 @@ test('rejects unsupported legal or financial assertions in document-only lifecyc
 test('hidden and symbol-bearing lifecycle event claims fail closed', () => {
   const hidden = event('issued', 1);
   Object.defineProperty(hidden, 'settled', { value: true, enumerable: false });
-  assert.throws(() => project([hidden]), /Unsupported private note lifecycle event field/);
+  assert.throws(() => project([hidden]), /enumerable data properties/);
   const symbolic = event('issued', 1);
   symbolic[Symbol('deliveryProof')] = 'unverified';
   assert.throws(() => project([symbolic]), /Unsupported private note lifecycle event field/);
