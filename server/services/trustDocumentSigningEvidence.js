@@ -36,6 +36,30 @@ function digest(value, field) {
   return Buffer.from(value, 'hex');
 }
 
+// Reject malformed signature lists before reading any element. A sparse,
+// accessor-backed or extended array is not an independently reviewable set of
+// signer receipts; an accessor could also execute arbitrary code on read.
+function requirePlainAttestationList(attestations) {
+  if (!Array.isArray(attestations) || Object.getPrototypeOf(attestations) !== Array.prototype) {
+    throw new TypeError('Signature attestations must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(attestations);
+  const length = descriptors.length.value;
+  let count = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('Signature attestations must contain only array indices');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Signature attestations must contain enumerable data elements');
+    }
+    count++;
+  }
+  if (count !== length) throw new TypeError('Signature attestations must not contain holes');
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
  *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
@@ -76,9 +100,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       throw new Error('Signing governance ' + key + ' scope mismatch');
     }
   }
-  if (!Array.isArray(packet.attestations)) {
-    throw new TypeError('Signature attestations must be an array');
-  }
+  requirePlainAttestationList(packet.attestations);
   const documentHash = createHash('sha256').update(packet.content).digest();
   const signers = new Set();
   const evidenceRefs = new Set();
