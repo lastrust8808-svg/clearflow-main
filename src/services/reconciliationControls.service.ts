@@ -144,7 +144,6 @@ function hasCanonicalStatementRows(value: unknown): boolean {
     const prototype = Object.getPrototypeOf(row);
     if (prototype !== Object.prototype && prototype !== null) return false;
     const descriptors = Object.getOwnPropertyDescriptors(row);
-    if (REQUIRED_STATEMENT_ROW_FIELDS.some((key) => !Object.hasOwn(descriptors, key))) return false;
     for (const key of Reflect.ownKeys(descriptors)) {
       if (typeof key !== 'string' || !STATEMENT_ROW_FIELDS.has(key)) return false;
       const descriptor = descriptors[key];
@@ -187,7 +186,7 @@ export function buildReconciliationCloseMetrics(
   const parsedLineIds = new Set<string>();
   const hasInvalidLineIds = parsedLines.some((line) => {
     const id = line?.id;
-    if (!isValidStatementSourceRef(id) || parsedLineIds.has(id)) return true;
+    if (!Object.hasOwn(line, 'id') || !isValidStatementSourceRef(id) || parsedLineIds.has(id)) return true;
     parsedLineIds.add(id);
     return false;
   });
@@ -291,6 +290,22 @@ export function buildReconciliationCloseMetrics(
       matchedLineCount,
       isReadyToApprove: false,
       blockedReason: 'Statement lines must have unique, nonempty identifiers.',
+    };
+  }
+
+  // Preserve the existing specific identifier diagnostics above for legacy
+  // partial rows, while requiring all other financial fields to be own
+  // properties before a row can qualify for approval.
+  if (parsedLines.some((line) =>
+    REQUIRED_STATEMENT_ROW_FIELDS.some((key) => !Object.hasOwn(line, key))
+  )) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Parsed statement lines must be a valid array of source rows.',
     };
   }
 
