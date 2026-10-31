@@ -302,3 +302,118 @@ test('first no-op modification still flags an unreviewed record for review', () 
   assert.equal(replay.applied, 0);
   assert.equal(replay.replayed, 1);
 });
+
+test('stored and incoming feed getters are rejected without evaluating financial fields', () => {
+  const original = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  let getterCalls = 0;
+  const stored = { ...original.entries[0] };
+  Object.defineProperty(stored, 'amountCents', {
+    enumerable: true,
+    get() { getterCalls++; return 2575; },
+  });
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: [stored], events: [],
+  }), /malformed canonical feed/);
+  assert.equal(getterCalls, 0);
+
+  const incoming = event('tx-2');
+  Object.defineProperty(incoming, 'pending', {
+    enumerable: true,
+    get() { getterCalls++; return false; },
+  });
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: original.entries, events: [incoming],
+  }), /malformed canonical feed/);
+  assert.equal(getterCalls, 0);
+  assert.equal(original.entries[0].amountCents, 2575);
+});
+
+test('feed arrays reject sparse indices, getter elements and hidden metadata', () => {
+  let getterCalls = 0;
+  const getterEvents = [event('tx-1')];
+  Object.defineProperty(getterEvents, '0', {
+    enumerable: true,
+    get() { getterCalls++; return event('tx-1'); },
+  });
+  assert.throws(() => planBankFeedReplay({
+    ...base(), events: getterEvents,
+  }), /malformed canonical feed/);
+  assert.equal(getterCalls, 0);
+
+  const sparseEvents = new Array(2);
+  sparseEvents[1] = event('tx-1');
+  assert.throws(() => planBankFeedReplay({
+    ...base(), events: sparseEvents,
+  }), /malformed canonical feed/);
+
+  const decoratedExisting = [];
+  Object.defineProperty(decoratedExisting, 'hidden', { value: 'foreign evidence' });
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: decoratedExisting,
+  }), /malformed canonical feed/);
+
+  const decoratedAccounts = ['acct-a'];
+  decoratedAccounts[Symbol('hidden')] = 'foreign account';
+  assert.throws(() => planBankFeedReplay({
+    ...base(), allowedAccountIds: decoratedAccounts,
+  }), /malformed canonical feed/);
+});
+
+test('canonical provider and stored records reject unknown or hidden evidence fields', () => {
+  const original = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const cases = [
+    { ...original.entries[0], unexpectedBalance: 1000 },
+    Object.assign(Object.create({ inherited: true }), original.entries[0]),
+  ];
+  for (const stored of cases) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: [stored],
+    }), /malformed canonical feed/);
+  }
+
+  const hidden = event('tx-2');
+  Object.defineProperty(hidden, 'providerPayload', { value: 'not persisted' });
+  const withSymbol = event('tx-3');
+  withSymbol[Symbol('audit')] = 'not persisted';
+  const polluted = JSON.parse('{"kind":"added","accountId":"acct-a","transactionId":"tx-4","amountCents":2575,"pending":false,"__proto__":{"isAdmin":true}}');
+  for (const incoming of [event('tx-5', { unexpectedBalance: 1000 }), hidden, withSymbol, polluted]) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: original.entries, events: [incoming],
+    }), /malformed canonical feed/);
+  }
+  assert.equal(original.entries.length, 1);
+});
+
+test('removal events with attached posting or amount evidence fail closed', () => {
+  const original = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const snapshot = structuredClone(original.entries);
+  for (const extra of [
+    { amountCents: 2575 },
+    { pending: false },
+    { pendingTransactionId: 'pending-1' },
+    { amountCents: undefined },
+  ]) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: original.entries,
+      events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'tx-1', ...extra }],
+    }), /malformed canonical feed/);
+    assert.deepEqual(original.entries, snapshot);
+  }
+  const valid = planBankFeedReplay({
+    ...base(), existing: original.entries,
+    events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'tx-1' }],
+  });
+  assert.equal(valid.entries[0].status, 'removed');
+});
+
+test('frozen and null-prototype canonical JSON envelopes remain supported', () => {
+  const frozen = Object.freeze(event('tx-1'));
+  const nullPrototype = Object.assign(Object.create(null), event('tx-2'));
+  const result = planBankFeedReplay({
+    ...base(),
+    allowedAccountIds: Object.freeze(['acct-a', 'acct-b']),
+    events: Object.freeze([frozen, nullPrototype]),
+  });
+  assert.equal(result.applied, 2);
+  assert.deepEqual(result.entries.map((entry) => entry.transactionId), ['tx-1', 'tx-2']);
+});
