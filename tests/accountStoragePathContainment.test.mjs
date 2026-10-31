@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { promises as fs, constants as fsConstants } from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   loadAccountAppData,
   loadAccountDocumentFile,
@@ -162,6 +163,28 @@ test('atomic document replacement breaks hard links without modifying the victim
   } finally {
     await fs.rm(aliasPath, { recursive: true, force: true });
     await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
+test('named-pipe JSON record paths fail promptly without blocking a storage read', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('Linux named-pipe open semantics are required for this regression.');
+    return;
+  }
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const accountId = `named-pipe-record-${randomUUID()}`;
+  const accountPath = path.join(root, accountId);
+  try {
+    await fs.mkdir(accountPath, { recursive: true });
+    // Opening a FIFO read-only without O_NONBLOCK can hang before fstat
+    // ever checks whether the record is a regular JSON file.
+    execFileSync('mkfifo', [path.join(accountPath, 'app-data.json')]);
+    await assert.rejects(loadAccountAppData(accountId), /Unsafe storage record file/);
+    // An atomic replacement should still recover the poisoned record path.
+    await saveAccountAppData(accountId, { revision: 1 });
+    assert.deepEqual(await loadAccountAppData(accountId), { revision: 1 });
+  } finally {
+    await fs.rm(accountPath, { recursive: true, force: true });
   }
 });
 
