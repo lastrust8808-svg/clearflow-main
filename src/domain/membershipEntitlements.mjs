@@ -55,6 +55,23 @@ function instant(value, label) {
 
 // Share the projector's canonical identity policy with test-only webhook admission.
 // Neither validation nor fixture HMAC authenticates a production provider.
+// Date.parse truncates fractional seconds beyond milliseconds. Preserve the
+// remaining precision when ordering provider events and comparing paid-through
+// boundaries, so a later microsecond event cannot be treated as simultaneous.
+export function compareMembershipInstants(left, right) {
+  const leftMs = instant(left, 'left timestamp');
+  const rightMs = instant(right, 'right timestamp');
+  if (leftMs !== rightMs) return leftMs < rightMs ? -1 : 1;
+  const remainder = (value) => {
+    const fraction = /\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/.exec(value)?.[1] ?? '';
+    return fraction.padEnd(3, '0').slice(3);
+  };
+  const a = remainder(left), b = remainder(right);
+  const width = Math.max(a.length, b.length);
+  const paddedA = a.padEnd(width, '0'), paddedB = b.padEnd(width, '0');
+  return paddedA < paddedB ? -1 : paddedA > paddedB ? 1 : 0;
+}
+
 export { required as parseMembershipIdentifier, instant as parseMembershipInstant };
 
 /**
@@ -67,7 +84,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   const tenantId = required(scope.tenantId, 'tenantId');
   const memberId = required(scope.memberId, 'memberId');
   const subscriptionId = required(scope.subscriptionId, 'subscriptionId');
-  const cutoff = instant(asOf, 'asOf');
+  instant(asOf, 'asOf');
   if (!Array.isArray(events)) throw new TypeError('events must be an array');
 
   const seen = new Map();
@@ -99,7 +116,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
     if (Object.keys(event).some(field => !allowedFields.has(field))) {
       throw new Error('unexpected membership event claim');
     }
-    const occurred = instant(event.occurredAt, 'event.occurredAt');
+    instant(event.occurredAt, 'event.occurredAt');
     const normalizedEvent = {
       id, tenantId, memberId, subscriptionId,
       type: event.type, occurredAt: event.occurredAt,
@@ -110,7 +127,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
     if (event.type === 'payment_succeeded') {
       normalizedEvent.settlementId = required(event.settlementId, 'event.settlementId');
       normalizedEvent.periodEnd = required(event.periodEnd, 'event.periodEnd');
-      if (instant(normalizedEvent.periodEnd, 'event.periodEnd') <= occurred) {
+      if (compareMembershipInstants(normalizedEvent.periodEnd, event.occurredAt) <= 0) {
         throw new Error('payment period must end after settlement event');
       }
     }
@@ -150,15 +167,15 @@ export function projectMembershipEntitlement(scope, events, asOf) {
       });
     }
     seen.set(id, fingerprint);
-    normalized.push({ ...normalizedEvent, occurred });
+    normalized.push(normalizedEvent);
   }
 
-  normalized.sort((a, b) => a.occurred - b.occurred || ORDER[a.type] - ORDER[b.type] || a.id.localeCompare(b.id));
+  normalized.sort((a, b) => compareMembershipInstants(a.occurredAt, b.occurredAt) || ORDER[a.type] - ORDER[b.type] || a.id.localeCompare(b.id));
   // Provider events may arrive out of order. A refund invalidates the invoice's
   // settlement even when its recorded timestamp precedes the success event.
   // Only refunds effective at asOf participate in historical projections.
   const refundedInvoices = new Set(normalized
-    .filter((event) => event.type === 'payment_refunded' && event.occurred <= cutoff)
+    .filter((event) => event.type === 'payment_refunded' && compareMembershipInstants(event.occurredAt, asOf) <= 0)
     .map((event) => event.invoiceId));
   let status = 'pending';
   let periodEnd = null;
@@ -171,7 +188,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   let lastEventId = null;
   let processedEvents = 0;
   for (const event of normalized) {
-    if (event.occurred > cutoff) continue;
+    if (compareMembershipInstants(event.occurredAt, asOf) > 0) continue;
     processedEvents += 1;
     lastEventId = event.id;
     if (status === 'cancelled') continue; // cancellation is terminal for this subscription ID
@@ -189,7 +206,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
         // A newer invoice must not silently shorten an independently verified
         // paid-through period. Reject conflicting provider periods rather than
         // replacing a longer entitlement with an earlier expiration.
-        if (status === 'active' && instant(event.periodEnd, 'event.periodEnd') < instant(periodEnd, 'periodEnd')) {
+        if (status === 'active' && compareMembershipInstants(event.periodEnd, periodEnd) < 0) {
           throw new Error('payment period regresses existing entitlement');
         }
         status = 'active';
@@ -214,7 +231,7 @@ export function projectMembershipEntitlement(scope, events, asOf) {
         break;
     }
   }
-  if (status === 'active' && instant(periodEnd, 'periodEnd') <= cutoff) {
+  if (status === 'active' && compareMembershipInstants(periodEnd, asOf) <= 0) {
     status = 'expired';
   }
   return Object.freeze({
