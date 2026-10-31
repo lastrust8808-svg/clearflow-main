@@ -60,7 +60,7 @@ const EVENT_FEED_FIELDS = new Set([
 
 function assertCanonicalFeedList(value: unknown, label: string): void {
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
-    throw new Error(`Malformed canonical feed ${label} array.`);
+    throw new Error(`malformed canonical feed ${label} array.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
@@ -71,7 +71,7 @@ function assertCanonicalFeedList(value: unknown, label: string): void {
     const descriptor = descriptors[key];
     return !descriptor.enumerable || !Object.hasOwn(descriptor, 'value');
   })) {
-    throw new Error(`Malformed canonical feed ${label} array.`);
+    throw new Error(`malformed canonical feed ${label} array.`);
   }
 }
 
@@ -79,21 +79,21 @@ function assertCanonicalFeedObject(
   value: unknown, fields: ReadonlySet<string>, label: string
 ): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Malformed canonical feed ${label} object.`);
+    throw new Error(`malformed canonical feed ${label} object.`);
   }
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error(`Malformed canonical feed ${label} object.`);
+    throw new Error(`malformed canonical feed ${label} object.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
   for (const key of Reflect.ownKeys(descriptors)) {
     if (typeof key !== 'string' || !fields.has(key)) {
-      throw new Error(`Malformed canonical feed ${label} property.`);
+      throw new Error(`malformed canonical feed ${label} property.`);
     }
     const descriptor = descriptors[key];
     if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
         descriptor.value === undefined) {
-      throw new Error(`Malformed canonical feed ${label} property.`);
+      throw new Error(`malformed canonical feed ${label} property.`);
     }
   }
 }
@@ -136,7 +136,7 @@ export function planBankFeedReplay(input: FeedReplayInput): {
         (Object.hasOwn(event, 'amountCents') ||
          Object.hasOwn(event, 'pending') ||
          Object.hasOwn(event, 'pendingTransactionId'))) {
-      throw new Error('Malformed canonical feed removal metadata.');
+      throw new Error('malformed canonical feed removal metadata.');
     }
   }
   const allowed = new Set(input.allowedAccountIds);
