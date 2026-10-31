@@ -188,7 +188,7 @@ function assertBoundedParsedRecordDepth(record) {
         // integers beyond the exact IEEE-754 range. Neither may be returned
         // as trustworthy persisted financial evidence.
         if (typeof child === 'number' &&
-            (!Number.isFinite(child) || Math.abs(child) > Number.MAX_SAFE_INTEGER)) {
+            (!Number.isFinite(child) || Math.abs(child) > Number.MAX_SAFE_INTEGER || Object.is(child, -0))) {
           throw new TypeError('Unsafe storage record numeric value.');
         }
         if (child && typeof child === 'object') pending.push([child, depth + 1]);
@@ -334,7 +334,7 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet(), depth = 0
   if (typeof value === 'number' && Number.isFinite(value)) {
     // JSON.stringify cannot restore precision already lost in an unsafe
     // integer. Reject such values before any durable-save acknowledgement.
-    if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
+    if (Math.abs(value) > Number.MAX_SAFE_INTEGER || Object.is(value, -0)) {
       throw new TypeError('Unsafe storage record numeric value.');
     }
     return;
