@@ -435,3 +435,27 @@ test('private-note event admission rejects accessor and non-enumerable fields wi
   });
   assert.throws(() => project([event('issued', 1), event('presented', 2), hiddenPredecessor]), /enumerable data properties/);
 });
+
+test('snapshot metadata rejects inherited, unreviewed, hidden and symbol-keyed claims', () => {
+  const base = { ...scope, asOfAt: '2026-11-01T00:00:00.000Z', events: [event('issued', 1)] };
+  const inherited = Object.assign(Object.create({ paymentConfirmed: true }), base);
+  assert.throws(() => projectPrivateNoteLifecycle(inherited), /snapshot must be a plain data record/);
+  assert.throws(() => projectPrivateNoteLifecycle({ ...base, fundedMinor: 50000 }), /Unsupported private note snapshot field/);
+  const hidden = { ...base };
+  Object.defineProperty(hidden, 'defaulted', { value: true, enumerable: false });
+  assert.throws(() => projectPrivateNoteLifecycle(hidden), /snapshot fields must be enumerable data properties/);
+  const symbolic = { ...base, [Symbol('paymentProof')]: 'unverified' };
+  assert.throws(() => projectPrivateNoteLifecycle(symbolic), /Unsupported private note snapshot field/);
+  assert.equal(projectPrivateNoteLifecycle(Object.assign(Object.create(null), base)).status, 'issued');
+});
+
+test('snapshot accessor claims are rejected without invoking their getters', () => {
+  const base = { ...scope, asOfAt: '2026-11-01T00:00:00.000Z', events: [event('issued', 1)] };
+  let getterCalls = 0;
+  Object.defineProperty(base, 'tenantId', {
+    enumerable: true,
+    get() { getterCalls++; return scope.tenantId; },
+  });
+  assert.throws(() => projectPrivateNoteLifecycle(base), /snapshot fields must be enumerable data properties/);
+  assert.equal(getterCalls, 0);
+});
