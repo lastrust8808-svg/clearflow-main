@@ -1423,3 +1423,50 @@ test('ERP recovery receipts require canonical UTC timestamps across single, batc
     assert.equal(row.updatedAt, '2026-10-29T12:04:00Z');
   }
 });
+
+
+test('ERP persisted Date receipts reject forged Date wrappers and ignore overridden instance methods', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  const valid = new Date('2026-10-29T12:00:00Z');
+  // A native Date may have own methods that lie about its timestamp. Read
+  // the intrinsic Date slot rather than trusting either override.
+  valid.getTime = () => NaN;
+  valid.toISOString = () => '2099-01-01T00:00:00.000Z';
+  const db = fakeDatabase();
+  const query = db.query.bind(db);
+  db.query = async (...params) => {
+    const result = await query(...params);
+    return { rows: result.rows.map(row => ({ ...row, created_at: valid })) };
+  };
+  const receipt = await reserve({ db, ...args });
+  assert.equal(receipt.createdAt, '2026-10-29T12:00:00.000Z');
+
+  const fake = Object.create(Date.prototype);
+  fake.getTime = () => 0;
+  fake.toISOString = () => '2026-10-29T12:00:00.000Z';
+  const subclass = new (class extends Date {
+    getTime() { return 0; }
+    toISOString() { return '2026-10-29T12:00:00.000Z'; }
+  })('2026-10-29T12:00:00Z');
+  const proxy = new Proxy(new Date('2026-10-29T12:00:00Z'), {});
+  const revoked = Proxy.revocable(new Date('2026-10-29T12:00:00Z'), {});
+  revoked.revoke();
+
+  for (const forged of [fake, subclass, proxy, revoked.proxy]) {
+    const database = fakeDatabase();
+    const original = database.query.bind(database);
+    database.query = async (...params) => {
+      const result = await original(...params);
+      return { rows: result.rows.map(row => ({ ...row, created_at: forged })) };
+    };
+    await assert.rejects(reserve({ db: database, ...args }), /invalid creation timestamp/);
+    await assert.rejects(readErpOperationJobStatus({
+      authenticatedScope: scope, jobId: statusJobId,
+      db: { query: async () => ({ rows: [{
+        id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+        operation: 'invoice_delivery', status: 'queued',
+        created_at: '2026-10-29T12:00:00Z', updated_at: forged,
+      }] }) },
+    }), /invalid status timestamp/);
+  }
+});
