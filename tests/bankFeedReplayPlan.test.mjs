@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planBankFeedReplay } from '../src/services/bankFeedReplayPlan.service.ts';
+import { planBankFeedReplay, planBankFeedCursorPage } from '../src/services/bankFeedReplayPlan.service.ts';
 
 const base = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', allowedAccountIds: ['acct-a', 'acct-b'], existing: [], events: [] });
 const event = (transactionId, overrides = {}) => ({ kind: 'added', accountId: 'acct-a', transactionId, amountCents: 2575, pending: false, ...overrides });
@@ -478,4 +478,127 @@ test('stored feed records require own scope, amount, status and review fields', 
     }), /malformed canonical feed stored record/);
     assert.deepEqual(valid.entries, snapshot);
   }
+});
+
+const cursorPage = (overrides = {}) => ({
+  feed: { ...base(), events: [event('tx-cursor')] },
+  checkpoint: {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    cursor: null, revision: 0,
+  },
+  expectedCursor: null,
+  expectedRevision: 0,
+  nextCursor: 'opaque-cursor-1',
+  hasMore: false,
+  ...overrides,
+});
+
+test('cursor checkpoint advances only alongside a valid non-posting replay proposal', () => {
+  const input = cursorPage();
+  const original = structuredClone(input);
+  const result = planBankFeedCursorPage(input);
+  assert.equal(result.applied, 1);
+  assert.equal(result.commitRequired, true);
+  assert.deepEqual(result.nextCheckpoint, {
+    ...input.checkpoint, cursor: 'opaque-cursor-1', revision: 1,
+  });
+  assert.equal(result.entries[0].transactionId, 'tx-cursor');
+  assert.deepEqual(input, original, 'planning must not mutate provider or stored checkpoint evidence');
+
+  const next = planBankFeedCursorPage(cursorPage({
+    feed: { ...base(), existing: result.entries, events: [] },
+    checkpoint: result.nextCheckpoint,
+    expectedCursor: 'opaque-cursor-1',
+    expectedRevision: 1,
+    nextCursor: 'opaque-cursor-2',
+    hasMore: true,
+  }));
+  assert.equal(next.commitRequired, true);
+  assert.equal(next.nextCheckpoint.revision, 2);
+  assert.deepEqual(next.entries, result.entries);
+});
+
+test('stale or cross-connection cursor checkpoints fail closed', () => {
+  const baseline = cursorPage();
+  const variants = [
+    { expectedRevision: 1 },
+    { expectedCursor: 'stale-cursor' },
+    { checkpoint: { ...baseline.checkpoint, tenantId: 'tenant-b' } },
+    { checkpoint: { ...baseline.checkpoint, provider: 'mercury' } },
+    { checkpoint: { ...baseline.checkpoint, connectionId: 'other-item' } },
+  ];
+  for (const variant of variants) {
+    assert.throws(() => planBankFeedCursorPage(cursorPage(variant)),
+      /Stale feed cursor checkpoint|outside the authorized connection scope/);
+  }
+  assert.deepEqual(baseline.checkpoint, {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    cursor: null, revision: 0,
+  });
+});
+
+test('terminal empty polling can retain a cursor without a spurious commit', () => {
+  const input = cursorPage({
+    feed: { ...base(), events: [] },
+    checkpoint: { ...cursorPage().checkpoint, cursor: 'opaque-cursor-1', revision: 4 },
+    expectedCursor: 'opaque-cursor-1',
+    expectedRevision: 4,
+    nextCursor: 'opaque-cursor-1',
+  });
+  const result = planBankFeedCursorPage(input);
+  assert.equal(result.commitRequired, false);
+  assert.equal(result.applied, 0);
+  assert.deepEqual(result.nextCheckpoint, input.checkpoint);
+  for (const variant of [
+    { hasMore: true },
+    { feed: { ...base(), events: [event('tx-cursor')] } },
+  ]) {
+    assert.throws(() => planBankFeedCursorPage({ ...input, ...variant }),
+      /cannot retain its cursor/);
+  }
+});
+
+test('cursor page rejects malformed evidence before proposing any acknowledgement', () => {
+  const input = cursorPage();
+  const cases = [
+    { nextCursor: '' },
+    { nextCursor: ' padded ' },
+    { nextCursor: 'bad\\nline' },
+    { nextCursor: null },
+    { expectedCursor: 123 },
+    { hasMore: 'false' },
+    { checkpoint: { ...input.checkpoint, revision: -1 } },
+    { checkpoint: { ...input.checkpoint, revision: 1.5 } },
+    { checkpoint: { ...input.checkpoint, cursor: 'bad\\nline' } },
+  ];
+  for (const variant of cases) {
+    assert.throws(() => planBankFeedCursorPage(cursorPage(variant)),
+      /Invalid feed cursor checkpoint/);
+  }
+  const original = structuredClone(input.feed);
+  assert.throws(() => planBankFeedCursorPage(cursorPage({
+    feed: { ...input.feed, events: [event('tx-cursor'), event('tx-other', { amountCents: 0.5 })] },
+  })), /exact, safe integer/);
+  assert.deepEqual(input.feed, original);
+});
+
+test('cursor checkpoint rejects accessor or hidden metadata and revision overflow', () => {
+  let getterCalls = 0;
+  const checkpoint = cursorPage().checkpoint;
+  Object.defineProperty(checkpoint, 'cursor', {
+    enumerable: true,
+    get() { getterCalls++; return null; },
+  });
+  assert.throws(() => planBankFeedCursorPage(cursorPage({ checkpoint })),
+    /malformed canonical feed cursor checkpoint/);
+  assert.equal(getterCalls, 0);
+  const hidden = cursorPage().checkpoint;
+  Object.defineProperty(hidden, 'hiddenScope', { value: 'foreign' });
+  assert.throws(() => planBankFeedCursorPage(cursorPage({ checkpoint: hidden })),
+    /malformed canonical feed cursor checkpoint/);
+  const maxRevision = Number.MAX_SAFE_INTEGER;
+  assert.throws(() => planBankFeedCursorPage(cursorPage({
+    checkpoint: { ...cursorPage().checkpoint, revision: maxRevision },
+    expectedRevision: maxRevision,
+  })), /exceed safe integer precision/);
 });
