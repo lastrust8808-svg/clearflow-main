@@ -96,3 +96,40 @@ test('modified posted record retains a valid pending supersession link', () => {
   assert.equal(changed.entries[1].amountCents, 2600);
   assert.equal(changed.entries[1].requiresReview, true);
 });
+
+test('posted feed state never regresses to pending through a modification', () => {
+  const first = planBankFeedReplay({ ...base(), events: [event('posted-1')] });
+  const snapshot = structuredClone(first.entries);
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [event('posted-1', { kind: 'modified', pending: true })],
+  }), /cannot regress to pending/);
+  assert.deepEqual(first.entries, snapshot);
+});
+
+test('posted pending-to-posted linkage is immutable without audited correction', () => {
+  const pending = planBankFeedReplay({
+    ...base(), events: [
+      event('pending-1', { pending: true }),
+      event('pending-2', { pending: true }),
+    ],
+  });
+  const posted = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('posted-1', { pendingTransactionId: 'pending-1' })],
+  });
+  const snapshot = structuredClone(posted.entries);
+  for (const pendingTransactionId of [null, 'pending-2']) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: posted.entries,
+      events: [event('posted-1', { kind: 'modified', pendingTransactionId, amountCents: 2600 })],
+    }), /pending linkage cannot change/);
+    assert.deepEqual(posted.entries, snapshot);
+  }
+  const valid = planBankFeedReplay({
+    ...base(), existing: posted.entries,
+    events: [event('posted-1', { kind: 'modified', pendingTransactionId: 'pending-1', amountCents: 2600 })],
+  });
+  assert.equal(valid.entries.find((row) => row.transactionId === 'posted-1').amountCents, 2600);
+  assert.equal(valid.entries.find((row) => row.transactionId === 'pending-1').supersededBy, 'posted-1');
+});
