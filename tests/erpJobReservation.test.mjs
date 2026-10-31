@@ -1365,3 +1365,61 @@ test('ERP terminal failure receipt requires canonical UTC timestamps and monoton
   assert.equal(receipt.updatedAt, validUpdated);
   assert.equal('delivered' in receipt, false);
 });
+
+
+test('ERP recovery receipts require canonical UTC timestamps across single, batch and backlog reads', async () => {
+  const {
+    quarantineExpiredErpOperationJob: quarantine,
+    quarantineExpiredErpOperationJobsBatch: sweep,
+  } = await import('../server/services/erpJobReservation.js');
+  const base = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  const methods = [
+    row => quarantine({ ...base, jobId: claimedJobId,
+      db: { query: async () => ({ rows: [row] }) } }),
+    row => sweep({ ...base,
+      db: { query: async () => ({ rows: [row] }) } }),
+    row => list({ ...base,
+      db: { query: async () => ({ rows: [row] }) } }),
+  ];
+  // Date.parse normalizes February 30 and accepts timezone offsets. Neither
+  // can serve as an authenticated persisted recovery receipt.
+  const invalidCommon = [
+    { created_at: '2026-02-30T12:00:00Z' },
+    { created_at: '2026-10-29T12:00:00-04:00' },
+    { updated_at: '2026-02-30T12:04:00Z' },
+    { updated_at: '2026-10-29T12:04:00+00:00' },
+    { updated_at: '2026-10-29T12:04:00.1234Z' },
+    { updated_at: new Date(NaN) },
+    { updated_at: '2026-10-29T11:59:59Z' },
+  ];
+  for (const method of methods) {
+    for (const overrides of invalidCommon) {
+      await assert.rejects(method(quarantineRow(overrides)),
+        /invalid (quarantine|recovery|reconciliation) timestamp/,
+        JSON.stringify(overrides));
+    }
+  }
+  for (const method of methods.slice(1)) {
+    for (const dispatch_started_at of [
+      '2026-02-30T12:02:00Z',
+      '2026-10-29T12:02:00+00:00',
+      '2026-10-29T12:02:00.1234Z',
+      new Date(NaN),
+    ]) {
+      await assert.rejects(method(quarantineRow({ dispatch_started_at })),
+        /invalid (recovery|reconciliation) timestamp/);
+    }
+  }
+  const valid = quarantineRow({
+    created_at: '2026-10-29T12:00:00Z',
+    updated_at: '2026-10-29T12:04:00Z',
+    dispatch_started_at: '2026-10-29T12:02:00Z',
+  });
+  for (const method of methods) {
+    const result = await method(valid);
+    const row = result.jobs?.[0] ?? (Array.isArray(result) ? result[0] : result);
+    assert.equal(row.status, 'outcome_unknown');
+    assert.equal(row.createdAt, '2026-10-29T12:00:00Z');
+    assert.equal(row.updatedAt, '2026-10-29T12:04:00Z');
+  }
+});
