@@ -53,8 +53,9 @@ function instant(value, label) {
   return ms;
 }
 
-// Shared strict calendar parser for the test-only signed admission fixture.
-export { instant as parseMembershipInstant };
+// Share the projector's canonical identity policy with test-only webhook admission.
+// Neither validation nor fixture HMAC authenticates a production provider.
+export { required as parseMembershipIdentifier, instant as parseMembershipInstant };
 
 /**
  * @param {{tenantId:string, memberId:string, subscriptionId:string}} scope
