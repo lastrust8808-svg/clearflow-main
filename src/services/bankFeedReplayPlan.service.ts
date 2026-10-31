@@ -18,6 +18,9 @@ export interface FeedReplayEntry {
   pendingTransactionId?: string | null;
   supersededBy?: string;
   requiresReview: boolean;
+  // Optional SHA-256 of the exact raw provider payload, supplied by a trusted adapter.
+  // A shape-valid digest is NOT proof the adapter actually hashed provider bytes.
+  providerPayloadHash?: string;
 }
 
 export interface FeedReplayEvent {
@@ -27,6 +30,7 @@ export interface FeedReplayEvent {
   amountCents?: number;
   pending?: boolean;
   pendingTransactionId?: string | null;
+  providerPayloadHash?: string;
 }
 
 export interface FeedReplayInput {
@@ -52,10 +56,11 @@ const keyOf = (accountId: string, transactionId: string): string =>
 const STORED_FEED_FIELDS = new Set([
   'tenantId', 'provider', 'connectionId', 'accountId', 'transactionId',
   'amountCents', 'status', 'pendingTransactionId', 'supersededBy', 'requiresReview',
+  'providerPayloadHash',
 ]);
 const EVENT_FEED_FIELDS = new Set([
   'kind', 'accountId', 'transactionId', 'amountCents', 'pending',
-  'pendingTransactionId',
+  'pendingTransactionId', 'providerPayloadHash',
 ]);
 const INPUT_FEED_FIELDS = new Set([
   'tenantId', 'provider', 'connectionId', 'allowedAccountIds', 'existing', 'events',
@@ -118,6 +123,9 @@ function assertCanonicalFeedObject(
   }
 }
 
+const validPayloadHash = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
 function requireAmount(value: unknown): asserts value is number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || Object.is(value, -0)) {
     throw new Error('Feed amount must be an exact, safe integer number of cents.');
@@ -160,10 +168,15 @@ export function planBankFeedReplay(input: FeedReplayInput): {
       event, EVENT_FEED_FIELDS, 'provider event',
       event.kind === 'removed' ? EVENT_IDENTITY_FIELDS : EVENT_POSTING_FIELDS,
     );
+    if (Object.hasOwn(event, 'providerPayloadHash') &&
+        !validPayloadHash(event.providerPayloadHash)) {
+      throw new Error('Invalid provider payload fingerprint.');
+    }
     if (event.kind === 'removed' &&
         (Object.hasOwn(event, 'amountCents') ||
          Object.hasOwn(event, 'pending') ||
-         Object.hasOwn(event, 'pendingTransactionId'))) {
+         Object.hasOwn(event, 'pendingTransactionId') ||
+         Object.hasOwn(event, 'providerPayloadHash'))) {
       throw new Error('malformed canonical feed removal metadata.');
     }
   }
@@ -181,7 +194,9 @@ export function planBankFeedReplay(input: FeedReplayInput): {
         (entry.supersededBy != null && !validId(entry.supersededBy)) ||
         (entry.status === 'pending' && entry.pendingTransactionId != null) ||
         (entry.status === 'superseded' && !entry.supersededBy) ||
-        (entry.status !== 'superseded' && entry.supersededBy != null)) {
+        (entry.status !== 'superseded' && entry.supersededBy != null) ||
+        (Object.hasOwn(entry, 'providerPayloadHash') &&
+          !validPayloadHash(entry.providerPayloadHash))) {
       throw new Error('Existing feed record is outside the authorized scope or malformed.');
     }
     requireAmount(entry.amountCents);
@@ -243,9 +258,24 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     }
     const status: FeedEntryStatus = event.pending ? 'pending' : 'posted';
     const pendingTransactionId = event.pendingTransactionId ?? null;
+    const incomingHash = event.providerPayloadHash ?? null;
+    const storedHash = existing?.providerPayloadHash ?? null;
+    // An identical normalized transaction can still carry materially changed
+    // raw provider evidence. Never classify differing fingerprints as replay.
+    if (event.kind === 'modified' && existing) {
+      if (storedHash !== null && incomingHash === null) {
+        throw new Error('Provider fingerprint cannot be discarded by a modification.');
+      }
+      if (storedHash !== null && storedHash === incomingHash &&
+          (existing.status !== status || existing.amountCents !== event.amountCents ||
+           (existing.pendingTransactionId ?? null) !== pendingTransactionId)) {
+        throw new Error('Unchanged provider fingerprint conflicts with modified financial evidence.');
+      }
+    }
     if (event.kind === 'added' && existing) {
       if (existing.status === status && existing.amountCents === event.amountCents &&
-          (existing.pendingTransactionId ?? null) === pendingTransactionId) {
+          (existing.pendingTransactionId ?? null) === pendingTransactionId &&
+          storedHash === incomingHash) {
         replayed++;
         continue;
       }
@@ -275,7 +305,8 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     // on the first modification, even when the tracked fields are unchanged.
     if (event.kind === 'modified' && existing && existing.requiresReview &&
         existing.status === status && existing.amountCents === event.amountCents &&
-        (existing.pendingTransactionId ?? null) === pendingTransactionId) {
+        (existing.pendingTransactionId ?? null) === pendingTransactionId &&
+        storedHash === incomingHash) {
       replayed++;
       continue;
     }
@@ -297,6 +328,7 @@ export function planBankFeedReplay(input: FeedReplayInput): {
       existing.amountCents = event.amountCents;
       existing.status = status;
       existing.pendingTransactionId = pendingTransactionId;
+      if (incomingHash !== null) existing.providerPayloadHash = incomingHash;
       existing.requiresReview = true;
     } else {
       const entry: FeedReplayEntry = {
@@ -309,6 +341,7 @@ export function planBankFeedReplay(input: FeedReplayInput): {
         status,
         pendingTransactionId,
         requiresReview: true,
+        ...(incomingHash !== null ? { providerPayloadHash: incomingHash } : {}),
       };
       entries.push(entry);
       index.set(key, entry);
