@@ -60,6 +60,33 @@ function requirePlainAttestationList(attestations) {
   if (count !== length) throw new TypeError('Signature attestations must not contain holes');
 }
 
+// Signature receipts are evidence claims, not executable application objects.
+// Validate every receipt before reading any receipt field, including receipts
+// later in the list. This is structural admission, not receipt authentication.
+const ATTESTATION_FIELDS = new Set([
+  'tenantId', 'entityId', 'trustId', 'documentId', 'versionId',
+  'signerId', 'documentSha256', 'signedAt', 'explicitConsent',
+  'consentedAt', 'identityEvidenceRef', 'consentEvidenceRef',
+  'signatureEvidenceRef',
+]);
+
+function requirePlainAttestationRecord(attestation) {
+  if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation) ||
+      (Object.getPrototypeOf(attestation) !== Object.prototype &&
+       Object.getPrototypeOf(attestation) !== null)) {
+    throw new TypeError('Signature attestation must be a plain record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(attestation);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !ATTESTATION_FIELDS.has(key)) {
+      throw new TypeError('Signature attestation contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Signature attestation fields must be enumerable own data properties');
+    }
+  }
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
  *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
@@ -101,6 +128,7 @@ export function assessTrustDocumentSigningPacket(packet) {
     }
   }
   requirePlainAttestationList(packet.attestations);
+  for (const attestation of packet.attestations) requirePlainAttestationRecord(attestation);
   const documentHash = createHash('sha256').update(packet.content).digest();
   const signers = new Set();
   const evidenceRefs = new Set();
