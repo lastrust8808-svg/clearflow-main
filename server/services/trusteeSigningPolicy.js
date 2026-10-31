@@ -186,6 +186,15 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
       active.add(trusteeId);
     }
   }
+  // Evidence references and trustee/scope identifiers serve different roles.
+  // Check after collecting every appointment so a reference cannot masquerade
+  // as a trustee appearing later in the snapshot, regardless of list order.
+  for (const evidenceRef of governanceEvidenceRefs) {
+    if (trustees.has(evidenceRef) || evidenceRef === tenantId ||
+        evidenceRef === entityId || evidenceRef === trustId) {
+      throw new Error('Trustee governance evidence reference collides with identity or scope');
+    }
+  }
   const signers = new Set();
   for (const signer of snapshot.signerIds) {
     const signerId = id(signer, 'signerIds item');
