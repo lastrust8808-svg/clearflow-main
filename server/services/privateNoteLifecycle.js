@@ -70,6 +70,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
   const noticeDocumentRefs = new Set();
   let latestNoticeDocumentRef = null;
   const noticeEvidenceRefs = new Set();
+  // Distinguish immutable document identities from action-provenance receipts.
+  // Even a later notice document must not reuse an earlier evidence pointer.
+  const documentRefs = new Set();
   // Evidence references identify distinct lifecycle-action provenance records.
   // Reusing a pointer for a different action must fail closed; verification
   // of the referenced record remains the caller's responsibility.
@@ -96,6 +99,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
     if (next === null) throw new Error('Invalid private note lifecycle transition');
     if (event.type === 'issued') {
       issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
+      documentRefs.add(issuedDocumentRef);
       // An issuance without a provenance reference must not become an issued state.
       // The caller must independently verify this evidence before accepting it.
       issuedEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
@@ -138,6 +142,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
         throw new Error('Notice draft preparation evidence reference must be unique');
       }
       noticeDocumentRefs.add(noticeDocumentRef);
+      documentRefs.add(noticeDocumentRef);
       noticeEvidenceRefs.add(noticeEvidenceRef);
       latestNoticeDocumentRef = noticeDocumentRef;
     }
@@ -160,6 +165,14 @@ export function projectPrivateNoteLifecycle(snapshot) {
     status = next;
     lastEventId = eventId;
     lastEventAt = occurredAt;
+  }
+  // A document reference must not be recycled as an issuance, presentment,
+  // dispute or notice-preparation evidence receipt, regardless of event order.
+  // The caller must still authenticate both reference namespaces in storage.
+  for (const documentRef of documentRefs) {
+    if (lifecycleEvidenceRefs.has(documentRef)) {
+      throw new Error('Private note document and lifecycle evidence references must be distinct');
+    }
   }
   return Object.freeze({ status, eventCount: seen.size, lastEventId, lastEventAt });
 }
