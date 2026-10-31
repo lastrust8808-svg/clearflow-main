@@ -35,6 +35,60 @@ function timestamp(value, field) {
   return value;
 }
 
+// QR binding decisions must never consume inherited, accessor-backed, hidden or
+// unreviewed identity/status claims. This is structural admission only; the
+// caller remains responsible for authenticating immutable registry evidence.
+function plainQrRecord(record, label, allowed, required = allowed) {
+  if (!record || typeof record !== 'object' || Array.isArray(record) ||
+      (Object.getPrototypeOf(record) !== Object.prototype &&
+       Object.getPrototypeOf(record) !== null)) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(record);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError(label + ' fields must be enumerable data properties');
+    }
+    if (typeof key !== 'string' || !allowed.includes(key)) {
+      throw new TypeError('Unsupported ' + label + ' field');
+    }
+  }
+  for (const key of required) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Missing own ' + label + ' field: ' + key);
+    }
+  }
+}
+
+function plainQrBindings(bindings) {
+  if (!Array.isArray(bindings) || Object.getPrototypeOf(bindings) !== Array.prototype) {
+    throw new TypeError('QR bindings must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(bindings);
+  const length = descriptors.length.value;
+  let count = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('QR bindings must contain only array indices');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('QR bindings must contain enumerable data elements');
+    }
+    count++;
+  }
+  if (count !== length) throw new TypeError('QR bindings must not contain holes');
+}
+
+const QR_SCOPE_FIELDS = ['tenantId', 'entityId', 'trustId'];
+const QR_BINDING_FIELDS = [
+  ...QR_SCOPE_FIELDS, 'documentId', 'versionId', 'tokenHashSha256',
+  'status', 'issuedAt', 'revokedAt', 'revocationEvidenceRef',
+];
+const QR_BINDING_REQUIRED = QR_BINDING_FIELDS.slice(0, 8);
+
 /**
  * @param {{tenantId:string,entityId:string,bindings:Array<{
  *   tenantId:string,entityId:string,trustId:string,documentId:string,versionId:string,
@@ -44,16 +98,13 @@ function timestamp(value, field) {
  * @returns {{status:'bound',documentId:string,versionId:string}|{status:'unknown'}}
  */
 export function resolveTrustDocumentQrBinding(registry, lookup) {
-  if (!registry || typeof registry !== 'object' || Array.isArray(registry) ||
-      !Array.isArray(registry.bindings)) {
-    throw new TypeError('Tenant-scoped QR registry required');
-  }
+  plainQrRecord(registry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
+  plainQrBindings(registry.bindings);
   const tenantId = id(registry.tenantId, 'registry.tenantId');
   const entityId = id(registry.entityId, 'registry.entityId');
   const trustId = id(registry.trustId, 'registry.trustId');
-  if (!lookup || typeof lookup !== 'object' || Array.isArray(lookup)) {
-    throw new TypeError('QR lookup required');
-  }
+  plainQrRecord(lookup, 'QR lookup',
+    [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
   if (id(lookup.tenantId, 'lookup.tenantId') !== tenantId ||
       id(lookup.entityId, 'lookup.entityId') !== entityId ||
       id(lookup.trustId, 'lookup.trustId') !== trustId) {
@@ -72,9 +123,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   const versionWindows = new Map();
   let matched = null;
   for (const binding of registry.bindings) {
-    if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
-      throw new TypeError('Invalid QR binding');
-    }
+    plainQrRecord(binding, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED);
     if (binding.tenantId !== tenantId || binding.entityId !== entityId ||
         binding.trustId !== trustId) {
       throw new Error('QR binding tenant/entity scope mismatch');
