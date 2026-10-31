@@ -527,12 +527,13 @@ export async function failErpOperationJob({
       typeof record.actor_id !== 'string' || !record.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound failure');
   }
-  const stamp = value => value instanceof Date ? value.toISOString() : value;
-  const createdAt = stamp(record.created_at);
-  const updatedAt = stamp(record.updated_at);
-  if ([createdAt, updatedAt].some(
-    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
-  ) || Date.parse(updatedAt) < Date.parse(createdAt)) {
+  // A terminal failure is a persisted state receipt. Reject malformed or
+  // normalized dates, non-UTC strings and backwards chronology before
+  // acknowledging it to the worker; no provider delivery is implied.
+  const createdAt = persistedUtcTimestamp(record.created_at);
+  const updatedAt = persistedUtcTimestamp(record.updated_at);
+  if (createdAt === null || updatedAt === null ||
+      Date.parse(updatedAt) < Date.parse(createdAt)) {
     throw new Error('ERP job storage returned an invalid failure timestamp');
   }
   return Object.freeze({
