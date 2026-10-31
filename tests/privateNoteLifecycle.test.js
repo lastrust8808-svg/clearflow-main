@@ -334,3 +334,36 @@ test('journal event IDs cannot alias issued or future notice document versions',
     event('issued', 1), event('presented', 2), event('notice_prepared', 3),
   ]).status, 'notice_prepared');
 });
+
+test('actor identities cannot masquerade as journal events or independent evidence', () => {
+  assert.throws(() => project([
+    event('issued', 1, { actorId: 'event-1' }),
+  ]), /actor identifiers must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1, { actorId: 'evidence-2' }),
+    event('presented', 2),
+  ]), /actor identifiers must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1, { evidenceRef: 'actor-a' }),
+  ]), /actor identifiers must be distinct/);
+  assert.equal(project([
+    event('issued', 1), event('presented', 2),
+  ]).status, 'presented');
+});
+
+test('actor identities cannot alias issued or later notice documents', () => {
+  assert.throws(() => project([
+    event('issued', 1, { actorId: 'document-1' }),
+  ]), /actor identifiers must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1, { actorId: 'document-3' }),
+    event('presented', 2),
+    event('notice_prepared', 3),
+  ]), /actor identifiers must be distinct/);
+  // Multiple actions by the same principal remain valid when the identifier
+  // does not overlap the document, journal-event, or evidence namespaces.
+  assert.equal(project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3),
+  ]).status, 'notice_prepared');
+});
