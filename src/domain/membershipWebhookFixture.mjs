@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { types as nodeTypes } from 'node:util';
 import { parseMembershipIdentifier, parseMembershipInstant, compareMembershipInstants } from './membershipEntitlements.mjs';
 
 /**
@@ -115,8 +116,11 @@ export function verifyScopedMembershipWebhookFixture({
   // Authenticated scope must come from an explicit server-side identity record,
   // not inherited properties, getters, hidden fields, or proxy-like wrappers.
   // Check descriptors before reading any scope value to avoid executing getters.
+  // A Proxy can fabricate property descriptors or invoke traps during scope
+  // inspection. Reject it before any reflective operation or identity read,
+  // including revoked Proxies whose traps would otherwise throw.
   if (!authenticatedScope || typeof authenticatedScope !== 'object' ||
-      Array.isArray(authenticatedScope)) return null;
+      nodeTypes.isProxy(authenticatedScope) || Array.isArray(authenticatedScope)) return null;
   try {
     const prototype = Object.getPrototypeOf(authenticatedScope);
     if (prototype !== Object.prototype && prototype !== null) return null;
