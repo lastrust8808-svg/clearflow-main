@@ -231,3 +231,35 @@ test('version registry rejects malformed arrays before accessing any version', (
   assert.deepEqual(verify(Object.freeze([Object.freeze(version(1))])), { status: 'valid' });
   assert.deepEqual(verify(Object.freeze([])), { status: 'unknown' });
 });
+
+
+test('document version records reject getters, hidden claims and unsupported fields without executing code', () => {
+  let getterCalls = 0;
+  const accessor = version(1);
+  Object.defineProperty(accessor, 'sha256', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('untrusted getter executed'); },
+  });
+  const hidden = version(1);
+  Object.defineProperty(hidden, 'metadata', { value: 'unreviewed' });
+  const symbolic = version(1);
+  symbolic[Symbol('hidden')] = 'unreviewed';
+  const unsupported = version(1, { paymentReceived: true });
+  const inherited = Object.assign(Object.create({ versionId: 'version-1' }), version(1));
+  for (const invalid of [accessor, hidden, symbolic, unsupported, inherited]) {
+    assert.throws(() => check([invalid], { versionId: 'version-1', sha256: digestA }),
+      /Document version (fields must|contains unsupported|must be a plain)/);
+  }
+  assert.equal(getterCalls, 0);
+});
+
+test('document version verification accepts frozen and null-prototype plain records', () => {
+  const frozen = Object.freeze(version(1));
+  const nullPrototype = Object.assign(Object.create(null), version(1));
+  const proof = { versionId: 'version-1', sha256: digestA };
+  assert.deepEqual(check([frozen], proof), { status: 'valid' });
+  assert.deepEqual(check([nullPrototype], proof), { status: 'valid' });
+  assert.deepEqual(verifyTrustDocumentBytes(registry([nullPrototype]), {
+    versionId: 'version-1', content: Buffer.from('unmatched bytes'),
+  }), { status: 'unknown' });
+});
