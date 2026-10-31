@@ -301,3 +301,18 @@ test('even matching signed and authenticated scopes must use canonical identitie
     }
   }
 });
+
+
+test('signed fixture enforces submillisecond settlement period ordering', () => {
+  const occurredAt = '2026-10-29T12:00:00.000200Z';
+  assert.equal(verifyScoped(scopedInput({
+    ...scopedPayload, occurredAt, periodEnd: '2026-10-29T12:00:00.000100Z',
+  })), null);
+  assert.equal(verifyScoped(scopedInput({
+    ...scopedPayload, occurredAt, periodEnd: '2026-10-29T08:00:00.000200-04:00',
+  })), null);
+  const valid = verifyScoped(scopedInput({
+    ...scopedPayload, occurredAt, periodEnd: '2026-10-29T12:00:00.000300Z',
+  }));
+  assert.equal(valid?.verified, true);
+});
