@@ -1175,3 +1175,53 @@ test('reservation rejects nonnumeric minor-unit values before SQL without coerci
   assert.equal(accepted.created, true);
   assert.equal(db.calls, 1);
 });
+
+test('ERP job receipts reject malformed persisted timestamps and reversed status chronology', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  const validCreated = '2026-10-29T12:00:00Z';
+  const validUpdated = '2026-10-29T12:01:00Z';
+  const invalidCreated = [
+    '2026-02-30T12:00:00Z', '2026-10-29T24:00:00Z',
+    '2026-10-29T12:00:00-04:00', 'tomorrow', new Date(NaN),
+  ];
+  for (const created_at of invalidCreated) {
+    const db = fakeDatabase();
+    const query = db.query.bind(db);
+    db.query = async (...params) => {
+      const result = await query(...params);
+      return { rows: result.rows.map(row => ({ ...row, created_at })) };
+    };
+    await assert.rejects(reserve({ db, ...args }), /invalid creation timestamp/);
+  }
+
+  for (const [created_at, updated_at] of [
+    ...invalidCreated.map(created => [created, validUpdated]),
+    [validCreated, '2026-02-30T12:01:00Z'],
+    [validCreated, '2026-10-29T12:01:00+01:00'],
+    [validCreated, '2026-10-29T11:59:59Z'],
+    [validCreated, new Date(NaN)],
+  ]) {
+    const db = { async query() {
+      return { rows: [{
+        id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+        operation: 'invoice_delivery', status: 'queued', created_at, updated_at,
+      }] };
+    } };
+    await assert.rejects(readErpOperationJobStatus({
+      db, authenticatedScope: scope, jobId: statusJobId,
+    }), /invalid status timestamp/);
+  }
+
+  const db = { async query() {
+    return { rows: [{
+      id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+      operation: 'invoice_delivery', status: 'queued',
+      created_at: validCreated, updated_at: validUpdated,
+    }] };
+  } };
+  const status = await readErpOperationJobStatus({
+    db, authenticatedScope: scope, jobId: statusJobId,
+  });
+  assert.equal(status.createdAt, validCreated);
+  assert.equal(status.updatedAt, validUpdated);
+});
