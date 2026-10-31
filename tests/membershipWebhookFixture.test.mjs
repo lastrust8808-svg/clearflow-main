@@ -268,8 +268,11 @@ test('signed JSON Unicode escapes cannot smuggle lone surrogates into verified i
 
 test('signed fixture refuses noncanonical event identities before setting verified', () => {
   const invalid = [
-    ' padded', 'padded ', 'a\\u0000b', 'a\\u200bb',
-    'a\\u202eb', 'a\\ud800b', 'x'.repeat(256),
+    ' padded', 'padded ', 'a' + String.fromCharCode(0) + 'b',
+    'a' + String.fromCharCode(0x200b) + 'b',
+    'a' + String.fromCharCode(0x202e) + 'b',
+    'a' + String.fromCharCode(0xd800) + 'b',
+    'x'.repeat(256),
   ];
   for (const field of ['id', 'invoiceId', 'settlementId']) {
     for (const value of invalid) {
@@ -284,7 +287,12 @@ test('signed fixture refuses noncanonical event identities before setting verifi
 
 test('even matching signed and authenticated scopes must use canonical identities', () => {
   for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
-    for (const value of [' padded', 'padded ', 'a\\u200bb', 'a\\u202eb', 'x'.repeat(256)]) {
+    for (const value of [
+      ' padded', 'padded ',
+      'a' + String.fromCharCode(0x200b) + 'b',
+      'a' + String.fromCharCode(0x202e) + 'b',
+      'x'.repeat(256),
+    ]) {
       const candidate = { ...scopedPayload, [field]: value };
       const scope = { ...authenticatedScope, [field]: value };
       // Equality of attacker-controlled text is not authorization or canonicalization.
