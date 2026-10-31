@@ -13,6 +13,38 @@
  */
 const RATE_DENOMINATOR = 120_000n; // 12 months * 10,000 basis points
 const MAX_PERIODS = 600;
+const TERMS_FIELDS = new Set([
+  'tenantId', 'entityId', 'noteId', 'currency', 'principalMinor',
+  'annualRateBps', 'paymentCount', 'firstDueDate',
+]);
+
+// A projection must not silently accept inherited, accessor-derived, hidden,
+// or extra fields claiming an actual payment, execution, or settlement.
+function requirePlainNoteTerms(terms) {
+  if (!terms || typeof terms !== 'object' || Array.isArray(terms)) {
+    throw new TypeError('Note terms must be a plain data record');
+  }
+  const prototype = Object.getPrototypeOf(terms);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Note terms must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(terms);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !TERMS_FIELDS.has(key)) {
+      throw new TypeError('Unsupported note terms field');
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Note terms fields must be enumerable data properties');
+    }
+  }
+  for (const key of TERMS_FIELDS) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Note terms.' + key + ' must be an own data field');
+    }
+  }
+}
+
 
 function requiredString(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
@@ -76,9 +108,7 @@ function monthlyDueDate(first, offset) {
  * firstDueDate:string}} terms
  */
 export function buildFixedMonthlyNoteSchedule(terms) {
-  if (!terms || typeof terms !== 'object' || Array.isArray(terms)) {
-    throw new TypeError('Note terms required');
-  }
+  requirePlainNoteTerms(terms);
   const tenantId = requiredString(terms.tenantId, 'tenantId');
   const entityId = requiredString(terms.entityId, 'entityId');
   const noteId = requiredString(terms.noteId, 'noteId');
