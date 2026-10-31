@@ -401,3 +401,37 @@ test('hidden and symbol-bearing lifecycle event claims fail closed', () => {
   symbolic[Symbol('deliveryProof')] = 'unverified';
   assert.throws(() => project([symbolic]), /Unsupported private note lifecycle event field/);
 });
+
+test('private-note lifecycle events reject inherited or missing-own identity claims', () => {
+  const inherited = Object.assign(Object.create({ paidAt: '2026-10-01T12:00:00.000Z' }), event('issued', 1));
+  assert.throws(() => project([inherited]), /plain data record/);
+  const missingActor = event('issued', 1);
+  delete missingActor.actorId;
+  assert.throws(() => project([missingActor]), /Missing own.*actorId/);
+  const missingEvidence = event('issued', 1);
+  delete missingEvidence.evidenceRef;
+  assert.throws(() => project([missingEvidence]), /Missing own.*evidenceRef/);
+  const nullPrototypeRecord = Object.assign(Object.create(null), event('issued', 1));
+  assert.equal(project([nullPrototypeRecord]).status, 'issued');
+});
+
+test('private-note event admission rejects accessor and non-enumerable fields without invoking getters', () => {
+  const accessor = event('issued', 1);
+  let getterCalls = 0;
+  Object.defineProperty(accessor, 'type', {
+    enumerable: true,
+    get() { getterCalls++; return 'issued'; },
+  });
+  assert.throws(() => project([accessor]), /enumerable data properties/);
+  assert.equal(getterCalls, 0);
+  const hidden = event('issued', 1);
+  Object.defineProperty(hidden, 'evidenceRef', {
+    enumerable: false, value: 'evidence-1',
+  });
+  assert.throws(() => project([hidden]), /enumerable data properties/);
+  const hiddenPredecessor = event('notice_prepared', 3, { supersedesDocumentRef: 'document-2' });
+  Object.defineProperty(hiddenPredecessor, 'supersedesDocumentRef', {
+    enumerable: false, value: 'document-2',
+  });
+  assert.throws(() => project([event('issued', 1), event('presented', 2), hiddenPredecessor]), /enumerable data properties/);
+});
