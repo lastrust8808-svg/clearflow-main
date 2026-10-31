@@ -82,7 +82,14 @@ function authenticatedWorkerIdentity(scope) {
 // Only explicit, plain JSON data is accepted; no getters or custom toJSON.
 function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   if (depth > 32) throw new TypeError('ERP job payload nesting limit exceeded');
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (value === null || typeof value === 'boolean') return;
+  // Lone UTF-16 surrogates are not Unicode scalar values. Downstream UTF-8
+  // encoders replace them with U+FFFD, potentially changing recipient or
+  // invoice identities after the idempotency digest was persisted.
+  if (typeof value === 'string') {
+    if (/\p{Cs}/u.test(value)) throw new TypeError('ERP job payload contains malformed Unicode');
+    return;
+  }
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new TypeError('ERP job payload contains a non-finite number');
     // JSON.stringify(-0) becomes 0, collapsing distinct caller-supplied
@@ -138,6 +145,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     for (const [key, descriptor] of Object.entries(descriptors)) {
       // JSON.stringify silently omits non-enumerable object properties.
       // Reject them rather than hashing/storing a different financial payload.
+      if (/\p{Cs}/u.test(key)) {
+        throw new TypeError('ERP job payload contains malformed Unicode');
+      }
       if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key)) {
         throw new TypeError('ERP job payload contains an unsafe property');
