@@ -348,6 +348,37 @@ test('worker claims reject foreign or fabricated records and invalid leases', as
   }
 });
 
+test('worker claim receipts require canonical UTC timestamps and monotonic lease chronology', async () => {
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  const invalid = [
+    claimedRow({ claimed_at: '2026-02-30T12:01:00Z' }),
+    claimedRow({ created_at: '2026-10-29 12:00:00' }),
+    claimedRow({ claimed_at: '2026-10-29T13:01:00+01:00' }),
+    claimedRow({ lease_expires_at: 'tomorrow' }),
+    claimedRow({ claimed_at: new Date(NaN) }),
+    claimedRow({ created_at: new Date('2026-10-29T12:01:30Z') }),
+    claimedRow({ updated_at: new Date('2026-10-29T12:00:59Z') }),
+    claimedRow({ updated_at: new Date('2026-10-29T12:02:00Z') }),
+  ];
+  for (const row of invalid) {
+    await assert.rejects(claim({
+      ...input, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid worker lease timestamp/);
+  }
+  const valid = claimedRow({
+    created_at: '2026-10-29T12:00:00Z',
+    claimed_at: '2026-10-29T12:01:00.000Z',
+    updated_at: '2026-10-29T12:01:00Z',
+    lease_expires_at: '2026-10-29T12:02:00.000Z',
+  });
+  const receipt = await claim({
+    ...input, db: { query: async () => ({ rows: [valid] }) },
+  });
+  assert.equal(receipt.status, 'processing');
+  assert.equal(receipt.leaseExpiresAt, '2026-10-29T12:02:00.000Z');
+  assert.equal(Object.isFrozen(receipt), true);
+});
+
 test('proposed schema requires durable claim ownership and indexes queued work', () => {
   const sql = readFileSync(new URL('../server/db/erp_operation_jobs.proposed.sql', import.meta.url), 'utf8');
   assert.match(sql, /claimed_by text/);
