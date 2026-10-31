@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planBankFeedReplay, planBankFeedCursorPage } from '../src/services/bankFeedReplayPlan.service.ts';
+import { planBankFeedReplay, planBankFeedCursorPage, hashRawProviderPayloadBytes, verifyRawProviderPayloadHash } from '../src/services/bankFeedReplayPlan.service.ts';
 
 const base = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', allowedAccountIds: ['acct-a', 'acct-b'], existing: [], events: [] });
 const event = (transactionId, overrides = {}) => ({ kind: 'added', accountId: 'acct-a', transactionId, amountCents: 2575, pending: false, ...overrides });
@@ -673,4 +673,25 @@ test('malformed provider payload fingerprints fail closed for incoming and store
     events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'tx-hash', providerPayloadHash: 'b'.repeat(64) }],
   }), /malformed canonical feed removal metadata/);
   assert.deepEqual(first.entries, snapshot);
+});
+
+test('raw provider fingerprint hashes exact bytes and detects altered evidence', async () => {
+  const bytes = new TextEncoder().encode('abc');
+  const known = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  assert.equal(await hashRawProviderPayloadBytes(bytes), known);
+  assert.equal(await verifyRawProviderPayloadHash(bytes, known), known);
+  const changed = new TextEncoder().encode('abd');
+  assert.notEqual(await hashRawProviderPayloadBytes(changed), known);
+  await assert.rejects(verifyRawProviderPayloadHash(changed, known), /does not match/);
+  await assert.rejects(verifyRawProviderPayloadHash(bytes, known.toUpperCase()), /Invalid provider payload/);
+});
+
+test('raw provider hashing snapshots mutable bytes and rejects invalid or oversized evidence', async () => {
+  const bytes = new TextEncoder().encode('abc');
+  const digest = hashRawProviderPayloadBytes(bytes);
+  bytes[0] = 0;
+  assert.equal(await digest, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  for (const invalid of ['', new Uint8Array(0), new Uint8Array(1024 * 1024 + 1), null]) {
+    await assert.rejects(hashRawProviderPayloadBytes(invalid), /Raw provider payload/);
+  }
 });
