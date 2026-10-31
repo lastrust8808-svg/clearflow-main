@@ -203,7 +203,7 @@ test('fails closed on malformed hashes, statuses, timestamps and revocation evid
   assert.throws(() => resolveTrustDocumentQrBinding(registry, { ...lookup,
     tokenHashSha256: 'x'.repeat(64) }), /SHA-256/);
   assert.throws(() => resolveTrustDocumentQrBinding({ ...registry, bindings: [null] }, lookup),
-    /Invalid QR binding/);
+    /QR binding must be a plain data record/);
 });
 
 test('QR resolution requires canonical as-of time and rejects future-issued bindings', () => {
@@ -389,4 +389,72 @@ test('QR historical verification rejects future, malformed and pre-registration 
   assert.deepEqual(verifyTrustDocumentQrBytes(
     registry, lookup, versionRegistry(), finalizedBytes,
   ), { status: 'valid' });
+});
+
+test('QR registry and lookup reject inherited, accessor, hidden and unsupported claims', () => {
+  const { registry, lookup } = fixture();
+  const inherited = Object.assign(Object.create({ tenantId: 'spoofed' }), registry);
+  assert.throws(() => resolveTrustDocumentQrBinding(inherited, lookup), /QR registry must be a plain data record/);
+  const accessor = { ...lookup };
+  let getterCalls = 0;
+  Object.defineProperty(accessor, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return scope.tenantId; },
+  });
+  assert.throws(() => resolveTrustDocumentQrBinding(registry, accessor),
+    /QR lookup fields must be enumerable data properties/);
+  assert.equal(getterCalls, 0);
+  const hidden = { ...registry };
+  Object.defineProperty(hidden, 'revoked', { value: true, enumerable: false });
+  assert.throws(() => resolveTrustDocumentQrBinding(hidden, lookup),
+    /QR registry fields must be enumerable data properties/);
+  assert.throws(() => resolveTrustDocumentQrBinding(registry,
+    { ...lookup, [Symbol('privileged')]: true }), /Unsupported QR lookup field/);
+  const plain = Object.assign(Object.create(null), registry, {
+    bindings: Object.freeze([Object.assign(Object.create(null), registry.bindings[0])]),
+  });
+  assert.deepEqual(resolveTrustDocumentQrBinding(plain,
+    Object.assign(Object.create(null), lookup)),
+  { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
+});
+
+test('QR bindings reject malformed arrays and forged binding properties without executing getters', () => {
+  const { registry, lookup } = fixture();
+  const row = registry.bindings[0];
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [row, , row],
+  }, lookup), /QR bindings must not contain holes/);
+  const getterArray = [row];
+  let getterCalls = 0;
+  Object.defineProperty(getterArray, '0', {
+    enumerable: true, get() { getterCalls++; return row; },
+  });
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: getterArray,
+  }, lookup), /QR bindings must contain enumerable data elements/);
+  assert.equal(getterCalls, 0);
+  const hiddenArray = [row];
+  Object.defineProperty(hiddenArray, 'paymentReceived', { value: true });
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: hiddenArray,
+  }, lookup), /QR bindings must contain only array indices/);
+  const inheritedRow = Object.assign(Object.create({ status: 'active' }), row);
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [inheritedRow],
+  }, lookup), /QR binding must be a plain data record/);
+  const getterRow = { ...row };
+  Object.defineProperty(getterRow, 'status', {
+    enumerable: true, get() { getterCalls++; return 'active'; },
+  });
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [getterRow],
+  }, lookup), /QR binding fields must be enumerable data properties/);
+  assert.equal(getterCalls, 0);
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [{ ...row, settledMinor: 100 }],
+  }, lookup), /Unsupported QR binding field/);
+  const missing = { ...row };
+  delete missing.status;
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [missing],
+  }, lookup), /Missing own QR binding field: status/);
 });
