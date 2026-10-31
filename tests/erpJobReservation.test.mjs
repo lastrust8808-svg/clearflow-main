@@ -1139,7 +1139,7 @@ test('reservation rejects fractional minor units and negative zero without a dat
     { invoice: { adjustment: -0 } },
   ]) {
     await assert.rejects(reserve({ db, ...args, payload }),
-      /ERP job payload contains (a fractional minor-unit amount|negative zero)/);
+      /ERP job payload contains (an invalid minor-unit amount|negative zero)/);
   }
   assert.equal(db.calls, 0, 'ambiguous financial numbers must never reach SQL');
 
@@ -1148,6 +1148,29 @@ test('reservation rejects fractional minor units and negative zero without a dat
     db, ...args,
     payload: { invoice: { lines: [{ lineTotalMinor: 199 }, { feeCents: -25 }] },
       amountMinor: 0, taxRate: 0.075 },
+  });
+  assert.equal(accepted.created, true);
+  assert.equal(db.calls, 1);
+});
+
+
+test('reservation rejects nonnumeric minor-unit values before SQL without coercion', async () => {
+  const db = fakeDatabase();
+  for (const payload of [
+    { amountMinor: '12500' },
+    { invoice: { lines: [{ lineTotalMinor: '125.5' }] } },
+    { fees: [{ feeCents: null }] },
+    { ledger: { balanceMinor: true } },
+    { amountMinor: { cents: 125 } },
+    { amountMinor: [125] },
+  ]) {
+    await assert.rejects(reserve({ db, ...args, payload }), /invalid minor-unit amount/);
+  }
+  assert.equal(db.calls, 0, 'invalid minor-unit representations must not reach SQL');
+
+  const accepted = await reserve({
+    db, ...args,
+    payload: { amountMinor: 12500, refundCents: -25, feeCents: 0, taxRate: 0.075 },
   });
   assert.equal(accepted.created, true);
   assert.equal(db.calls, 1);
