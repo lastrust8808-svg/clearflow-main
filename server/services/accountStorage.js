@@ -184,6 +184,13 @@ function assertBoundedParsedRecordDepth(record) {
     }
     if (value && typeof value === 'object') {
       for (const child of Object.values(value)) {
+        // JSON.parse accepts exponents that overflow to Infinity and rounds
+        // integers beyond the exact IEEE-754 range. Neither may be returned
+        // as trustworthy persisted financial evidence.
+        if (typeof child === 'number' &&
+            (!Number.isFinite(child) || Math.abs(child) > Number.MAX_SAFE_INTEGER)) {
+          throw new TypeError('Unsafe storage record numeric value.');
+        }
         if (child && typeof child === 'object') pending.push([child, depth + 1]);
       }
     }
@@ -324,7 +331,14 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet(), depth = 0
   // non-finite numbers to null, and throws on bigint. Do not acknowledge a
   // durable save whose data is silently different from the submitted record.
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
-  if (typeof value === 'number' && Number.isFinite(value)) return;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // JSON.stringify cannot restore precision already lost in an unsafe
+    // integer. Reject such values before any durable-save acknowledgement.
+    if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
+      throw new TypeError('Unsafe storage record numeric value.');
+    }
+    return;
+  }
   if (typeof value !== 'object') {
     throw new TypeError('Storage record payload must contain JSON-compatible values.');
   }
