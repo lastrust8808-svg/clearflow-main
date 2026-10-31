@@ -317,3 +317,103 @@ export function planBankFeedReplay(input: FeedReplayInput): {
   }
   return { entries, applied, replayed };
 }
+
+/**
+ * Cursor-page checkpoint contract for a normalized provider adapter.
+ *
+ * This is a pure proposal, NOT a durable cursor acknowledgement. The server
+ * must load the checkpoint under authenticated tenant/connection scope, then
+ * compare-and-swap its revision and write all proposed entries plus the cursor
+ * in the SAME database transaction. A failed transaction must acknowledge
+ * neither rows nor cursor. Raw provider payload hashes belong in that audit.
+ */
+export interface FeedCursorCheckpoint {
+  tenantId: string;
+  provider: FeedProvider;
+  connectionId: string;
+  cursor: string | null;
+  revision: number;
+}
+
+export interface FeedCursorPageInput {
+  feed: FeedReplayInput;
+  checkpoint: FeedCursorCheckpoint;
+  expectedCursor: string | null;
+  expectedRevision: number;
+  nextCursor: string;
+  hasMore: boolean;
+}
+
+export interface FeedCursorPagePlan {
+  entries: FeedReplayEntry[];
+  applied: number;
+  replayed: number;
+  nextCheckpoint: FeedCursorCheckpoint;
+  commitRequired: boolean;
+}
+
+const CURSOR_PAGE_FIELDS = new Set([
+  'feed', 'checkpoint', 'expectedCursor', 'expectedRevision', 'nextCursor', 'hasMore',
+]);
+const CURSOR_CHECKPOINT_FIELDS = new Set([
+  'tenantId', 'provider', 'connectionId', 'cursor', 'revision',
+]);
+const validCursor = (value: unknown): value is string | null =>
+  value === null ||
+  (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
+   value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
+
+/**
+ * Fail closed on stale checkpoints and non-advancing nonempty pages.
+ * Empty terminal polls may legitimately retain the same provider cursor.
+ */
+export function planBankFeedCursorPage(input: FeedCursorPageInput): FeedCursorPagePlan {
+  assertCanonicalFeedObject(input, CURSOR_PAGE_FIELDS, 'cursor page', CURSOR_PAGE_FIELDS);
+  assertCanonicalFeedObject(
+    input.checkpoint, CURSOR_CHECKPOINT_FIELDS, 'cursor checkpoint', CURSOR_CHECKPOINT_FIELDS,
+  );
+  const checkpoint = input.checkpoint;
+  if (!validId(checkpoint.tenantId) || !validId(checkpoint.connectionId) ||
+      (checkpoint.provider !== 'plaid' && checkpoint.provider !== 'mercury') ||
+      !validCursor(checkpoint.cursor) || !validCursor(input.expectedCursor) ||
+      !validCursor(input.nextCursor) || input.nextCursor === null ||
+      !Number.isSafeInteger(checkpoint.revision) || checkpoint.revision < 0 ||
+      !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 ||
+      typeof input.hasMore !== 'boolean') {
+    throw new Error('Invalid feed cursor checkpoint or page metadata.');
+  }
+  // The inner planner independently validates the canonical feed envelope and
+  // every row before any proposed state can be returned.
+  const replay = planBankFeedReplay(input.feed);
+  if (checkpoint.tenantId !== input.feed.tenantId ||
+      checkpoint.provider !== input.feed.provider ||
+      checkpoint.connectionId !== input.feed.connectionId) {
+    throw new Error('Feed cursor checkpoint is outside the authorized connection scope.');
+  }
+  if (checkpoint.revision !== input.expectedRevision ||
+      checkpoint.cursor !== input.expectedCursor) {
+    throw new Error('Stale feed cursor checkpoint; reload and retry under transaction lock.');
+  }
+  if (input.nextCursor === checkpoint.cursor) {
+    if (input.hasMore || input.feed.events.length !== 0) {
+      throw new Error('Nonempty or incomplete provider page cannot retain its cursor.');
+    }
+    return {
+      ...replay,
+      nextCheckpoint: { ...checkpoint },
+      commitRequired: false,
+    };
+  }
+  if (checkpoint.revision === Number.MAX_SAFE_INTEGER) {
+    throw new Error('Feed cursor revision would exceed safe integer precision.');
+  }
+  return {
+    ...replay,
+    nextCheckpoint: {
+      ...checkpoint,
+      cursor: input.nextCursor,
+      revision: checkpoint.revision + 1,
+    },
+    commitRequired: true,
+  };
+}
