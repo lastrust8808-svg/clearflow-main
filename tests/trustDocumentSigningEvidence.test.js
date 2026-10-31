@@ -568,3 +568,38 @@ test('signing rejects accessor-backed and hidden historical version records with
   assert.throws(() => assess({ versionRegistry: registryWith(symbol) }),
     /unsupported fields/);
 });
+
+test('signing preflights every receipt record without executing later receipt getters', () => {
+  let getterCalls = 0;
+  const malicious = attestation('b');
+  Object.defineProperty(malicious, 'signerId', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('Untrusted signer getter executed'); },
+  });
+  assert.throws(() => assess({
+    attestations: [attestation('a'), malicious],
+  }), /enumerable own data properties/);
+  assert.equal(getterCalls, 0);
+  const hidden = attestation('b');
+  Object.defineProperty(hidden, 'consentEvidenceRef', {
+    enumerable: false, configurable: true, value: 'hidden-consent',
+  });
+  assert.throws(() => assess({ attestations: [attestation('a'), hidden] }),
+    /enumerable own data properties/);
+});
+
+test('signing rejects unsupported receipt claims and custom prototypes; frozen plain receipts remain valid', () => {
+  const unknown = { ...attestation('a'), paymentReceived: true };
+  assert.throws(() => assess({ attestations: [unknown] }), /unsupported fields/);
+  const symbol = { ...attestation('a'), [Symbol('settled')]: true };
+  assert.throws(() => assess({ attestations: [symbol] }), /unsupported fields/);
+  const inherited = attestation('a');
+  Object.setPrototypeOf(inherited, { paymentAuthorized: true });
+  assert.throws(() => assess({ attestations: [inherited] }), /plain record/);
+  assert.equal(assess({
+    attestations: [Object.freeze(attestation('a'))],
+  }).status, 'evidence_ready_for_review');
+  assert.equal(assess({
+    attestations: [Object.assign(Object.create(null), attestation('a'))],
+  }).status, 'evidence_ready_for_review');
+});
