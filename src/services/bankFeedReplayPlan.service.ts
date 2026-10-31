@@ -66,7 +66,7 @@ function assertCanonicalFeedList(value: unknown, label: string): void {
   const keys = Reflect.ownKeys(descriptors);
   if (keys.length !== value.length + 1 || keys.some((key) => {
     if (key === 'length') return false;
-    if (typeof key !== 'string' || !/^(0|[1-9]\\d*)$/.test(key) ||
+    if (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
         Number(key) >= value.length) return true;
     const descriptor = descriptors[key];
     return !descriptor.enumerable || !Object.hasOwn(descriptor, 'value');
