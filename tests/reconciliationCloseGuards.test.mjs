@@ -837,12 +837,36 @@ test('controller signoff must occur after statement import even across timezone 
   }
 });
 
-test('pending controller review does not require an approval timestamp', () => {
-  const metrics = buildReconciliationCloseMetrics(
-    reconciliation({ closeApprovalStatus: 'pending', statementImportedAt: undefined }),
-    account
-  );
-  assert.equal(metrics.isReadyToApprove, true);
+test('pending controller review rejects missing, malformed and future statement import timestamps', () => {
+  for (const statementImportedAt of [
+    undefined, null, '', 'not-a-date', '2026-02-30T12:00:00Z',
+    '2999-01-01T00:00:00Z', '2026-10-27T12:00:00', '2026-10-27T12:00:00+15:00',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeApprovalStatus: 'pending', statementImportedAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, String(statementImportedAt));
+    assert.match(metrics.blockedReason, /valid statement import timestamp/);
+  }
+});
+
+test('pending review needs import evidence but not a controller signoff timestamp', () => {
+  for (const statementImportedAt of [
+    '2026-10-27T12:00:00Z',
+    '2026-10-27T08:00:00-04:00',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'pending',
+        statementImportedAt,
+        controllerSignoffName: undefined,
+        controllerSignoffAt: undefined,
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, true, statementImportedAt);
+  }
 });
 
 test('controller approval rejects statement-row resolutions outside the import-to-signoff window', () => {
