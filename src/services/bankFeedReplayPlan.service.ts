@@ -167,6 +167,16 @@ export function planBankFeedReplay(input: FeedReplayInput): {
         throw new Error('Posted feed pending linkage cannot change without audited correction.');
       }
     }
+    // A repeated provider modification with no observable change must not
+    // create another applied event. Preserve review eligibility: an existing
+    // record that has not yet been flagged for review must still be flagged
+    // on the first modification, even when the tracked fields are unchanged.
+    if (event.kind === 'modified' && existing && existing.requiresReview &&
+        existing.status === status && existing.amountCents === event.amountCents &&
+        (existing.pendingTransactionId ?? null) === pendingTransactionId) {
+      replayed++;
+      continue;
+    }
     // A posted transaction may replace a pending one only through an explicit
     // provider linkage on the same account. Never match merely by amount/date.
     if (pendingTransactionId) {
