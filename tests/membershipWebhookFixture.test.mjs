@@ -316,3 +316,31 @@ test('signed fixture enforces submillisecond settlement period ordering', () => 
   }));
   assert.equal(valid?.verified, true);
 });
+
+test('signed fixture refuses inherited, accessor-backed, or hidden authenticated scope claims', () => {
+  const inherited = Object.create(authenticatedScope);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: inherited })), null);
+
+  const getterScope = { ...authenticatedScope };
+  let getterCalls = 0;
+  Object.defineProperty(getterScope, 'tenantId', {
+    enumerable: true,
+    get() { getterCalls++; return authenticatedScope.tenantId; },
+  });
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: getterScope })), null);
+  assert.equal(getterCalls, 0, 'scope accessors must never execute');
+
+  const hiddenScope = { ...authenticatedScope };
+  Object.defineProperty(hiddenScope, 'isAdmin', { value: true, enumerable: false });
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: hiddenScope })), null);
+
+  const symbolScope = { ...authenticatedScope, [Symbol('trusted')]: true };
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: symbolScope })), null);
+
+  const extraScope = { ...authenticatedScope, role: 'owner' };
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: extraScope })), null);
+
+  const nullPrototypeScope = Object.assign(Object.create(null), authenticatedScope);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: nullPrototypeScope }))?.verified, true);
+  assert.equal(verifyScoped(scopedInput())?.verified, true);
+});
