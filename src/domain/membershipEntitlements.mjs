@@ -30,6 +30,28 @@ function required(value, label) {
   return value;
 }
 
+// Never let inherited "verified" flags, inherited tenant identities, accessors,
+// or non-enumerable claims enter the trusted entitlement projection. The
+// production adapter must still authenticate the provider and persist events.
+function assertPlainMembershipRecord(value, label, requiredFields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+    throw new TypeError(label + ' must be a plain membership record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError(label + ' must contain only own enumerable data fields');
+    }
+  }
+  for (const field of requiredFields) {
+    if (!Object.hasOwn(descriptors, field)) {
+      throw new TypeError(label + ' is missing an own ' + field + ' field');
+    }
+  }
+}
+
 function instant(value, label) {
   required(value, label);
   // Date.parse silently normalizes invalid calendar dates (e.g. February 30)
@@ -80,7 +102,7 @@ export { required as parseMembershipIdentifier, instant as parseMembershipInstan
  * @param {string} asOf Explicit ISO timestamp for deterministic expiry decisions.
  */
 export function projectMembershipEntitlement(scope, events, asOf) {
-  if (!scope || typeof scope !== 'object') throw new TypeError('scope is required');
+  assertPlainMembershipRecord(scope, 'scope', ['tenantId', 'memberId', 'subscriptionId']);
   const tenantId = required(scope.tenantId, 'tenantId');
   const memberId = required(scope.memberId, 'memberId');
   const subscriptionId = required(scope.subscriptionId, 'subscriptionId');
@@ -92,9 +114,9 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   const settledInvoices = new Map();
   const normalized = [];
   for (const event of events) {
-    if (!event || typeof event !== 'object' || Array.isArray(event)) {
-      throw new TypeError('invalid membership event');
-    }
+    assertPlainMembershipRecord(event, 'membership event', [
+      'id', 'type', 'tenantId', 'memberId', 'subscriptionId', 'occurredAt', 'verified',
+    ]);
     const id = required(event.id, 'event.id');
     if (event.tenantId !== tenantId || event.memberId !== memberId || event.subscriptionId !== subscriptionId) {
       throw new Error('membership event scope mismatch');
