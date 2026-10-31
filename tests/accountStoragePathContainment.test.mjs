@@ -285,6 +285,44 @@ test('scoped records reject missing or incorrect record identifiers without supp
   }
 });
 
+test('explicit legacy app-data identity rejects copied records and conflicting writes', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const sourceId = `legacy-source-${randomUUID()}`;
+  const destinationId = `legacy-destination-${randomUUID()}`;
+  const sourcePath = path.join(root, sourceId);
+  const destinationPath = path.join(root, destinationId);
+  try {
+    const original = { accountId: sourceId, revision: 1, ledger: { cents: 2500 } };
+    await saveAccountAppData(sourceId, original);
+    await fs.mkdir(destinationPath, { recursive: true });
+    // A regular copy has no symlink/hard-link evidence. Explicit identity
+    // must still reject cross-account reads for non-Google legacy records.
+    await fs.copyFile(
+      path.join(sourcePath, 'app-data.json'),
+      path.join(destinationPath, 'app-data.json')
+    );
+    await assert.rejects(
+      loadAccountAppData(destinationId),
+      /Stored app data accountId does not match requested account/
+    );
+    await assert.rejects(
+      saveAccountAppData(destinationId, { ...original, revision: 2 }),
+      /Stored app data accountId does not match requested account/
+    );
+    assert.deepEqual(await loadAccountAppData(sourceId), original);
+    // Correctly scoped explicit identities remain supported.
+    const valid = { accountId: destinationId, revision: 3 };
+    await saveAccountAppData(destinationId, valid);
+    assert.deepEqual(await loadAccountAppData(destinationId), valid);
+    // Existing legacy records without an embedded accountId remain readable.
+    await saveAccountAppData(destinationId, { revision: 4 });
+    assert.deepEqual(await loadAccountAppData(destinationId), { revision: 4 });
+  } finally {
+    await fs.rm(destinationPath, { recursive: true, force: true });
+    await fs.rm(sourcePath, { recursive: true, force: true });
+  }
+});
+
 test('google app-data scope rejects an independently copied workspace from another account', async () => {
   const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
   const victimEmail = `victim-${randomUUID()}@example.test`;
