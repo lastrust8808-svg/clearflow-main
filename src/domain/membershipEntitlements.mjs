@@ -86,6 +86,19 @@ export function projectMembershipEntitlement(scope, events, asOf) {
       throw new Error('unverified membership event');
     }
     if (!TYPES.has(event.type)) throw new Error('unsupported membership event type');
+    // Reject unexpected provider/client claims rather than silently discarding
+    // them from the normalized event fingerprint. A duplicate event ID with
+    // conflicting extra fields must never appear equivalent after projection.
+    // This is defense in depth; verified:true still requires a trusted adapter.
+    const commonFields = ['id', 'type', 'tenantId', 'memberId',
+      'subscriptionId', 'occurredAt', 'verified'];
+    const paymentFields = event.type.startsWith('payment_') ? ['invoiceId'] : [];
+    const settlementFields = event.type === 'payment_succeeded'
+      ? ['settlementId', 'periodEnd'] : [];
+    const allowedFields = new Set([...commonFields, ...paymentFields, ...settlementFields]);
+    if (Object.keys(event).some(field => !allowedFields.has(field))) {
+      throw new Error('unexpected membership event claim');
+    }
     const occurred = instant(event.occurredAt, 'event.occurredAt');
     const normalizedEvent = {
       id, tenantId, memberId, subscriptionId,
