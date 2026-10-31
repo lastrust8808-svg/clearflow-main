@@ -1107,3 +1107,23 @@ test('worker identity provenance is required for all ERP job mutations and recov
   assert.equal(await claim({ db: { query: async () => ({ rows: [] }) },
     authenticatedWorker, operation: 'invoice_delivery' }), null);
 });
+
+test('reservation rejects unsafe financial integers before SQL without rejecting exact boundary values', async () => {
+  const db = fakeDatabase();
+  const invalidPayloads = [
+    { amountMinor: Number.MAX_SAFE_INTEGER + 1 },
+    { invoice: { lines: [{ quantity: -(Number.MAX_SAFE_INTEGER + 1) }] } },
+    { balances: [0, 2 ** 53] },
+  ];
+  for (const payload of invalidPayloads) {
+    await assert.rejects(reserve({ db, ...args, payload }), /unsafe integer/);
+  }
+  assert.equal(db.calls, 0, 'unsafe amounts must not reserve jobs');
+
+  const accepted = await reserve({
+    db, ...args,
+    payload: { amountMinor: Number.MAX_SAFE_INTEGER, adjustment: -Number.MAX_SAFE_INTEGER, taxRate: 0.075 },
+  });
+  assert.equal(accepted.created, true);
+  assert.equal(db.calls, 1);
+});
