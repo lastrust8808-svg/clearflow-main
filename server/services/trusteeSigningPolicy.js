@@ -145,6 +145,15 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
       calendarDate(appointment.acceptedOn, 'appointment.acceptedOn');
     const revokedOn = appointment.revokedOn == null ? null :
       calendarDate(appointment.revokedOn, 'appointment.revokedOn');
+    // Evidence references describe specific acceptance/revocation events. A
+    // pointer without its corresponding event date is a contradictory claim,
+    // not independent proof of authority or removal of authority.
+    if (acceptedOn === null && appointment.acceptanceEvidenceRef != null) {
+      throw new Error('Unaccepted trustee appointment cannot claim acceptance evidence');
+    }
+    if (revokedOn === null && appointment.revocationEvidenceRef != null) {
+      throw new Error('Unrevoked trustee appointment cannot claim revocation evidence');
+    }
     if (acceptedOn !== null) {
       const acceptanceEvidenceRef = id(appointment.acceptanceEvidenceRef, 'appointment.acceptanceEvidenceRef');
       if (acceptanceEvidenceRefs.has(acceptanceEvidenceRef)) {
