@@ -61,6 +61,31 @@ function requirePlainVersionList(versions) {
   if (count !== length) throw new TypeError('Document versions must not contain holes');
 }
 
+// A version is a financial/legal document provenance record, not an arbitrary
+// executable object. Reject unsupported assertions and accessor/hidden fields
+// before reading any version data. This does not authenticate its source.
+const VERSION_FIELDS = new Set([
+  'versionId', 'tenantId', 'entityId', 'trustId', 'documentId',
+  'sequence', 'sha256', 'status', 'registeredAt', 'evidenceRef',
+  'finalizedAt', 'revokedAt', 'revocationEvidenceRef',
+]);
+
+function requirePlainVersionRecord(version) {
+  if (!version || typeof version !== 'object' || Array.isArray(version) ||
+      (Object.getPrototypeOf(version) !== Object.prototype && Object.getPrototypeOf(version) !== null)) {
+    throw new TypeError('Document version must be a plain record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(version);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !VERSION_FIELDS.has(key)) {
+      throw new TypeError('Document version contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Document version fields must be enumerable own data properties');
+    }
+  }
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,versions:Array<{
  *   versionId:string,tenantId:string,entityId:string,trustId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
@@ -86,9 +111,7 @@ export function verifyTrustDocumentVersion(registry, proof) {
   let target = null;
   for (let i = 0; i < registry.versions.length; i++) {
     const version = registry.versions[i];
-    if (!version || typeof version !== 'object' || Array.isArray(version)) {
-      throw new TypeError('Invalid document version');
-    }
+    requirePlainVersionRecord(version);
     const id = identifier(version.versionId, 'version.versionId');
     for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
       if (version[key] !== registry[key]) throw new Error('Document version ' + key + ' scope mismatch');
