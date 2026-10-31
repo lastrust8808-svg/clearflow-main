@@ -295,3 +295,27 @@ test('billing identities reject padded, invisible, malformed and oversized value
   }
   assert.equal(project(scope, [paid()], asOf).entitled, true);
 });
+
+test('verified projection rejects unexpected claims rather than silently dropping them', () => {
+  for (const [candidate, label] of [
+    [paid('extra-paid', { entitled: true }), 'paid entitlement'],
+    [paid('extra-role', { role: 'owner' }), 'paid role'],
+    [paid('extra-provider', { providerVerified: true }), 'provider assertion'],
+    [event('extra-cancel', 'subscription_cancelled', undefined, { invoiceId: 'inv-1' }), 'cancel payment field'],
+    [event('extra-created', 'subscription_created', undefined, { periodEnd: '2099-01-01T00:00:00Z' }), 'created period'],
+    [event('extra-failed', 'payment_failed', undefined, {
+      invoiceId: 'inv-2', settlementId: 'settle-spoof',
+    }), 'failed settlement'],
+    [event('extra-refund', 'payment_refunded', undefined, {
+      invoiceId: 'inv-1', paid: true,
+    }), 'refund paid flag'],
+  ]) {
+    assert.throws(() => project(scope, [candidate], asOf),
+      /unexpected membership event claim/, label);
+  }
+  // Previously the unknown field was omitted from the normalized fingerprint,
+  // so a conflicting duplicate could be silently treated as the same event.
+  assert.throws(() => project(scope, [paid(), paid('evt-paid', { role: 'admin' })], asOf),
+    /unexpected membership event claim/);
+  assert.equal(project(scope, [paid()], asOf).entitled, true);
+});
