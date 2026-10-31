@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - 'src/services/reconciliationControls.service.ts'
+      - 'src/services/bankFeedReplayPlan.service.ts'
       - 'tests/reconciliationCloseGuards.test.mjs'
+      - 'tests/bankFeedReplayPlan.test.mjs'
       - '.github/workflows/banking-reconciliation-guards.yml'
   push:
     branches:
@@ -26,4 +28,6 @@ jobs:
         with:
           node-version: '22'
       - name: Verify close guards (no external provider credentials)
-        run: node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs
+        run: |
+          node --experimental-strip-types --check src/services/bankFeedReplayPlan.service.ts
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs
