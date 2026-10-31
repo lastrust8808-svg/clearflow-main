@@ -247,6 +247,34 @@ test('closed reconciliation cannot regain approval eligibility from stale ready-
   }
 });
 
+test('empty or malformed persisted close job markers block replay eligibility', () => {
+  for (const closeJobId of ['', 0, false, [], {}]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closeJobId }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(closeJobId));
+    assert.match(metrics.blockedReason, /completed reconciliation cannot be approved again/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(
+    reconciliation({ closeJobId: null }), account
+  ).isReadyToApprove, true);
+});
+
+test('empty or malformed persisted closure timestamps block replay eligibility', () => {
+  for (const closedAt of ['', 0, false, [], {}]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ closedAt }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(closedAt));
+    assert.match(metrics.blockedReason, /completed reconciliation cannot be approved again/);
+  }
+  assert.equal(buildReconciliationCloseMetrics(
+    reconciliation({ closedAt: null }), account
+  ).isReadyToApprove, true);
+});
+
 test('controller-approved but still open reconciliation retains close eligibility', () => {
   const metrics = buildReconciliationCloseMetrics(
     reconciliation({ closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt: '2026-10-28T18:00:00Z' }),
