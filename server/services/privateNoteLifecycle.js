@@ -142,6 +142,14 @@ export function projectPrivateNoteLifecycle(snapshot) {
       latestNoticeDocumentRef = noticeDocumentRef;
     }
     if (event.type === 'disputed') {
+      // A dispute must identify a document already registered in this note's
+      // timeline. The disputed target may be the issued instrument or an
+      // existing notice draft, but never an unrelated or future document.
+      // This is reference integrity only, not evidence of actual delivery.
+      const disputedDocumentRef = requiredId(event.documentRef, 'documentRef');
+      if (disputedDocumentRef !== issuedDocumentRef && !noticeDocumentRefs.has(disputedDocumentRef)) {
+        throw new Error('Dispute must reference the issued note or a previously prepared notice draft');
+      }
       requiredId(event.evidenceRef, 'evidenceRef');
     }
     const lifecycleEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
