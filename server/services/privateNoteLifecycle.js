@@ -48,6 +48,31 @@ function utcInstant(value, field) {
   return value;
 }
 
+// A lifecycle journal must be an explicit dense data array. Sparse histories,
+// inherited array elements, getters and hidden metadata are not trustworthy
+// evidence of the complete ordered sequence of note events.
+function requirePlainEventHistory(events) {
+  if (!Array.isArray(events) || Object.getPrototypeOf(events) !== Array.prototype) {
+    throw new TypeError('Private note events must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(events);
+  const length = descriptors.length.value;
+  let indexed = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('Private note events must contain only array indices');
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Private note events must contain enumerable data elements');
+    }
+    indexed++;
+  }
+  if (indexed !== length) throw new TypeError('Private note events must not contain holes');
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,noteId:string,
  *   asOfAt:string,events:Array<{eventId:string,tenantId:string,entityId:string,
@@ -83,7 +108,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
     trustId: requiredId(snapshot.trustId, 'trustId'),
     noteId: requiredId(snapshot.noteId, 'noteId'),
   };
-  if (!Array.isArray(snapshot.events)) throw new TypeError('events must be an array');
+  requirePlainEventHistory(snapshot.events);
   // Snapshot time is supplied by the caller; runtime integration must use a
   // trusted server-side clock, not an untrusted request parameter.
   const asOfAt = utcInstant(snapshot.asOfAt, 'asOfAt');
