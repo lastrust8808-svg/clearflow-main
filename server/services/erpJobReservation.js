@@ -148,8 +148,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       // Other decimal fields (e.g. taxRate) remain permitted.
       if (/(?:Minor|Cents)$/i.test(key) &&
           typeof descriptor.value === 'number' &&
-          !Number.isSafeInteger(descriptor.value)) {
-        throw new TypeError('ERP job payload contains a fractional or unsafe minor-unit amount');
+          Number.isFinite(descriptor.value) &&
+          !Number.isInteger(descriptor.value)) {
+        throw new TypeError('ERP job payload contains a fractional minor-unit amount');
       }
       assertJsonSafe(descriptor.value, seen, depth + 1);
     }
