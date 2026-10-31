@@ -417,3 +417,65 @@ test('frozen and null-prototype canonical JSON envelopes remain supported', () =
   assert.equal(result.applied, 2);
   assert.deepEqual(result.entries.map((entry) => entry.transactionId), ['tx-1', 'tx-2']);
 });
+
+
+test('canonical input scope cannot execute getters or silently drop hidden fields', () => {
+  let getterCalls = 0;
+  const withGetter = base();
+  Object.defineProperty(withGetter, 'tenantId', {
+    enumerable: true,
+    get() { getterCalls++; return 'tenant-a'; },
+  });
+  assert.throws(() => planBankFeedReplay(withGetter), /malformed canonical feed input/);
+  assert.equal(getterCalls, 0);
+
+  const hidden = base();
+  Object.defineProperty(hidden, 'untrackedAuthorization', { value: 'tenant-b' });
+  assert.throws(() => planBankFeedReplay(hidden), /malformed canonical feed input/);
+
+  const incomplete = base();
+  delete incomplete.tenantId;
+  assert.throws(() => planBankFeedReplay(incomplete), /malformed canonical feed input/);
+});
+
+test('provider events require own posting and identity evidence', () => {
+  const valid = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const snapshot = structuredClone(valid.entries);
+  for (const field of ['kind', 'accountId', 'transactionId', 'amountCents', 'pending']) {
+    const incomplete = event('tx-2');
+    delete incomplete[field];
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: valid.entries, events: [incomplete],
+    }), /malformed canonical feed provider event/);
+    assert.deepEqual(valid.entries, snapshot);
+  }
+
+  const removal = { kind: 'removed', accountId: 'acct-a', transactionId: 'tx-1' };
+  const validRemoval = planBankFeedReplay({
+    ...base(), existing: valid.entries, events: [removal],
+  });
+  assert.equal(validRemoval.entries[0].status, 'removed');
+  for (const field of ['kind', 'accountId', 'transactionId']) {
+    const incomplete = { ...removal };
+    delete incomplete[field];
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: valid.entries, events: [incomplete],
+    }), /malformed canonical feed provider event/);
+  }
+});
+
+test('stored feed records require own scope, amount, status and review fields', () => {
+  const valid = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const snapshot = structuredClone(valid.entries);
+  for (const field of [
+    'tenantId', 'provider', 'connectionId', 'accountId', 'transactionId',
+    'amountCents', 'status', 'requiresReview',
+  ]) {
+    const incomplete = { ...valid.entries[0] };
+    delete incomplete[field];
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: [incomplete], events: [],
+    }), /malformed canonical feed stored record/);
+    assert.deepEqual(valid.entries, snapshot);
+  }
+});
