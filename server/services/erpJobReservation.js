@@ -456,18 +456,20 @@ export async function markErpOperationJobDispatchStarted({
       !row.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound dispatch fence');
   }
-  const stamp = value => value instanceof Date ? value.toISOString() : value;
-  const createdAt = stamp(row.created_at);
-  const claimedAt = stamp(row.claimed_at);
-  const dispatchStartedAt = stamp(row.dispatch_started_at);
-  const leaseExpiresAt = stamp(row.lease_expires_at);
-  const updatedAt = stamp(row.updated_at);
+  // A dispatch fence is a durable pre-side-effect boundary. Reject informal
+  // dates, normalized impossible dates and chronology that would imply a
+  // dispatch after lease expiry or a status update before the dispatch.
+  const createdAt = persistedUtcTimestamp(row.created_at);
+  const claimedAt = persistedUtcTimestamp(row.claimed_at);
+  const dispatchStartedAt = persistedUtcTimestamp(row.dispatch_started_at);
+  const leaseExpiresAt = persistedUtcTimestamp(row.lease_expires_at);
+  const updatedAt = persistedUtcTimestamp(row.updated_at);
   if ([createdAt, claimedAt, dispatchStartedAt, leaseExpiresAt, updatedAt].some(
-    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
+    value => value === null
   ) || Date.parse(createdAt) > Date.parse(claimedAt) ||
-       Date.parse(dispatchStartedAt) < Date.parse(claimedAt) ||
-       Date.parse(dispatchStartedAt) >= Date.parse(leaseExpiresAt) ||
-       Date.parse(updatedAt) < Date.parse(dispatchStartedAt)) {
+       Date.parse(claimedAt) > Date.parse(dispatchStartedAt) ||
+       Date.parse(dispatchStartedAt) > Date.parse(updatedAt) ||
+       Date.parse(updatedAt) >= Date.parse(leaseExpiresAt)) {
     throw new Error('ERP job storage returned an invalid dispatch fence timestamp');
   }
   return Object.freeze({
