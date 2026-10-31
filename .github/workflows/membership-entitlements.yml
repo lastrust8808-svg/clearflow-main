@@ -1,0 +1,26 @@
+name: Membership entitlement projection guards
+on:
+  push:
+    branches:
+      - feature/membership-ux-20261028
+  pull_request:
+    paths:
+      - 'src/domain/membershipEntitlements.mjs'
+      - 'tests/membershipEntitlements.test.mjs'
+      - 'src/domain/membershipWebhookFixture.mjs'
+      - 'tests/membershipWebhookFixture.test.mjs'
+      - '.github/workflows/membership-entitlements.yml'
+permissions:
+  contents: read
+jobs:
+  membership-entitlements:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs
+      - name: Run deterministic entitlement tests
+        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs
