@@ -133,3 +133,46 @@ test('posted pending-to-posted linkage is immutable without audited correction',
   assert.equal(valid.entries.find((row) => row.transactionId === 'posted-1').amountCents, 2600);
   assert.equal(valid.entries.find((row) => row.transactionId === 'pending-1').supersededBy, 'posted-1');
 });
+
+test('provider removal of a superseded pending row preserves posted correction linkage', () => {
+  const pending = planBankFeedReplay({
+    ...base(), events: [event('pending-1', { pending: true })],
+  });
+  const posted = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('posted-1', { pendingTransactionId: 'pending-1' })],
+  });
+  const removal = { kind: 'removed', accountId: 'acct-a', transactionId: 'pending-1' };
+  const removed = planBankFeedReplay({
+    ...base(), existing: posted.entries, events: [removal],
+  });
+  assert.equal(removed.applied, 0);
+  assert.equal(removed.replayed, 1);
+  assert.deepEqual(removed.entries, posted.entries);
+  const replay = planBankFeedReplay({
+    ...base(), existing: removed.entries, events: [removal],
+  });
+  assert.equal(replay.replayed, 1);
+  assert.deepEqual(replay.entries, posted.entries);
+  const correction = planBankFeedReplay({
+    ...base(), existing: removed.entries,
+    events: [event('posted-1', {
+      kind: 'modified', amountCents: 2600, pendingTransactionId: 'pending-1',
+    })],
+  });
+  assert.equal(correction.entries.find((row) => row.transactionId === 'pending-1').status, 'superseded');
+  assert.equal(correction.entries.find((row) => row.transactionId === 'posted-1').amountCents, 2600);
+});
+
+test('removing a pending row without posted linkage still records removal', () => {
+  const pending = planBankFeedReplay({
+    ...base(), events: [event('pending-1', { pending: true })],
+  });
+  const removed = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'pending-1' }],
+  });
+  assert.equal(removed.applied, 1);
+  assert.equal(removed.entries[0].status, 'removed');
+  assert.equal(removed.entries[0].requiresReview, true);
+});
