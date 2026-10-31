@@ -445,7 +445,7 @@ test('event batches reject inherited, sparse, accessor and hidden entries before
   assert.equal(getterCalls, 0, 'an event slot getter must not execute');
 
   const sparseBatch = new Array(1);
-  assert.throws(() => project(scope, sparseBatch, asOf), /own enumerable data entries/);
+  assert.throws(() => project(scope, sparseBatch, asOf), /dense plain array/);
 
   const extraBatch = [paid()];
   Object.defineProperty(extraBatch, 'hiddenClaim', { value: true, enumerable: false });
