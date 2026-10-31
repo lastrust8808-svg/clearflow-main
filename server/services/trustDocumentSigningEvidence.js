@@ -87,6 +87,37 @@ function requirePlainAttestationRecord(attestation) {
   }
 }
 
+// The packet envelope itself must be inert before any scope or document
+// field is read. Do not allow a caller to manufacture authority by exposing
+// an inherited identity, executing a getter, or smuggling payment claims.
+const SIGNING_PACKET_FIELDS = new Set([
+  'tenantId', 'entityId', 'trustId', 'documentId', 'versionId',
+  'content', 'finalizedAt', 'evaluatedAt', 'governance',
+  'versionRegistry', 'attestations',
+]);
+
+function requirePlainSigningPacket(packet) {
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
+      (Object.getPrototypeOf(packet) !== Object.prototype &&
+       Object.getPrototypeOf(packet) !== null)) {
+    throw new TypeError('Signing packet must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(packet);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !SIGNING_PACKET_FIELDS.has(key)) {
+      throw new TypeError('Signing packet contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Signing packet fields must be enumerable own data properties');
+    }
+  }
+  for (const key of SIGNING_PACKET_FIELDS) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Signing packet missing own field: ' + key);
+    }
+  }
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
  *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
@@ -99,9 +130,7 @@ function requirePlainAttestationRecord(attestation) {
  *   reason:string,signerCount:number}} Frozen internal decision.
  */
 export function assessTrustDocumentSigningPacket(packet) {
-  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) {
-    throw new TypeError('Signing packet required');
-  }
+  requirePlainSigningPacket(packet);
   const scope = {};
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
     scope[key] = identifier(packet[key], key);
