@@ -57,6 +57,18 @@ const EVENT_FEED_FIELDS = new Set([
   'kind', 'accountId', 'transactionId', 'amountCents', 'pending',
   'pendingTransactionId',
 ]);
+const INPUT_FEED_FIELDS = new Set([
+  'tenantId', 'provider', 'connectionId', 'allowedAccountIds', 'existing', 'events',
+]);
+const INPUT_REQUIRED_FIELDS = INPUT_FEED_FIELDS;
+const STORED_REQUIRED_FIELDS = new Set([
+  'tenantId', 'provider', 'connectionId', 'accountId', 'transactionId',
+  'amountCents', 'status', 'requiresReview',
+]);
+const EVENT_IDENTITY_FIELDS = new Set(['kind', 'accountId', 'transactionId']);
+const EVENT_POSTING_FIELDS = new Set([
+  ...EVENT_IDENTITY_FIELDS, 'amountCents', 'pending',
+]);
 
 function assertCanonicalFeedList(value: unknown, label: string): void {
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
@@ -76,7 +88,8 @@ function assertCanonicalFeedList(value: unknown, label: string): void {
 }
 
 function assertCanonicalFeedObject(
-  value: unknown, fields: ReadonlySet<string>, label: string
+  value: unknown, fields: ReadonlySet<string>, label: string,
+  requiredFields: ReadonlySet<string> = new Set()
 ): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`malformed canonical feed ${label} object.`);
@@ -86,6 +99,13 @@ function assertCanonicalFeedObject(
     throw new Error(`malformed canonical feed ${label} object.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
+  // A missing own field must not be filled from a polluted Object.prototype.
+  // This also avoids silently accepting incomplete provider or stored records.
+  for (const key of requiredFields) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new Error(`malformed canonical feed ${label} required property.`);
+    }
+  }
   for (const key of Reflect.ownKeys(descriptors)) {
     if (typeof key !== 'string' || !fields.has(key)) {
       throw new Error(`malformed canonical feed ${label} property.`);
@@ -110,6 +130,9 @@ export function planBankFeedReplay(input: FeedReplayInput): {
   applied: number;
   replayed: number;
 } {
+  // Validate the input envelope before accessing its fields: accessor-backed
+  // authorization scope and inherited values must never influence replay.
+  assertCanonicalFeedObject(input, INPUT_FEED_FIELDS, 'input', INPUT_REQUIRED_FIELDS);
   if (!validId(input.tenantId) || !validId(input.connectionId) ||
       (input.provider !== 'plaid' && input.provider !== 'mercury') ||
       !Array.isArray(input.allowedAccountIds) ||
@@ -128,10 +151,13 @@ export function planBankFeedReplay(input: FeedReplayInput): {
   // Removed events carry only identity; attached financial fields must never
   // be silently ignored as though the provider supplied a clean tombstone.
   for (const entry of input.existing) {
-    assertCanonicalFeedObject(entry, STORED_FEED_FIELDS, 'stored record');
+    assertCanonicalFeedObject(entry, STORED_FEED_FIELDS, 'stored record', STORED_REQUIRED_FIELDS);
   }
   for (const event of input.events) {
-    assertCanonicalFeedObject(event, EVENT_FEED_FIELDS, 'provider event');
+    assertCanonicalFeedObject(
+      event, EVENT_FEED_FIELDS, 'provider event',
+      event?.kind === 'removed' ? EVENT_IDENTITY_FIELDS : EVENT_POSTING_FIELDS,
+    );
     if (event.kind === 'removed' &&
         (Object.hasOwn(event, 'amountCents') ||
          Object.hasOwn(event, 'pending') ||
