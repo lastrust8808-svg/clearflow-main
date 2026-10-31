@@ -147,10 +147,12 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       // reservation that downstream accounting may round differently.
       // Other decimal fields (e.g. taxRate) remain permitted.
       if (/(?:Minor|Cents)$/i.test(key) &&
-          typeof descriptor.value === 'number' &&
-          Number.isFinite(descriptor.value) &&
-          !Number.isInteger(descriptor.value)) {
-        throw new TypeError('ERP job payload contains a fractional minor-unit amount');
+          (typeof descriptor.value !== 'number' ||
+           !Number.isSafeInteger(descriptor.value))) {
+        // A string, null, boolean, object, or fractional amount can bypass
+        // numeric cent validation and be coerced or rounded by a downstream
+        // accounting adapter. Require an exact, safe integer representation.
+        throw new TypeError('ERP job payload contains an invalid minor-unit amount');
       }
       assertJsonSafe(descriptor.value, seen, depth + 1);
     }
