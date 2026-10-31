@@ -360,3 +360,41 @@ test('equivalent offset timestamps and trailing fractional zeros compare as the 
   assert.equal(project(scope, [success], '2026-10-20T12:00:00.1234Z').status, 'expired');
   assert.equal(project(scope, [success], '2026-10-20T12:00:00.123399Z').status, 'active');
 });
+
+
+test('inherited verification and accessor-backed claims cannot authorize membership', () => {
+  const inheritedVerified = { ...paid() };
+  delete inheritedVerified.verified;
+  Object.setPrototypeOf(inheritedVerified, { verified: true });
+  assert.throws(() => project(scope, [inheritedVerified], asOf), /plain membership record/);
+
+  const inheritedScope = Object.create(scope);
+  assert.throws(() => project(inheritedScope, [paid()], asOf), /plain membership record/);
+
+  const accessorVerified = { ...paid() };
+  Object.defineProperty(accessorVerified, 'verified', {
+    enumerable: true, get() { return true; },
+  });
+  assert.throws(() => project(scope, [accessorVerified], asOf), /own enumerable data fields/);
+
+  const accessorInvoice = { ...paid() };
+  Object.defineProperty(accessorInvoice, 'invoiceId', {
+    enumerable: true, get() { return 'inv-1'; },
+  });
+  assert.throws(() => project(scope, [accessorInvoice], asOf), /own enumerable data fields/);
+
+  const hiddenClaim = { ...paid() };
+  Object.defineProperty(hiddenClaim, 'entitled', { value: true, enumerable: false });
+  assert.throws(() => project(scope, [hiddenClaim], asOf), /own enumerable data fields/);
+
+  const symbolClaim = { ...paid(), [Symbol('paid')]: true };
+  assert.throws(() => project(scope, [symbolClaim], asOf), /own enumerable data fields/);
+
+  const missingOwnVerified = { ...paid() };
+  delete missingOwnVerified.verified;
+  assert.throws(() => project(scope, [missingOwnVerified], asOf), /missing an own verified field/);
+
+  const validNullPrototype = Object.assign(Object.create(null), paid());
+  assert.equal(project(scope, [validNullPrototype], asOf).status, 'active');
+  assert.equal(project(scope, [paid()], asOf).status, 'active');
+});
