@@ -46,6 +46,37 @@ const packet = (changes = {}) => ({
 });
 const assess = changes => assessTrustDocumentSigningPacket(packet(changes));
 
+test('signing governance envelope rejects executable, inherited and unsupported claims before reading them', () => {
+  const valid = packet().governance;
+  for (const key of ['tenantId', 'entityId', 'trustId', 'mode', 'appointments']) {
+    let getterCalls = 0;
+    const malicious = { ...valid };
+    Object.defineProperty(malicious, key, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Governance getter must not execute'); },
+    });
+    assert.throws(() => assess({ governance: malicious }),
+      /Signing governance fields must be enumerable own data properties/);
+    assert.equal(getterCalls, 0, key + ' getter was executed');
+  }
+  const inherited = { ...valid };
+  Object.setPrototypeOf(inherited, { tenantId: 'forged-tenant' });
+  assert.throws(() => assess({ governance: inherited }), /Signing governance must be a plain data record/);
+  const missing = { ...valid };
+  delete missing.mode;
+  assert.throws(() => assess({ governance: missing }), /Signing governance missing own field: mode/);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => assess({ governance: hidden }), /Signing governance contains unsupported fields/);
+  const symbol = { ...valid, [Symbol('signed')]: true };
+  assert.throws(() => assess({ governance: symbol }), /Signing governance contains unsupported fields/);
+  assert.throws(() => assess({ governance: { ...valid, paymentAuthorized: true } }),
+    /Signing governance contains unsupported fields/);
+  assert.equal(assess({ governance: Object.freeze({ ...valid }) }).status, 'evidence_ready_for_review');
+  assert.equal(assess({ governance: Object.assign(Object.create(null), valid) }).status,
+    'evidence_ready_for_review');
+});
+
 test('independent trustee packet with distinct consent and receipt evidence is ready for review only', () => {
   assert.deepEqual(assess(), {
     status: 'evidence_ready_for_review', reason: 'supplied_policy_satisfied', signerCount: 1,
