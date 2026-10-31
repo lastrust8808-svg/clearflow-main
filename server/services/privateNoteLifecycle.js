@@ -174,5 +174,13 @@ export function projectPrivateNoteLifecycle(snapshot) {
       throw new Error('Private note document and lifecycle evidence references must be distinct');
     }
   }
+  // An event's journal identity must never double as a document identity or
+  // independent evidence receipt, even when the collision occurs in a later
+  // event. This is namespace integrity, not proof that the receipt is genuine.
+  for (const eventId of seen) {
+    if (documentRefs.has(eventId) || lifecycleEvidenceRefs.has(eventId)) {
+      throw new Error('Private note event, document and evidence references must be distinct');
+    }
+  }
   return Object.freeze({ status, eventCount: seen.size, lastEventId, lastEventAt });
 }
