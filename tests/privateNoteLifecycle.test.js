@@ -6,7 +6,7 @@ const scope = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', 
 const event = (type, index, overrides = {}) => ({
   ...scope, eventId: 'event-' + index, type, actorId: 'actor-a',
   occurredAt: '2026-10-' + String(index).padStart(2, '0') + 'T12:00:00.000Z',
-  documentRef: type === 'presented' ? 'document-1' : 'document-' + index,
+  documentRef: type === 'presented' || type === 'disputed' ? 'document-1' : 'document-' + index,
   evidenceRef: 'evidence-' + index,
   ...overrides,
 });
@@ -82,6 +82,29 @@ test('dispute evidence cannot replay issuance or presentment provenance', () => 
     ]), /lifecycle evidence reference must be unique across events/);
   }
   assert.equal(project([issued, presented, event('disputed', 3)]).status, 'disputed');
+});
+
+test('dispute must bind to an already registered note document, not an unrelated reference', () => {
+  const history = [event('issued', 1), event('presented', 2)];
+  for (const invalid of [undefined, null, '', 'document-2', 'document-unknown', 'document-5']) {
+    assert.throws(() => project([
+      ...history, event('disputed', 3, { documentRef: invalid }),
+    ]), /documentRef|Dispute must reference/);
+  }
+  assert.equal(project([...history, event('disputed', 3, { documentRef: 'document-1' })]).status, 'disputed');
+});
+
+test('disputes may target existing notice drafts but not future or unrelated notice documents', () => {
+  const history = [event('issued', 1), event('presented', 2), event('notice_prepared', 3)];
+  assert.equal(project([...history, event('disputed', 4, { documentRef: 'document-3' })]).status, 'disputed');
+  for (const invalid of ['document-4', 'document-5', 'other-note-notice']) {
+    assert.throws(() => project([
+      ...history, event('disputed', 4, { documentRef: invalid }),
+    ]), /Dispute must reference/);
+  }
+  const revised = [...history, event('disputed', 4, { documentRef: 'document-3' }),
+    event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' })];
+  assert.equal(project([...revised, event('disputed', 6, { documentRef: 'document-3' })]).status, 'disputed');
 });
 
 test('notice preparation cannot reuse issuance or presentment evidence', () => {
