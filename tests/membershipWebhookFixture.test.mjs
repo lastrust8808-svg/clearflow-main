@@ -265,3 +265,31 @@ test('signed JSON Unicode escapes cannot smuggle lone surrogates into verified i
     rawBody: valid, signatureHeader: sign(valid),
   })).id, 'evt-😀');
 });
+
+test('signed fixture refuses noncanonical event identities before setting verified', () => {
+  const invalid = [
+    ' padded', 'padded ', 'a\\u0000b', 'a\\u200bb',
+    'a\\u202eb', 'a\\ud800b', 'x'.repeat(256),
+  ];
+  for (const field of ['id', 'invoiceId', 'settlementId']) {
+    for (const value of invalid) {
+      const candidate = { ...scopedPayload, [field]: value };
+      assert.equal(verifyScoped(scopedInput(candidate)), null, field + ': ' + JSON.stringify(value));
+    }
+  }
+  // The shared policy accepts valid visible Unicode and exactly 255 code units.
+  assert.equal(verifyScoped(scopedInput({ ...scopedPayload, id: 'x'.repeat(255) })).verified, true);
+  assert.equal(verifyScoped(scopedInput({ ...scopedPayload, id: 'evt-café' })).verified, true);
+});
+
+test('even matching signed and authenticated scopes must use canonical identities', () => {
+  for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+    for (const value of [' padded', 'padded ', 'a\\u200bb', 'a\\u202eb', 'x'.repeat(256)]) {
+      const candidate = { ...scopedPayload, [field]: value };
+      const scope = { ...authenticatedScope, [field]: value };
+      // Equality of attacker-controlled text is not authorization or canonicalization.
+      assert.equal(verifyScoped(scopedInput(candidate, { authenticatedScope: scope })), null,
+        field + ': ' + JSON.stringify(value));
+    }
+  }
+});
