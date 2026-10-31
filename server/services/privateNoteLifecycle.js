@@ -60,6 +60,23 @@ export function projectPrivateNoteLifecycle(snapshot) {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
     throw new TypeError('Private note snapshot required');
   }
+  // Snapshot-level scope and as-of claims must obey the same plain-data
+  // admission rule as lifecycle events. Never evaluate inherited identities,
+  // getters, hidden metadata or unreviewed financial/legal state fields.
+  const snapshotPrototype = Object.getPrototypeOf(snapshot);
+  if (snapshotPrototype !== Object.prototype && snapshotPrototype !== null) {
+    throw new TypeError('Private note snapshot must be a plain data record');
+  }
+  const snapshotFields = new Set(['tenantId', 'entityId', 'trustId', 'noteId', 'asOfAt', 'events']);
+  for (const key of Reflect.ownKeys(snapshot)) {
+    const descriptor = Object.getOwnPropertyDescriptor(snapshot, key);
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Private note snapshot fields must be enumerable data properties');
+    }
+    if (typeof key !== 'string' || !snapshotFields.has(key)) {
+      throw new TypeError('Unsupported private note snapshot field');
+    }
+  }
   const scope = {
     tenantId: requiredId(snapshot.tenantId, 'tenantId'),
     entityId: requiredId(snapshot.entityId, 'entityId'),
