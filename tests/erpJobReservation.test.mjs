@@ -407,6 +407,45 @@ test('lease renewal is atomic and limited to the owning worker and unexpired pro
   assert.equal('delivered' in result, false);
 });
 
+test('lease renewal rejects malformed UTC receipts and reversed lease chronology', async () => {
+  const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
+  const input = {
+    authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId,
+  };
+  const invalid = [
+    claimedRow({ created_at: '2026-02-30T12:00:00Z' }),
+    claimedRow({ claimed_at: '2026-10-29T12:01:00+00:00' }),
+    claimedRow({ updated_at: '2026-10-29 12:01:00' }),
+    claimedRow({ lease_expires_at: 'tomorrow' }),
+    claimedRow({ claimed_at: new Date(NaN) }),
+    claimedRow({ created_at: new Date('2026-10-29T12:01:01Z') }),
+    claimedRow({ claimed_at: new Date('2026-10-29T12:01:01Z') }),
+    claimedRow({ updated_at: new Date('2026-10-29T12:04:00Z'),
+      lease_expires_at: new Date('2026-10-29T12:04:00Z') }),
+    claimedRow({ updated_at: new Date('2026-10-29T12:05:00Z'),
+      lease_expires_at: new Date('2026-10-29T12:04:00Z') }),
+  ];
+  for (const row of invalid) {
+    await assert.rejects(renew({
+      ...input, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid lease renewal timestamp/);
+  }
+  const valid = claimedRow({
+    created_at: '2026-10-29T12:00:00Z',
+    claimed_at: '2026-10-29T12:01:00.000Z',
+    updated_at: '2026-10-29T12:01:01Z',
+    lease_expires_at: '2026-10-29T12:04:00.000Z',
+  });
+  const receipt = await renew({
+    ...input, db: { query: async () => ({ rows: [valid] }) },
+  });
+  assert.equal(receipt.status, 'processing');
+  assert.equal(receipt.claimedAt, '2026-10-29T12:01:00.000Z');
+  assert.equal(receipt.leaseExpiresAt, '2026-10-29T12:04:00.000Z');
+  assert.equal(Object.isFrozen(receipt), true);
+});
+
 test('expired, finished or foreign leases cannot be renewed; database failure is not success', async () => {
   const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
   const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery', jobId: claimedJobId };
