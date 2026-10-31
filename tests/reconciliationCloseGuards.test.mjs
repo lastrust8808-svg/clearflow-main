@@ -1055,3 +1055,34 @@ test('exact-cent raw bank amount formats preserve eligible reviewed rows', () =>
   );
   assert.equal(grouped.isReadyToApprove, true);
 });
+
+test('statement import cannot predate even the earliest timezone-adjusted period start', () => {
+  for (const approval of [
+    { closeApprovalStatus: 'pending' },
+    { closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt: '2026-10-28T18:00:00Z' },
+  ]) {
+    for (const statementImportedAt of [
+      '2026-09-30T09:59:59Z',
+      '2026-09-30T11:59:59+02:00',
+      '2026-09-29T20:00:00Z',
+    ]) {
+      const metrics = buildReconciliationCloseMetrics(
+        reconciliation({ ...approval, statementImportedAt }), account
+      );
+      assert.equal(metrics.isReadyToApprove, false, JSON.stringify({ approval, statementImportedAt }));
+      assert.match(metrics.blockedReason, /import cannot precede the statement period/);
+    }
+    // UTC+14 is the earliest local midnight globally; do not reject an
+    // import at that instant without the actual bank-local timezone.
+    for (const statementImportedAt of [
+      '2026-09-30T10:00:00Z',
+      '2026-10-01T00:00:00+14:00',
+      '2026-10-27T12:00:00Z',
+    ]) {
+      const metrics = buildReconciliationCloseMetrics(
+        reconciliation({ ...approval, statementImportedAt }), account
+      );
+      assert.equal(metrics.isReadyToApprove, true, JSON.stringify({ approval, statementImportedAt }));
+    }
+  }
+});
