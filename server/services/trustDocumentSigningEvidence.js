@@ -118,6 +118,36 @@ function requirePlainSigningPacket(packet) {
   }
 }
 
+// Governance is later spread into a policy snapshot. An accessor on the
+// original governance object would execute during that spread, before the
+// policy evaluator could validate the copied object. Admit only inert, own
+// data fields before reading scope or constructing derived policy snapshots.
+const SIGNING_GOVERNANCE_FIELDS = new Set([
+  'tenantId', 'entityId', 'trustId', 'mode', 'appointments',
+]);
+
+function requirePlainSigningGovernance(governance) {
+  if (!governance || typeof governance !== 'object' || Array.isArray(governance) ||
+      (Object.getPrototypeOf(governance) !== Object.prototype &&
+       Object.getPrototypeOf(governance) !== null)) {
+    throw new TypeError('Signing governance must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(governance);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !SIGNING_GOVERNANCE_FIELDS.has(key)) {
+      throw new TypeError('Signing governance contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Signing governance fields must be enumerable own data properties');
+    }
+  }
+  for (const key of SIGNING_GOVERNANCE_FIELDS) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Signing governance missing own field: ' + key);
+    }
+  }
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,
  *   versionId:string,content:Buffer|Uint8Array,finalizedAt:string,evaluatedAt:string,
@@ -147,10 +177,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       packet.content.byteLength === 0) {
     throw new TypeError('Nonempty finalized document bytes required');
   }
-  if (!packet.governance || typeof packet.governance !== 'object' ||
-      Array.isArray(packet.governance)) {
-    throw new TypeError('Governance snapshot required');
-  }
+  requirePlainSigningGovernance(packet.governance);
   for (const key of ['tenantId', 'entityId', 'trustId']) {
     if (packet.governance[key] !== scope[key]) {
       throw new Error('Signing governance ' + key + ' scope mismatch');
