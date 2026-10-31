@@ -116,6 +116,44 @@ function hasValidStatementFinancialFields(
     hasConsistentRawStatementAmount(line);
 }
 
+// Statement imports are untrusted financial evidence. Reject getters, sparse
+// arrays, inherited row fields, hidden metadata, and unrecognized row keys
+// before accessing any amount, match status, or review identity.
+const STATEMENT_ROW_FIELDS = new Set([
+  'id', 'postedDate', 'description', 'amount', 'direction', 'rawAmountText',
+  'reference', 'matchStatus', 'suggestedPaymentId', 'suggestedTransactionIds',
+  'linkedJournalEntryId', 'confidenceScore', 'resolvedAt', 'notes',
+]);
+const REQUIRED_STATEMENT_ROW_FIELDS = [
+  'id', 'postedDate', 'description', 'amount', 'direction', 'matchStatus',
+];
+
+function hasCanonicalStatementRows(value: unknown): boolean {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return false;
+  const arrayDescriptors = Object.getOwnPropertyDescriptors(value);
+  const arrayKeys = Reflect.ownKeys(arrayDescriptors);
+  if (arrayKeys.length !== value.length + 1 || arrayKeys.some((key) => {
+    if (key === 'length') return false;
+    if (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
+        Number(key) >= value.length) return true;
+    const descriptor = arrayDescriptors[key];
+    return !descriptor.enumerable || !Object.hasOwn(descriptor, 'value');
+  })) return false;
+  for (const row of value) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+    const prototype = Object.getPrototypeOf(row);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    const descriptors = Object.getOwnPropertyDescriptors(row);
+    if (REQUIRED_STATEMENT_ROW_FIELDS.some((key) => !Object.hasOwn(descriptors, key))) return false;
+    for (const key of Reflect.ownKeys(descriptors)) {
+      if (typeof key !== 'string' || !STATEMENT_ROW_FIELDS.has(key)) return false;
+      const descriptor = descriptors[key];
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) return false;
+    }
+  }
+  return true;
+}
+
 export function buildReconciliationCloseMetrics(
   reconciliation: ReconciliationRecord,
   bankAccount?: BankAccountRecord
@@ -133,10 +171,7 @@ export function buildReconciliationCloseMetrics(
   // Imported rows are untrusted persisted input. A malformed collection or
   // null/non-object row must block approval, not throw during index matching.
   // Missing rows remain subject to the existing no-statement-lines gate.
-  if (rawParsedLines != null && (
-    !Array.isArray(rawParsedLines) ||
-    rawParsedLines.some((line) => !line || typeof line !== 'object' || Array.isArray(line))
-  )) {
+  if (rawParsedLines != null && !hasCanonicalStatementRows(rawParsedLines)) {
     return {
       bookEndingBalance,
       differenceAmount,
