@@ -52,6 +52,31 @@ function assertPlainMembershipRecord(value, label, requiredFields) {
   }
 }
 
+// Do not read inherited, sparse or getter-backed event slots: array iteration
+// would execute accessors before individual event verification. Snapshot only
+// explicit data entries before considering any payment or entitlement claim.
+function membershipEventBatch(events) {
+  if (!Array.isArray(events)) throw new TypeError('events must be an array');
+  if (Object.getPrototypeOf(events) !== Array.prototype) {
+    throw new TypeError('events must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(events);
+  const length = descriptors.length?.value;
+  if (!Number.isSafeInteger(length) || length > 10000 ||
+      Reflect.ownKeys(descriptors).length !== length + 1) {
+    throw new TypeError('events must be a dense plain array without extra properties');
+  }
+  const entries = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('events must contain only own enumerable data entries');
+    }
+    entries.push(descriptor.value);
+  }
+  return entries;
+}
+
 function instant(value, label) {
   required(value, label);
   // Date.parse silently normalizes invalid calendar dates (e.g. February 30)
@@ -114,13 +139,14 @@ export function projectMembershipEntitlement(scope, events, asOf) {
   const memberId = required(scope.memberId, 'memberId');
   const subscriptionId = required(scope.subscriptionId, 'subscriptionId');
   instant(asOf, 'asOf');
-  if (!Array.isArray(events)) throw new TypeError('events must be an array');
+  const admittedEvents = membershipEventBatch(events);
 
   const seen = new Map();
   const settlements = new Map();
   const settledInvoices = new Map();
   const normalized = [];
-  for (const event of events) {
+  for (let index = 0; index < admittedEvents.length; index++) {
+    const event = admittedEvents[index];
     assertPlainMembershipRecord(event, 'membership event', [
       'id', 'type', 'tenantId', 'memberId', 'subscriptionId', 'occurredAt', 'verified',
     ]);
