@@ -472,6 +472,22 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
+  // An import cannot predate even the earliest possible start of its
+  // statement period. Use UTC+14 (the earliest global local midnight) as a
+  // conservative bound because the bank's timezone is not available here.
+  // Server-side reconciliation must verify the actual bank-local period.
+  const earliestPossiblePeriodStart = Date.parse(`${reconciliation.periodStart}T00:00:00+14:00`);
+  if (Date.parse(reconciliation.statementImportedAt!) < earliestPossiblePeriodStart) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Statement import cannot precede the statement period.',
+    };
+  }
+
   // An approved controller signoff must follow the imported statement.
   // Compare absolute instants so legitimate timezone offsets retain ordering.
   if (
