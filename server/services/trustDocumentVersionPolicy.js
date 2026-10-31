@@ -36,6 +36,31 @@ function timestamp(value, field) {
   return value;
 }
 
+// Validate the complete immutable-version list before reading any entry. A
+// sparse, accessor-backed, extended or prototype-mutated array can conceal
+// versions or execute code during verification. This is structural admission,
+// not authentication of registry provenance.
+function requirePlainVersionList(versions) {
+  if (!Array.isArray(versions) || Object.getPrototypeOf(versions) !== Array.prototype) {
+    throw new TypeError('Document versions must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(versions);
+  const length = descriptors.length.value;
+  let count = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('Document versions must contain only array indices');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Document versions must contain enumerable data elements');
+    }
+    count++;
+  }
+  if (count !== length) throw new TypeError('Document versions must not contain holes');
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,versions:Array<{
  *   versionId:string,tenantId:string,entityId:string,trustId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
@@ -48,7 +73,7 @@ export function verifyTrustDocumentVersion(registry, proof) {
     throw new TypeError('Document registry required');
   }
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) identifier(registry[key], key);
-  if (!Array.isArray(registry.versions)) throw new TypeError('versions must be an array');
+  requirePlainVersionList(registry.versions);
   if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
     throw new TypeError('Document proof required');
   }
