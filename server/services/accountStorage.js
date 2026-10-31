@@ -225,7 +225,12 @@ async function readBoundedRecordText(handle, stat) {
 async function readJsonSafely(targetPath) {
   await secureExistingReadDirectories(path.dirname(targetPath));
   // O_NOFOLLOW prevents a JSON record symlink from redirecting the read.
-  const handle = await fs.open(targetPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  // O_NONBLOCK prevents a malicious named pipe at a record path from hanging
+  // a request in open() before fstat can reject the non-regular file.
+  const handle = await fs.open(
+    targetPath,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
+  );
   try {
     // O_NOFOLLOW rejects symbolic links, but hard links can still alias a
     // different tenant's record. Refuse multi-linked or non-regular records
