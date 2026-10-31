@@ -49,6 +49,33 @@ function authenticatedActorIdentity(scope) {
   };
 }
 
+// A worker identity must be an explicit authenticated data record. Never
+// accept inherited tenant/worker IDs, getters, or Proxy traps as authorization
+// for claiming, renewing, failing, or quarantining durable ERP jobs.
+function authenticatedWorkerIdentity(scope) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || nodeTypes.isProxy(scope)) {
+    throw new TypeError('Authenticated ERP worker must be a plain data record');
+  }
+  const prototype = Object.getPrototypeOf(scope);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Authenticated ERP worker must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(scope);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Authenticated ERP worker contains an unsafe property');
+    }
+  }
+  if (!Object.hasOwn(descriptors, 'tenantId') || !Object.hasOwn(descriptors, 'workerId')) {
+    throw new TypeError('Authenticated ERP worker is missing an own identity');
+  }
+  return {
+    tenantId: requiredIdentifier(descriptors.tenantId.value, 'authenticated tenant'),
+    workerId: requiredIdentifier(descriptors.workerId.value, 'authenticated worker'),
+  };
+}
+
 // Reject values that JSON.stringify silently drops or coerces. In an accounting
 // operation, { amount: NaN } must never become { amount: null }, and a missing
 // recipient must not hash identically to a deliberately omitted field.
@@ -236,8 +263,7 @@ export async function claimErpOperationJob({
   db, authenticatedWorker, operation, leaseSeconds = 60,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId, workerId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 300) {
     throw new TypeError('Invalid ERP worker lease');
@@ -300,8 +326,7 @@ export async function renewErpOperationJobLease({
   db, authenticatedWorker, operation, jobId, leaseSeconds = 60,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId, workerId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (typeof jobId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
@@ -360,8 +385,7 @@ export async function markErpOperationJobDispatchStarted({
   db, authenticatedWorker, operation, jobId,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId, workerId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (typeof jobId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
@@ -425,8 +449,7 @@ export async function failErpOperationJob({
   db, authenticatedWorker, operation, jobId, failureCode,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  const workerId = requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId, workerId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (typeof jobId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
@@ -483,8 +506,7 @@ export async function quarantineExpiredErpOperationJob({
   db, authenticatedWorker, operation, jobId,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (typeof jobId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
@@ -536,8 +558,7 @@ export async function quarantineExpiredErpOperationJobsBatch({
   db, authenticatedWorker, operation, maxJobs = 25,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 100) {
     throw new TypeError('Invalid ERP recovery batch size');
@@ -614,8 +635,7 @@ export async function listErpOperationJobsNeedingReconciliation({
   db, authenticatedWorker, operation, maxJobs = 25, afterJobId = null,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedWorker?.tenantId, 'authenticated tenant');
-  requiredIdentifier(authenticatedWorker?.workerId, 'authenticated worker');
+  const { tenantId } = authenticatedWorkerIdentity(authenticatedWorker);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 100) {
     throw new TypeError('Invalid ERP reconciliation page size');
