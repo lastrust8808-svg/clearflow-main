@@ -149,6 +149,38 @@ test('QR token rotations cannot overlap validity windows for the same document v
   }, lookup), /Overlapping QR bindings/);
 });
 
+test('large reverse-ordered QR rotation histories validate adjacent intervals without losing overlap checks', () => {
+  const { registry, lookup } = fixture();
+  const start = Date.parse('2026-10-28T00:00:00.000Z');
+  const rows = Array.from({ length: 256 }, (_, index) => {
+    const issued = new Date(start + index * 60_000).toISOString();
+    const hash = createHash('sha256').update('rotation-' + index).digest('hex');
+    return {
+      ...registry.bindings[0], tokenHashSha256: hash, issuedAt: issued,
+      ...(index === 255 ? { status: 'active' } : {
+        status: 'revoked',
+        revokedAt: new Date(start + (index + 1) * 60_000).toISOString(),
+        revocationEvidenceRef: 'rotation-revocation-' + index,
+      }),
+    };
+  });
+  const reversed = { ...registry, bindings: [...rows].reverse() };
+  assert.deepEqual(resolveTrustDocumentQrBinding(reversed, {
+    ...lookup, tokenHashSha256: rows[255].tokenHashSha256,
+  }), { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
+  assert.deepEqual(resolveTrustDocumentQrBinding(reversed, {
+    ...lookup, tokenHashSha256: rows[0].tokenHashSha256,
+  }), { status: 'unknown' });
+  // One millisecond of overlap between two nonadjacent registry rows must
+  // still fail after sorting; exact revocation/issuance boundaries are valid.
+  const overlapping = [...rows];
+  overlapping[127] = { ...overlapping[127],
+    revokedAt: new Date(start + 129 * 60_000).toISOString() };
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: overlapping.reverse(),
+  }, lookup), /Overlapping QR bindings/);
+});
+
 test('fails closed on malformed hashes, statuses, timestamps and revocation evidence', () => {
   const { registry, lookup } = fixture();
   const original = registry.bindings[0];
