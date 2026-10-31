@@ -1086,3 +1086,55 @@ test('statement import cannot predate even the earliest timezone-adjusted period
     }
   }
 });
+
+test('malformed statement source rows fail closed before evaluating getters or hidden evidence', () => {
+  let getterCalls = 0;
+  const getterRow = statementLine('line-1', 'matched');
+  Object.defineProperty(getterRow, 'amount', {
+    enumerable: true,
+    get() { getterCalls++; return 25.75; },
+  });
+  const hiddenRow = statementLine('line-1', 'matched');
+  Object.defineProperty(hiddenRow, 'untrackedAmount', { value: 9000 });
+  const symbolRow = statementLine('line-1', 'matched');
+  symbolRow[Symbol('audit')] = 'foreign';
+  const inheritedRow = Object.assign(Object.create({ id: 'line-1' }), statementLine('line-1', 'matched'));
+  delete inheritedRow.id;
+  const unknownRow = statementLine('line-1', 'matched', { unexpectedBalance: 999 });
+  const missingRow = statementLine('line-1', 'matched');
+  delete missingRow.direction;
+  const sparseRows = new Array(2);
+  sparseRows[1] = statementLine('line-1', 'matched');
+  const accessorRows = [statementLine('line-1', 'matched')];
+  Object.defineProperty(accessorRows, '0', {
+    enumerable: true,
+    get() { getterCalls++; return statementLine('line-1', 'matched'); },
+  });
+  const decoratedRows = [statementLine('line-1', 'matched')];
+  Object.defineProperty(decoratedRows, 'hidden', { value: 'untracked' });
+
+  for (const rows of [
+    [getterRow], [hiddenRow], [symbolRow], [inheritedRow],
+    [unknownRow], [missingRow], sparseRows, accessorRows, decoratedRows,
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ parsedStatementLines: rows }), account,
+    );
+    assert.equal(metrics.isReadyToApprove, false);
+    assert.match(metrics.blockedReason, /valid array of source rows/);
+  }
+  assert.equal(getterCalls, 0, 'malicious source getters must not execute');
+});
+
+test('frozen and null-prototype canonical statement rows remain eligible for review', () => {
+  const frozen = Object.freeze(statementLine('line-1', 'matched'));
+  const valid = buildReconciliationCloseMetrics(reconciliation({
+    parsedStatementLines: Object.freeze([frozen]),
+  }), account);
+  assert.equal(valid.isReadyToApprove, true);
+  const nullPrototype = Object.assign(Object.create(null), statementLine('line-1', 'matched'));
+  const second = buildReconciliationCloseMetrics(reconciliation({
+    parsedStatementLines: [nullPrototype],
+  }), account);
+  assert.equal(second.isReadyToApprove, true);
+});
