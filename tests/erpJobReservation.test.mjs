@@ -1057,3 +1057,53 @@ test('ERP reservation and status reject inherited or accessor-backed authenticat
     db, authenticatedScope: plain, jobId: '123e4567-e89b-42d3-a456-426614174000',
   }), null);
 });
+
+test('worker identity provenance is required for all ERP job mutations and recovery reads', async () => {
+  const {
+    renewErpOperationJobLease: renew,
+    markErpOperationJobDispatchStarted: dispatch,
+    failErpOperationJob: fail,
+    quarantineExpiredErpOperationJob: quarantine,
+    quarantineExpiredErpOperationJobsBatch: sweep,
+  } = await import('../server/services/erpJobReservation.js');
+  const db = fakeDatabase();
+  const jobId = '123e4567-e89b-42d3-a456-426614174000';
+  const methods = [claim, renew, dispatch, fail, quarantine, sweep, list];
+  let getterCalls = 0;
+  const inheritedTenant = Object.assign(Object.create({ tenantId: 'tenant-a' }), { workerId: 'worker-a' });
+  const inheritedWorker = Object.assign(Object.create({ workerId: 'worker-a' }), { tenantId: 'tenant-a' });
+  const accessorTenant = { workerId: 'worker-a' };
+  Object.defineProperty(accessorTenant, 'tenantId', {
+    enumerable: true, get() { getterCalls++; throw new Error('untrusted worker getter'); },
+  });
+  const accessorWorker = { tenantId: 'tenant-a' };
+  Object.defineProperty(accessorWorker, 'workerId', {
+    enumerable: true, get() { getterCalls++; throw new Error('untrusted worker getter'); },
+  });
+  const hiddenTenant = { workerId: 'worker-a' };
+  Object.defineProperty(hiddenTenant, 'tenantId', { value: 'tenant-a', enumerable: false });
+  const symbolClaim = { ...workerScope, [Symbol('tenant')]: 'foreign' };
+  const proxy = new Proxy({ ...workerScope }, {
+    get() { getterCalls++; throw new Error('untrusted proxy getter'); },
+  });
+  for (const authenticatedWorker of [
+    inheritedTenant, inheritedWorker, accessorTenant, accessorWorker,
+    hiddenTenant, symbolClaim, proxy, new (class Worker {
+      constructor() { Object.assign(this, workerScope); }
+    })(),
+  ]) {
+    for (const method of methods) {
+      await assert.rejects(method({
+        db, authenticatedWorker, operation: 'invoice_delivery',
+        jobId, failureCode: 'ERP_WORKER_ERROR',
+      }), /Authenticated ERP worker/);
+    }
+  }
+  assert.equal(getterCalls, 0, 'identity validation must never invoke getters');
+  assert.equal(db.calls, 0, 'untrusted worker identity must never reach SQL');
+
+  // Legitimate null-prototype authentication records remain usable.
+  const authenticatedWorker = Object.assign(Object.create(null), workerScope);
+  assert.equal(await claim({ db: { query: async () => ({ rows: [] }) },
+    authenticatedWorker, operation: 'invoice_delivery' }), null);
+});
