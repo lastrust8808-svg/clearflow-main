@@ -46,7 +46,7 @@ const keyOf = (accountId: string, transactionId: string): string =>
   JSON.stringify([accountId, transactionId]);
 
 function requireAmount(value: unknown): asserts value is number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || Object.is(value, -0)) {
     throw new Error('Feed amount must be an exact, safe integer number of cents.');
   }
 }
