@@ -176,3 +176,56 @@ test('removing a pending row without posted linkage still records removal', () =
   assert.equal(removed.entries[0].status, 'removed');
   assert.equal(removed.entries[0].requiresReview, true);
 });
+
+test('persisted feed metadata rejects malformed or forged supersession evidence', () => {
+  const pending = planBankFeedReplay({ ...base(), events: [event('pending-1', { pending: true })] });
+  const posted = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('posted-1', { pendingTransactionId: 'pending-1' })],
+  });
+  const snapshot = structuredClone(posted.entries);
+  const corruptions = [
+    (rows) => { rows[0].supersededBy = 'other-posted'; },
+    (rows) => { rows[0].supersededBy = ''; },
+    (rows) => { rows[0].supersededBy = undefined; },
+    (rows) => { rows[1].pendingTransactionId = 'unknown-pending'; },
+    (rows) => { rows[1].pendingTransactionId = 'posted-1'; },
+    (rows) => { rows[1].requiresReview = 'true'; },
+    (rows) => { rows[0].status = 'pending'; },
+  ];
+  for (const corrupt of corruptions) {
+    const rows = structuredClone(snapshot);
+    corrupt(rows);
+    assert.throws(() => planBankFeedReplay({ ...base(), existing: rows, events: [] }),
+      /malformed|linkage is inconsistent/);
+  }
+  assert.deepEqual(posted.entries, snapshot);
+});
+
+test('persisted pending-to-posted links cannot cross account boundaries', () => {
+  const pending = planBankFeedReplay({ ...base(), events: [event('pending-1', { pending: true })] });
+  const posted = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('posted-1', { pendingTransactionId: 'pending-1' })],
+  });
+  const rows = structuredClone(posted.entries);
+  rows[1].accountId = 'acct-b';
+  assert.throws(() => planBankFeedReplay({ ...base(), existing: rows, events: [] }),
+    /linkage is inconsistent/);
+});
+
+test('removed posted records retain valid persisted supersession provenance', () => {
+  const pending = planBankFeedReplay({ ...base(), events: [event('pending-1', { pending: true })] });
+  const posted = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('posted-1', { pendingTransactionId: 'pending-1' })],
+  });
+  const removed = planBankFeedReplay({
+    ...base(), existing: posted.entries,
+    events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'posted-1' }],
+  });
+  assert.equal(removed.entries[0].status, 'superseded');
+  assert.equal(removed.entries[1].status, 'removed');
+  const replay = planBankFeedReplay({ ...base(), existing: removed.entries, events: [] });
+  assert.deepEqual(replay.entries, removed.entries);
+});
