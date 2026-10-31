@@ -367,3 +367,37 @@ test('actor identities cannot alias issued or later notice documents', () => {
     event('notice_prepared', 3),
   ]).status, 'notice_prepared');
 });
+
+
+test('rejects unsupported legal or financial assertions in document-only lifecycle events', () => {
+  for (const [type, index, field, value] of [
+    ['issued', 1, 'fundedAt', '2026-10-01T12:00:00.000Z'],
+    ['presented', 2, 'deliveredAt', '2026-10-02T12:00:00.000Z'],
+    ['disputed', 3, 'defaultedAt', '2026-10-03T12:00:00.000Z'],
+    ['notice_prepared', 4, 'servedAt', '2026-10-04T12:00:00.000Z'],
+    ['notice_prepared', 4, 'paymentReceivedMinor', 100_00],
+  ]) {
+    const history = [event('issued', 1), event('presented', 2), event('disputed', 3),
+      event('notice_prepared', 4)];
+    const modified = history.slice(0, index);
+    modified[index - 1] = event(type, index, { [field]: value });
+    assert.throws(() => project(modified), /Unsupported private note lifecycle event field/);
+  }
+  // A predecessor is meaningful only for an actual revised notice draft.
+  assert.throws(() => project([
+    event('issued', 1, { supersedesDocumentRef: 'unrelated' }),
+  ]), /Unsupported private note lifecycle event field/);
+  assert.equal(project([
+    event('issued', 1), event('presented', 2), event('notice_prepared', 3),
+    event('disputed', 4), event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' }),
+  ]).status, 'notice_prepared');
+});
+
+test('hidden and symbol-bearing lifecycle event claims fail closed', () => {
+  const hidden = event('issued', 1);
+  Object.defineProperty(hidden, 'settled', { value: true, enumerable: false });
+  assert.throws(() => project([hidden]), /Unsupported private note lifecycle event field/);
+  const symbolic = event('issued', 1);
+  symbolic[Symbol('deliveryProof')] = 'unverified';
+  assert.throws(() => project([symbolic]), /Unsupported private note lifecycle event field/);
+});
