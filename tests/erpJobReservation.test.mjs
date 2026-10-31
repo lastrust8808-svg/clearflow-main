@@ -1329,3 +1329,39 @@ test('ERP job receipts reject malformed persisted timestamps and reversed status
   assert.equal(status.createdAt, validCreated);
   assert.equal(status.updatedAt, validUpdated);
 });
+
+test('ERP terminal failure receipt requires canonical UTC timestamps and monotonic chronology', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  const input = {
+    authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR',
+  };
+  const validCreated = '2026-10-29T12:00:00Z';
+  const validUpdated = '2026-10-29T12:03:00Z';
+  const invalidRows = [
+    ...[
+      '2026-02-30T12:00:00Z', '2026-10-29T24:00:00Z',
+      '2026-10-29T12:00:00-04:00', 'tomorrow', new Date(NaN),
+    ].map(created_at => failedRow({ created_at, updated_at: validUpdated })),
+    ...[
+      '2026-02-30T12:03:00Z', '2026-10-29T12:03:00+01:00',
+      '2026-10-29T12:03:00.1234Z', new Date(NaN),
+      '2026-10-29T11:59:59Z',
+    ].map(updated_at => failedRow({ created_at: validCreated, updated_at })),
+  ];
+  for (const row of invalidRows) {
+    await assert.rejects(fail({
+      ...input, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid failure timestamp/);
+  }
+  const receipt = await fail({
+    ...input,
+    db: { query: async () => ({ rows: [failedRow({
+      created_at: validCreated, updated_at: validUpdated,
+    })] }) },
+  });
+  assert.equal(receipt.status, 'failed');
+  assert.equal(receipt.createdAt, validCreated);
+  assert.equal(receipt.updatedAt, validUpdated);
+  assert.equal('delivered' in receipt, false);
+});
