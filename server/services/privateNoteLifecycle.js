@@ -62,6 +62,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
   // trusted server-side clock, not an untrusted request parameter.
   const asOfAt = utcInstant(snapshot.asOfAt, 'asOfAt');
   const seen = new Set();
+  // Actor identifiers name principals, not independent event/document/evidence
+  // receipts. Reject role collisions anywhere in the supplied journal history.
+  const actorIds = new Set();
   let status = 'draft';
   let lastEventId = null;
   let lastEventAt = null;
@@ -87,7 +90,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
     for (const [key, value] of Object.entries(scope)) {
       if (event[key] !== value) throw new Error('Private note event ' + key + ' scope mismatch');
     }
-    requiredId(event.actorId, 'actorId');
+    actorIds.add(requiredId(event.actorId, 'actorId'));
     const occurredAt = utcInstant(event.occurredAt, 'occurredAt');
     if (occurredAt > asOfAt) {
       throw new Error('Private note event occurs after snapshot as-of timestamp');
@@ -180,6 +183,14 @@ export function projectPrivateNoteLifecycle(snapshot) {
   for (const eventId of seen) {
     if (documentRefs.has(eventId) || lifecycleEvidenceRefs.has(eventId)) {
       throw new Error('Private note event, document and evidence references must be distinct');
+    }
+  }
+  // An actor identifier must never be interpreted as a journal event,
+  // immutable document, or independent provenance receipt. Repeated actors
+  // across legitimate actions are permitted; only cross-role reuse fails.
+  for (const actorId of actorIds) {
+    if (seen.has(actorId) || documentRefs.has(actorId) || lifecycleEvidenceRefs.has(actorId)) {
+      throw new Error('Private note actor identifiers must be distinct from event, document and evidence references');
     }
   }
   return Object.freeze({ status, eventCount: seen.size, lastEventId, lastEventAt });
