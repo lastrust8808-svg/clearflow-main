@@ -319,3 +319,44 @@ test('verified projection rejects unexpected claims rather than silently droppin
     /unexpected membership event claim/);
   assert.equal(project(scope, [paid()], asOf).entitled, true);
 });
+
+
+test('submillisecond event order determines whether an earlier failure can revoke a later payment', () => {
+  const success = paid('micro-success', { periodEnd: '2026-11-20T12:00:00Z' });
+  success.occurredAt = '2026-10-20T12:00:00.000200Z';
+  const earlierFailure = event('micro-failure-early', 'payment_failed',
+    '2026-10-20T12:00:00.000100Z', { invoiceId: 'inv-2' });
+  const laterFailure = event('micro-failure-late', 'payment_failed',
+    '2026-10-20T12:00:00.000300Z', { invoiceId: 'inv-2' });
+  assert.equal(project(scope, [success, earlierFailure], asOf).status, 'active');
+  assert.equal(project(scope, [success, laterFailure], asOf).status, 'past_due');
+});
+
+test('submillisecond as-of boundaries never admit future payment or expire early', () => {
+  const success = paid('micro-payment', { periodEnd: '2026-10-20T12:00:00.000300Z' });
+  success.occurredAt = '2026-10-20T12:00:00.000200Z';
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.000100Z').status, 'pending');
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.000200Z').status, 'active');
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.000299Z').status, 'active');
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.000300Z').status, 'expired');
+});
+
+test('submillisecond paid-through must follow occurrence and never regress', () => {
+  const invalid = paid('micro-invalid', { periodEnd: '2026-10-20T12:00:00.000100Z' });
+  invalid.occurredAt = '2026-10-20T12:00:00.000200Z';
+  assert.throws(() => project(scope, [invalid], asOf), /period must end/);
+  const first = paid('micro-first', { periodEnd: '2026-11-20T12:00:00.000300Z' });
+  const renewal = paid('micro-renewal', {
+    invoiceId: 'inv-2', settlementId: 'settle-2',
+    periodEnd: '2026-11-20T12:00:00.000200Z',
+  });
+  renewal.occurredAt = '2026-10-25T12:00:00Z';
+  assert.throws(() => project(scope, [renewal, first], asOf), /period regresses/);
+});
+
+test('equivalent offset timestamps and trailing fractional zeros compare as the same instant', () => {
+  const success = paid('micro-offset', { periodEnd: '2026-10-20T12:00:00.123400Z' });
+  success.occurredAt = '2026-10-20T08:00:00.123300-04:00';
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.1234Z').status, 'expired');
+  assert.equal(project(scope, [success], '2026-10-20T12:00:00.123399Z').status, 'active');
+});
