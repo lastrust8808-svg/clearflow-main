@@ -458,3 +458,56 @@ test('QR bindings reject malformed arrays and forged binding properties without 
     ...registry, bindings: [missing],
   }, lookup), /Missing own QR binding field: status/);
 });
+
+test('QR byte verification rejects unsafe document history before any getter executes', () => {
+  const { registry, lookup } = fixture();
+  const version = versionRegistry().versions[0];
+  let getterCalls = 0;
+  const getterArray = [version];
+  Object.defineProperty(getterArray, '0', {
+    enumerable: true, get() { getterCalls++; return version; },
+  });
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: getterArray }), finalizedBytes),
+  /Document versions must contain enumerable data elements/);
+  assert.equal(getterCalls, 0);
+
+  // Every record is checked before any historical scope/status field is read.
+  const getterRecord = { ...version };
+  Object.defineProperty(getterRecord, 'trustId', {
+    enumerable: true, get() { getterCalls++; return scope.trustId; },
+  });
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [version, getterRecord] }), finalizedBytes),
+  /Document version fields must be enumerable own data properties/);
+  assert.equal(getterCalls, 0);
+
+  const getterRegistry = versionRegistry();
+  Object.defineProperty(getterRegistry, 'versions', {
+    enumerable: true, get() { getterCalls++; return [version]; },
+  });
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    getterRegistry, finalizedBytes),
+  /QR document registry fields must be enumerable data properties/);
+  assert.equal(getterCalls, 0);
+
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [version, , version] }), finalizedBytes),
+  /Document versions must not contain holes/);
+  const extended = [version];
+  Object.defineProperty(extended, 'paymentReceived', { value: true });
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: extended }), finalizedBytes),
+  /Document versions must contain only array indices/);
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    Object.assign(Object.create({ tenantId: 'spoofed' }), versionRegistry()),
+    finalizedBytes), /QR document registry must be a plain data record/);
+  assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: [{ ...version, paymentReceived: true }] }),
+    finalizedBytes), /Document version contains unsupported fields/);
+
+  // Frozen, valid immutable snapshots remain supported.
+  const frozen = Object.freeze([Object.freeze({ ...version })]);
+  assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
+    versionRegistry({ versions: frozen }), finalizedBytes), { status: 'valid' });
+});
