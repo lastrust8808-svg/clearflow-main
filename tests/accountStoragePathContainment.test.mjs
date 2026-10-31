@@ -1159,3 +1159,40 @@ test('legacy JSON numeric overflow and precision loss fail closed on all storage
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('negative zero must not be silently normalized in account storage or legacy records', async () => {
+  const accountId = `negative-zero-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/sig-1.json', save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ amountMinor: 0, retained: true });
+      const before = await fixture.read();
+      for (const payload of [
+        { amountMinor: -0 },
+        { nested: [{ amountMinor: -0 }] },
+      ]) {
+        await assert.rejects(fixture.save(payload), /Unsafe storage record numeric value/);
+        assert.deepEqual(await fixture.read(), before);
+      }
+      // JSON.parse preserves -0, whereas JSON.stringify converts it to 0.
+      // Reject altered legacy evidence rather than returning a different sign.
+      await fs.writeFile(path.join(root, fixture.file), '{"nested":[{"amountMinor":-0}]}');
+      await assert.rejects(fixture.read(), /Unsafe storage record numeric value/);
+      await fixture.save({ amountMinor: 0 });
+      const restored = await fixture.read();
+      assert.equal(Object.is(restored.amountMinor, -0), false);
+      assert.equal(restored.amountMinor, 0);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
