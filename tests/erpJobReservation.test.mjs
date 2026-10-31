@@ -767,6 +767,40 @@ test('dispatch fence rejects foreign receipts, invalid chronology, and invalid i
   assert.equal(calls, 0);
 });
 
+test('dispatch fence requires canonical UTC timestamps and monotonic lease chronology', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  const invalid = [
+    { dispatch_started_at: '2026-02-30T12:01:30Z' },
+    { dispatch_started_at: '2026-10-29 12:01:30' },
+    { dispatch_started_at: '2026-10-29T08:01:30-04:00' },
+    { lease_expires_at: '2026-02-30T12:02:00Z' },
+    { created_at: '2026-10-29T12:01:01Z' },
+    { claimed_at: '2026-10-29T12:01:31Z' },
+    { updated_at: '2026-10-29T12:01:29Z' },
+    { updated_at: '2026-10-29T12:02:00Z' },
+    { updated_at: '2026-10-29T12:02:01Z' },
+  ];
+  for (const overrides of invalid) {
+    await assert.rejects(mark({ ...input, db: {
+      query: async () => ({ rows: [dispatchedRow(overrides)] }),
+    } }), /invalid dispatch fence timestamp/, JSON.stringify(overrides));
+  }
+  const valid = await mark({ ...input, db: {
+    query: async () => ({ rows: [dispatchedRow({
+      created_at: '2026-10-29T12:00:00Z',
+      claimed_at: '2026-10-29T12:01:00Z',
+      dispatch_started_at: '2026-10-29T12:01:30Z',
+      updated_at: '2026-10-29T12:01:30Z',
+      lease_expires_at: '2026-10-29T12:02:00Z',
+    })] }),
+  } });
+  assert.equal(valid.dispatchStartedAt, '2026-10-29T12:01:30Z');
+  assert.equal(valid.outcomeMayBeUnknown, true);
+});
+
 test('terminal failure is forbidden once an external dispatch might have started', async () => {
   const { failErpOperationJob: fail } =
     await import('../server/services/erpJobReservation.js');
