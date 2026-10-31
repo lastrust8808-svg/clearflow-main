@@ -1138,3 +1138,64 @@ test('frozen and null-prototype canonical statement rows remain eligible for rev
   }), account);
   assert.equal(second.isReadyToApprove, true);
 });
+
+
+test('reviewed book indices reject sparse, inherited, accessor and hidden financial evidence', () => {
+  const sparse = new Array(1);
+  const inherited = new Array(1);
+  const inheritedPrototype = Object.create(Array.prototype);
+  inheritedPrototype[0] = 'ledger-1';
+  Object.setPrototypeOf(inherited, inheritedPrototype);
+  const accessor = ['ledger-1'];
+  Object.defineProperty(accessor, '0', {
+    enumerable: true,
+    configurable: true,
+    get() { throw new Error('book index getter must not execute'); },
+  });
+  const hidden = ['ledger-1'];
+  Object.defineProperty(hidden, 'reviewOverride', { value: 'ledger-2' });
+  const symbolic = ['ledger-1'];
+  symbolic[Symbol('unreviewed')] = 'ledger-2';
+  const extra = ['ledger-1'];
+  extra.unreviewed = 'ledger-2';
+  for (const field of ['clearedTransactionIds', 'unmatchedTransactionIds']) {
+    for (const invalid of [sparse, inherited, accessor, hidden, symbolic, extra]) {
+      const metrics = buildReconciliationCloseMetrics(reconciliation({ [field]: invalid }), account);
+      assert.equal(metrics.isReadyToApprove, false, field);
+      assert.match(metrics.blockedReason, /Cleared and unmatched book transaction identifiers/);
+    }
+  }
+  // Frozen, fully-owned canonical indices remain valid.
+  assert.equal(buildReconciliationCloseMetrics(reconciliation({
+    clearedTransactionIds: Object.freeze(['ledger-1']),
+    unmatchedTransactionIds: Object.freeze([]),
+  }), account).isReadyToApprove, true);
+});
+
+test('statement review indices reject hidden, sparse and getter-backed IDs without evaluating getters', () => {
+  const sparse = new Array(1);
+  const accessor = ['line-1'];
+  Object.defineProperty(accessor, '0', {
+    enumerable: true,
+    configurable: true,
+    get() { throw new Error('statement index getter must not execute'); },
+  });
+  const hidden = ['line-1'];
+  Object.defineProperty(hidden, 'unreviewed', { value: true });
+  const symbol = ['line-1'];
+  symbol[Symbol('unreviewed')] = true;
+  for (const [field, diagnostic] of [
+    ['matchedStatementLineIds', /Matched statement-line identifiers/],
+    ['unmatchedStatementLineIds', /Unmatched statement-line identifiers/],
+  ]) {
+    for (const invalid of [sparse, accessor, hidden, symbol]) {
+      const metrics = buildReconciliationCloseMetrics(reconciliation({ [field]: invalid }), account);
+      assert.equal(metrics.isReadyToApprove, false, field);
+      assert.match(metrics.blockedReason, diagnostic);
+    }
+  }
+  assert.equal(buildReconciliationCloseMetrics(reconciliation({
+    matchedStatementLineIds: Object.freeze(['line-1']),
+    unmatchedStatementLineIds: Object.freeze([]),
+  }), account).isReadyToApprove, true);
+});
