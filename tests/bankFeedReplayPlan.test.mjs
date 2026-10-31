@@ -229,3 +229,48 @@ test('removed posted records retain valid persisted supersession provenance', ()
   const replay = planBankFeedReplay({ ...base(), existing: removed.entries, events: [] });
   assert.deepEqual(replay.entries, removed.entries);
 });
+
+test('repeated identical modified feed events are idempotent after first correction', () => {
+  const first = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const changed = planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [event('tx-1', { kind: 'modified', amountCents: 2600 })],
+  });
+  assert.equal(changed.applied, 1);
+  const replay = planBankFeedReplay({
+    ...base(), existing: changed.entries,
+    events: [event('tx-1', { kind: 'modified', amountCents: 2600 })],
+  });
+  assert.equal(replay.applied, 0);
+  assert.equal(replay.replayed, 1);
+  assert.deepEqual(replay.entries, changed.entries);
+
+  const pending = planBankFeedReplay({
+    ...base(), events: [event('pending-1', { pending: true })],
+  });
+  const repeatedPending = planBankFeedReplay({
+    ...base(), existing: pending.entries,
+    events: [event('pending-1', { kind: 'modified', pending: true })],
+  });
+  assert.equal(repeatedPending.applied, 0);
+  assert.equal(repeatedPending.replayed, 1);
+});
+
+test('first no-op modification still flags an unreviewed record for review', () => {
+  const first = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  const unreviewed = first.entries.map((entry) => ({ ...entry, requiresReview: false }));
+  const modified = planBankFeedReplay({
+    ...base(), existing: unreviewed,
+    events: [event('tx-1', { kind: 'modified' })],
+  });
+  assert.equal(modified.applied, 1);
+  assert.equal(modified.replayed, 0);
+  assert.equal(modified.entries[0].requiresReview, true);
+  assert.equal(unreviewed[0].requiresReview, false);
+  const replay = planBankFeedReplay({
+    ...base(), existing: modified.entries,
+    events: [event('tx-1', { kind: 'modified' })],
+  });
+  assert.equal(replay.applied, 0);
+  assert.equal(replay.replayed, 1);
+});
