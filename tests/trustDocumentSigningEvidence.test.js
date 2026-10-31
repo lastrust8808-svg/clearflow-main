@@ -603,3 +603,40 @@ test('signing rejects unsupported receipt claims and custom prototypes; frozen p
     attestations: [Object.assign(Object.create(null), attestation('a'))],
   }).status, 'evidence_ready_for_review');
 });
+
+test('signing packet envelope rejects executable and hidden claims before reading scope', () => {
+  assert.equal(assess().status, 'evidence_ready_for_review');
+  for (const field of ['tenantId', 'governance', 'versionRegistry', 'attestations']) {
+    let calls = 0;
+    const malicious = packet();
+    Object.defineProperty(malicious, field, {
+      enumerable: true, configurable: true,
+      get() { calls++; throw new Error('Untrusted packet getter executed'); },
+    });
+    assert.throws(() => assessTrustDocumentSigningPacket(malicious),
+      /Signing packet fields must be enumerable own data properties/);
+    assert.equal(calls, 0);
+  }
+  const hidden = packet();
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => assessTrustDocumentSigningPacket(hidden),
+    /Signing packet contains unsupported fields/);
+  assert.throws(() => assessTrustDocumentSigningPacket({
+    ...packet(), [Symbol('settled')]: true,
+  }), /Signing packet contains unsupported fields/);
+  assert.throws(() => assessTrustDocumentSigningPacket({
+    ...packet(), paymentAuthorized: true,
+  }), /Signing packet contains unsupported fields/);
+  const inherited = packet();
+  Object.setPrototypeOf(inherited, { tenantId: 'forged-tenant' });
+  assert.throws(() => assessTrustDocumentSigningPacket(inherited),
+    /Signing packet must be a plain data record/);
+  const missing = packet();
+  delete missing.trustId;
+  assert.throws(() => assessTrustDocumentSigningPacket(missing),
+    /Signing packet missing own field: trustId/);
+  assert.equal(assessTrustDocumentSigningPacket(Object.freeze(packet())).status,
+    'evidence_ready_for_review');
+  assert.equal(assessTrustDocumentSigningPacket(Object.assign(Object.create(null), packet())).status,
+    'evidence_ready_for_review');
+});
