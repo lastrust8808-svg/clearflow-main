@@ -1127,3 +1127,28 @@ test('reservation rejects unsafe financial integers before SQL without rejecting
   assert.equal(accepted.created, true);
   assert.equal(db.calls, 1);
 });
+
+test('reservation rejects fractional minor units and negative zero without a database write', async () => {
+  const db = fakeDatabase();
+  for (const payload of [
+    { amountMinor: 125.5 },
+    { invoice: { lines: [{ lineTotalMinor: 199.01 }] } },
+    { fees: [{ feeCents: 0.5 }] },
+    { ledger: { balanceMinor: -1.25 } },
+    { amountMinor: -0 },
+    { invoice: { adjustment: -0 } },
+  ]) {
+    await assert.rejects(reserve({ db, ...args, payload }),
+      /ERP job payload contains (a fractional or unsafe minor-unit amount|negative zero)/);
+  }
+  assert.equal(db.calls, 0, 'ambiguous financial numbers must never reach SQL');
+
+  // Integer minor units and decimal rate fields are distinct representations.
+  const accepted = await reserve({
+    db, ...args,
+    payload: { invoice: { lines: [{ lineTotalMinor: 199 }, { feeCents: -25 }] },
+      amountMinor: 0, taxRate: 0.075 },
+  });
+  assert.equal(accepted.created, true);
+  assert.equal(db.calls, 1);
+});
