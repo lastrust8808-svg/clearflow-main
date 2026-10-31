@@ -453,17 +453,26 @@ export function buildReconciliationCloseMetrics(
     };
   }
 
-  // A controller cannot approve statement evidence that had not yet been
-  // imported. Legacy approvals without a verifiable import timestamp must
-  // be re-reviewed instead of reusing an unbound signoff. Compare absolute
-  // instants so legitimate timezone offsets retain their ordering.
-  // This checks client-side evidence consistency, not provider provenance
-  // or authenticated server-side approval.
+  // A statement must have a completed, valid import timestamp before
+  // either pending controller review or approved close can be eligible.
+  // A filename/import ID alone is not evidence that an import occurred.
+  // This remains client-side consistency validation, not provider provenance.
+  if (!hasValidControllerSignoffTimestamp(reconciliation.statementImportedAt)) {
+    return {
+      bookEndingBalance,
+      differenceAmount,
+      unresolvedLineCount,
+      matchedLineCount,
+      isReadyToApprove: false,
+      blockedReason: 'Controller review requires a valid statement import timestamp.',
+    };
+  }
+
+  // An approved controller signoff must follow the imported statement.
+  // Compare absolute instants so legitimate timezone offsets retain ordering.
   if (
-    reconciliation.closeApprovalStatus === 'approved' && (
-      !hasValidControllerSignoffTimestamp(reconciliation.statementImportedAt) ||
-      Date.parse(reconciliation.controllerSignoffAt!) < Date.parse(reconciliation.statementImportedAt!)
-    )
+    reconciliation.closeApprovalStatus === 'approved' &&
+    Date.parse(reconciliation.controllerSignoffAt!) < Date.parse(reconciliation.statementImportedAt!)
   ) {
     return {
       bookEndingBalance,
