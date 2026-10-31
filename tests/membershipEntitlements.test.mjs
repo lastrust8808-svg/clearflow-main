@@ -462,3 +462,33 @@ test('event batches reject inherited, sparse, accessor and hidden entries before
   assert.throws(() => project(scope, new Array(10001).fill(paid()), asOf), /dense plain array/);
   assert.equal(project(scope, Object.freeze([paid()]), asOf).status, 'active');
 });
+
+test('Proxy-wrapped membership identities, event records and batches fail before traps execute', () => {
+  let trapCalls = 0;
+  const trap = {
+    getPrototypeOf() { trapCalls++; throw new Error('untrusted prototype trap'); },
+    ownKeys() { trapCalls++; throw new Error('untrusted keys trap'); },
+    get() { trapCalls++; throw new Error('untrusted getter trap'); },
+    getOwnPropertyDescriptor() { trapCalls++; throw new Error('untrusted descriptor trap'); },
+  };
+  const proxiedScope = new Proxy({ ...scope }, trap);
+  const proxiedEvent = new Proxy(paid(), trap);
+  const proxiedBatch = new Proxy([paid()], trap);
+  for (const [identity, events] of [
+    [proxiedScope, [paid()]],
+    [scope, [proxiedEvent]],
+    [scope, proxiedBatch],
+  ]) {
+    assert.throws(() => project(identity, events, asOf), /Proxy/);
+  }
+  assert.equal(trapCalls, 0, 'rejected Proxy objects must not execute user traps');
+
+  const revoked = Proxy.revocable(paid(), {});
+  revoked.revoke();
+  assert.throws(() => project(scope, [revoked.proxy], asOf), /Proxy/);
+
+  // Ordinary frozen and null-prototype records remain admissible.
+  const inertScope = Object.freeze(Object.assign(Object.create(null), scope));
+  const inertEvent = Object.freeze(Object.assign(Object.create(null), paid()));
+  assert.equal(project(inertScope, Object.freeze([inertEvent]), asOf).status, 'active');
+});
