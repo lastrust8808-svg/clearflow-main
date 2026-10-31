@@ -45,6 +45,59 @@ const validId = (value: unknown): value is string =>
 const keyOf = (accountId: string, transactionId: string): string =>
   JSON.stringify([accountId, transactionId]);
 
+// The replay planner accepts normalized JSON evidence, not arbitrary provider
+// objects. Inspect descriptors BEFORE spreading or reading fields: getters,
+// hidden metadata, unknown keys, or sparse batches could otherwise change
+// the proposed ledger evidence or be silently discarded during persistence.
+const STORED_FEED_FIELDS = new Set([
+  'tenantId', 'provider', 'connectionId', 'accountId', 'transactionId',
+  'amountCents', 'status', 'pendingTransactionId', 'supersededBy', 'requiresReview',
+]);
+const EVENT_FEED_FIELDS = new Set([
+  'kind', 'accountId', 'transactionId', 'amountCents', 'pending',
+  'pendingTransactionId',
+]);
+
+function assertCanonicalFeedList(value: unknown, label: string): void {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    throw new Error(`Malformed canonical feed ${label} array.`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.length !== value.length + 1 || keys.some((key) => {
+    if (key === 'length') return false;
+    if (typeof key !== 'string' || !/^(0|[1-9]\\d*)$/.test(key) ||
+        Number(key) >= value.length) return true;
+    const descriptor = descriptors[key];
+    return !descriptor.enumerable || !Object.hasOwn(descriptor, 'value');
+  })) {
+    throw new Error(`Malformed canonical feed ${label} array.`);
+  }
+}
+
+function assertCanonicalFeedObject(
+  value: unknown, fields: ReadonlySet<string>, label: string
+): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Malformed canonical feed ${label} object.`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error(`Malformed canonical feed ${label} object.`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !fields.has(key)) {
+      throw new Error(`Malformed canonical feed ${label} property.`);
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
+        descriptor.value === undefined) {
+      throw new Error(`Malformed canonical feed ${label} property.`);
+    }
+  }
+}
+
 function requireAmount(value: unknown): asserts value is number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || Object.is(value, -0)) {
     throw new Error('Feed amount must be an exact, safe integer number of cents.');
@@ -59,11 +112,32 @@ export function planBankFeedReplay(input: FeedReplayInput): {
 } {
   if (!validId(input.tenantId) || !validId(input.connectionId) ||
       (input.provider !== 'plaid' && input.provider !== 'mercury') ||
-      !Array.isArray(input.allowedAccountIds) || !input.allowedAccountIds.length ||
-      input.allowedAccountIds.some((id) => !validId(id)) ||
-      new Set(input.allowedAccountIds).size !== input.allowedAccountIds.length ||
+      !Array.isArray(input.allowedAccountIds) ||
       !Array.isArray(input.existing) || !Array.isArray(input.events)) {
     throw new Error('Invalid authorized feed scope or event collection.');
+  }
+  assertCanonicalFeedList(input.allowedAccountIds, 'authorized accounts');
+  assertCanonicalFeedList(input.existing, 'existing records');
+  assertCanonicalFeedList(input.events, 'provider events');
+  if (!input.allowedAccountIds.length ||
+      input.allowedAccountIds.some((id) => !validId(id)) ||
+      new Set(input.allowedAccountIds).size !== input.allowedAccountIds.length) {
+    throw new Error('Invalid authorized feed scope or event collection.');
+  }
+  // Validate all canonical envelopes before cloning or processing a page.
+  // Removed events carry only identity; attached financial fields must never
+  // be silently ignored as though the provider supplied a clean tombstone.
+  for (const entry of input.existing) {
+    assertCanonicalFeedObject(entry, STORED_FEED_FIELDS, 'stored record');
+  }
+  for (const event of input.events) {
+    assertCanonicalFeedObject(event, EVENT_FEED_FIELDS, 'provider event');
+    if (event.kind === 'removed' &&
+        (Object.hasOwn(event, 'amountCents') ||
+         Object.hasOwn(event, 'pending') ||
+         Object.hasOwn(event, 'pendingTransactionId'))) {
+      throw new Error('Malformed canonical feed removal metadata.');
+    }
   }
   const allowed = new Set(input.allowedAccountIds);
   const entries = input.existing.map((entry) => ({ ...entry }));
