@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
+import { assertPlainTrustDocumentVersions, verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 
 /**
  * Pure, INTERNAL binding resolver for QR token SHA-256 digests.
@@ -206,13 +206,18 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   const binding = resolveTrustDocumentQrBinding(qrRegistry, lookup);
   // An unknown or revoked QR token must not reveal whether a document exists.
   if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
-  if (!versionRegistry || typeof versionRegistry !== 'object' || Array.isArray(versionRegistry) ||
-      versionRegistry.tenantId !== qrRegistry.tenantId ||
+  // Preflight the registry and the *entire* historical version list before
+  // reading scope, status or chronology. Earlier scope checks and Array#some
+  // could execute an untrusted getter before the core byte verifier ran.
+  // Structural admission is not authentication of registry provenance.
+  plainQrRecord(versionRegistry, 'QR document registry',
+    [...QR_SCOPE_FIELDS, 'documentId', 'versions']);
+  assertPlainTrustDocumentVersions(versionRegistry.versions);
+  if (versionRegistry.tenantId !== qrRegistry.tenantId ||
       versionRegistry.entityId !== qrRegistry.entityId ||
       versionRegistry.trustId !== qrRegistry.trustId ||
       versionRegistry.documentId !== binding.documentId ||
-      !Array.isArray(versionRegistry.versions) ||
-      versionRegistry.versions.some(version => !version || version.trustId !== qrRegistry.trustId)) {
+      versionRegistry.versions.some(version => version.trustId !== qrRegistry.trustId)) {
     throw new Error('QR document registry scope mismatch');
   }
   // A later version must not retroactively supersede an earlier version in
