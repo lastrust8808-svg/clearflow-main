@@ -170,3 +170,53 @@ test('trustee revocations require distinct, non-replayed evidence references', (
     ], signerIds: ['b'],
   }).eligible, true);
 });
+
+test('governance snapshot rejects inherited, getter-backed, hidden and unsupported authority claims', () => {
+  const valid = snapshot();
+  assert.throws(() => evaluateTrusteeSigningPolicy(Object.create(valid)), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'mode', {
+    enumerable: true,
+    get() { getterCalled = true; return 'independent'; },
+  });
+  assert.throws(() => evaluateTrusteeSigningPolicy(accessor), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'signatureVerified', { value: true, enumerable: false });
+  assert.throws(() => evaluateTrusteeSigningPolicy(hidden), /Unsupported Governance snapshot field/);
+  assert.throws(() => evaluate({ paymentAuthorized: true }), /Unsupported Governance snapshot field/);
+  assert.throws(() => evaluateTrusteeSigningPolicy({ ...valid, [Symbol('approved')]: true }),
+    /Unsupported Governance snapshot field/);
+  const missing = { ...valid };
+  delete missing.trustId;
+  assert.throws(() => evaluateTrusteeSigningPolicy(missing), /Governance snapshot.trustId/);
+  assert.equal(evaluateTrusteeSigningPolicy(Object.assign(Object.create(null), valid)).eligible, true);
+});
+
+test('trustee appointments require own plain-data evidence and cannot smuggle signing claims', () => {
+  const valid = appointment('a');
+  assert.throws(() => evaluate({ appointments: [Object.create(valid)] }), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'acceptedOn', {
+    enumerable: true,
+    get() { getterCalled = true; return '2025-01-02'; },
+  });
+  assert.throws(() => evaluate({ appointments: [accessor] }), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'identityVerified', { value: true, enumerable: false });
+  assert.throws(() => evaluate({ appointments: [hidden] }), /Unsupported Trustee appointment field/);
+  assert.throws(() => evaluate({ appointments: [{ ...valid, delegationAuthorized: true }] }),
+    /Unsupported Trustee appointment field/);
+  assert.throws(() => evaluate({ appointments: [{ ...valid, [Symbol('executed')]: true }] }),
+    /Unsupported Trustee appointment field/);
+  const missing = { ...valid };
+  delete missing.trusteeId;
+  assert.throws(() => evaluate({ appointments: [missing] }), /Trustee appointment.trusteeId/);
+  assert.equal(evaluate({
+    appointments: [Object.assign(Object.create(null), valid)],
+    signerIds: ['a'],
+  }).eligible, true);
+});
