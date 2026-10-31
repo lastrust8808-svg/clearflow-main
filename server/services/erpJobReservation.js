@@ -579,11 +579,12 @@ export async function quarantineExpiredErpOperationJob({
       typeof row.actor_id !== 'string' || !row.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound quarantine');
   }
-  const stamp = value => value instanceof Date ? value.toISOString() : value;
-  const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
-  if ([createdAt, updatedAt].some(
-    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
-  ) || Date.parse(updatedAt) < Date.parse(createdAt)) {
+  // A recovery receipt is persisted evidence, not an informal Date.parse
+  // guess: reject normalized impossible dates and non-UTC strings.
+  const createdAt = persistedUtcTimestamp(row.created_at);
+  const updatedAt = persistedUtcTimestamp(row.updated_at);
+  if (createdAt === null || updatedAt === null ||
+      Date.parse(updatedAt) < Date.parse(createdAt)) {
     throw new Error('ERP job storage returned an invalid quarantine timestamp');
   }
   return Object.freeze({
@@ -646,17 +647,17 @@ export async function quarantineExpiredErpOperationJobsBatch({
       throw new Error('ERP job storage returned an invalid tenant-bound recovery record');
     }
     seenIds.add(row.id);
-    const stamp = value => value instanceof Date ? value.toISOString() : value;
-    const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
+    // Fail closed if a recovery/backlog receipt has a noncanonical timestamp.
+    // An invalid non-null dispatch time must not become "not dispatched".
+    const createdAt = persistedUtcTimestamp(row.created_at);
+    const updatedAt = persistedUtcTimestamp(row.updated_at);
     const dispatchStartedAt = row.dispatch_started_at == null
-      ? null : stamp(row.dispatch_started_at);
-    if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
-        typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt)) ||
+      ? null : persistedUtcTimestamp(row.dispatch_started_at);
+    if (createdAt === null || updatedAt === null ||
         Date.parse(updatedAt) < Date.parse(createdAt) ||
+        (row.dispatch_started_at != null && dispatchStartedAt === null) ||
         (dispatchStartedAt !== null &&
-         (typeof dispatchStartedAt !== 'string' ||
-          !Number.isFinite(Date.parse(dispatchStartedAt)) ||
-          Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
+         (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
           Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
       throw new Error('ERP job storage returned an invalid recovery timestamp');
     }
@@ -712,17 +713,17 @@ export async function listErpOperationJobsNeedingReconciliation({
       throw new Error('ERP job storage returned an invalid tenant-bound reconciliation record');
     }
     previousId = row.id;
-    const stamp = value => value instanceof Date ? value.toISOString() : value;
-    const createdAt = stamp(row.created_at), updatedAt = stamp(row.updated_at);
+    // Fail closed if a recovery/backlog receipt has a noncanonical timestamp.
+    // An invalid non-null dispatch time must not become "not dispatched".
+    const createdAt = persistedUtcTimestamp(row.created_at);
+    const updatedAt = persistedUtcTimestamp(row.updated_at);
     const dispatchStartedAt = row.dispatch_started_at == null
-      ? null : stamp(row.dispatch_started_at);
-    if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
-        typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt)) ||
+      ? null : persistedUtcTimestamp(row.dispatch_started_at);
+    if (createdAt === null || updatedAt === null ||
         Date.parse(updatedAt) < Date.parse(createdAt) ||
+        (row.dispatch_started_at != null && dispatchStartedAt === null) ||
         (dispatchStartedAt !== null &&
-         (typeof dispatchStartedAt !== 'string' ||
-          !Number.isFinite(Date.parse(dispatchStartedAt)) ||
-          Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
+         (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
           Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
       throw new Error('ERP job storage returned an invalid reconciliation timestamp');
     }
