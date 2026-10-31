@@ -85,6 +85,12 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new TypeError('ERP job payload contains a non-finite number');
+    // JSON numbers above the safe-integer boundary may already have rounded
+    // before serialization. Never reserve an accounting job with ambiguous
+    // integer amounts, counts, or minor-unit balances.
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      throw new TypeError('ERP job payload contains an unsafe integer');
+    }
     return;
   }
   if (typeof value !== 'object') throw new TypeError('ERP job payload contains a non-JSON value');
