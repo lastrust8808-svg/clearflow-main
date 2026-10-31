@@ -397,15 +397,18 @@ export async function renewErpOperationJobLease({
       !record.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound lease renewal');
   }
-  const stamp = value => value instanceof Date ? value.toISOString() : value;
-  const claimedAt = stamp(record.claimed_at);
-  const leaseExpiresAt = stamp(record.lease_expires_at);
-  const updatedAt = stamp(record.updated_at);
-  const createdAt = stamp(record.created_at);
-  if ([claimedAt, leaseExpiresAt, updatedAt, createdAt].some(
-    value => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
-  ) || Date.parse(leaseExpiresAt) <= Date.parse(claimedAt) ||
-       Date.parse(updatedAt) < Date.parse(createdAt)) {
+  // Renewal is a persisted worker-lease receipt, not a best-effort clock
+  // parse. Require canonical UTC timestamps and the same monotonic chronology
+  // as an initial claim: created <= claimed <= updated < lease expiry.
+  // Date.parse alone normalizes impossible dates and accepts local strings.
+  const claimedAt = persistedUtcTimestamp(record.claimed_at);
+  const leaseExpiresAt = persistedUtcTimestamp(record.lease_expires_at);
+  const updatedAt = persistedUtcTimestamp(record.updated_at);
+  const createdAt = persistedUtcTimestamp(record.created_at);
+  if ([claimedAt, leaseExpiresAt, updatedAt, createdAt].some(value => value === null) ||
+      Date.parse(createdAt) > Date.parse(claimedAt) ||
+      Date.parse(claimedAt) > Date.parse(updatedAt) ||
+      Date.parse(updatedAt) >= Date.parse(leaseExpiresAt)) {
     throw new Error('ERP job storage returned an invalid lease renewal timestamp');
   }
   return Object.freeze({
