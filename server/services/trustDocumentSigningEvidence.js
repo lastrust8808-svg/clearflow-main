@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { evaluateTrusteeSigningPolicy } from './trusteeSigningPolicy.js';
-import { verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
+import { assertPlainTrustDocumentVersions, verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 
 /**
  * INTERNAL, non-posting signature-evidence readiness assessment. The caller
@@ -176,6 +176,10 @@ export function assessTrustDocumentSigningPacket(packet) {
       throw new Error('Signing document version registry ' + key + ' scope mismatch');
     }
   }
+  // Fail closed on the complete historical version list before any loop
+  // reads trust ownership, revocation status or timestamps. The core verifier
+  // runs later and cannot protect these earlier reads on its own.
+  assertPlainTrustDocumentVersions(versionRegistry.versions);
   // A tenant may own multiple trusts. A matching tenant/entity/document ID
   // does not authorize substituting a version registered for another trust.
   // Require trust ownership on the registry AND every historical version.
