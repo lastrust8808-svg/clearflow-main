@@ -21,6 +21,34 @@ function requiredIdentifier(value, label) {
   return value;
 }
 
+// A tenant/actor claim is only a trusted input after the caller authenticates
+// it. Reject inherited, accessor-backed, hidden and Proxy identity records
+// before reading any field; otherwise an apparent tenant binding can be
+// supplied by JavaScript prototype state rather than an explicit auth result.
+function authenticatedActorIdentity(scope) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || nodeTypes.isProxy(scope)) {
+    throw new TypeError('Authenticated ERP scope must be a plain data record');
+  }
+  const prototype = Object.getPrototypeOf(scope);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Authenticated ERP scope must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(scope);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Authenticated ERP scope contains an unsafe property');
+    }
+  }
+  if (!Object.hasOwn(descriptors, 'tenantId') || !Object.hasOwn(descriptors, 'actorId')) {
+    throw new TypeError('Authenticated ERP scope is missing an own identity');
+  }
+  return {
+    tenantId: requiredIdentifier(descriptors.tenantId.value, 'authenticated tenant'),
+    actorId: requiredIdentifier(descriptors.actorId.value, 'authenticated actor'),
+  };
+}
+
 // Reject values that JSON.stringify silently drops or coerces. In an accounting
 // operation, { amount: NaN } must never become { amount: null }, and a missing
 // recipient must not hash identically to a deliberately omitted field.
@@ -88,8 +116,7 @@ export async function reserveErpOperationJob({
   db, authenticatedScope, operation, idempotencyKey, payload,
 }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedScope?.tenantId, 'authenticated tenant');
-  const actorId = requiredIdentifier(authenticatedScope?.actorId, 'authenticated actor');
+  const { tenantId, actorId } = authenticatedActorIdentity(authenticatedScope);
   if (!operations.has(operation)) throw new TypeError('Unsupported ERP operation');
   if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
     throw new TypeError('Invalid idempotency key');
@@ -165,8 +192,7 @@ export async function reserveErpOperationJob({
 // A returned status is NOT proof that an email was delivered or funds moved.
 export async function readErpOperationJobStatus({ db, authenticatedScope, jobId }) {
   if (!db || typeof db.query !== 'function') throw new TypeError('Database connection required');
-  const tenantId = requiredIdentifier(authenticatedScope?.tenantId, 'authenticated tenant');
-  const actorId = requiredIdentifier(authenticatedScope?.actorId, 'authenticated actor');
+  const { tenantId, actorId } = authenticatedActorIdentity(authenticatedScope);
   if (typeof jobId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
     throw new TypeError('Invalid ERP job id');
