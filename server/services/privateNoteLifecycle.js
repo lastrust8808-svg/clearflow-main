@@ -17,6 +17,15 @@ const NEXT = Object.freeze({
   notice_prepared: Object.freeze({ disputed: 'disputed' }),
 });
 
+// Only these structural fields may appear in a lifecycle event. In particular,
+// a draft event must not smuggle delivery, default, settlement or payment
+// assertions into a document-only projection. New event types require an
+// explicit reviewed schema change, not silently ignored metadata.
+const EVENT_FIELDS = new Set([
+  'eventId', 'tenantId', 'entityId', 'trustId', 'noteId',
+  'type', 'occurredAt', 'actorId', 'documentRef', 'evidenceRef',
+]);
+
 function requiredId(value, field) {
   if (typeof value !== 'string' || !value || value.trim() !== value) {
     throw new TypeError(field + ' must be a nonempty unpadded string');
@@ -83,6 +92,16 @@ export function projectPrivateNoteLifecycle(snapshot) {
   for (const event of snapshot.events) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
+    }
+    // Reflect.ownKeys also rejects hidden/symbol payload fields that a normal
+    // Object.keys check would silently skip. No payment or delivery fields are
+    // permitted in this non-posting document timeline.
+    for (const key of Reflect.ownKeys(event)) {
+      if (typeof key !== 'string' ||
+          (!EVENT_FIELDS.has(key) &&
+           !(event.type === 'notice_prepared' && key === 'supersedesDocumentRef'))) {
+        throw new TypeError('Unsupported private note lifecycle event field');
+      }
     }
     const eventId = requiredId(event.eventId, 'eventId');
     if (seen.has(eventId)) throw new Error('Duplicate private note event ID');
