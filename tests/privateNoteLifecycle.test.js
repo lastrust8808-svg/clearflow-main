@@ -283,3 +283,30 @@ test('initial notice draft cannot falsely claim a predecessor', () => {
   }
   assert.equal(project([...history, event('notice_prepared', 3)]).status, 'notice_prepared');
 });
+
+
+test('issued instrument and notice documents cannot masquerade as lifecycle evidence', () => {
+  assert.throws(() => project([
+    event('issued', 1, { evidenceRef: 'document-1' }),
+  ]), /document and lifecycle evidence references must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3, { evidenceRef: 'document-1' }),
+  ]), /document and lifecycle evidence references must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4, { evidenceRef: 'document-3' }),
+  ]), /document and lifecycle evidence references must be distinct/);
+});
+
+test('future notice document IDs cannot recycle earlier action evidence references', () => {
+  assert.throws(() => project([
+    event('issued', 1),
+    event('presented', 2, { evidenceRef: 'document-3' }),
+    event('notice_prepared', 3),
+  ]), /document and lifecycle evidence references must be distinct/);
+  assert.equal(project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4),
+  ]).status, 'disputed');
+});
