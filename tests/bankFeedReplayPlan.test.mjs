@@ -71,6 +71,34 @@ test('unsafe amounts, malformed identities and unknown modifications fail closed
   assert.throws(() => planBankFeedReplay({ ...base(), events: [event('tx-1', { kind: 'modified' })] }), /Unknown modification/);
 });
 
+test('negative-zero cents are rejected in new events and stored feed evidence', () => {
+  // JSON.stringify(-0) produces "0"; accepting it would silently change the
+  // original financial evidence during persistence or a replay.
+  const original = planBankFeedReplay({
+    ...base(), events: [event('tx-1', { amountCents: 0 })],
+  });
+  assert.equal(original.entries[0].amountCents, 0, 'ordinary positive zero is valid');
+  const snapshot = structuredClone(original.entries);
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: original.entries,
+    events: [event('tx-2', { amountCents: -0 })],
+  }), /safe integer/);
+  assert.deepEqual(original.entries, snapshot);
+
+  const corrupted = structuredClone(original.entries);
+  corrupted[0].amountCents = -0;
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: corrupted, events: [],
+  }), /safe integer/);
+
+  // A rejected later event must not partially mutate the caller's records.
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: original.entries,
+    events: [event('tx-2', { amountCents: 100 }), event('tx-3', { amountCents: -0 })],
+  }), /safe integer/);
+  assert.deepEqual(original.entries, snapshot);
+});
+
 test('modifications and removals require explicit review; removal replays safely', () => {
   const first = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
   const modified = planBankFeedReplay({ ...base(), existing: first.entries, events: [event('tx-1', { kind: 'modified', amountCents: 2600 })] });
