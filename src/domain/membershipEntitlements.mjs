@@ -174,7 +174,8 @@ export function projectMembershipEntitlement(scope, events, asOf) {
         if (prior.invoiceId !== normalizedEvent.invoiceId) {
           throw new Error('settlement reused across invoices');
         }
-        if (prior.periodEnd !== normalizedEvent.periodEnd || prior.occurredAt !== normalizedEvent.occurredAt) {
+        if (compareMembershipInstants(prior.periodEnd, normalizedEvent.periodEnd) !== 0 ||
+            compareMembershipInstants(prior.occurredAt, normalizedEvent.occurredAt) !== 0) {
           throw new Error('conflicting settlement replay');
         }
         seen.set(id, fingerprint);
