@@ -1,0 +1,26 @@
+name: ERP operation fail-closed guards
+on:
+  pull_request:
+    paths:
+      - 'src/services/erpOperations.service.ts'
+      - 'server/routes/erp.js'
+      - 'tests/erpDurableAcceptance.test.mjs'
+      - 'tests/erpOperationsFailures.test.mjs'
+      - 'tests/erpJobReservation.test.mjs'
+      - 'server/services/erpJobReservation.js'
+      - 'server/db/erp_operation_jobs.proposed.sql'
+      - '.github/workflows/erp-operation-failclosed.yml'
+  push:
+    branches:
+      - 'workstream/erp-business-operations-2026-10-28'
+jobs:
+  fail-closed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check server/routes/erp.js
+      - run: node --check server/services/erpJobReservation.js
+      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs tests/erpDurableAcceptance.test.mjs tests/erpJobReservation.test.mjs
