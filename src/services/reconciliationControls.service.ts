@@ -281,6 +281,10 @@ export function buildReconciliationCloseMetrics(
     !hasValidStatementCalendarDate(reconciliation.periodStart) ||
     !hasValidStatementCalendarDate(reconciliation.periodEnd) ||
     reconciliation.periodStart > reconciliation.periodEnd ||
+    // A statement period ending after today's UTC calendar date cannot yet
+    // provide complete bank evidence for close. This is a client-side guard;
+    // server-side close must use an authoritative bank/account timezone.
+    reconciliation.periodEnd > new Date().toISOString().slice(0, 10) ||
     parsedLines.some((line) =>
       !hasValidStatementCalendarDate(line.postedDate) ||
       line.postedDate < reconciliation.periodStart ||
