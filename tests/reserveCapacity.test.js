@@ -73,7 +73,7 @@ test('rejects padded or control-character tenant, entity and trust identifiers',
   for (const key of ['tenantId', 'entityId', 'trustId']) {
     for (const bad of [' ' + base[key], base[key] + ' ', base[key] + '\u0000',
       base[key] + '\u001f', base[key] + '\u007f', base[key] + '\u009f']) {
-      assert.throws(() => calculateReserveCapacity({ ...base, [key]: bad, entries: [] }),
+      assert.throws(() => calculateReserveCapacity({ ...base, [key]: bad, asOfAt, maxEvidenceAgeMs: 3600000, entries: [] }),
         /unpadded|control characters/);
     }
   }
@@ -165,7 +165,7 @@ test('rejects bank-balance classification for noncash collateral', () => {
 test('requires canonical UTC snapshot and source-observation timestamps', () => {
   for (const invalid of [undefined, null, '', '2026-10-30', '2026-10-30T06:00:00Z',
     '2026-10-30T06:00:00.000+00:00', '2026-02-30T06:00:00.000Z']) {
-    assert.throws(() => calculateReserveCapacity({ ...base, asOfAt: invalid, entries: [] }), /asOfAt/);
+    assert.throws(() => calculateReserveCapacity({ ...base, asOfAt: invalid, maxEvidenceAgeMs: 3600000, entries: [] }), /asOfAt/);
     assert.throws(() => calculate([entry('cash-a', 100, { observedAt: invalid })]), /entry.observedAt/);
   }
 });
@@ -212,4 +212,44 @@ test('rejects stale cash and noncash reserve evidence at the exact millisecond b
   assert.throws(() => calculate([entry('cash-a', 100, {
     observedAt: '2026-10-30T05:59:59.999Z',
   })], 0), /exceeds configured maximum age/);
+});
+
+test('reserve snapshots reject inherited, accessor, hidden and unsupported financial claims', () => {
+  const valid = { ...base, asOfAt, maxEvidenceAgeMs: 3600000, entries: [entry('cash-a', 100)] };
+  assert.throws(() => calculateReserveCapacity(Object.create(valid)), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'maxEvidenceAgeMs', {
+    enumerable: true, get() { getterCalled = true; return 3600000; },
+  });
+  assert.throws(() => calculateReserveCapacity(accessor), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'settled', { value: true, enumerable: false });
+  assert.throws(() => calculateReserveCapacity(hidden), /Unsupported Reserve snapshot field/);
+  assert.throws(() => calculateReserveCapacity({ ...valid, paymentAuthorized: true }), /Unsupported Reserve snapshot field/);
+  const symbolKey = { ...valid, [Symbol('funded')]: true };
+  assert.throws(() => calculateReserveCapacity(symbolKey), /Unsupported Reserve snapshot field/);
+  assert.equal(calculateReserveCapacity(Object.assign(Object.create(null), valid)).unencumberedCashMinor, 100);
+});
+
+test('reserve entries require own plain-data values and reject unreviewed settlement claims', () => {
+  const valid = entry('cash-a', 100);
+  assert.throws(() => calculate([Object.create(valid)]), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'amountMinor', {
+    enumerable: true, get() { getterCalled = true; return 100; },
+  });
+  assert.throws(() => calculate([accessor]), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => calculate([hidden]), /Unsupported Reserve entry field/);
+  assert.throws(() => calculate([{ ...valid, settledMinor: 100 }]), /Unsupported Reserve entry field/);
+  assert.throws(() => calculate([{ ...valid, [Symbol('confirmed')]: true }]), /Unsupported Reserve entry field/);
+  const missing = { ...valid };
+  delete missing.amountMinor;
+  assert.throws(() => calculate([missing]), /Reserve entry.amountMinor/);
+  assert.equal(calculate([Object.assign(Object.create(null), valid)]).unencumberedCashMinor, 100);
 });
