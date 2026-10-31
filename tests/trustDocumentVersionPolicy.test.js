@@ -204,3 +204,30 @@ test('byte-level verification rejects registry scope mismatch', () => {
     tenantId: 'another-tenant', sha256: fileDigest(bytes),
   })]), { versionId: 'version-1', content: bytes }), /scope mismatch/);
 });
+
+
+test('version registry rejects malformed arrays before accessing any version', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  const verify = versions => verifyTrustDocumentVersion(registry(versions), proof);
+  const sparse = new Array(1);
+  const inherited = [version(1)];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  const accessor = [version(1)];
+  let getterCalls = 0;
+  Object.defineProperty(accessor, '0', {
+    configurable: true, enumerable: true,
+    get() { getterCalls++; throw new Error('unsafe getter executed'); },
+  });
+  const hidden = [version(1)];
+  Object.defineProperty(hidden, 'metadata', { value: 'unreviewed' });
+  const symbolic = [version(1)];
+  symbolic[Symbol('unreviewed')] = 'metadata';
+  const extended = [version(1)];
+  extended.extra = version(2);
+  for (const versions of [sparse, inherited, accessor, hidden, symbolic, extended]) {
+    assert.throws(() => verify(versions), /Document versions must/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.deepEqual(verify(Object.freeze([Object.freeze(version(1))])), { status: 'valid' });
+  assert.deepEqual(verify(Object.freeze([])), { status: 'unknown' });
+});
