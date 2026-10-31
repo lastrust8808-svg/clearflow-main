@@ -987,3 +987,32 @@ test('ERP identity validation preserves ordinary Unicode identifiers', async () 
   assert.equal(result.tenantId, authenticatedScope.tenantId);
   assert.equal(db.calls, 1);
 });
+
+
+test('ERP reservations reject inherited array serializer hooks before persistence', async () => {
+  const db = fakeDatabase();
+  const rows = [{ amountMinor: 12500 }];
+  Object.setPrototypeOf(rows, {
+    toJSON() { return [{ amountMinor: 0 }]; },
+  });
+  // Without the prototype guard, JSON.stringify silently changes the
+  // financial rows before the idempotency digest and database INSERT.
+  assert.equal(JSON.stringify({ rows }), '{"rows":[{"amountMinor":0}]}');
+  const subclassRows = new (class extends Array {})();
+  subclassRows.push({ amountMinor: 12500 });
+  for (const payload of [
+    { invoiceId: 'invoice-123', rows },
+    { invoiceId: 'invoice-123', rows: subclassRows },
+  ]) {
+    await assert.rejects(
+      reserve({ db, ...args, payload }),
+      /ERP job payload contains an unsafe array prototype/,
+    );
+  }
+  assert.equal(db.calls, 0, 'unsafe payload must not reach the database');
+  const ordinary = await reserve({ db, ...args, payload: {
+    invoiceId: 'invoice-123', rows: [{ amountMinor: 12500 }],
+  } });
+  assert.equal(ordinary.created, true);
+  assert.equal(db.calls, 1);
+});
