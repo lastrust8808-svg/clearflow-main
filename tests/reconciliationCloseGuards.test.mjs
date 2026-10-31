@@ -663,6 +663,27 @@ test('reconciliation cannot approve malformed or reversed statement periods', ()
   }
 });
 
+test('future statement periods cannot qualify for pending review or controller-approved close', () => {
+  const futurePeriodEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const approval of [
+    { closeApprovalStatus: 'pending' },
+    { closeApprovalStatus: 'approved', controllerSignoffName: 'Controller A', controllerSignoffAt: '2026-10-28T18:00:00Z' },
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({ periodEnd: futurePeriodEnd, ...approval }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, JSON.stringify(approval));
+    assert.match(metrics.blockedReason, /Statement period and imported posting dates/);
+  }
+  // A period ending on the current UTC date is not rejected merely for its date;
+  // the server must still establish bank-local completeness and provenance.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  assert.equal(buildReconciliationCloseMetrics(
+    reconciliation({ periodEnd: todayUtc }), account
+  ).isReadyToApprove, true);
+});
+
 test('matched rows outside the reconciliation period cannot authorize close', () => {
   for (const postedDate of ['2026-09-30', '2026-11-01']) {
     const metrics = buildReconciliationCloseMetrics(reconciliation({
