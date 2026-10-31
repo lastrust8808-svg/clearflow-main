@@ -1016,3 +1016,44 @@ test('ERP reservations reject inherited array serializer hooks before persistenc
   assert.equal(ordinary.created, true);
   assert.equal(db.calls, 1);
 });
+
+
+test('ERP reservation and status reject inherited or accessor-backed authenticated identity before SQL', async () => {
+  const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
+  let getterCalls = 0;
+  const inheritedTenant = Object.assign(Object.create({ tenantId: 'tenant-a' }), { actorId: 'actor-a' });
+  const inheritedActor = Object.assign(Object.create({ actorId: 'actor-a' }), { tenantId: 'tenant-a' });
+  const accessorTenant = { actorId: 'actor-a' };
+  Object.defineProperty(accessorTenant, 'tenantId', {
+    enumerable: true, get() { getterCalls++; throw new Error('untrusted identity getter'); },
+  });
+  const accessorActor = { tenantId: 'tenant-a' };
+  Object.defineProperty(accessorActor, 'actorId', {
+    enumerable: true, get() { getterCalls++; throw new Error('untrusted identity getter'); },
+  });
+  const hiddenTenant = { actorId: 'actor-a' };
+  Object.defineProperty(hiddenTenant, 'tenantId', { value: 'tenant-a', enumerable: false });
+  const symbolClaim = { ...scope, [Symbol('tenant')]: 'other' };
+  const proxied = new Proxy({ ...scope }, {
+    get() { getterCalls++; throw new Error('untrusted proxy getter'); },
+  });
+  const db = fakeDatabase();
+  for (const authenticatedScope of [
+    inheritedTenant, inheritedActor, accessorTenant, accessorActor,
+    hiddenTenant, symbolClaim, proxied,
+  ]) {
+    await assert.rejects(reserve({ db, ...args, authenticatedScope }), /Authenticated ERP scope/);
+    await assert.rejects(readErpOperationJobStatus({
+      db, authenticatedScope, jobId: '123e4567-e89b-42d3-a456-426614174000',
+    }), /Authenticated ERP scope/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.equal(db.calls, 0);
+
+  // Null-prototype records with explicit own identity fields remain valid.
+  const plain = Object.assign(Object.create(null), scope);
+  assert.equal((await reserve({ db, ...args, authenticatedScope: plain })).status, 'queued');
+  assert.equal(await readErpOperationJobStatus({
+    db, authenticatedScope: plain, jobId: '123e4567-e89b-42d3-a456-426614174000',
+  }), null);
+});
