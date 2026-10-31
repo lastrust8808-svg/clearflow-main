@@ -165,8 +165,18 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
 // accepts normalized impossible dates and informal text such as "tomorrow";
 // those must never appear as durable accounting acknowledgements.
 function persistedUtcTimestamp(value) {
+  // Database drivers normally return native Date objects. Never trust an
+  // overrideable instance method, subclass, or Proxy to fabricate persisted
+  // accounting timestamps: read the built-in Date's internal time slot.
+  if (nodeTypes.isProxy(value)) return null;
   if (value instanceof Date) {
-    return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+    try {
+      if (Object.getPrototypeOf(value) !== Date.prototype) return null;
+      const epochMs = Date.prototype.getTime.call(value);
+      return Number.isFinite(epochMs) ? Date.prototype.toISOString.call(value) : null;
+    } catch {
+      return null;
+    }
   }
   if (typeof value !== 'string' ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) {
