@@ -459,3 +459,33 @@ test('snapshot accessor claims are rejected without invoking their getters', () 
   assert.throws(() => projectPrivateNoteLifecycle(base), /snapshot fields must be enumerable data properties/);
   assert.equal(getterCalls, 0);
 });
+
+test('private-note history rejects sparse arrays and custom array prototypes', () => {
+  const sparse = [event('issued', 1), , event('presented', 2)];
+  assert.throws(() => project(sparse), /events must not contain holes/);
+  const inherited = [event('issued', 1)];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  assert.throws(() => project(inherited), /events must be a plain array/);
+  assert.equal(project(Object.freeze([event('issued', 1)])).status, 'issued');
+  assert.equal(project([]).status, 'draft');
+});
+
+test('private-note history rejects accessor elements and hidden or symbol metadata', () => {
+  const accessor = [event('issued', 1)];
+  let getterCalls = 0;
+  Object.defineProperty(accessor, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; return event('issued', 1); },
+  });
+  assert.throws(() => project(accessor), /events must contain enumerable data elements/);
+  assert.equal(getterCalls, 0);
+  const hidden = [event('issued', 1)];
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => project(hidden), /events must contain only array indices/);
+  const symbolic = [event('issued', 1)];
+  symbolic[Symbol('verified')] = true;
+  assert.throws(() => project(symbolic), /events must contain only array indices/);
+  const extra = [event('issued', 1)];
+  extra.extra = 'unreviewed';
+  assert.throws(() => project(extra), /events must contain only array indices/);
+});
