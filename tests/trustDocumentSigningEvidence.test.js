@@ -168,6 +168,33 @@ test('invalid or missing evidence references and document bytes are rejected', (
   assert.throws(() => assess({ attestations: null }), /attestations/);
   assert.throws(() => assess({ attestations: [attestation('a', { signerId: 'a\u0000' })] }), /control characters/);
 });
+test('attestation list rejects sparse, accessor-backed and extended arrays without running getters', () => {
+  const sparse = new Array(1);
+  assert.throws(() => assess({ attestations: sparse }), /must not contain holes/);
+  const getterList = [attestation('a')];
+  let getterCalls = 0;
+  Object.defineProperty(getterList, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('Getter must never execute'); },
+  });
+  assert.throws(() => assess({ attestations: getterList }), /enumerable data elements/);
+  assert.equal(getterCalls, 0);
+  const hidden = [attestation('a')];
+  Object.defineProperty(hidden, 'injectedClaim', { value: 'signed', enumerable: false });
+  assert.throws(() => assess({ attestations: hidden }), /only array indices/);
+  const symbol = [attestation('a')];
+  symbol[Symbol('injectedClaim')] = 'signed';
+  assert.throws(() => assess({ attestations: symbol }), /only array indices/);
+  const inherited = [attestation('a')];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  assert.throws(() => assess({ attestations: inherited }), /plain array/);
+});
+
+test('frozen plain attestation lists remain eligible for evidence review', () => {
+  const attestations = Object.freeze([Object.freeze(attestation('a'))]);
+  assert.equal(assess({ attestations }).status, 'evidence_ready_for_review');
+});
+
 test('assessment never mutates evidence packet or governance snapshot', () => {
   const original = packet();
   const before = {
