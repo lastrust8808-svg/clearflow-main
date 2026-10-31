@@ -1470,3 +1470,31 @@ test('ERP persisted Date receipts reject forged Date wrappers and ignore overrid
     }), /invalid status timestamp/);
   }
 });
+
+
+test('reservation rejects malformed Unicode before idempotency hashing or SQL', async () => {
+  const db = fakeDatabase();
+  // Distinct lone surrogates can both become U+FFFD when converted to UTF-8.
+  // Never let a persisted idempotency key refer to a differently encoded
+  // recipient, invoice ID, nested line item, or object field name.
+  const invalidKey = { invoiceId: 'invoice-123' };
+  invalidKey['reference\uD800'] = 'value';
+  for (const payload of [
+    { invoiceId: 'invoice-\uD800' },
+    { invoiceId: 'invoice-\uDC00' },
+    { invoiceId: 'invoice-123', recipient: { email: 'a\uD800@example.test' } },
+    { invoiceId: 'invoice-123', lines: [{ label: '\uDC00' }] },
+    invalidKey,
+  ]) {
+    await assert.rejects(reserve({ db, ...args, payload }), /malformed Unicode/);
+  }
+  assert.equal(db.calls, 0, 'malformed Unicode must not reach the database');
+
+  // A correctly paired surrogate is a valid Unicode scalar value.
+  const valid = await reserve({ db, ...args, payload: {
+    invoiceId: 'invoice-\uD83D\uDE00', recipient: 'customer@example.test',
+    lines: [{ description: 'repair \uD83D\uDE00' }],
+  } });
+  assert.equal(valid.created, true);
+  assert.equal(db.calls, 1);
+});
