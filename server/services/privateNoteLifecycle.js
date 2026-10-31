@@ -93,14 +93,32 @@ export function projectPrivateNoteLifecycle(snapshot) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
     }
-    // Reflect.ownKeys also rejects hidden/symbol payload fields that a normal
-    // Object.keys check would silently skip. No payment or delivery fields are
-    // permitted in this non-posting document timeline.
-    for (const key of Reflect.ownKeys(event)) {
+    // Require a plain, own-property data record. Inherited fields, getters and
+    // hidden properties must not supply purported actor, scope or legal claims.
+    // This is structural admission only; authentication is the caller's duty.
+    const prototype = Object.getPrototypeOf(event);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('Private note lifecycle event must be a plain data record');
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(event);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const descriptor = descriptors[key];
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+        throw new TypeError('Private note lifecycle event fields must be enumerable data properties');
+      }
       if (typeof key !== 'string' ||
           (!EVENT_FIELDS.has(key) &&
-           !(event.type === 'notice_prepared' && key === 'supersedesDocumentRef'))) {
+           !(Object.hasOwn(descriptors, 'type') &&
+             descriptors.type.value === 'notice_prepared' &&
+             key === 'supersedesDocumentRef'))) {
         throw new TypeError('Unsupported private note lifecycle event field');
+      }
+    }
+    // All currently supported event types require the same core identifiers,
+    // including document and evidence refs. Never read them from a prototype.
+    for (const key of EVENT_FIELDS) {
+      if (!Object.hasOwn(descriptors, key)) {
+        throw new TypeError('Missing own private note lifecycle event field: ' + key);
       }
     }
     const eventId = requiredId(event.eventId, 'eventId');
@@ -146,12 +164,14 @@ export function projectPrivateNoteLifecycle(snapshot) {
       // Revised notices must explicitly identify the immediately preceding
       // draft. This is a document lineage check, not proof of service or legal
       // effectiveness. Initial drafts must not claim an earlier notice.
+      const predecessorRef = Object.hasOwn(descriptors, 'supersedesDocumentRef')
+        ? descriptors.supersedesDocumentRef.value : undefined;
       if (latestNoticeDocumentRef === null) {
-        if (event.supersedesDocumentRef != null) {
+        if (predecessorRef != null) {
           throw new Error('Initial notice draft cannot supersede another document');
         }
       } else {
-        const supersedes = requiredId(event.supersedesDocumentRef, 'supersedesDocumentRef');
+        const supersedes = requiredId(predecessorRef, 'supersedesDocumentRef');
         if (supersedes !== latestNoticeDocumentRef) {
           throw new Error('Notice revision must supersede the latest prepared draft');
         }
