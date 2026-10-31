@@ -1,3 +1,5 @@
+import { types as nodeTypes } from 'node:util';
+
 /**
  * Pure, non-posting membership entitlement projection.
  *
@@ -34,6 +36,12 @@ function required(value, label) {
 // or non-enumerable claims enter the trusted entitlement projection. The
 // production adapter must still authenticate the provider and persist events.
 function assertPlainMembershipRecord(value, label, requiredFields) {
+  // A Proxy can forge its prototype/descriptors and execute traps while
+  // identity and verified-payment claims are inspected. Reject it before
+  // reflection; this projector must consume inert, explicit data records.
+  if (nodeTypes.isProxy(value)) {
+    throw new TypeError(label + ' must not be a Proxy');
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
     throw new TypeError(label + ' must be a plain membership record');
@@ -56,6 +64,9 @@ function assertPlainMembershipRecord(value, label, requiredFields) {
 // would execute accessors before individual event verification. Snapshot only
 // explicit data entries before considering any payment or entitlement claim.
 function membershipEventBatch(events) {
+  // Array.isArray accepts Proxy-wrapped arrays. Reject wrappers before any
+  // prototype or descriptor reflection that could invoke arbitrary traps.
+  if (nodeTypes.isProxy(events)) throw new TypeError('events must not be a Proxy');
   if (!Array.isArray(events)) throw new TypeError('events must be an array');
   if (Object.getPrototypeOf(events) !== Array.prototype) {
     throw new TypeError('events must be a plain array');
