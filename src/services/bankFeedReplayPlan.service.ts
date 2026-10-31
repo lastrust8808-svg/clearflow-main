@@ -72,13 +72,40 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     if (!entry || entry.tenantId !== input.tenantId || entry.provider !== input.provider ||
         entry.connectionId !== input.connectionId || !allowed.has(entry.accountId) ||
         !validId(entry.transactionId) ||
-        !['pending', 'posted', 'superseded', 'removed'].includes(entry.status)) {
+        !['pending', 'posted', 'superseded', 'removed'].includes(entry.status) ||
+        typeof entry.requiresReview !== 'boolean' ||
+        (entry.pendingTransactionId != null &&
+          (!validId(entry.pendingTransactionId) || entry.pendingTransactionId === entry.transactionId)) ||
+        (entry.supersededBy != null && !validId(entry.supersededBy)) ||
+        (entry.status === 'pending' && entry.pendingTransactionId != null) ||
+        (entry.status === 'superseded' && !entry.supersededBy) ||
+        (entry.status !== 'superseded' && entry.supersededBy != null)) {
       throw new Error('Existing feed record is outside the authorized scope or malformed.');
     }
     requireAmount(entry.amountCents);
     const key = keyOf(entry.accountId, entry.transactionId);
     if (index.has(key)) throw new Error('Duplicate canonical feed identity in existing records.');
     index.set(key, entry);
+  }
+  // Persisted links must agree in both directions before any new provider
+  // event is considered. Otherwise a fabricated tombstone could authorize
+  // a posted correction without its original pending transaction.
+  for (const entry of entries) {
+    if (entry.pendingTransactionId != null) {
+      const predecessor = index.get(keyOf(entry.accountId, entry.pendingTransactionId));
+      if (!predecessor || predecessor.status !== 'superseded' ||
+          predecessor.supersededBy !== entry.transactionId ||
+          (entry.status !== 'posted' && entry.status !== 'removed')) {
+        throw new Error('Persisted pending-to-posted linkage is inconsistent.');
+      }
+    }
+    if (entry.status === 'superseded') {
+      const successor = index.get(keyOf(entry.accountId, entry.supersededBy!));
+      if (!successor || (successor.status !== 'posted' && successor.status !== 'removed') ||
+          successor.pendingTransactionId !== entry.transactionId) {
+        throw new Error('Persisted supersession linkage is inconsistent.');
+      }
+    }
   }
 
   let applied = 0;
