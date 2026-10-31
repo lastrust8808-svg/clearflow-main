@@ -208,7 +208,11 @@ async function readBoundedRecordText(handle, stat) {
     }
     chunks.push(buffer.subarray(0, bytesRead));
   }
-  return Buffer.concat(chunks, total).toString('utf8');
+  // Buffer.toString('utf8') silently replaces malformed byte sequences with
+  // U+FFFD. That can change bank evidence, names or identifiers in legacy
+  // records while still leaving parseable JSON. Fail closed on corruption.
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+    .decode(Buffer.concat(chunks, total));
 }
 
 async function readJsonSafely(targetPath) {
