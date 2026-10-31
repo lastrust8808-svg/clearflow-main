@@ -36,6 +36,18 @@ Coordinate with PR #16 for authenticated tenant-scoped durable storage and migra
 ## Current evidence
 No banking-specific tests have been executed by this branch at creation. No live provider verification has been performed by this workstream.
 
+
+## Raw provider payload fingerprint contract (non-posting planner)
+
+The optional `providerPayloadHash` field is a lowercase, 64-character SHA-256 digest of the exact raw provider transaction payload, calculated by a **trusted server-side provider adapter** before normalization. This branch validates digest shape and replay consistency; it does **not** fetch provider data, compute a digest, authenticate the adapter, or persist audit evidence.
+
+- New transactions may carry the digest; legacy un-hashed rows remain accepted but are **not verified for raw-payload integrity**.
+- Replayed `added` events must match the stored digest and normalized values. A different digest requires audited exception handling, not silent deduplication.
+- A `modified` event with a new digest triggers a reviewable change even when tracked normalized fields are identical. A previously hashed row cannot be downgraded by omitting its digest.
+- The same digest with different normalized amount, status or pending link is rejected as inconsistent adapter evidence.
+- Removal tombstones carry only provider identity; the prior digest remains on the stored row.
+- Before release, the authenticated ingestion service must compute and verify raw provider hashes, persist them and cursor/entries atomically, and retain a redacted provider audit trail. CI fixture hashes are not proof of live provider behavior.
+
 ## Integration dependencies
 Security & Infrastructure: tenant auth, encryption, unique indexes, migration runner, backup/restore.
 Plaid PR #19: Link products, token vault, transaction sync and webhook routes.
