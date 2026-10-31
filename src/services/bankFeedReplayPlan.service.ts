@@ -122,6 +122,18 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     if (existing && (existing.status === 'removed' || existing.status === 'superseded')) {
       throw new Error('Cannot silently modify a removed or superseded transaction.');
     }
+    // A posted bank transaction must not become pending again or lose its
+    // original provider pending-to-posted link through a feed modification.
+    // Either change would reopen already-reviewed financial evidence; route
+    // corrections through an explicitly audited exception workflow instead.
+    if (existing?.status === 'posted') {
+      if (status !== 'posted') {
+        throw new Error('Posted feed transaction cannot regress to pending.');
+      }
+      if ((existing.pendingTransactionId ?? null) !== pendingTransactionId) {
+        throw new Error('Posted feed pending linkage cannot change without audited correction.');
+      }
+    }
     // A posted transaction may replace a pending one only through an explicit
     // provider linkage on the same account. Never match merely by amount/date.
     if (pendingTransactionId) {
