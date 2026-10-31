@@ -337,15 +337,17 @@ export async function claimErpOperationJob({
       typeof record.actor_id !== 'string' || !record.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound worker claim');
   }
-  const timestamp = (value) => value instanceof Date ? value.toISOString() : value;
-  const claimedAt = timestamp(record.claimed_at);
-  const leaseExpiresAt = timestamp(record.lease_expires_at);
-  const createdAt = timestamp(record.created_at);
-  const updatedAt = timestamp(record.updated_at);
-  if ([claimedAt, leaseExpiresAt, createdAt, updatedAt].some(
-    (value) => typeof value !== 'string' || !Number.isFinite(Date.parse(value))
-  ) || Date.parse(leaseExpiresAt) <= Date.parse(claimedAt) ||
-       Date.parse(updatedAt) < Date.parse(createdAt)) {
+  // A claim receipt is evidence of an exclusive database lease. Never accept
+  // Date.parse's normalization of impossible dates or informal/local timestamps,
+  // and require creation <= claim <= update < lease expiry.
+  const claimedAt = persistedUtcTimestamp(record.claimed_at);
+  const leaseExpiresAt = persistedUtcTimestamp(record.lease_expires_at);
+  const createdAt = persistedUtcTimestamp(record.created_at);
+  const updatedAt = persistedUtcTimestamp(record.updated_at);
+  if ([claimedAt, leaseExpiresAt, createdAt, updatedAt].some(value => value === null) ||
+      Date.parse(createdAt) > Date.parse(claimedAt) ||
+      Date.parse(claimedAt) > Date.parse(updatedAt) ||
+      Date.parse(updatedAt) >= Date.parse(leaseExpiresAt)) {
     throw new Error('ERP job storage returned an invalid worker lease timestamp');
   }
   return Object.freeze({
