@@ -92,7 +92,13 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     const existing = index.get(key);
     if (event.kind === 'removed') {
       if (!existing) throw new Error('Unknown removal requires an audited provider exception.');
-      if (existing.status === 'removed') { replayed++; continue; }
+      // A provider may remove a pending row after its linked posted row arrives.
+      // Preserve the superseded tombstone: posted corrections still need the
+      // original provider identity to validate their pending-to-posted link.
+      if (existing.status === 'removed' || existing.status === 'superseded') {
+        replayed++;
+        continue;
+      }
       existing.status = 'removed';
       existing.requiresReview = true;
       applied++;
