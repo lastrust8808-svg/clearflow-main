@@ -220,3 +220,30 @@ test('trustee appointments require own plain-data evidence and cannot smuggle si
     signerIds: ['a'],
   }).eligible, true);
 });
+
+test('trustee and signer lists reject sparse, accessor-backed and extra-property arrays', () => {
+  for (const field of ['appointments', 'signerIds']) {
+    const valid = snapshot();
+    const accessor = [...valid[field]];
+    let getterCalled = false;
+    Object.defineProperty(accessor, '0', {
+      enumerable: true,
+      configurable: true,
+      get() { getterCalled = true; throw new Error('unexpected getter execution'); },
+    });
+    assert.throws(() => evaluate({ [field]: accessor }), /enumerable data elements/);
+    assert.equal(getterCalled, false);
+    const sparse = [...valid[field]];
+    delete sparse[0];
+    assert.throws(() => evaluate({ [field]: sparse }), /must not contain holes/);
+    const extra = [...valid[field]];
+    Object.defineProperty(extra, 'authorized', { value: true, enumerable: false });
+    assert.throws(() => evaluate({ [field]: extra }), /only array indices/);
+    const symbol = [...valid[field]];
+    symbol[Symbol('authority')] = true;
+    assert.throws(() => evaluate({ [field]: symbol }), /only array indices/);
+    const subclass = class GovernanceList extends Array {};
+    assert.throws(() => evaluate({ [field]: subclass.from(valid[field]) }), /plain array/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
