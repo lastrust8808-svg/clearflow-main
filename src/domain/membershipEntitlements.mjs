@@ -103,6 +103,13 @@ export { required as parseMembershipIdentifier, instant as parseMembershipInstan
  */
 export function projectMembershipEntitlement(scope, events, asOf) {
   assertPlainMembershipRecord(scope, 'scope', ['tenantId', 'memberId', 'subscriptionId']);
+  // Scope is a server-authenticated identity tuple, not a place for privilege,
+  // entitlement, or billing assertions. Reject extra claims even when no
+  // provider events are present, matching the test webhook admission policy.
+  const scopeFields = new Set(['tenantId', 'memberId', 'subscriptionId']);
+  if (Object.keys(scope).some(field => !scopeFields.has(field))) {
+    throw new Error('unexpected membership scope claim');
+  }
   const tenantId = required(scope.tenantId, 'tenantId');
   const memberId = required(scope.memberId, 'memberId');
   const subscriptionId = required(scope.subscriptionId, 'subscriptionId');
