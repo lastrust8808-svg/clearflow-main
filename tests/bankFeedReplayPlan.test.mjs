@@ -563,13 +563,13 @@ test('cursor page rejects malformed evidence before proposing any acknowledgemen
   const cases = [
     { nextCursor: '' },
     { nextCursor: ' padded ' },
-    { nextCursor: 'bad\\nline' },
+    { nextCursor: 'bad\nline' },
     { nextCursor: null },
     { expectedCursor: 123 },
     { hasMore: 'false' },
     { checkpoint: { ...input.checkpoint, revision: -1 } },
     { checkpoint: { ...input.checkpoint, revision: 1.5 } },
-    { checkpoint: { ...input.checkpoint, cursor: 'bad\\nline' } },
+    { checkpoint: { ...input.checkpoint, cursor: 'bad\nline' } },
   ];
   for (const variant of cases) {
     assert.throws(() => planBankFeedCursorPage(cursorPage(variant)),
