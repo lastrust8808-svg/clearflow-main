@@ -1,0 +1,59 @@
+name: Trust reserves and note invariants
+on:
+  pull_request:
+    paths:
+      - 'server/services/reserveCapacity.js'
+      - 'tests/reserveCapacity.test.js'
+      - 'server/services/noteAmortization.js'
+      - 'tests/noteAmortization.test.js'
+      - 'server/services/trusteeSigningPolicy.js'
+      - 'tests/trusteeSigningPolicy.test.js'
+      - 'server/services/privateNoteLifecycle.js'
+      - 'tests/privateNoteLifecycle.test.js'
+      - 'server/services/trustDocumentVersionPolicy.js'
+      - 'tests/trustDocumentVersionPolicy.test.js'
+      - 'server/services/trustDocumentQrPolicy.js'
+      - 'tests/trustDocumentQrPolicy.test.js'
+      - 'server/services/trustDocumentQrRegistryPolicy.js'
+      - 'server/services/trustDocumentSigningEvidence.js'
+      - 'tests/trustDocumentQrRegistryPolicy.test.js'
+      - 'tests/trustDocumentSigningEvidence.test.js'
+      - '.github/workflows/trust-reserves.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/services/reserveCapacity.js'
+      - 'tests/reserveCapacity.test.js'
+      - 'server/services/noteAmortization.js'
+      - 'tests/noteAmortization.test.js'
+      - 'server/services/trusteeSigningPolicy.js'
+      - 'tests/trusteeSigningPolicy.test.js'
+      - 'server/services/privateNoteLifecycle.js'
+      - 'tests/privateNoteLifecycle.test.js'
+      - 'server/services/trustDocumentVersionPolicy.js'
+      - 'tests/trustDocumentVersionPolicy.test.js'
+      - 'server/services/trustDocumentQrPolicy.js'
+      - 'tests/trustDocumentQrPolicy.test.js'
+      - 'server/services/trustDocumentQrRegistryPolicy.js'
+      - 'server/services/trustDocumentSigningEvidence.js'
+      - 'tests/trustDocumentQrRegistryPolicy.test.js'
+      - 'tests/trustDocumentSigningEvidence.test.js'
+permissions:
+  contents: read
+jobs:
+  trust-financial-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check server/services/reserveCapacity.js
+      - run: node --check server/services/noteAmortization.js
+      - run: node --check server/services/trusteeSigningPolicy.js
+      - run: node --check server/services/privateNoteLifecycle.js
+      - run: node --check server/services/trustDocumentVersionPolicy.js
+      - run: node --check server/services/trustDocumentQrPolicy.js
+      - run: node --check server/services/trustDocumentQrRegistryPolicy.js
+      - run: node --check server/services/trustDocumentSigningEvidence.js
+      - run: node --test tests/reserveCapacity.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js
