@@ -150,7 +150,7 @@ test('revoked and unaccepted signers cannot satisfy packet review', () => {
   ] };
   assert.equal(assess({ governance: revoked }).reason, 'signer_ineligible_at_signing');
   const unaccepted = { ...packet().governance, appointments: [
-    appointment('a', { acceptedOn: undefined }), appointment('b'),
+    appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined }), appointment('b'),
   ] };
   assert.equal(assess({ governance: unaccepted }).reason, 'signer_ineligible_at_signing');
 });
