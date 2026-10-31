@@ -11,6 +11,45 @@
  * policies are supported; quorum, successor priorities and delegated powers
  * require separate reviewed rules and must not be inferred.
  */
+// Governance data is a policy input, not an authorization token. Never read
+// inherited trustee identities, accessor-produced dates, hidden properties or
+// extra claims of signing authority from a supplied record.
+const SNAPSHOT_FIELDS = new Set([
+  'tenantId', 'entityId', 'trustId', 'asOfDate', 'mode', 'appointments', 'signerIds',
+]);
+const APPOINTMENT_FIELDS = new Set([
+  'trusteeId', 'tenantId', 'entityId', 'trustId', 'effectiveOn',
+  'acceptedOn', 'acceptanceEvidenceRef', 'revokedOn', 'revocationEvidenceRef',
+]);
+const APPOINTMENT_REQUIRED_FIELDS = new Set([
+  'trusteeId', 'tenantId', 'entityId', 'trustId', 'effectiveOn',
+]);
+
+function requirePlainGovernanceRecord(record, allowed, required, label) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  const prototype = Object.getPrototypeOf(record);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(record);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !allowed.has(key)) {
+      throw new TypeError('Unsupported ' + label + ' field');
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError(label + ' fields must be enumerable data properties');
+    }
+  }
+  for (const key of required) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError(label + '.' + key + ' must be an own data field');
+    }
+  }
+}
+
 function id(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new TypeError(`${field} must be a nonempty unpadded string`);
@@ -45,9 +84,7 @@ function calendarDate(value, field) {
  *   signerCount:number}} Frozen policy assessment, not an authorization token.
  */
 export function evaluateTrusteeSigningPolicy(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
-    throw new TypeError('Governance snapshot required');
-  }
+  requirePlainGovernanceRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Governance snapshot');
   const tenantId = id(snapshot.tenantId, 'tenantId');
   const entityId = id(snapshot.entityId, 'entityId');
   const trustId = id(snapshot.trustId, 'trustId');
@@ -67,9 +104,8 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   // across trustees. References are structural only until verified by storage.
   const governanceEvidenceRefs = new Set();
   for (const appointment of snapshot.appointments) {
-    if (!appointment || typeof appointment !== 'object' || Array.isArray(appointment)) {
-      throw new TypeError('Invalid trustee appointment');
-    }
+    requirePlainGovernanceRecord(appointment, APPOINTMENT_FIELDS,
+      APPOINTMENT_REQUIRED_FIELDS, 'Trustee appointment');
     const trusteeId = id(appointment.trusteeId, 'appointment.trusteeId');
     if (trustees.has(trusteeId)) throw new Error('Duplicate trustee appointment');
     trustees.add(trusteeId);
