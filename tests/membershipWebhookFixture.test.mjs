@@ -344,3 +344,29 @@ test('signed fixture refuses inherited, accessor-backed, or hidden authenticated
   assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: nullPrototypeScope }))?.verified, true);
   assert.equal(verifyScoped(scopedInput())?.verified, true);
 });
+
+test('signed fixture rejects proxy-backed authenticated scope before invoking traps', () => {
+  let traps = 0;
+  const proxy = new Proxy({ ...authenticatedScope }, {
+    getPrototypeOf() { traps++; return Object.prototype; },
+    ownKeys() { traps++; return ['tenantId', 'memberId', 'subscriptionId']; },
+    getOwnPropertyDescriptor(target, property) {
+      traps++;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property) { traps++; return Reflect.get(target, property); },
+  });
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { authenticatedScope: proxy })), null);
+  assert.equal(traps, 0, 'untrusted scope proxy traps must never execute');
+
+  const revocable = Proxy.revocable({ ...authenticatedScope }, {});
+  revocable.revoke();
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    authenticatedScope: revocable.proxy,
+  })), null, 'revoked proxies must fail closed without throwing');
+
+  // Legitimate immutable server-side records remain supported.
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    authenticatedScope: Object.freeze({ ...authenticatedScope }),
+  }))?.verified, true);
+});
