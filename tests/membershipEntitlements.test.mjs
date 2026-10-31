@@ -40,6 +40,25 @@ test('duplicate settlement under distinct provider event IDs is processed once',
   assert.equal(result.status, 'active');
   assert.equal(result.processedEvents, 1);
 });
+test('equivalent timezone and fractional precision in settlement replay are idempotent', () => {
+  const replay = paid('evt-offset-replay', {
+    periodEnd: '2026-11-20T08:00:00.000000-04:00',
+  });
+  replay.occurredAt = '2026-10-20T08:00:00.000000-04:00';
+  const result = project(scope, [replay, paid('evt-original')], asOf);
+  assert.equal(result.status, 'active');
+  assert.equal(result.processedEvents, 1, 'one settlement is one economic event');
+
+  // A genuinely different microsecond is still a conflicting settlement,
+  // even though Date.parse truncates it to the same millisecond.
+  const altered = paid('evt-altered');
+  altered.occurredAt = '2026-10-20T12:00:00.000001Z';
+  assert.throws(
+    () => project(scope, [paid('evt-original'), altered], asOf),
+    /conflicting settlement replay/,
+  );
+});
+
 test('settlement replay cannot silently extend the membership period', () => {
   assert.throws(
     () => project(scope, [paid('evt-one'), paid('evt-two', { periodEnd: '2027-11-20T12:00:00Z' })], asOf),
