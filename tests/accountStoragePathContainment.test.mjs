@@ -971,3 +971,49 @@ test('deeply nested records fail closed on writes and legacy reads across all st
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('oversized legacy JSON records fail closed before parsing across storage categories', async () => {
+  const accountId = `oversized-legacy-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), load: () => loadAccountAppData(accountId) },
+    { file: path.join('files', 'doc-1.json'), save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), load: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: path.join('remittance', 'vendor-1.json'), save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), load: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: path.join('transaction-proof-chains', 'chains.json'), save: (v) => saveAccountTransactionProofVault(accountId, v), load: () => loadAccountTransactionProofVault(accountId) },
+    { file: path.join('plaid', 'connections.json'), save: (v) => saveAccountPlaidVault(accountId, v), load: () => loadAccountPlaidVault(accountId) },
+    { file: path.join('extractions', 'sig-1.json'), save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), load: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ revision: 1 });
+      // Sparse truncation simulates a corrupt or hostile legacy record
+      // without allocating a giant test fixture in memory.
+      await fs.truncate(path.join(root, fixture.file), 32 * 1024 * 1024 + 1);
+      await assert.rejects(fixture.load(), /Storage record exceeds size limit/);
+      await fixture.save({ revision: 2 });
+      assert.equal((await fixture.load()).revision, 2);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('oversized multibyte JSON writes preserve existing records', async () => {
+  const accountId = `oversized-write-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  try {
+    await saveAccountAppData(accountId, { revision: 1 });
+    const before = await loadAccountAppData(accountId);
+    // Character count is below 32 MiB; UTF-8 byte count is above it.
+    await assert.rejects(
+      saveAccountAppData(accountId, { content: 'é'.repeat(17 * 1024 * 1024) }),
+      /Storage record exceeds size limit/
+    );
+    assert.deepEqual(await loadAccountAppData(accountId), before);
+    await saveAccountAppData(accountId, { revision: 2 });
+    assert.equal((await loadAccountAppData(accountId)).revision, 2);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
