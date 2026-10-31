@@ -449,9 +449,22 @@ function assertGoogleAppDataScope(accountId, appData) {
   return appData;
 }
 
+// Legacy app-data records may not contain a top-level accountId, but when
+// an explicit identity is present it must agree with the requested tenant.
+// Otherwise a copied JSON file can be served under a different legacy account
+// even though its embedded identity still names the original owner.
+// This is defense in depth; legacy records without an identity still require
+// authenticated route-level authorization and a versioned identity migration.
+function assertAppDataAccountScope(accountId, appData) {
+  if (Object.hasOwn(appData, 'accountId') && appData.accountId !== accountId) {
+    throw new Error('Stored app data accountId does not match requested account.');
+  }
+  return assertGoogleAppDataScope(accountId, appData);
+}
+
 export async function loadAccountAppData(accountId) {
   try {
-    return assertGoogleAppDataScope(accountId, await readJsonSafely(appDataPath(accountId)));
+    return assertAppDataAccountScope(accountId, await readJsonSafely(appDataPath(accountId)));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       return null;
@@ -462,7 +475,7 @@ export async function loadAccountAppData(accountId) {
 
 export async function saveAccountAppData(accountId, appData) {
   const snapshot = snapshotWritableRecord(appData);
-  assertGoogleAppDataScope(accountId, snapshot);
+  assertAppDataAccountScope(accountId, snapshot);
   const targetDirectory = accountDirectory(accountId);
   await ensureDirectory(targetDirectory);
   await writeJsonAtomically(appDataPath(accountId), snapshot);
