@@ -13,7 +13,9 @@ on:
       - workstream/banking-reconciliation-2026-10-28
     paths:
       - 'src/services/reconciliationControls.service.ts'
+      - 'src/services/bankFeedReplayPlan.service.ts'
       - 'tests/reconciliationCloseGuards.test.mjs'
+      - 'tests/bankFeedReplayPlan.test.mjs'
       - '.github/workflows/banking-reconciliation-guards.yml'
 
 permissions:
