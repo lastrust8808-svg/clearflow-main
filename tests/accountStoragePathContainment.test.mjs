@@ -1056,3 +1056,68 @@ test('malformed UTF-8 legacy records fail closed without replacing bank evidence
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('unsafe-precision numbers cannot be saved as exact financial evidence', async () => {
+  const accountId = `unsafe-numeric-write-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ retained: true });
+      const before = await fixture.read();
+      for (const payload of [
+        { amount: Number.MAX_SAFE_INTEGER + 1 },
+        { nested: { amountMinor: -(Number.MAX_SAFE_INTEGER + 1) } },
+        { nested: [{ amount: 1e100 }] },
+      ]) {
+        await assert.rejects(fixture.save(payload), /Unsafe storage record numeric value/);
+        assert.deepEqual(await fixture.read(), before, 'rejected numeric write must preserve the prior record');
+      }
+      await fixture.save({ amount: 125.25, largestExactInteger: Number.MAX_SAFE_INTEGER });
+      const saved = await fixture.read();
+      assert.equal(saved.amount, 125.25);
+      assert.equal(saved.largestExactInteger, Number.MAX_SAFE_INTEGER);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('legacy JSON numeric overflow and precision loss fail closed on all storage reads', async () => {
+  const accountId = `unsafe-numeric-read-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/sig-1.json', save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ amount: 125.25 });
+      for (const corrupted of [
+        '{"amount":1e400}', // JSON.parse yields Infinity, not a valid financial amount.
+        '{"nested":[{"amountMinor":9007199254740993}]}', // Rounded by JSON.parse.
+        '{"nested":{"amountMinor":-9007199254740993}}',
+      ]) {
+        await fs.writeFile(path.join(root, fixture.file), corrupted);
+        await assert.rejects(fixture.read(), /Unsafe storage record numeric value/);
+      }
+      await fixture.save({ amount: -125.25, largestExactInteger: Number.MAX_SAFE_INTEGER });
+      const recovered = await fixture.read();
+      assert.equal(recovered.amount, -125.25);
+      assert.equal(recovered.largestExactInteger, Number.MAX_SAFE_INTEGER);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
