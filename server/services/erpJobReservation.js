@@ -85,6 +85,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new TypeError('ERP job payload contains a non-finite number');
+    // JSON.stringify(-0) becomes 0, collapsing distinct caller-supplied
+    // financial representations into the same idempotency fingerprint.
+    if (Object.is(value, -0)) throw new TypeError('ERP job payload contains negative zero');
     // JSON numbers above the safe-integer boundary may already have rounded
     // before serialization. Never reserve an accounting job with ambiguous
     // integer amounts, counts, or minor-unit balances.
@@ -138,6 +141,15 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key)) {
         throw new TypeError('ERP job payload contains an unsafe property');
+      }
+      // Minor-unit and cent-denominated amounts must be exact integers.
+      // JSON.stringify would otherwise preserve a fractional cent in a
+      // reservation that downstream accounting may round differently.
+      // Other decimal fields (e.g. taxRate) remain permitted.
+      if (/(?:Minor|Cents)$/i.test(key) &&
+          typeof descriptor.value === 'number' &&
+          !Number.isSafeInteger(descriptor.value)) {
+        throw new TypeError('ERP job payload contains a fractional or unsafe minor-unit amount');
       }
       assertJsonSafe(descriptor.value, seen, depth + 1);
     }
