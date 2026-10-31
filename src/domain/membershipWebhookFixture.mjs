@@ -112,8 +112,26 @@ export function verifyScopedMembershipWebhookFixture({
   rawBody, signatureHeader, secret, nowSeconds, authenticatedScope,
 }) {
   if (!verifyMembershipWebhookFixture({ rawBody, signatureHeader, secret, nowSeconds })) return null;
+  // Authenticated scope must come from an explicit server-side identity record,
+  // not inherited properties, getters, hidden fields, or proxy-like wrappers.
+  // Check descriptors before reading any scope value to avoid executing getters.
   if (!authenticatedScope || typeof authenticatedScope !== 'object' ||
       Array.isArray(authenticatedScope)) return null;
+  try {
+    const prototype = Object.getPrototypeOf(authenticatedScope);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(authenticatedScope);
+    const requiredScopeFields = ['tenantId', 'memberId', 'subscriptionId'];
+    if (Reflect.ownKeys(descriptors).length !== requiredScopeFields.length) return null;
+    for (const field of requiredScopeFields) {
+      const descriptor = descriptors[field];
+      if (!descriptor || !descriptor.enumerable ||
+          !Object.hasOwn(descriptor, 'value') ||
+          typeof descriptor.value !== 'string') return null;
+    }
+  } catch {
+    return null;
+  }
   let event;
   try {
     // Buffer.toString('utf8') silently substitutes U+FFFD for malformed bytes.
