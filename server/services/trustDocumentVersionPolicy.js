@@ -86,6 +86,15 @@ function requirePlainVersionRecord(version) {
   }
 }
 
+// Reusable structural preflight for consumers that inspect historical
+// versions before calling the byte verifier. Check every array slot and
+// record descriptor before reading any version field (including trustId,
+// status or timestamps); malformed accessors must never execute.
+export function assertPlainTrustDocumentVersions(versions) {
+  requirePlainVersionList(versions);
+  for (const version of versions) requirePlainVersionRecord(version);
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,versions:Array<{
  *   versionId:string,tenantId:string,entityId:string,trustId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
