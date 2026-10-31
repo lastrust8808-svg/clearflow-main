@@ -154,9 +154,11 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     assertCanonicalFeedObject(entry, STORED_FEED_FIELDS, 'stored record', STORED_REQUIRED_FIELDS);
   }
   for (const event of input.events) {
+    // Inspect descriptors before reading kind; a malicious getter must not run.
+    assertCanonicalFeedObject(event, EVENT_FEED_FIELDS, 'provider event');
     assertCanonicalFeedObject(
       event, EVENT_FEED_FIELDS, 'provider event',
-      event?.kind === 'removed' ? EVENT_IDENTITY_FIELDS : EVENT_POSTING_FIELDS,
+      event.kind === 'removed' ? EVENT_IDENTITY_FIELDS : EVENT_POSTING_FIELDS,
     );
     if (event.kind === 'removed' &&
         (Object.hasOwn(event, 'amountCents') ||
