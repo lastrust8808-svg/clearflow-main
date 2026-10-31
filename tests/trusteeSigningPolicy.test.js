@@ -261,3 +261,37 @@ test('trustee and signer lists reject sparse, accessor-backed and extra-property
   }
   assert.equal(evaluate().eligible, true);
 });
+
+test('governance evidence cannot impersonate trustees, including later appointments', () => {
+  for (const reversed of [false, true]) {
+    const appointments = [
+      appointment('a', { acceptanceEvidenceRef: 'b' }),
+      appointment('b'),
+    ];
+    if (reversed) appointments.reverse();
+    assert.throws(() => evaluate({ appointments }), /collides with identity or scope/);
+  }
+  for (const reversed of [false, true]) {
+    const appointments = [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'b' }),
+      appointment('b'),
+    ];
+    if (reversed) appointments.reverse();
+    assert.throws(() => evaluate({ appointments }), /collides with identity or scope/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('governance evidence cannot masquerade as tenant, entity or trust scope', () => {
+  for (const scopeId of ['tenant-a', 'entity-a', 'trust-a']) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: scopeId })],
+    }), /collides with identity or scope/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', {
+        revokedOn: '2026-10-28', revocationEvidenceRef: scopeId,
+      })],
+    }), /collides with identity or scope/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
