@@ -160,6 +160,24 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   seen.delete(value);
 }
 
+// A PostgreSQL timestamp returned as a Date or canonical UTC ISO string is
+// acceptable evidence of a persisted job transition. Date.parse alone also
+// accepts normalized impossible dates and informal text such as "tomorrow";
+// those must never appear as durable accounting acknowledgements.
+function persistedUtcTimestamp(value) {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  }
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed) ||
+      new Date(parsed).toISOString().slice(0, 19) !== value.slice(0, 19)) return null;
+  return value;
+}
+
 export async function reserveErpOperationJob({
   db, authenticatedScope, operation, idempotencyKey, payload,
 }) {
@@ -223,9 +241,8 @@ export async function reserveErpOperationJob({
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid job record');
   }
-  const createdAt = record.created_at instanceof Date
-    ? record.created_at.toISOString() : record.created_at;
-  if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt))) {
+  const createdAt = persistedUtcTimestamp(record.created_at);
+  if (createdAt === null) {
     throw new Error('ERP job storage returned an invalid creation timestamp');
   }
   return Object.freeze({
@@ -261,12 +278,10 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid tenant-bound status');
   }
-  const createdAt = record.created_at instanceof Date
-    ? record.created_at.toISOString() : record.created_at;
-  const updatedAt = record.updated_at instanceof Date
-    ? record.updated_at.toISOString() : record.updated_at;
-  if (typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
-      typeof updatedAt !== 'string' || !Number.isFinite(Date.parse(updatedAt))) {
+  const createdAt = persistedUtcTimestamp(record.created_at);
+  const updatedAt = persistedUtcTimestamp(record.updated_at);
+  if (createdAt === null || updatedAt === null ||
+      Date.parse(updatedAt) < Date.parse(createdAt)) {
     throw new Error('ERP job storage returned an invalid status timestamp');
   }
   return Object.freeze({
