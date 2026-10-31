@@ -32,9 +32,23 @@ test('joint mode requires all currently active accepted trustees', () => {
   assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
 });
 test('unaccepted or future-effective appointment is not active', () => {
-  const appointments = [appointment('a', { acceptedOn: undefined }),
+  const appointments = [appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined }),
     appointment('b', { effectiveOn: '2027-01-01' })];
   assert.equal(evaluate({ appointments }).reason, 'no_active_accepted_trustees');
+});
+test('orphan acceptance and revocation pointers cannot claim trustee governance events', () => {
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptedOn: undefined })],
+  }), /Unaccepted trustee appointment cannot claim acceptance evidence/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { revokedOn: undefined, revocationEvidenceRef: 'revocation-a' })],
+  }), /Unrevoked trustee appointment cannot claim revocation evidence/);
+  assert.equal(evaluate({
+    appointments: [appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined })],
+  }).reason, 'no_active_accepted_trustees');
+  assert.equal(evaluate({
+    appointments: [appointment('a', { revokedOn: undefined })], signerIds: ['a'],
+  }).eligible, true);
 });
 test('acceptance after evaluation date does not confer eligibility', () => {
   assert.equal(evaluate({ appointments: [appointment('a', { acceptedOn: '2026-10-29' })] }).eligible, false);
