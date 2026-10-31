@@ -1139,7 +1139,7 @@ test('reservation rejects fractional minor units and negative zero without a dat
     { invoice: { adjustment: -0 } },
   ]) {
     await assert.rejects(reserve({ db, ...args, payload }),
-      /ERP job payload contains (a fractional or unsafe minor-unit amount|negative zero)/);
+      /ERP job payload contains (a fractional minor-unit amount|negative zero)/);
   }
   assert.equal(db.calls, 0, 'ambiguous financial numbers must never reach SQL');
 
