@@ -399,8 +399,11 @@ export function buildReconciliationCloseMetrics(
   if (
     (reconciliation.status !== 'open' && reconciliation.status !== 'in_review') ||
     reconciliation.closeApprovalStatus === 'closed' ||
-    Boolean(reconciliation.closedAt) ||
-    Boolean(reconciliation.closeJobId)
+    // Presence of a close marker is enough to block replay, even if a
+    // partial/legacy write left an empty or malformed value. Truthiness
+    // would let closeJobId: '' or closedAt: '' appear eligible again.
+    reconciliation.closedAt != null ||
+    reconciliation.closeJobId != null
   ) {
     return {
       bookEndingBalance,
