@@ -65,6 +65,25 @@ function isValidStatementSourceRef(value: unknown): value is string {
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
+// A reviewed index is financial evidence, not merely an array with a length.
+// Sparse arrays, inherited entries, getters and hidden metadata can otherwise
+// make an absent book transaction look cleared. Inspect descriptors before
+// reading elements or constructing a Set.
+function hasCanonicalReviewIdList(value: unknown): value is string[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.length !== value.length + 1 || keys.some((key) => {
+    if (key === 'length') return false;
+    if (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
+        Number(key) >= value.length) return true;
+    const descriptor = descriptors[key];
+    return !descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
+      !isValidStatementSourceRef(descriptor.value);
+  })) return false;
+  return new Set(value).size === value.length;
+}
+
 // When the import preserves the bank's raw amount text, it must agree with
 // the normalized numeric amount before a matched row can qualify for close.
 // Compare absolute cents because banks encode debit/credit signs differently;
@@ -195,18 +214,17 @@ export function buildReconciliationCloseMetrics(
   // a parsed row marked "matched" is not independently verified by itself.
   // An explicit empty unmatched list is valid after review.
   const matchedIdList = reconciliation.matchedStatementLineIds;
-  const matchedIdSet = new Set<string>(Array.isArray(matchedIdList) ? matchedIdList : []);
-  const hasInconsistentMatchedIds = !Array.isArray(matchedIdList) ||
-    matchedIdSet.size !== matchedIdList.length ||
-    matchedIdList.some((id) => !isValidStatementSourceRef(id) || !parsedLineIds.has(id)) ||
+  const validMatchedIdList = hasCanonicalReviewIdList(matchedIdList) ? matchedIdList : null;
+  const matchedIdSet = new Set<string>(validMatchedIdList ?? []);
+  const hasInconsistentMatchedIds = validMatchedIdList === null ||
+    validMatchedIdList.some((id) => !parsedLineIds.has(id)) ||
     parsedLines.some((line) => matchedIdSet.has(line.id) !== (line.matchStatus === 'matched'));
   // A missing, malformed or duplicated unmatched index must not masquerade
   // as an explicitly reviewed zero-exception statement.
   const unmatchedIdList = reconciliation.unmatchedStatementLineIds;
-  const hasInvalidUnmatchedIds = !Array.isArray(unmatchedIdList) ||
-    unmatchedIdList.some((id) => !isValidStatementSourceRef(id)) ||
-    new Set(unmatchedIdList).size !== unmatchedIdList.length;
-  const unresolvedLineIds = new Set<string>(Array.isArray(unmatchedIdList) ? unmatchedIdList : []);
+  const validUnmatchedIdList = hasCanonicalReviewIdList(unmatchedIdList) ? unmatchedIdList : null;
+  const hasInvalidUnmatchedIds = validUnmatchedIdList === null;
+  const unresolvedLineIds = new Set<string>(validUnmatchedIdList ?? []);
   for (const line of parsedLines) {
     if (line.matchStatus !== 'matched') {
       unresolvedLineIds.add(line.id);
@@ -381,10 +399,7 @@ export function buildReconciliationCloseMetrics(
   // records must undergo explicit book-side review before approval.
   const clearedIds = reconciliation.clearedTransactionIds;
   const unmatchedBookIds = reconciliation.unmatchedTransactionIds;
-  const validUniqueIds = (ids: unknown): ids is string[] =>
-    Array.isArray(ids) &&
-    ids.every((id) => isValidStatementSourceRef(id)) &&
-    new Set(ids).size === ids.length;
+  const validUniqueIds = hasCanonicalReviewIdList;
   if (
     !validUniqueIds(clearedIds) ||
     !validUniqueIds(unmatchedBookIds) ||
