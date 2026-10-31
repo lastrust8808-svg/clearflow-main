@@ -602,3 +602,75 @@ test('cursor checkpoint rejects accessor or hidden metadata and revision overflo
     expectedRevision: maxRevision,
   })), /exceed safe integer precision/);
 });
+
+test('changed provider payload fingerprint triggers review even when normalized fields are unchanged', () => {
+  const firstHash = 'a'.repeat(64);
+  const changedHash = 'b'.repeat(64);
+  const first = planBankFeedReplay({
+    ...base(), events: [event('tx-hash', { providerPayloadHash: firstHash })],
+  });
+  assert.equal(first.entries[0].providerPayloadHash, firstHash);
+  const before = structuredClone(first.entries);
+  const changed = planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [event('tx-hash', { kind: 'modified', providerPayloadHash: changedHash })],
+  });
+  assert.equal(changed.applied, 1);
+  assert.equal(changed.replayed, 0);
+  assert.equal(changed.entries[0].providerPayloadHash, changedHash);
+  assert.deepEqual(first.entries, before, 'proposal must not mutate stored records');
+  const replay = planBankFeedReplay({
+    ...base(), existing: changed.entries,
+    events: [event('tx-hash', { kind: 'modified', providerPayloadHash: changedHash })],
+  });
+  assert.equal(replay.applied, 0);
+  assert.equal(replay.replayed, 1);
+  assert.deepEqual(replay.entries, changed.entries);
+});
+
+test('fingerprint conflicts and downgrade cannot be silently treated as provider replay', () => {
+  const firstHash = 'a'.repeat(64);
+  const otherHash = 'b'.repeat(64);
+  const first = planBankFeedReplay({
+    ...base(), events: [event('tx-hash', { providerPayloadHash: firstHash })],
+  });
+  const snapshot = structuredClone(first.entries);
+  for (const conflicting of [
+    event('tx-hash', { providerPayloadHash: otherHash }),
+    event('tx-hash'),
+  ]) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: first.entries, events: [conflicting],
+    }), /Conflicting replay/);
+  }
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [event('tx-hash', { kind: 'modified' })],
+  }), /fingerprint cannot be discarded/);
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [event('tx-hash', { kind: 'modified', amountCents: 3000, providerPayloadHash: firstHash })],
+  }), /fingerprint conflicts with modified financial evidence/);
+  assert.deepEqual(first.entries, snapshot);
+});
+
+test('malformed provider payload fingerprints fail closed for incoming and stored records', () => {
+  const first = planBankFeedReplay({
+    ...base(), events: [event('tx-hash', { providerPayloadHash: 'a'.repeat(64) })],
+  });
+  const snapshot = structuredClone(first.entries);
+  for (const hash of ['a'.repeat(63), 'A'.repeat(64), 'z'.repeat(64), null, 123]) {
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: first.entries,
+      events: [event('new-tx', { providerPayloadHash: hash })],
+    }), /Invalid provider payload fingerprint/);
+    assert.throws(() => planBankFeedReplay({
+      ...base(), existing: [{ ...first.entries[0], providerPayloadHash: hash }],
+    }), /malformed/);
+  }
+  assert.throws(() => planBankFeedReplay({
+    ...base(), existing: first.entries,
+    events: [{ kind: 'removed', accountId: 'acct-a', transactionId: 'tx-hash', providerPayloadHash: 'b'.repeat(64) }],
+  }), /malformed canonical feed removal metadata/);
+  assert.deepEqual(first.entries, snapshot);
+});
