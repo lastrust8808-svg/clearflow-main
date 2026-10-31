@@ -37,8 +37,20 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   // and JSON.stringify. Reject them before any property reflection or access.
   if (nodeTypes.isProxy(value)) throw new TypeError('ERP job payload contains a Proxy');
   if (seen.has(value)) throw new TypeError('ERP job payload contains a circular or shared reference');
-  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype &&
-      Object.getPrototypeOf(value) !== null) {
+  // JSON.stringify invokes inherited toJSON hooks before hashing. A custom
+  // array prototype can rewrite invoice lines without an own property, and
+  // polluted built-in prototypes can rewrite otherwise plain payloads.
+  // Reject those hooks before any database reservation is acknowledged.
+  if (Object.hasOwn(Object.prototype, 'toJSON') ||
+      Object.hasOwn(Array.prototype, 'toJSON')) {
+    throw new TypeError('ERP job payload inherits a JSON serializer hook');
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value)) {
+    if (prototype !== Array.prototype) {
+      throw new TypeError('ERP job payload contains an unsafe array prototype');
+    }
+  } else if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('ERP job payload must contain plain JSON objects');
   }
   seen.add(value);
