@@ -114,16 +114,28 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       throw new TypeError('Invalid QR binding status');
     }
     const versionKey = JSON.stringify([documentId, versionId]);
+    // Accumulate windows first: registry rows are not guaranteed to be in
+    // issuance order. Checking each against all earlier rows is quadratic
+    // for long-lived documents with many token rotations.
     const windows = versionWindows.get(versionKey) ?? [];
-    for (const prior of windows) {
-      const overlaps = (prior.revokedAt === null || issuedAt < prior.revokedAt) &&
-        (revokedAt === null || prior.issuedAt < revokedAt);
-      if (overlaps) throw new Error('Overlapping QR bindings for document version');
-    }
     windows.push({ issuedAt, revokedAt });
     versionWindows.set(versionKey, windows);
     if (timingSafeEqual(Buffer.from(hash, 'hex'), requested)) {
       matched = binding.status === 'active' ? { status: 'bound', documentId, versionId } : null;
+    }
+  }
+  // Once sorted by issuance, any overlap must occur between adjacent
+  // intervals. A revoked token's end is exclusive: a replacement may be
+  // issued at the exact revocation instant, but never before it. An active
+  // token has no end and therefore cannot precede another binding.
+  // This keeps validation O(n log n) rather than O(n^2) per version.
+  for (const windows of versionWindows.values()) {
+    windows.sort((left, right) => left.issuedAt.localeCompare(right.issuedAt));
+    for (let i = 1; i < windows.length; i++) {
+      if (windows[i - 1].revokedAt === null ||
+          windows[i].issuedAt < windows[i - 1].revokedAt) {
+        throw new Error('Overlapping QR bindings for document version');
+      }
     }
   }
   return Object.freeze(matched ?? { status: 'unknown' });
