@@ -310,3 +310,27 @@ test('future notice document IDs cannot recycle earlier action evidence referenc
     event('notice_prepared', 3), event('disputed', 4),
   ]).status, 'disputed');
 });
+
+test('journal event IDs cannot double as issuance or presentment evidence receipts', () => {
+  assert.throws(() => project([
+    event('issued', 1, { eventId: 'evidence-1' }),
+  ]), /event, document and evidence references must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1, { evidenceRef: 'event-2' }),
+    event('presented', 2),
+  ]), /event, document and evidence references must be distinct/);
+  assert.equal(project([event('issued', 1), event('presented', 2)]).status, 'presented');
+});
+
+test('journal event IDs cannot alias issued or future notice document versions', () => {
+  assert.throws(() => project([
+    event('issued', 1, { eventId: 'document-1' }),
+  ]), /event, document and evidence references must be distinct/);
+  assert.throws(() => project([
+    event('issued', 1), event('presented', 2, { eventId: 'document-3' }),
+    event('notice_prepared', 3),
+  ]), /event, document and evidence references must be distinct/);
+  assert.equal(project([
+    event('issued', 1), event('presented', 2), event('notice_prepared', 3),
+  ]).status, 'notice_prepared');
+});
