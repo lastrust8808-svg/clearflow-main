@@ -433,3 +433,32 @@ test('authenticated membership scope rejects extra privilege or billing claims',
   assert.equal(project(nullPrototypeScope, [paid()], asOf).entitled, true);
   assert.equal(project(scope, [], asOf).status, 'pending');
 });
+
+test('event batches reject inherited, sparse, accessor and hidden entries before projection', () => {
+  let getterCalls = 0;
+  const accessorBatch = [paid()];
+  Object.defineProperty(accessorBatch, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; return paid(); },
+  });
+  assert.throws(() => project(scope, accessorBatch, asOf), /own enumerable data entries/);
+  assert.equal(getterCalls, 0, 'an event slot getter must not execute');
+
+  const sparseBatch = new Array(1);
+  assert.throws(() => project(scope, sparseBatch, asOf), /own enumerable data entries/);
+
+  const extraBatch = [paid()];
+  Object.defineProperty(extraBatch, 'hiddenClaim', { value: true, enumerable: false });
+  assert.throws(() => project(scope, extraBatch, asOf), /dense plain array/);
+
+  const symbolBatch = [paid()];
+  symbolBatch[Symbol('entitled')] = true;
+  assert.throws(() => project(scope, symbolBatch, asOf), /dense plain array/);
+
+  const inheritedBatch = [paid()];
+  Object.setPrototypeOf(inheritedBatch, Object.create(Array.prototype));
+  assert.throws(() => project(scope, inheritedBatch, asOf), /plain array/);
+
+  assert.throws(() => project(scope, new Array(10001).fill(paid()), asOf), /dense plain array/);
+  assert.equal(project(scope, Object.freeze([paid()]), asOf).status, 'active');
+});
