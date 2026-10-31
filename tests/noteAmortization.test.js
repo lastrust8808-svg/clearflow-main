@@ -43,7 +43,7 @@ test('rejects invalid dates and malformed terms', () => {
   for (const firstDueDate of ['2026-02-29', '2026-13-01', '2026-01-00', 'not a date', '2026-1-1']) {
     assert.throws(() => schedule({ firstDueDate }), /firstDueDate/);
   }
-  assert.throws(() => buildFixedMonthlyNoteSchedule(null), /required/);
+  assert.throws(() => buildFixedMonthlyNoteSchedule(null), /plain data record/);
   assert.throws(() => schedule({ currency: 'usd' }), /currency/);
   assert.throws(() => schedule({ tenantId: '' }), /tenantId/);
 });
@@ -110,4 +110,34 @@ test('rejects invisible control characters in note scope identifiers', () => {
     }
   }
   assert.equal(schedule({ noteId: 'valid-note' }).noteId, 'valid-note');
+});
+
+test('note schedule terms reject inherited, accessor, hidden and unsupported execution claims', () => {
+  assert.throws(() => buildFixedMonthlyNoteSchedule(Object.create(terms)), /plain data record/);
+  assert.throws(() => buildFixedMonthlyNoteSchedule([]), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...terms };
+  Object.defineProperty(accessor, 'principalMinor', {
+    enumerable: true,
+    get() { getterCalled = true; return terms.principalMinor; },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(accessor), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...terms };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(hidden), /Unsupported note terms field/);
+  assert.throws(() => schedule({ settledMinor: 100 }), /Unsupported note terms field/);
+  assert.throws(() => buildFixedMonthlyNoteSchedule({ ...terms, [Symbol('executed')]: true }),
+    /Unsupported note terms field/);
+  const missing = { ...terms };
+  delete missing.noteId;
+  assert.throws(() => buildFixedMonthlyNoteSchedule(missing), /Note terms.noteId/);
+});
+
+test('null-prototype note terms with explicit own data values remain valid', () => {
+  const input = Object.assign(Object.create(null), terms);
+  const result = buildFixedMonthlyNoteSchedule(input);
+  assert.equal(result.installments.length, 12);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(Object.isFrozen(result), true);
 });
