@@ -895,6 +895,26 @@ test('controller approval rejects statement-row resolutions outside the import-t
   }
 });
 
+test('pending controller review rejects invalid or pre-import row resolution evidence', () => {
+  for (const resolvedAt of [
+    '2026-10-27T11:59:59Z',
+    '2026-02-30T12:00:00Z',
+    'not-a-timestamp',
+    '',
+    '2999-01-01T00:00:00Z',
+  ]) {
+    const metrics = buildReconciliationCloseMetrics(
+      reconciliation({
+        closeApprovalStatus: 'pending',
+        parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt })],
+      }),
+      account
+    );
+    assert.equal(metrics.isReadyToApprove, false, resolvedAt);
+    assert.match(metrics.blockedReason, /resolutions must follow import and precede controller approval/);
+  }
+});
+
 test('valid row resolution evidence preserves approval eligibility across timezone offsets', () => {
   const approval = {
     closeApprovalStatus: 'approved',
@@ -916,7 +936,7 @@ test('valid row resolution evidence preserves approval eligibility across timezo
     );
     assert.equal(metrics.isReadyToApprove, true, String(resolvedAt));
   }
-  // Pending controller review remains eligible for review; it is not a close.
+  // A valid post-import row resolution remains eligible for pending review; it is not a close.
   assert.equal(buildReconciliationCloseMetrics(reconciliation({
     parsedStatementLines: [statementLine('line-1', 'matched', { resolvedAt: '2026-10-28T19:00:00Z' })],
   }), account).isReadyToApprove, true);
