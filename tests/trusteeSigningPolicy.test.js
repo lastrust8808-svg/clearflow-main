@@ -360,7 +360,7 @@ test('governance list size is bounded before enumerating untrusted appointments 
 });
 
 test('rejects malformed UTF-16 in trustee scope, appointments, signer IDs and governance evidence', () => {
-  for (const malformed of ['\\uD800', '\\uDC00', 'prefix\\uD800', '\\uDC00suffix']) {
+  for (const malformed of ['\uD800', '\uDC00', 'prefix\uD800', '\uDC00suffix']) {
     for (const key of ['tenantId', 'entityId', 'trustId']) {
       assert.throws(() => evaluate({ [key]: malformed }), /well-formed Unicode/);
     }
@@ -381,7 +381,7 @@ test('rejects malformed UTF-16 in trustee scope, appointments, signer IDs and go
       signerIds: ['b'],
     }), /well-formed Unicode/);
   }
-  const supplementary = 'trustee-\\u{1F680}';
+  const supplementary = 'trustee-\u{1F680}';
   assert.equal(evaluate({
     appointments: [appointment(supplementary)],
     signerIds: [supplementary],
