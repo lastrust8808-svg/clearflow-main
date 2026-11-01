@@ -197,6 +197,53 @@ function assertBoundedParsedRecordDepth(record) {
   }
 }
 
+// JSON.parse silently keeps the last occurrence of a duplicate object key.
+// A legacy or externally supplied bank record can therefore conceal a
+// contradictory tenant ID, amount, or audit field. Scan the bounded JSON
+// text before parsing, decoding escaped key aliases and tracking each object's
+// keys separately. JSON.parse remains responsible for full syntax validation.
+function assertUniqueJsonObjectKeys(text) {
+  const stack = [];
+  for (let i = 0; i < text.length;) {
+    const char = text[i];
+    if (char === '{' || char === '[') {
+      stack.push(char === '{' ? { kind: 'object', keys: new Set() } : { kind: 'array' });
+      if (stack.length > MAX_RECORD_NESTING_DEPTH + 1) {
+        throw new TypeError('Storage record nesting exceeds safety limit.');
+      }
+      i++;
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      stack.pop();
+      i++;
+      continue;
+    }
+    if (char !== '"') {
+      i++;
+      continue;
+    }
+    const start = i++;
+    while (i < text.length) {
+      if (text[i] === '\\') {
+        i += 2;
+        continue;
+      }
+      if (text[i++] === '"') break;
+    }
+    let next = i;
+    while (next < text.length && /\\s/.test(text[next])) next++;
+    const current = stack[stack.length - 1];
+    if (text[next] === ':' && current?.kind === 'object') {
+      const key = JSON.parse(text.slice(start, i));
+      if (current.keys.has(key)) {
+        throw new Error('Duplicate storage record JSON property.');
+      }
+      current.keys.add(key);
+    }
+  }
+}
+
 // Read at most the configured byte budget, even if another process appends
 // after fstat. A size-only check followed by readFile() is not a memory bound.
 async function readBoundedRecordText(handle, stat) {
@@ -251,7 +298,9 @@ async function readJsonSafely(targetPath) {
     // Do not return a JSON primitive or array as a tenant workspace/vault;
     // all account storage APIs persist top-level JSON objects. In particular,
     // non-Google app-data has no separate embedded identity scope check.
-    const record = JSON.parse(await readBoundedRecordText(handle, stat), (key, value) => {
+    const recordText = await readBoundedRecordText(handle, stat);
+    assertUniqueJsonObjectKeys(recordText);
+    const record = JSON.parse(recordText, (key, value) => {
       if (UNSAFE_JSON_KEYS.has(key)) throw new Error('Unsafe storage record property.');
       return value;
     });
