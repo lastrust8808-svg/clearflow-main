@@ -550,3 +550,32 @@ test('oversized private-note journal is rejected before reading any event fields
   assert.throws(() => project(Array.from({ length: 10000 }, () => undefined)),
     /Invalid private note event/);
 });
+
+test('private-note journal IDs reject lone UTF-16 surrogates without rejecting valid supplementary Unicode', () => {
+  const malformed = ['\uD800', '\uDC00', 'broken-\uD800-end'];
+  for (const value of malformed) {
+    for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+      assert.throws(() => projectPrivateNoteLifecycle({
+        ...scope, [key]: 'id-' + value,
+        asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+      }), /well-formed Unicode/);
+    }
+    for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+      assert.throws(() => project([event('issued', 1, { [key]: 'id-' + value })]),
+        /well-formed Unicode/);
+    }
+  }
+  const astralScope = {
+    tenantId: 'tenant-🚀', entityId: 'entity-🚀',
+    trustId: 'trust-🚀', noteId: 'note-🚀',
+  };
+  const astralEvent = {
+    ...event('issued', 1), ...astralScope,
+    eventId: 'event-🚀', actorId: 'actor-🚀',
+    documentRef: 'document-🚀', evidenceRef: 'evidence-🚀',
+  };
+  assert.equal(projectPrivateNoteLifecycle({
+    ...astralScope, asOfAt: '2026-11-01T00:00:00.000Z',
+    events: [astralEvent],
+  }).status, 'issued');
+});
