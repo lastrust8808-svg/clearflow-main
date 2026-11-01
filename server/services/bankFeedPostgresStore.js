@@ -58,13 +58,31 @@ function transactionQueries(client) {
     },
     async loadEntries(scope) {
       const result = await client.query(
-        `SELECT payload FROM ${ENTRIES}
+        `SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload
+         FROM ${ENTRIES}
          WHERE tenant_id = $1 AND provider = $2 AND connection_id = $3
            AND account_id = ANY($4::text[])
          ORDER BY account_id, transaction_id`,
         [...params(scope), scope.allowedAccountIds],
       );
-      return result.rows.map((row) => row.payload);
+      // JSONB is not a trusted identity boundary. Verify that each stored
+      // payload agrees with its database composite key and the authorized
+      // scope before the replay planner can use any historical evidence.
+      const allowed = new Set(scope.allowedAccountIds);
+      return result.rows.map((row) => {
+        const entry = row.payload;
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
+            row.tenant_id !== scope.tenantId || row.provider !== scope.provider ||
+            row.connection_id !== scope.connectionId ||
+            !allowed.has(row.account_id) ||
+            entry.tenantId !== row.tenant_id || entry.provider !== row.provider ||
+            entry.connectionId !== row.connection_id ||
+            entry.accountId !== row.account_id ||
+            entry.transactionId !== row.transaction_id) {
+          throw new Error('Persisted banking entry identity does not match its scoped database key.');
+        }
+        return entry;
+      });
     },
     async saveEntries(scope, entries) {
       const allowed = new Set(scope.allowedAccountIds);
