@@ -181,6 +181,20 @@ export function planBankFeedReplay(input: FeedReplayInput): {
     }
   }
   const allowed = new Set(input.allowedAccountIds);
+  // A provider page must contain at most one event per scoped transaction.
+  // Silently counting a duplicate as a replay hides malformed provider input;
+  // mixed added/modified/removed duplicates can also obscure which state won.
+  // Detect this before constructing any proposed financial record changes.
+  const pageIdentities = new Set<string>();
+  for (const event of input.events) {
+    // The normal event validator below reports malformed/unauthorized IDs.
+    if (!allowed.has(event.accountId) || !validId(event.transactionId)) continue;
+    const identity = keyOf(event.accountId, event.transactionId);
+    if (pageIdentities.has(identity)) {
+      throw new Error('Duplicate provider event identity within one feed page.');
+    }
+    pageIdentities.add(identity);
+  }
   const entries = input.existing.map((entry) => ({ ...entry }));
   const index = new Map<string, FeedReplayEntry>();
   for (const entry of entries) {
