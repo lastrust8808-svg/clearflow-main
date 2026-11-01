@@ -93,7 +93,7 @@ function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0)
       if (typeof key !== 'string' || !descriptor.enumerable ||
           !Object.hasOwn(descriptor, 'value') ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key) ||
-          (isArray && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length))) {
+          (isArray && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))) {
         throw new TypeError('Unsafe banking evidence property.');
       }
       assertPlainBankingEvidence(descriptor.value, ancestors, depth + 1);
