@@ -23,6 +23,9 @@ export interface AuthorizedBankFeedScope {
 }
 
 export interface BankFeedPageEvidence {
+  // Cursor supplied to the provider when THIS page was fetched. A page from
+  // an older poll must never be committed against a newer locked checkpoint.
+  requestedCursor: string | null;
   events: FeedReplayEvent[];
   nextCursor: string;
   hasMore: boolean;
@@ -51,7 +54,7 @@ export interface BankFeedTransactionalStore {
 // transaction is waiting for its checkpoint lock. The planner still validates
 // the financial semantics of these detached values inside the transaction.
 const SCOPE_FIELDS = new Set(['tenantId', 'provider', 'connectionId', 'allowedAccountIds']);
-const PAGE_FIELDS = new Set(['events', 'nextCursor', 'hasMore']);
+const PAGE_FIELDS = new Set(['requestedCursor', 'events', 'nextCursor', 'hasMore']);
 const EVENT_FIELDS = new Set([
   'kind', 'accountId', 'transactionId', 'amountCents', 'pending',
   'pendingTransactionId', 'providerPayloadHash',
@@ -137,7 +140,9 @@ export async function commitAuthorizedBankFeedPage(
     const proposal = planBankFeedCursorPage({
       feed: { ...scope, existing, events: detachedPage.events },
       checkpoint,
-      expectedCursor: checkpoint.cursor,
+      // Never manufacture the expected cursor from the freshly locked state:
+      // that would accept a stale response fetched before another poll advanced.
+      expectedCursor: detachedPage.requestedCursor,
       expectedRevision: checkpoint.revision,
       nextCursor: detachedPage.nextCursor,
       hasMore: detachedPage.hasMore,
