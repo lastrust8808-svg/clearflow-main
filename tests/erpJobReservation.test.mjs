@@ -753,6 +753,7 @@ function quarantineRow(overrides = {}) {
     id: claimedJobId, tenant_id: workerScope.tenantId, actor_id: 'actor-a',
     operation: 'invoice_delivery', status: 'outcome_unknown', failure_code: null,
     claimed_by: null, claimed_at: null, lease_expires_at: null,
+    dispatch_started_at: null,
     created_at: new Date('2026-10-29T12:00:00Z'),
     updated_at: new Date('2026-10-29T12:04:00Z'), ...overrides,
   };
@@ -1880,5 +1881,52 @@ test('reconciliation backlog refuses contradictory lease or failure metadata', a
       authenticatedWorker: workerScope, operation: 'invoice_delivery',
       db: { query: async () => ({ rows: [quarantineRow({ [field]: value })] }) },
     }), /invalid tenant-bound reconciliation record/, field);
+  }
+});
+
+test('single-job expired-lease recovery preserves dispatch evidence and rejects forged or missing fence data', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId };
+  let capturedSql;
+  const dispatchStarted = new Date('2026-10-29T12:01:30Z');
+  const receipt = await quarantine({ ...input, db: {
+    async query(sql) {
+      capturedSql = sql;
+      return { rows: [quarantineRow({ dispatch_started_at: dispatchStarted })] };
+    },
+  } });
+  assert.match(capturedSql, /RETURNING[\\s\\S]*dispatch_started_at/);
+  assert.equal(receipt.dispatchStartedAt, '2026-10-29T12:01:30.000Z');
+  assert.equal(receipt.status, 'outcome_unknown');
+  assert.equal(receipt.requiresReconciliation, true);
+  assert.equal(Object.isFrozen(receipt), true);
+  assert.equal('delivered' in receipt, false);
+
+  const undispatched = await quarantine({ ...input, db: {
+    query: async () => ({ rows: [quarantineRow()] }),
+  } });
+  assert.equal(undispatched.dispatchStartedAt, null);
+  assert.equal(undispatched.requiresReconciliation, true,
+    'even an undispatched expired lease is never automatically retried');
+
+  const missing = quarantineRow();
+  delete missing.dispatch_started_at;
+  await assert.rejects(quarantine({ ...input, db: {
+    query: async () => ({ rows: [missing] }),
+  } }), /invalid tenant-bound quarantine/,
+  'missing dispatch evidence must not silently be treated as no dispatch');
+
+  for (const dispatch_started_at of [
+    'invalid', '2026-02-30T12:01:30Z',
+    '2026-10-29T08:01:30-04:00',
+    new Date('2026-10-29T11:59:59Z'),
+    new Date('2026-10-29T12:05:00Z'),
+  ]) {
+    await assert.rejects(quarantine({ ...input, db: {
+      query: async () => ({ rows: [quarantineRow({ dispatch_started_at })] }),
+    } }), /invalid quarantine timestamp/,
+    'invalid or out-of-order dispatch fence cannot be acknowledged');
   }
 });
