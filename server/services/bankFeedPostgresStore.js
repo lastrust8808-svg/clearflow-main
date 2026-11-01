@@ -5,6 +5,8 @@
  * Tables require a separately reviewed migration before this can be wired in.
  * No provider calls or payment operations are performed here.
  */
+import { types as nodeTypes } from 'node:util';
+
 const CHECKPOINT = 'public.clearflow_bank_feed_checkpoints';
 const ENTRIES = 'public.clearflow_bank_feed_entries';
 
@@ -56,6 +58,49 @@ function validCursor(value) {
     (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
       value === value.trim() &&
       !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
+}
+
+// Preserve the exact financial evidence submitted to JSONB. JSON.stringify
+// silently converts NaN/Infinity to null, -0 to 0, drops undefined fields,
+// invokes getters/toJSON, and accepts already-imprecise integers. Reject
+// those shapes before any INSERT, including when called without the planner.
+function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER || Object.is(value, -0)) {
+      throw new TypeError('Unsafe banking evidence numeric value.');
+    }
+    return;
+  }
+  if (typeof value !== 'object' || depth > 128 || nodeTypes.isProxy(value)) {
+    throw new TypeError('Banking evidence must contain bounded plain JSON values.');
+  }
+  const isArray = Array.isArray(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (isArray ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Banking evidence must contain plain objects and arrays.');
+  }
+  if (ancestors.has(value)) throw new TypeError('Cyclic banking evidence.');
+  ancestors.add(value);
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (isArray && Object.keys(value).length !== value.length) {
+      throw new TypeError('Sparse banking evidence array.');
+    }
+    for (const key of Reflect.ownKeys(descriptors)) {
+      if (isArray && key === 'length') continue;
+      const descriptor = descriptors[key];
+      if (typeof key !== 'string' || !descriptor.enumerable ||
+          !Object.hasOwn(descriptor, 'value') ||
+          ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key) ||
+          (isArray && (!/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= value.length))) {
+        throw new TypeError('Unsafe banking evidence property.');
+      }
+      assertPlainBankingEvidence(descriptor.value, ancestors, depth + 1);
+    }
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function transactionQueries(client) {
@@ -139,6 +184,7 @@ function transactionQueries(client) {
         let serialized;
         let snapshot;
         try {
+          assertPlainBankingEvidence(entry);
           serialized = JSON.stringify(entry);
           snapshot = JSON.parse(serialized);
         } catch {
