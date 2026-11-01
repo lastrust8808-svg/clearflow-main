@@ -18,7 +18,7 @@ const initial = () => ({
   entries: [],
 });
 
-function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false, tamperReadPayload = null } = {}) {
+function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false, tamperReadPayload = null, tamperCheckpointRow = null } = {}) {
   const state = initial();
   const calls = [];
   let releases = 0;
@@ -52,7 +52,7 @@ function mockPg({ failWrite = false, failCommit = false, failCas = false, failBe
             const row = working.checkpoint;
             const matched = row.tenant_id === values[0] &&
               row.provider === values[1] && row.connection_id === values[2];
-            return { rows: matched ? [structuredClone(row)] : [], rowCount: matched ? 1 : 0 };
+            return { rows: matched ? [{ ...structuredClone(row), ...tamperCheckpointRow }] : [], rowCount: matched ? 1 : 0 };
           }
           if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
             assert.match(sql, /account_id = ANY\(\$4::text\[\]\)/);
@@ -168,6 +168,35 @@ test('PostgreSQL adapter refuses cross-tenant checkpoint reads and out-of-scope 
   assert.equal(db.calls.filter((call) => /INSERT INTO/.test(call.sql)).length, 0);
   assert.deepEqual(db.state, initial());
   assert.equal(db.releases, 2);
+});
+
+test('PostgreSQL adapter rejects mismatched persisted checkpoint identities before history reads', async () => {
+  for (const field of ['tenant_id', 'provider', 'connection_id']) {
+    const db = mockPg({ tamperCheckpointRow: { [field]: 'forged-scope' } });
+    const store = createBankFeedPostgresStore(db.pool);
+    await assert.rejects(
+      store.withTransaction((tx) => tx.loadCheckpointForUpdate(scope())),
+      /Persisted banking checkpoint identity does not match authorized scope/,
+      field,
+    );
+    assert.equal(db.calls.filter(({ sql }) => sql.includes('FOR UPDATE')).length, 1);
+    assert.equal(db.calls.filter(({ sql }) =>
+      /SELECT tenant_id, provider, connection_id, account_id|INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)
+    ).length, 0, 'foreign checkpoint must not read entries, write rows or advance cursor');
+    assert.deepEqual(db.state, initial(), 'rejected checkpoint must preserve database state');
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.equal(db.releases, 1);
+    assert.equal(db.releaseErrors[0], undefined, 'successful rollback safely releases the connection');
+  }
+
+  const valid = mockPg();
+  const checkpoint = await createBankFeedPostgresStore(valid.pool).withTransaction(
+    (tx) => tx.loadCheckpointForUpdate(scope()),
+  );
+  assert.deepEqual(checkpoint, {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    cursor: null, revision: 0,
+  });
 });
 
 test('PostgreSQL adapter rejects unsafe BIGINT checkpoint revisions', async () => {
