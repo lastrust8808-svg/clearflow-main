@@ -30,6 +30,11 @@ const ENTRY_REQUIRED_FIELDS = new Set([...ENTRY_FIELDS].filter(
   key => key !== 'restrictedMinor' && key !== 'pledgedMinor',
 ));
 
+// Bound in-memory reserve classification before allocating descriptor maps or
+// reading individual asset records. Larger authenticated ledgers require
+// reviewed checkpoints/pagination, never silent truncation of reserve entries.
+const MAX_RESERVE_ENTRIES = 10000;
+
 // Reserve values must be explicit data, never inherited, computed by getters,
 // or accompanied by unreviewed assertions of available/settled funds.
 function requirePlainReserveRecord(record, allowed, required, label) {
@@ -65,8 +70,13 @@ function requirePlainReserveEntries(entries) {
   if (!Array.isArray(entries) || Object.getPrototypeOf(entries) !== Array.prototype) {
     throw new TypeError('Reserve entries must be a plain array');
   }
+  // The array length is an own non-accessor property. Reject oversized
+  // snapshots before enumerating any indexed fields or reading asset data.
+  const length = Object.getOwnPropertyDescriptor(entries, 'length').value;
+  if (length > MAX_RESERVE_ENTRIES) {
+    throw new RangeError('Reserve entry list exceeds maximum entry count');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(entries);
-  const length = descriptors.length.value;
   let count = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
