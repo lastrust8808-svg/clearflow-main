@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildFixedMonthlyNoteSchedule } from '../server/services/noteAmortization.js';
 
-const terms = { tenantId: 'tenant-a', entityId: 'trust-a', noteId: 'note-1', currency: 'USD',
+const terms = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', noteId: 'note-1', currency: 'USD',
   principalMinor: 1_200_000, annualRateBps: 600, paymentCount: 12, firstDueDate: '2026-01-31' };
 const schedule = (overrides = {}) => buildFixedMonthlyNoteSchedule({ ...terms, ...overrides });
 
@@ -46,6 +46,22 @@ test('rejects invalid dates and malformed terms', () => {
   assert.throws(() => buildFixedMonthlyNoteSchedule(null), /plain data record/);
   assert.throws(() => schedule({ currency: 'usd' }), /currency/);
   assert.throws(() => schedule({ tenantId: '' }), /tenantId/);
+});
+
+test('note schedules require an explicit trust scope and preserve it in projections', () => {
+  const missing = { ...terms };
+  delete missing.trustId;
+  assert.throws(() => buildFixedMonthlyNoteSchedule(missing), /Note terms.trustId/);
+  for (const trustId of [undefined, null, '', ' trust-a ', 'trust-a\\u0000']) {
+    assert.throws(() => schedule({ trustId }), /trustId/);
+  }
+  const first = schedule();
+  const second = schedule({ trustId: 'trust-b' });
+  assert.equal(first.entityId, second.entityId);
+  assert.equal(first.trustId, 'trust-a');
+  assert.equal(second.trustId, 'trust-b');
+  assert.deepEqual(first.installments, second.installments);
+  assert.equal(Object.isFrozen(second), true);
 });
 
 test('rejects invalid or unsafe amounts, rate, and term lengths', () => {
@@ -95,7 +111,7 @@ test('permits a one-cent single-installment note without inventing payments', ()
 
 
 test('rejects padded or whitespace-only note scope identifiers before amortization', () => {
-  for (const key of ['tenantId', 'entityId', 'noteId']) {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
     for (const invalid of [' ', ' valid', 'valid ', '\tvalid', 'valid\n']) {
       assert.throws(() => schedule({ [key]: invalid }), /unpadded/);
     }
@@ -104,7 +120,7 @@ test('rejects padded or whitespace-only note scope identifiers before amortizati
 });
 
 test('rejects invisible control characters in note scope identifiers', () => {
-  for (const key of ['tenantId', 'entityId', 'noteId']) {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
     for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
       assert.throws(() => schedule({ [key]: 'valid' + control }), /control characters/);
     }
