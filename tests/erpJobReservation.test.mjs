@@ -1600,3 +1600,32 @@ test('snake_case minor-unit financial fields reject fractional and coerced value
   assert.equal(accepted.created, true);
   assert.equal(db.calls, 1);
 });
+
+
+test('ERP reservation and worker identity reject noncanonical Unicode before database access', async () => {
+  // Canonically equivalent tenant/actor/worker labels must not create distinct
+  // audit principals or worker leases. Valid composed international IDs remain
+  // supported; no production identity provider or database is involved.
+  const decomposed = 'cafe\u0301';
+  const composed = 'caf\u00e9';
+  assert.notEqual(decomposed, composed);
+  let calls = 0;
+  const db = { async query() { calls++; return { rows: [] }; } };
+  for (const field of ['tenantId', 'actorId']) {
+    await assert.rejects(reserve({
+      db, ...args, authenticatedScope: { ...scope, [field]: decomposed },
+    }), /Invalid authenticated/);
+  }
+  for (const field of ['tenantId', 'workerId']) {
+    await assert.rejects(claim({
+      db, authenticatedWorker: { ...workerScope, [field]: decomposed },
+      operation: 'invoice_delivery',
+    }), /Invalid authenticated/);
+  }
+  assert.equal(calls, 0, 'invalid identities must be rejected before SQL');
+  assert.equal(await claim({
+    db, authenticatedWorker: { tenantId: 'tenant-' + composed, workerId: 'worker-' + composed },
+    operation: 'invoice_delivery',
+  }), null);
+  assert.equal(calls, 1, 'valid composed international identities reach SQL');
+});
