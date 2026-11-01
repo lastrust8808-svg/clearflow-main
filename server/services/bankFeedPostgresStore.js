@@ -96,23 +96,62 @@ function transactionQueries(client) {
       });
     },
     async saveEntries(scope, entries) {
-      const allowed = new Set(scope.allowedAccountIds);
+      // This adapter is also callable without the page planner. Validate and
+      // snapshot the entire batch before the first INSERT: conflicting replay
+      // identities must not silently overwrite one another within a page.
       params(scope);
-      if (!Array.isArray(entries) || entries.some((entry) =>
-        !entry || entry.tenantId !== scope.tenantId ||
-        entry.provider !== scope.provider ||
-        entry.connectionId !== scope.connectionId ||
-        !allowed.has(entry.accountId) || !entry.transactionId)) {
+      const allowed = new Set(scope.allowedAccountIds);
+      if (!Array.isArray(entries)) {
         throw new Error('Refusing out-of-scope banking entry write.');
       }
+      const prepared = [];
+      const seen = new Set();
       for (const entry of entries) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
+            entry.tenantId !== scope.tenantId ||
+            entry.provider !== scope.provider ||
+            entry.connectionId !== scope.connectionId ||
+            !allowed.has(entry.accountId) ||
+            !validScopeId(entry.transactionId)) {
+          throw new Error('Refusing out-of-scope banking entry write.');
+        }
+        let serialized;
+        let snapshot;
+        try {
+          serialized = JSON.stringify(entry);
+          snapshot = JSON.parse(serialized);
+        } catch {
+          throw new Error('Refusing non-JSON banking entry write.');
+        }
+        // A custom serializer or a mutating getter must not change the SQL
+        // composite key independently of the JSONB evidence being stored.
+        if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
+            snapshot.tenantId !== scope.tenantId ||
+            snapshot.provider !== scope.provider ||
+            snapshot.connectionId !== scope.connectionId ||
+            snapshot.accountId !== entry.accountId ||
+            snapshot.transactionId !== entry.transactionId) {
+          throw new Error('Refusing banking entry with inconsistent serialized identity.');
+        }
+        const key = JSON.stringify([snapshot.accountId, snapshot.transactionId]);
+        if (seen.has(key)) {
+          throw new Error('Duplicate banking entry identity in write batch.');
+        }
+        seen.add(key);
+        prepared.push({
+          accountId: snapshot.accountId,
+          transactionId: snapshot.transactionId,
+          serialized,
+        });
+      }
+      for (const entry of prepared) {
         await client.query(
           `INSERT INTO ${ENTRIES}
              (tenant_id, provider, connection_id, account_id, transaction_id, payload)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
            ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
            DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-          [...params(scope), entry.accountId, entry.transactionId, JSON.stringify(entry)],
+          [...params(scope), entry.accountId, entry.transactionId, entry.serialized],
         );
       }
     },
