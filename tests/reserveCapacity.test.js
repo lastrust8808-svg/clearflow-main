@@ -339,3 +339,32 @@ test('reserve entry preflight rejects a malformed later record without executing
   assert.equal(getterCalled, false);
   assert.equal(calculate([entry('cash-a', 100), entry('cash-b', 200)]).unencumberedCashMinor, 300);
 });
+
+test('rejects non-NFC reserve scope, asset and provenance aliases before classification', () => {
+  const composed = 'scope-\u00e9';
+  const decomposed = 'scope-e\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(
+      () => calculateReserveCapacity({ ...base, [key]: decomposed, asOfAt,
+        maxEvidenceAgeMs: 3600000, entries: [] }),
+      new RegExp(key + '.*NFC'),
+    );
+    assert.equal(calculateReserveCapacity({ ...base, [key]: composed, asOfAt,
+      maxEvidenceAgeMs: 3600000, entries: [] })[key], composed);
+    assert.throws(() => calculate([entry('a', 100, { [key]: decomposed })]),
+      /scope or currency mismatch/);
+  }
+  for (const key of ['id', 'assetId', 'evidenceRef']) {
+    assert.throws(() => calculate([entry('a', 100, { [key]: decomposed })]),
+      new RegExp('entry\\.' + key + '.*NFC'));
+    assert.equal(calculate([entry('a', 100, { [key]: composed })]).unencumberedCashMinor, 100);
+  }
+  // Without canonical identity admission, equivalent names can bypass the
+  // duplicate-asset and duplicate-evidence safeguards and overstate reserves.
+  for (const key of ['assetId', 'evidenceRef']) {
+    assert.throws(() => calculate([
+      entry('a', 100, { [key]: composed }),
+      entry('b', 200, { [key]: decomposed }),
+    ]), new RegExp('entry\\.' + key + '.*NFC'));
+  }
+});
