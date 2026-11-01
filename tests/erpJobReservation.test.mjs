@@ -447,6 +447,34 @@ test('worker claim excludes stale dispatch fences and failure codes before side 
   }
 });
 
+test('worker claim excludes queued rows with stale worker ownership before dispatch', async () => {
+  // The proposed schema prohibits stale leases on queued rows, but the
+  // atomic claim must fail closed even when an older schema or corrupted
+  // database record violates that invariant. Never overwrite another
+  // worker's lease and present the new claim as exclusive.
+  let queries = 0;
+  const db = { async query(sql, params) {
+    queries++;
+    assert.deepEqual(params, ['tenant-a', 'invoice_delivery', 'worker-a', 60]);
+    const candidate = sql.slice(sql.indexOf('WITH next_job AS'), sql.indexOf('FOR UPDATE SKIP LOCKED'));
+    const update = sql.slice(sql.indexOf('WHERE job.id = next_job.id'), sql.indexOf('RETURNING job.id'));
+    for (const [label, fragment] of [['candidate', candidate], ['atomic update', update]]) {
+      for (const field of ['claimed_by', 'claimed_at', 'lease_expires_at']) {
+        const prefix = label === 'candidate' ? '' : 'job.';
+        assert.ok(fragment.includes(prefix + field + ' IS NULL'),
+          label + ' must reject stale ' + field);
+      }
+    }
+    // A queued row with stale ownership must not qualify for a new lease.
+    return { rows: [] };
+  } };
+  const receipt = await claim({
+    db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+  });
+  assert.equal(receipt, null);
+  assert.equal(queries, 1);
+});
+
 test('no queued job returns null; storage errors are never successful claims', async () => {
   const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
   const args = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
