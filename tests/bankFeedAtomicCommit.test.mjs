@@ -163,6 +163,29 @@ test('missing or accessor-backed requested cursor fails before transaction acqui
   assert.equal(store.calls.transactions, 0);
 });
 
+test('malformed or ambiguous authorized scopes fail before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const invalidScopes = [
+    { ...scope(), tenantId: ' ' },
+    { ...scope(), connectionId: '' },
+    { ...scope(), provider: 'unrecognized' },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct-a'] },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct\\nforeign'] },
+    { ...scope(), allowedAccountIds: [] },
+  ];
+  for (const invalidScope of invalidScopes) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, invalidScope, page()),
+      /Invalid authorized feed scope or event collection/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'invalid scope must never acquire a database lock');
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
 test('out-of-scope checkpoint or provider event fails before any write', async () => {
   const store = fakeTransactionalStore();
   await assert.rejects(commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'tenant-b' }, page()),
