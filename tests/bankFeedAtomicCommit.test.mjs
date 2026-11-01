@@ -64,7 +64,29 @@ test('duplicate identities in a single provider page cannot write rows or advanc
   assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
   assert.equal(store.calls.rows, 0);
   assert.equal(store.calls.cursor, 0);
-  assert.equal(store.calls.rollbacks, 1);
+  assert.equal(store.calls.rollbacks, 0, 'duplicate page must be rejected before opening transaction');
+  assert.equal(store.calls.transactions, 0);
+});
+
+test('invalid provider event identities fail before lock and historical row reads', async () => {
+  const store = fakeTransactionalStore();
+  const invalidEvents = [
+    { ...event(), accountId: 'acct-foreign' },
+    { ...event(), transactionId: ' tx-padded' },
+    { ...event(), transactionId: 'tx' + String.fromCharCode(10) + 'forged' },
+    { ...event(), kind: 'unrecognized' },
+  ];
+  for (const invalid of invalidEvents) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page([invalid])),
+      /invalid or unauthorized account\/transaction identity/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'bad identities must never acquire a lock');
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
 });
 
 test('row-write failure rolls back cursor and entries', async () => {
