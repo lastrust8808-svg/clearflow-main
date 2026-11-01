@@ -34,7 +34,9 @@ Coordinate with PR #16 for authenticated tenant-scoped durable storage and migra
 11. CI commands, job URLs, commit SHAs and redacted artifacts recorded before any gate is marked passed.
 
 ## Current evidence
-No banking-specific tests have been executed by this branch at creation. No live provider verification has been performed by this workstream.
+The banking-specific CI suite now exercises the pure replay planner, atomic commit contract, reconciliation close guards and a PostgreSQL adapter against a deterministic injected SQL-client fixture. This is **not** a live PostgreSQL transaction/restore test and is **not** Mercury/Plaid provider verification. Read the latest PR CI run and commit SHA for current test counts.
+
+The proposed versioned migration `server/db/versions/003_banking_feed_checkpoints.sql` is intentionally **not wired into** the staging migration runner. The new `server/services/bankFeedPostgresStore.js` accepts an injected pool, scopes all reads/writes by tenant, provider and connection, filters entry reads by authorized accounts, locks the cursor row with `FOR UPDATE`, and acknowledges a page only after `COMMIT`. Its fixture tests exercise successful commit, stale cursor, write/CAS/COMMIT rollback, foreign tenant, foreign account and unsafe BIGINT revision. A trusted server route must still establish actual authenticated account permissions, explicitly provision authorized checkpoints, apply and restore-test the schema in staging, and connect normalized provider responses to this adapter before durable ingestion is considered verified.
 
 
 ## Raw provider payload fingerprint contract (non-posting planner)
