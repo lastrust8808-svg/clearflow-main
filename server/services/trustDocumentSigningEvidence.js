@@ -49,6 +49,11 @@ function requirePlainAttestationList(attestations) {
   if (!Array.isArray(attestations) || Object.getPrototypeOf(attestations) !== Array.prototype) {
     throw new TypeError('Signature attestations must be a plain array');
   }
+  // Bound untrusted receipt snapshots before allocating per-element descriptors.
+  // Larger authenticated histories need pagination/checkpoints, never truncation.
+  if (attestations.length > 10_000) {
+    throw new RangeError('Signature attestations exceed the 10000-record review limit');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(attestations);
   const length = descriptors.length.value;
   let count = 0;
