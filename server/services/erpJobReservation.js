@@ -368,11 +368,14 @@ export async function claimErpOperationJob({
     throw new TypeError('Invalid ERP worker lease');
   }
   // One SQL statement provides an atomic claim even with concurrent workers.
-  // SKIP LOCKED prevents two workers claiming the same queued row.
+  // SKIP LOCKED prevents two workers claiming the same queued row. A queued
+  // record with an old dispatch fence or terminal failure code must NEVER be
+  // reclaimed for external execution, even if schema constraints drift.
   const result = await db.query(
     `WITH next_job AS (
        SELECT id FROM erp_operation_jobs
        WHERE tenant_id = $1 AND operation = $2 AND status = 'queued'
+         AND dispatch_started_at IS NULL AND failure_code IS NULL
        ORDER BY created_at, id
        FOR UPDATE SKIP LOCKED LIMIT 1
      )
@@ -383,9 +386,11 @@ export async function claimErpOperationJob({
      FROM next_job
      WHERE job.id = next_job.id AND job.tenant_id = $1
        AND job.operation = $2 AND job.status = 'queued'
+       AND job.dispatch_started_at IS NULL AND job.failure_code IS NULL
      RETURNING job.id, job.tenant_id, job.actor_id, job.operation,
                job.status, job.claimed_by, job.claimed_at,
-               job.lease_expires_at, job.created_at, job.updated_at`,
+               job.lease_expires_at, job.dispatch_started_at, job.failure_code,
+               job.created_at, job.updated_at`,
     [tenantId, operation, workerId, leaseSeconds],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
@@ -397,6 +402,7 @@ export async function claimErpOperationJob({
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.id) ||
       record.tenant_id !== tenantId || record.operation !== operation ||
       record.claimed_by !== workerId || record.status !== 'processing' ||
+      record.dispatch_started_at !== null || record.failure_code !== null ||
       typeof record.actor_id !== 'string' || !record.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound worker claim');
   }
