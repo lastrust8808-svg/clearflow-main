@@ -55,6 +55,18 @@ test('atomic bank-feed page commits transaction rows and cursor once', async () 
   assert.equal(store.calls.cursor, 1);
 });
 
+test('duplicate identities in a single provider page cannot write rows or advance the cursor', async () => {
+  const store = fakeTransactionalStore();
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('same'), event('same')])),
+    /Duplicate provider event identity within one feed page/,
+  );
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.equal(store.calls.rollbacks, 1);
+});
+
 test('row-write failure rolls back cursor and entries', async () => {
   const store = fakeTransactionalStore({ failRows: true });
   await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page()), /row write failure/);
