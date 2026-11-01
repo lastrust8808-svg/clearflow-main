@@ -702,3 +702,26 @@ test('signing preflights document registry envelope before reading any registry 
   assert.equal(assess({ versionRegistry: Object.assign(Object.create(null), valid) }).status,
     'evidence_ready_for_review');
 });
+
+test('signing evidence rejects Unicode-normalization aliases without excluding canonical names', () => {
+  const decomposed = 'e\u0301';
+  const canonical = '\u00e9';
+  // A visually identical alternate encoding must not become a distinct
+  // document, trust, signer, or evidence reference in the signing review.
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
+    assert.throws(() => assess({ [key]: 'id-' + decomposed }), /NFC-normalized Unicode/);
+  }
+  for (const key of ['signerId', 'identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
+    assert.throws(() => assess({
+      attestations: [attestation('a', { [key]: 'ref-' + decomposed })],
+    }), /NFC-normalized Unicode/);
+  }
+  // Canonical international identifiers remain structurally admissible.
+  assert.equal(assess({
+    governance: {
+      ...packet().governance,
+      appointments: [...packet().governance.appointments, appointment(canonical)],
+    },
+    attestations: [attestation(canonical)],
+  }).status, 'evidence_ready_for_review');
+});
