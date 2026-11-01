@@ -671,3 +671,34 @@ test('signing packet envelope rejects executable and hidden claims before readin
   assert.equal(assessTrustDocumentSigningPacket(Object.assign(Object.create(null), packet())).status,
     'evidence_ready_for_review');
 });
+
+test('signing preflights document registry envelope before reading any registry scope', () => {
+  const valid = packet().versionRegistry;
+  for (const field of ['tenantId', 'trustId', 'versions']) {
+    let getterCalls = 0;
+    const malicious = { ...valid };
+    Object.defineProperty(malicious, field, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Registry getter executed in signing'); },
+    });
+    assert.throws(() => assess({ versionRegistry: malicious }),
+      /Document registry fields must be enumerable own data properties/);
+    assert.equal(getterCalls, 0, field + ' getter executed');
+  }
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => assess({ versionRegistry: hidden }),
+    /Document registry contains unsupported fields/);
+  const inherited = { ...valid };
+  Object.setPrototypeOf(inherited, { trustId: 'forged-trust' });
+  assert.throws(() => assess({ versionRegistry: inherited }),
+    /Document registry must be a plain data record/);
+  const missing = { ...valid };
+  delete missing.versions;
+  assert.throws(() => assess({ versionRegistry: missing }),
+    /Document registry missing own field: versions/);
+  assert.equal(assess({ versionRegistry: Object.freeze(valid) }).status,
+    'evidence_ready_for_review');
+  assert.equal(assess({ versionRegistry: Object.assign(Object.create(null), valid) }).status,
+    'evidence_ready_for_review');
+});
