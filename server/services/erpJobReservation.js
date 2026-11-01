@@ -484,6 +484,10 @@ export async function markErpOperationJobDispatchStarted({
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
     throw new TypeError('Invalid ERP job id');
   }
+  // PostgreSQL UUID values are returned in lowercase. Normalize an accepted
+  // uppercase UUID before the write so a committed dispatch fence is not
+  // falsely rejected after SQL succeeds (which could mislead a retrying worker).
+  const canonicalJobId = jobId.toLowerCase();
   // The atomic fence can be recorded only once, by the owning worker while
   // its processing lease is still valid. No fallback when storage fails.
   const result = await db.query(
@@ -495,14 +499,14 @@ export async function markErpOperationJobDispatchStarted({
      RETURNING id, tenant_id, actor_id, operation, status, claimed_by,
                claimed_at, dispatch_started_at, lease_expires_at,
                created_at, updated_at`,
-    [tenantId, operation, jobId, workerId],
+    [tenantId, operation, canonicalJobId, workerId],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid dispatch fence result');
   }
   const row = result.rows[0];
   if (!row) return null;
-  if (row.id !== jobId || row.tenant_id !== tenantId ||
+  if (row.id !== canonicalJobId || row.tenant_id !== tenantId ||
       row.operation !== operation || row.status !== 'processing' ||
       row.claimed_by !== workerId || typeof row.actor_id !== 'string' ||
       !row.actor_id) {
@@ -525,7 +529,7 @@ export async function markErpOperationJobDispatchStarted({
     throw new Error('ERP job storage returned an invalid dispatch fence timestamp');
   }
   return Object.freeze({
-    id: jobId, tenantId, operation, status: 'processing',
+    id: canonicalJobId, tenantId, operation, status: 'processing',
     dispatchStartedAt, leaseExpiresAt, updatedAt,
     outcomeMayBeUnknown: true,
   });
