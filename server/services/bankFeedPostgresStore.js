@@ -61,15 +61,24 @@ function validCursor(value) {
 function transactionQueries(client) {
   return {
     async loadCheckpointForUpdate(scope) {
+      const requestedScope = params(scope);
       const result = await client.query(
         `SELECT tenant_id, provider, connection_id, cursor, revision::text AS revision
          FROM ${CHECKPOINT}
          WHERE tenant_id = $1 AND provider = $2 AND connection_id = $3
          FOR UPDATE`,
-        params(scope),
+        requestedScope,
       );
       if (result.rows.length !== 1) return null;
       const row = result.rows[0];
+      // Verify database-returned identity independently of the WHERE clause.
+      // A faulty adapter, corrupted fixture or unexpected row must never be
+      // treated as an authorized checkpoint by direct store callers.
+      if (row.tenant_id !== requestedScope[0] ||
+          row.provider !== requestedScope[1] ||
+          row.connection_id !== requestedScope[2]) {
+        throw new Error('Persisted banking checkpoint identity does not match authorized scope.');
+      }
       if (!validCursor(row.cursor)) {
         throw new Error('Invalid persisted banking checkpoint cursor.');
       }
