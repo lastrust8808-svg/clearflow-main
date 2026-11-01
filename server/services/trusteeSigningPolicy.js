@@ -85,6 +85,12 @@ function id(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Reject canonically equivalent aliases rather than letting distinct
+  // spellings represent the same trustee, signer or governance evidence.
+  // This is an identity-integrity guard, not authentication of authority.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(`${field} must use NFC-normalized Unicode`);
+  }
   return value;
 }
 
