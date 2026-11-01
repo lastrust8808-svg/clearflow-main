@@ -53,12 +53,21 @@ function requirePlainGovernanceRecord(record, allowed, required, label) {
 // Reject sparse or accessor-backed lists before any array element is read.
 // Otherwise a supplied trustee/signer list could execute getters or hide
 // additional claims in symbol and non-index properties.
+// Bound untrusted in-memory governance lists before enumerating descriptors.
+// Larger authentic histories require authorized pagination or checkpoints.
+const MAX_GOVERNANCE_LIST_ITEMS = 10000;
+
 function requirePlainGovernanceList(list, label) {
   if (!Array.isArray(list) || Object.getPrototypeOf(list) !== Array.prototype) {
     throw new TypeError(label + ' must be a plain array');
   }
+  // Read only the intrinsic length descriptor before touching any indexed
+  // element or allocating a descriptor map for an oversized list.
+  const length = Object.getOwnPropertyDescriptor(list, 'length').value;
+  if (length > MAX_GOVERNANCE_LIST_ITEMS) {
+    throw new RangeError(label + ' exceeds maximum entry count');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(list);
-  const length = descriptors.length.value;
   let indexed = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
