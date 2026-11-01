@@ -35,6 +35,13 @@ function requiredId(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must not contain control characters');
   }
+  // Reject lone UTF-16 surrogates: they cannot be faithfully encoded as UTF-8
+  // identifiers, and downstream serializers may replace them with U+FFFD.
+  // Under the Unicode flag, valid surrogate pairs are matched as one scalar
+  // value and therefore remain accepted (including supplementary scripts).
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(field + ' must contain well-formed Unicode');
+  }
   // A journal must not treat canonically equivalent Unicode spellings as
   // independent actors, events, document versions or provenance records.
   // Reject aliases instead of silently changing externally persisted IDs.
