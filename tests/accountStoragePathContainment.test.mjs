@@ -1259,3 +1259,40 @@ test('legacy account records reject duplicate keys, escaped aliases, and nested 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('legacy JSON underflow cannot silently turn nonzero financial evidence into zero', async () => {
+  const accountId = `legacy-underflow-${randomUUID()}`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/sig-1.json', save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ amountMinor: 1250 });
+      const filePath = path.join(root, fixture.file);
+      const original = await fs.readFile(filePath, 'utf8');
+      for (const literal of ['1e-400', '-1e-400', '1e-324', '0.00001e-999']) {
+        const corrupted = original.replace(/}\s*$/, `, "evidence": {"amountMinor": ${literal}}}`);
+        await fs.writeFile(filePath, corrupted);
+        await assert.rejects(fixture.read(), /Unsafe storage record numeric value/);
+      }
+      // Ordinary string literals resembling exponents are not numbers, and
+      // the smallest representable nonzero float must remain readable.
+      const valid = original.replace(/}\s*$/, ', "memo": "1e-400", "tiny": 5e-324}');
+      await fs.writeFile(filePath, valid);
+      const recovered = await fixture.read();
+      assert.equal(recovered.memo, '1e-400');
+      assert.equal(recovered.tiny, Number.MIN_VALUE);
+      await fixture.save({ amountMinor: 1250 });
+      assert.equal((await fixture.read()).amountMinor, 1250);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
