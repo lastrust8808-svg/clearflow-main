@@ -591,6 +591,43 @@ test('worker terminal failure is atomic, tenant-scoped, lease-bound and clears c
   assert.equal(Object.isFrozen(result), true);
 });
 
+test('uppercase UUID cannot turn a durable terminal failure into a false failure', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  const requestedJobId = claimedJobId.toUpperCase();
+  let calls = 0;
+  const db = { async query(sql, params) {
+    calls++;
+    assert.match(sql, /dispatch_started_at IS NULL/);
+    assert.deepEqual(params, [
+      'tenant-a', 'invoice_delivery', claimedJobId, 'worker-a', 'ERP_WORKER_ERROR',
+    ]);
+    // PostgreSQL UUID receipts use canonical lowercase even for uppercase input.
+    return { rows: [failedRow()] };
+  } };
+  const receipt = await fail({
+    db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: requestedJobId, failureCode: 'ERP_WORKER_ERROR',
+  });
+  assert.equal(calls, 1);
+  assert.equal(receipt.id, claimedJobId);
+  assert.equal(receipt.status, 'failed');
+  assert.equal(receipt.failureCode, 'ERP_WORKER_ERROR');
+  assert.equal(Object.isFrozen(receipt), true);
+  assert.equal('sent' in receipt, false);
+
+  // Case normalization must not weaken the tenant or job receipt boundary.
+  for (const row of [
+    failedRow({ tenant_id: 'other-tenant' }),
+    failedRow({ id: '123e4567-e89b-42d3-a456-426614174001' }),
+  ]) {
+    await assert.rejects(fail({
+      db: { query: async () => ({ rows: [row] }) },
+      authenticatedWorker: workerScope, operation: 'invoice_delivery',
+      jobId: requestedJobId, failureCode: 'ERP_WORKER_ERROR',
+    }), /invalid tenant-bound failure/);
+  }
+});
+
 test('expired or already finished job cannot be failed again; database errors propagate', async () => {
   const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
   const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery',
