@@ -559,6 +559,10 @@ export async function failErpOperationJob({
     throw new TypeError('Invalid ERP job id');
   }
   if (!failureCodes.has(failureCode)) throw new TypeError('Invalid ERP failure code');
+  // PostgreSQL returns UUID columns in canonical lowercase form. Normalize
+  // before the atomic failure transition so a successful durable write cannot
+  // be reported as a failure solely due to uppercase caller input.
+  const canonicalJobId = jobId.toLowerCase();
 
   // Atomic compare-and-swap: only the current worker holding a live lease
   // may persist a terminal failure. Never requeue, dispatch, or report sent.
@@ -572,14 +576,14 @@ export async function failErpOperationJob({
        AND lease_expires_at > now() AND dispatch_started_at IS NULL
      RETURNING id, tenant_id, actor_id, operation, status, failure_code,
                claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
-    [tenantId, operation, jobId, workerId, failureCode],
+    [tenantId, operation, canonicalJobId, workerId, failureCode],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid failure result');
   }
   const record = result.rows[0];
   if (!record) return null;
-  if (record.id !== jobId || record.tenant_id !== tenantId ||
+  if (record.id !== canonicalJobId || record.tenant_id !== tenantId ||
       record.operation !== operation || record.status !== 'failed' ||
       record.failure_code !== failureCode ||
       record.claimed_by != null || record.claimed_at != null ||
@@ -597,7 +601,7 @@ export async function failErpOperationJob({
     throw new Error('ERP job storage returned an invalid failure timestamp');
   }
   return Object.freeze({
-    id: jobId, tenantId, operation, status: 'failed',
+    id: canonicalJobId, tenantId, operation, status: 'failed',
     failureCode, createdAt, updatedAt,
   });
 }
