@@ -388,3 +388,25 @@ test('reserve classification bounds entry history before enumerating oversized a
   assert.equal(result.unencumberedCashMinor, 10000);
   assert.equal(result.oldestEvidenceAt, '2026-10-30T05:00:00.000Z');
 });
+
+test('reserve identifiers reject ill-formed Unicode without rewriting valid supplementary characters', () => {
+  const malformed = [String.fromCharCode(0xD800), String.fromCharCode(0xDC00),
+    'x' + String.fromCharCode(0xD800) + 'y'];
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    for (const bad of malformed) {
+      assert.throws(() => calculateReserveCapacity({ ...base, [key]: 'scope-' + bad,
+        asOfAt, maxEvidenceAgeMs: 3600000, entries: [] }),
+      new RegExp(key + '.*well-formed Unicode'));
+    }
+    const valid = 'scope-\u{1F4B0}';
+    assert.equal(calculateReserveCapacity({ ...base, [key]: valid,
+      asOfAt, maxEvidenceAgeMs: 3600000, entries: [] })[key], valid);
+  }
+  for (const key of ['id', 'assetId', 'evidenceRef']) {
+    for (const bad of malformed) {
+      assert.throws(() => calculate([entry('cash-a', 100, { [key]: 'asset-' + bad })]),
+        new RegExp('entry\\.' + key + '.*well-formed Unicode'));
+    }
+    assert.equal(calculate([entry('cash-a', 100, { [key]: 'asset-\u{1F4B0}' })]).unencumberedCashMinor, 100);
+  }
+});
