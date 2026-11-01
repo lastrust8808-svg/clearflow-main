@@ -96,6 +96,12 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Canonically equivalent identifiers must never count as distinct assets,
+  // evidence references or trust scopes in a reserve ledger. Reject aliases
+  // rather than silently rewriting an authenticated storage identifier.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(`${field} must use NFC-normalized Unicode`);
+  }
   return value;
 }
 
