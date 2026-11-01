@@ -1,5 +1,4 @@
 import express from 'express';
-import { buildExecutionCapabilities } from '../services/paymentExecution.js';
 
 const router = express.Router();
 
@@ -45,11 +44,12 @@ router.post('/settlements/execute', (req, res) => {
 // tenant-authorized approval and audit persistence are integrated. Do not
 // advertise ACH/wire/check as executable merely because a token is present.
 router.get('/settlements/execution-capabilities', (_req, res) => {
-  const configured = buildExecutionCapabilities();
+  // No provider configuration is consulted: this endpoint is disabled regardless
+  // of credentials, and a read-only capability response must not leak provider
+  // configuration or fail because a provider adapter is unavailable.
   return res.status(200).json({
     success: true,
     capabilities: {
-      ...configured,
       provider: 'manual',
       executionMode: 'disabled',
       settlementExecutionAvailable: false,
