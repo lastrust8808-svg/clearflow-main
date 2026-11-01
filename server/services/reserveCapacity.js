@@ -106,6 +106,12 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Reject lone UTF-16 surrogates: UTF-8/JSON encoders can replace them with
+  // U+FFFD, making distinct reserve, asset, or evidence IDs collide on storage.
+  // Valid supplementary-plane characters (paired surrogates) are preserved.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(`${field} must contain well-formed Unicode`);
+  }
   // Canonically equivalent identifiers must never count as distinct assets,
   // evidence references or trust scopes in a reserve ledger. Reject aliases
   // rather than silently rewriting an authenticated storage identifier.
