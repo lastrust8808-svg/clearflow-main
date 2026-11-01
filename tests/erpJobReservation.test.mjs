@@ -1850,3 +1850,35 @@ test('ERP accounting JSON keys require NFC without rejecting international label
   assert.equal(receipt.created, true);
   assert.equal(db.calls, 1, 'NFC international keys and free-text values remain supported');
 });
+
+
+test('reconciliation backlog refuses contradictory lease or failure metadata', async () => {
+  // A quarantined outcome must have no worker lease and no terminal failure
+  // code. Otherwise an inconsistent database row could appear to be safely
+  // awaiting manual reconciliation, concealing an active worker or failure.
+  const expectedColumns = ['failure_code', 'claimed_by', 'claimed_at', 'lease_expires_at'];
+  let sqlText;
+  const valid = await list({
+    authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    db: { async query(sql) {
+      sqlText = sql;
+      return { rows: [quarantineRow()] };
+    } },
+  });
+  assert.equal(valid.jobs.length, 1);
+  for (const column of expectedColumns) {
+    assert.match(sqlText, new RegExp('\\b' + column + '\\b'),
+      'reconciliation SELECT must load ' + column);
+  }
+  for (const [field, value] of [
+    ['failure_code', 'ERP_WORKER_ERROR'],
+    ['claimed_by', 'worker-a'],
+    ['claimed_at', new Date('2026-10-29T12:01:00Z')],
+    ['lease_expires_at', new Date('2026-10-29T12:03:00Z')],
+  ]) {
+    await assert.rejects(list({
+      authenticatedWorker: workerScope, operation: 'invoice_delivery',
+      db: { query: async () => ({ rows: [quarantineRow({ [field]: value })] }) },
+    }), /invalid tenant-bound reconciliation record/, field);
+  }
+});
