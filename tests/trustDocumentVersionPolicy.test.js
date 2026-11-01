@@ -308,3 +308,69 @@ test('document registry envelope rejects executable, hidden and inherited scope 
     versionId: 'version-1', content: bytes,
   }), /Document registry fields must be enumerable own data properties/);
 });
+
+test('digest proof envelope rejects executable, inherited and unreviewed claims', () => {
+  const base = { versionId: 'version-1', sha256: digestA };
+  const verify = proof => check([version(1)], proof);
+  assert.deepEqual(verify(Object.freeze({ ...base })), { status: 'valid' });
+  assert.deepEqual(verify(Object.assign(Object.create(null), base)), { status: 'valid' });
+  for (const field of ['versionId', 'sha256']) {
+    let getterCalls = 0;
+    const accessor = { ...base };
+    Object.defineProperty(accessor, field, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Digest proof getter executed'); },
+    });
+    assert.throws(() => verify(accessor), /Document proof fields must be enumerable own data properties/);
+    assert.equal(getterCalls, 0, field + ' getter executed');
+    const missing = { ...base };
+    delete missing[field];
+    assert.throws(() => verify(missing), /Document proof required own field/);
+  }
+  const hidden = { ...base };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => verify(hidden), /Document proof contains unsupported fields/);
+  assert.throws(() => verify({ ...base, [Symbol('settled')]: true }),
+    /Document proof contains unsupported fields/);
+  assert.throws(() => verify({ ...base, paymentAuthorized: true }),
+    /Document proof contains unsupported fields/);
+  const inherited = { ...base };
+  Object.setPrototypeOf(inherited, { versionId: 'forged-version' });
+  assert.throws(() => verify(inherited), /Document proof must be a plain data record/);
+});
+
+test('byte proof envelope rejects executable and hidden claims before reading bytes', () => {
+  const bytes = Buffer.from('immutable document proof bytes');
+  const base = { versionId: 'version-1', content: bytes };
+  const verify = proof => verifyTrustDocumentBytes(
+    registry([version(1, { sha256: fileDigest(bytes) })]), proof);
+  assert.deepEqual(verify(Object.freeze({ ...base })), { status: 'valid' });
+  assert.deepEqual(verify(Object.assign(Object.create(null), base)), { status: 'valid' });
+  // The optional legacy digest remains ignored, not trusted over actual bytes.
+  assert.deepEqual(verify({ ...base, sha256: digestB }), { status: 'valid' });
+  for (const field of ['versionId', 'content', 'sha256']) {
+    let getterCalls = 0;
+    const accessor = { ...base };
+    Object.defineProperty(accessor, field, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Byte proof getter executed'); },
+    });
+    assert.throws(() => verify(accessor), /Document byte proof fields must be enumerable own data properties/);
+    assert.equal(getterCalls, 0, field + ' getter executed');
+  }
+  for (const field of ['versionId', 'content']) {
+    const missing = { ...base };
+    delete missing[field];
+    assert.throws(() => verify(missing), /Document byte proof required own field/);
+  }
+  const hidden = { ...base };
+  Object.defineProperty(hidden, 'settledMinor', { value: 1, enumerable: false });
+  assert.throws(() => verify(hidden), /Document byte proof contains unsupported fields/);
+  assert.throws(() => verify({ ...base, [Symbol('paymentReceived')]: true }),
+    /Document byte proof contains unsupported fields/);
+  assert.throws(() => verify({ ...base, paymentAuthorized: true }),
+    /Document byte proof contains unsupported fields/);
+  const inherited = { ...base };
+  Object.setPrototypeOf(inherited, { content: Buffer.from('forged') });
+  assert.throws(() => verify(inherited), /Document byte proof must be a plain data record/);
+});
