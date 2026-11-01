@@ -221,6 +221,22 @@ test('attestation list rejects sparse, accessor-backed and extended arrays witho
   assert.throws(() => assess({ attestations: inherited }), /plain array/);
 });
 
+test('signature receipt snapshots reject oversized histories before reading elements', () => {
+  const oversized = new Array(10_001).fill(attestation('a'));
+  let getterCalls = 0;
+  Object.defineProperty(oversized, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('Oversized receipt getter must not execute'); },
+  });
+  assert.throws(() => assess({ attestations: oversized }), /10000-record review limit/);
+  assert.equal(getterCalls, 0);
+
+  // Exactly 10,000 is within the structural bound; duplicate signers still
+  // fail the independent integrity gate rather than being silently truncated.
+  const boundary = new Array(10_000).fill(attestation('a'));
+  assert.throws(() => assess({ attestations: boundary }), /Duplicate signer attestation/);
+});
+
 test('frozen plain attestation lists remain eligible for evidence review', () => {
   const attestations = Object.freeze([Object.freeze(attestation('a'))]);
   assert.equal(assess({ attestations }).status, 'evidence_ready_for_review');
