@@ -271,7 +271,7 @@ test('uppercase UUID status lookup matches canonical PostgreSQL receipt without 
   let calls = 0;
   const db = { async query(sql, params) {
     calls++;
-    assert.match(sql, /WHERE tenant_id = \\$1 AND actor_id = \\$2 AND id = \\$3/);
+    assert.match(sql, /WHERE tenant_id = \$1 AND actor_id = \$2 AND id = \$3/);
     assert.deepEqual(params, [scope.tenantId, scope.actorId, statusJobId]);
     // PostgreSQL returns lowercase UUID text even when the caller used uppercase.
     return { rows: [base] };
