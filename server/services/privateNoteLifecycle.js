@@ -183,7 +183,13 @@ export function projectPrivateNoteLifecycle(snapshot) {
     if (lastEventAt !== null && occurredAt <= lastEventAt) {
       throw new Error('Private note events must have strictly increasing timestamps');
     }
-    const next = Object.hasOwn(NEXT[status], event.type) ? NEXT[status][event.type] : null;
+    // Never coerce untrusted event types into object keys: an object may
+    // execute Symbol.toPrimitive/toString during the transition lookup.
+    const eventType = descriptors.type.value;
+    if (typeof eventType !== 'string') {
+      throw new TypeError('Private note lifecycle event type must be a string');
+    }
+    const next = Object.hasOwn(NEXT[status], eventType) ? NEXT[status][eventType] : null;
     if (next === null) throw new Error('Invalid private note lifecycle transition');
     if (event.type === 'issued') {
       issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
