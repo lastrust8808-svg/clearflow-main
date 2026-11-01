@@ -730,7 +730,8 @@ export async function quarantineExpiredErpOperationJobsBatch({
         row.operation !== operation || row.status !== 'outcome_unknown' ||
         typeof row.actor_id !== 'string' || !row.actor_id ||
         row.failure_code != null || row.claimed_by != null ||
-        row.claimed_at != null || row.lease_expires_at != null) {
+        row.claimed_at != null || row.lease_expires_at != null ||
+        !Object.hasOwn(row, 'dispatch_started_at')) {
       throw new Error('ERP job storage returned an invalid tenant-bound recovery record');
     }
     seenIds.add(row.id);
@@ -738,11 +739,11 @@ export async function quarantineExpiredErpOperationJobsBatch({
     // An invalid non-null dispatch time must not become "not dispatched".
     const createdAt = persistedUtcTimestamp(row.created_at);
     const updatedAt = persistedUtcTimestamp(row.updated_at);
-    const dispatchStartedAt = row.dispatch_started_at == null
+    const dispatchStartedAt = row.dispatch_started_at === null
       ? null : persistedUtcTimestamp(row.dispatch_started_at);
     if (createdAt === null || updatedAt === null ||
         Date.parse(updatedAt) < Date.parse(createdAt) ||
-        (row.dispatch_started_at != null && dispatchStartedAt === null) ||
+        (row.dispatch_started_at !== null && dispatchStartedAt === null) ||
         (dispatchStartedAt !== null &&
          (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
           Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
@@ -802,7 +803,8 @@ export async function listErpOperationJobsNeedingReconciliation({
         // Otherwise the reconciliation backlog could falsely present an
         // inconsistent worker state as a safely quarantined job.
         row.failure_code != null || row.claimed_by != null ||
-        row.claimed_at != null || row.lease_expires_at != null) {
+        row.claimed_at != null || row.lease_expires_at != null ||
+        !Object.hasOwn(row, 'dispatch_started_at')) {
       throw new Error('ERP job storage returned an invalid tenant-bound reconciliation record');
     }
     previousId = row.id;
@@ -810,11 +812,11 @@ export async function listErpOperationJobsNeedingReconciliation({
     // An invalid non-null dispatch time must not become "not dispatched".
     const createdAt = persistedUtcTimestamp(row.created_at);
     const updatedAt = persistedUtcTimestamp(row.updated_at);
-    const dispatchStartedAt = row.dispatch_started_at == null
+    const dispatchStartedAt = row.dispatch_started_at === null
       ? null : persistedUtcTimestamp(row.dispatch_started_at);
     if (createdAt === null || updatedAt === null ||
         Date.parse(updatedAt) < Date.parse(createdAt) ||
-        (row.dispatch_started_at != null && dispatchStartedAt === null) ||
+        (row.dispatch_started_at !== null && dispatchStartedAt === null) ||
         (dispatchStartedAt !== null &&
          (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
           Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
