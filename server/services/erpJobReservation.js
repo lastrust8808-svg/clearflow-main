@@ -732,6 +732,9 @@ export async function quarantineExpiredErpOperationJobsBatch({
   const quarantined = result.rows.map(row => {
     if (!row || typeof row.id !== 'string' ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id) ||
+        // PostgreSQL UUID receipts are lowercase. Reject noncanonical rows
+        // so case aliases cannot bypass batch duplicate detection.
+        row.id !== row.id.toLowerCase() ||
         seenIds.has(row.id) || row.tenant_id !== tenantId ||
         row.operation !== operation || row.status !== 'outcome_unknown' ||
         typeof row.actor_id !== 'string' || !row.actor_id ||
