@@ -740,7 +740,7 @@ test('terminal failure receipt must prove no external dispatch was fenced', asyn
   } } });
   assert.equal(valid.status, 'failed');
   assert.match(statement, /dispatch_started_at IS NULL/);
-  assert.match(statement, /RETURNING[\\s\\S]*dispatch_started_at, created_at/);
+  assert.match(statement, /RETURNING[\s\S]*dispatch_started_at, created_at/);
 
   // A simulated adapter returning contradictory or absent dispatch evidence
   // must never be acknowledged as a safely failed job. A provider operation
