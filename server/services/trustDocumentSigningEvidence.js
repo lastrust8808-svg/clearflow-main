@@ -17,6 +17,12 @@ function identifier(value, field) {
       /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must be a nonempty unpadded identifier without control characters');
   }
+  // Canonically equivalent signer, document and evidence identifiers must
+  // not become distinct audit subjects merely because their Unicode byte
+  // representations differ. Do not rewrite an authenticated identifier.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(field + ' must use NFC-normalized Unicode');
+  }
   return value;
 }
 
