@@ -10,6 +10,7 @@ on:
       - 'server/services/erpJobReservation.js'
       - 'server/db/erp_operation_jobs.proposed.sql'
       - 'tests/erpPostgresSchema.test.sql'
+      - 'tests/erpPostgresConnectionDurability.test.sh'
       - '.github/workflows/erp-operation-failclosed.yml'
   push:
     branches:
@@ -60,3 +61,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f server/db/erp_operation_jobs.proposed.sql
       - name: Verify fail-closed constraints and tenant-scoped idempotency
         run: psql -X -v ON_ERROR_STOP=1 -f tests/erpPostgresSchema.test.sql
+      - name: Verify committed ERP job state across separate PostgreSQL sessions
+        run: bash tests/erpPostgresConnectionDurability.test.sh
