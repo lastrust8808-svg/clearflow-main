@@ -8,14 +8,25 @@
 const CHECKPOINT = 'public.clearflow_bank_feed_checkpoints';
 const ENTRIES = 'public.clearflow_bank_feed_entries';
 
+// This adapter can be called without the atomic page planner. Treat even
+// server-supplied scopes as untrusted input before issuing scoped SQL; truthy
+// numbers, whitespace aliases and invisible control characters are not IDs.
+function validScopeId(value) {
+  return typeof value === 'string' &&
+    value.length > 0 && value.length <= 256 &&
+    value === value.trim() &&
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
+}
+
 function assertScope(scope) {
   if (!scope || typeof scope !== 'object' ||
       !['plaid', 'mercury'].includes(scope.provider) ||
-      !scope.tenantId || !scope.connectionId ||
+      !validScopeId(scope.tenantId) ||
+      !validScopeId(scope.connectionId) ||
       !Array.isArray(scope.allowedAccountIds) ||
       scope.allowedAccountIds.length === 0 ||
       scope.allowedAccountIds.length > 1000 ||
-      scope.allowedAccountIds.some((id) => typeof id !== 'string' || !id) ||
+      scope.allowedAccountIds.some((id) => !validScopeId(id)) ||
       new Set(scope.allowedAccountIds).size !== scope.allowedAccountIds.length) {
     throw new Error('Invalid authenticated banking scope.');
   }
