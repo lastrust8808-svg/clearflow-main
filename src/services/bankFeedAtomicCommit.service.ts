@@ -163,6 +163,33 @@ function assertPageEventIdentities(
       throw new Error('Duplicate provider event identity within one feed page.');
     }
     identities.add(identity);
+    // Financially malformed pages must fail before a checkpoint lock or a
+    // historical-row read, not only after the replay planner loads entries.
+    // Keep the same posting/removal contract as planBankFeedReplay.
+    if (event.kind === 'removed') {
+      if (Object.hasOwn(event, 'amountCents') ||
+          Object.hasOwn(event, 'pending') ||
+          Object.hasOwn(event, 'pendingTransactionId') ||
+          Object.hasOwn(event, 'providerPayloadHash')) {
+        throw new Error('Malformed provider removal financial evidence.');
+      }
+      continue;
+    }
+    if (!Number.isSafeInteger(event.amountCents) ||
+        Object.is(event.amountCents, -0) ||
+        typeof event.pending !== 'boolean') {
+      throw new Error('Invalid provider posting amount or state.');
+    }
+    if (event.pendingTransactionId != null &&
+        (!validId(event.pendingTransactionId) || event.pending ||
+         event.pendingTransactionId === event.transactionId)) {
+      throw new Error('Invalid provider pending-to-posted linkage.');
+    }
+    if (Object.hasOwn(event, 'providerPayloadHash') &&
+        (typeof event.providerPayloadHash !== 'string' ||
+         !/^[a-f0-9]{64}$/.test(event.providerPayloadHash))) {
+      throw new Error('Invalid provider payload fingerprint.');
+    }
   }
 }
 
