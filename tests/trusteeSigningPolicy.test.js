@@ -295,3 +295,41 @@ test('governance evidence cannot masquerade as tenant, entity or trust scope', (
   }
   assert.equal(evaluate().eligible, true);
 });
+
+test('rejects non-NFC trustee governance identities and signer aliases', () => {
+  const decomposed = 'Jose\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => evaluate({ [key]: decomposed }), /NFC-normalized Unicode/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { [key]: decomposed })],
+    }), /NFC-normalized Unicode|mismatch/);
+  }
+  assert.throws(() => evaluate({
+    appointments: [appointment(decomposed)], signerIds: [decomposed],
+  }), /NFC-normalized Unicode/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a')], signerIds: [decomposed],
+  }), /NFC-normalized Unicode/);
+});
+
+test('rejects non-NFC governance evidence and preserves canonical international IDs', () => {
+  const decomposed = 'Cafe\u0301';
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptanceEvidenceRef: decomposed })],
+    signerIds: ['a'],
+  }), /NFC-normalized Unicode/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', {
+      revokedOn: '2026-10-28', revocationEvidenceRef: decomposed,
+    })],
+    signerIds: ['a'],
+  }), /NFC-normalized Unicode/);
+  const composed = 'Jos\u00e9';
+  const result = evaluate({
+    appointments: [appointment(composed, { acceptanceEvidenceRef: 'acceptance-' + composed })],
+    signerIds: [composed],
+  });
+  assert.equal(result.eligible, true);
+  assert.equal(result.activeTrusteeCount, 1);
+  assert.equal(result.signerCount, 1);
+});
