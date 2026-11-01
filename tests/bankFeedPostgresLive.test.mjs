@@ -122,7 +122,26 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
       commitAuthorizedBankFeedPage(
         store, a, page('cursor-a2', 'cursor-a3', [event('added', 'ci-tx2', 200)]),
       ),
-      /malformed canonical feed stored record/,
+      /Persisted banking entry identity does not match its scoped database key/,
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a2', revision: '2' });
+
+    // A plausible JSONB record can still claim a different tenant than its
+    // SQL composite key. Real PostgreSQL must reject it before any page write.
+    await pool.query(
+      `UPDATE public.clearflow_bank_feed_entries SET payload = $2::jsonb
+       WHERE tenant_id = $1 AND transaction_id = 'ci-poison'`,
+      [a.tenantId, JSON.stringify({
+        tenantId: b.tenantId, provider: 'plaid', connectionId: 'ci-shared-item',
+        accountId: 'ci-account', transactionId: 'ci-poison',
+        amountCents: 250, status: 'posted', requiresReview: true,
+      })],
+    );
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(
+        store, a, page('cursor-a2', 'cursor-a3', [event('added', 'ci-tx2', 200)]),
+      ),
+      /Persisted banking entry identity does not match its scoped database key/,
     );
     assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a2', revision: '2' });
     await pool.query(
