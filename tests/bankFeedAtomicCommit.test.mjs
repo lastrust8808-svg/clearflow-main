@@ -89,6 +89,49 @@ test('invalid provider event identities fail before lock and historical row read
   assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
 });
 
+test('malformed posting and removal evidence fails before checkpoint lock and historical reads', async () => {
+  const store = fakeTransactionalStore();
+  const missingAmount = { ...event('missing-amount') };
+  delete missingAmount.amountCents;
+  const missingState = { ...event('missing-state') };
+  delete missingState.pending;
+  const invalidEvents = [
+    missingAmount,
+    { ...event('fractional'), amountCents: 12.5 },
+    { ...event('unsafe'), amountCents: Number.MAX_SAFE_INTEGER + 1 },
+    { ...event('negative-zero'), amountCents: -0 },
+    missingState,
+    { ...event('string-state'), pending: 'false' },
+    { ...event('bad-link'), pendingTransactionId: ' padded' },
+    { ...event('self-link'), pendingTransactionId: 'self-link' },
+    { ...event('pending-link'), pending: true, pendingTransactionId: 'prior' },
+    { ...event('bad-hash'), providerPayloadHash: 'not-a-sha256' },
+    { ...event('upper-hash'), providerPayloadHash: 'A'.repeat(64) },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-amount', amountCents: 1 },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-state', pending: false },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-hash', providerPayloadHash: 'a'.repeat(64) },
+  ];
+  for (const invalid of invalidEvents) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page([invalid])),
+      /Invalid provider posting amount or state|Invalid provider pending-to-posted linkage|Invalid provider payload fingerprint|Malformed provider removal financial evidence/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'invalid financial evidence must never acquire checkpoint lock');
+  assert.equal(store.calls.entryReads, 0, 'invalid financial evidence must never read historical rows');
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+
+  // A valid negative cent amount and correctly shaped fingerprint still pass.
+  const valid = { ...event('refund'), amountCents: -125, providerPayloadHash: 'a'.repeat(64) };
+  const result = await commitAuthorizedBankFeedPage(store, scope(), page([valid]));
+  assert.equal(result.applied, 1);
+  assert.equal(store.state.entries[0].amountCents, -125);
+  assert.equal(store.state.entries[0].providerPayloadHash, 'a'.repeat(64));
+  assert.equal(store.state.checkpoint.cursor, 'cursor-1');
+});
+
 test('row-write failure rolls back cursor and entries', async () => {
   const store = fakeTransactionalStore({ failRows: true });
   await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page()), /row write failure/);
