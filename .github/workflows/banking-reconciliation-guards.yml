@@ -9,6 +9,7 @@ on:
       - 'server/services/bankFeedPostgresStore.js'
       - 'server/db/versions/003_banking_feed_checkpoints.sql'
       - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresLive.test.mjs'
       - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
@@ -24,6 +25,7 @@ on:
       - 'server/services/bankFeedPostgresStore.js'
       - 'server/db/versions/003_banking_feed_checkpoints.sql'
       - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresLive.test.mjs'
       - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
@@ -63,6 +65,11 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated PostgreSQL test client (never modify shared lockfile)
+        run: npm install --prefix "$RUNNER_TEMP/banking-pg" --no-save --ignore-scripts --no-audit --no-fund pg@8.13.1
       - name: Bootstrap only the reviewed 001 migration registry in disposable DB
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
@@ -80,3 +87,9 @@ jobs:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci < tests/bankFeedPostgresSchema.test.sql
+      - name: Verify actual pg client adapter, restart, rollback and concurrent cursors
+        env:
+          BANKING_PG_TEST_URL: postgresql://postgres:banking-ci-disposable-only@127.0.0.1:5432/clearflow_banking_ci
+        run: |
+          node --check tests/bankFeedPostgresLive.test.mjs
+          node --experimental-strip-types --test tests/bankFeedPostgresLive.test.mjs
