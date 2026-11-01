@@ -136,6 +136,18 @@ export async function commitAuthorizedBankFeedPage(
   const { scope, page: detachedPage } = snapshotPageInput(authorizedScope, page);
   return store.withTransaction(async (tx) => {
     const checkpoint = await tx.loadCheckpointForUpdate(scope);
+    // Reject a foreign checkpoint or an obsolete provider response BEFORE
+    // loading potentially large historical transaction sets under the lock.
+    // The replay planner independently validates the complete checkpoint and
+    // page after the scoped rows are loaded; this is an early rejection gate.
+    if (!checkpoint || checkpoint.tenantId !== scope.tenantId ||
+        checkpoint.provider !== scope.provider ||
+        checkpoint.connectionId !== scope.connectionId) {
+      throw new Error('Feed cursor checkpoint is outside the authorized connection scope.');
+    }
+    if (checkpoint.cursor !== detachedPage.requestedCursor) {
+      throw new Error('Stale feed cursor checkpoint; reload and retry under transaction lock.');
+    }
     const existing = await tx.loadEntries(scope);
     const proposal = planBankFeedCursorPage({
       feed: { ...scope, existing, events: detachedPage.events },
