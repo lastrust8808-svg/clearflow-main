@@ -1629,3 +1629,27 @@ test('ERP reservation and worker identity reject noncanonical Unicode before dat
   }), null);
   assert.equal(calls, 1, 'valid composed international identities reach SQL');
 });
+
+
+test('ERP accounting JSON keys require NFC without rejecting international labels or values', async () => {
+  const db = fakeDatabase();
+  const decomposed = 're\u0301fe\u0301rence';
+  const composed = 'référence';
+  assert.equal(decomposed.normalize('NFC'), composed);
+  // A decomposed key may look identical to an approved accounting field but
+  // would otherwise hash as a distinct JSON key and survive jsonb storage.
+  for (const payload of [
+    { [decomposed]: 'INV-123' },
+    { invoice: { lines: [{ [decomposed]: 'line-ref' }] } },
+    { [composed]: 'INV-123', [decomposed]: 'conflicting-value' },
+  ]) {
+    await assert.rejects(reserve({ db, ...args, payload }),
+      /unsafe Unicode property name/);
+  }
+  assert.equal(db.calls, 0, 'non-NFC JSON keys must fail before SQL');
+  const receipt = await reserve({ db, ...args, payload: {
+    [composed]: 'cafe\u0301', invoice: { lines: [{ [composed]: 'café' }] },
+  } });
+  assert.equal(receipt.created, true);
+  assert.equal(db.calls, 1, 'NFC international keys and free-text values remain supported');
+});
