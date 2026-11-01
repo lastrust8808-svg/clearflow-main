@@ -170,6 +170,23 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   seen.delete(value);
 }
 
+// Idempotency must describe the JSON value, not the insertion order of keys
+// in a caller's JavaScript object. PostgreSQL jsonb also discards key order;
+// canonicalize before both hashing and persistence so equivalent requests
+// replay the same reservation rather than reporting a false conflict.
+// assertJsonSafe runs first, excluding accessors, Proxies and non-JSON values.
+function canonicalJobJson(value) {
+  if (Array.isArray(value)) {
+    return '[' + value.map(canonicalJobJson).join(',') + ']';
+  }
+  if (value !== null && typeof value === 'object') {
+    return '{' + Object.keys(value).sort()
+      .map(key => JSON.stringify(key) + ':' + canonicalJobJson(value[key]))
+      .join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
 // A PostgreSQL timestamp returned as a Date or canonical UTC ISO string is
 // acceptable evidence of a persisted job transition. Date.parse alone also
 // accepts normalized impossible dates and informal text such as "tomorrow";
@@ -211,7 +228,7 @@ export async function reserveErpOperationJob({
     throw new TypeError('ERP job payload must be an object');
   }
   assertJsonSafe(payload);
-  const json = JSON.stringify(payload);
+  const json = canonicalJobJson(payload);
   if (typeof json !== 'string' || Buffer.byteLength(json) > 65536) {
     throw new TypeError('ERP job payload is invalid or too large');
   }
