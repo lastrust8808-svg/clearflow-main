@@ -232,7 +232,7 @@ function assertUniqueJsonObjectKeys(text) {
       if (text[i++] === '"') break;
     }
     let next = i;
-    while (next < text.length && /\\s/.test(text[next])) next++;
+    while (next < text.length && /\s/.test(text[next])) next++;
     const current = stack[stack.length - 1];
     if (text[next] === ':' && current?.kind === 'object') {
       const key = JSON.parse(text.slice(start, i));
