@@ -64,6 +64,17 @@ test('note schedules require an explicit trust scope and preserve it in projecti
   assert.equal(Object.isFrozen(second), true);
 });
 
+test('rejects non-NFC tenant, entity, trust and note identity aliases', () => {
+  const composed = 'scope-\u00e9';
+  const decomposed = 'scope-e\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    assert.throws(() => schedule({ [key]: decomposed }), new RegExp(key + '.*NFC'));
+    const result = schedule({ [key]: composed });
+    assert.equal(result[key], composed);
+    assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  }
+});
+
 test('rejects invalid or unsafe amounts, rate, and term lengths', () => {
   for (const principalMinor of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(() => schedule({ principalMinor }), /principalMinor/);
