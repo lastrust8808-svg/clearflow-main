@@ -191,6 +191,15 @@ export function verifyTrustDocumentVersion(registry, proof) {
       throw new Error('Document versions must have increasing registration timestamps');
     }
     lastRegisteredAt = registeredAt;
+    // A finalized document cannot be registered before its finalization.
+    // This optional legacy field is not evidence of finalization by itself:
+    // signing still requires independently authenticated version provenance.
+    if (version.finalizedAt != null) {
+      const finalizedAt = timestamp(version.finalizedAt, 'version.finalizedAt');
+      if (finalizedAt > registeredAt) {
+        throw new Error('Document finalization must not follow registration');
+      }
+    }
     if (!VERSION_STATUSES.has(version.status)) throw new TypeError('Invalid document version status');
     // A revoked document version must have its own independently verifiable
     // revocation receipt. Registration evidence cannot double as revocation
