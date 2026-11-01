@@ -192,8 +192,12 @@ export function calculateReserveCapacity(snapshot) {
       throw new TypeError('Noncash collateral requires a noncash source classification');
     }
     const amount = minorUnits(entry.amountMinor, 'amountMinor');
-    const restricted = minorUnits(entry.restrictedMinor ?? 0, 'restrictedMinor');
-    const pledged = minorUnits(entry.pledgedMinor ?? 0, 'pledgedMinor');
+    // Omission means no reported encumbrance. An explicitly present null or
+    // undefined is unknown, not zero: treating it as zero overstates cash.
+    const restricted = Object.hasOwn(entry, 'restrictedMinor')
+      ? minorUnits(entry.restrictedMinor, 'restrictedMinor') : 0;
+    const pledged = Object.hasOwn(entry, 'pledgedMinor')
+      ? minorUnits(entry.pledgedMinor, 'pledgedMinor') : 0;
     if (entry.kind === 'noncash_collateral') {
       if (restricted !== 0 || pledged !== 0) {
         throw new Error('Noncash collateral cannot be classified as restricted/pledged cash');
