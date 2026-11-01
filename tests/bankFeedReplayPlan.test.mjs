@@ -25,6 +25,27 @@ test('identical provider transaction IDs on different accounts remain distinct',
   assert.equal(result.entries.length, 2);
 });
 
+test('duplicate transaction identities in one provider page fail closed before replay', () => {
+  const repeated = event('tx-1');
+  for (const events of [
+    [repeated, { ...repeated }],
+    [repeated, { ...repeated, kind: 'modified' }],
+    [repeated, { kind: 'removed', accountId: 'acct-a', transactionId: 'tx-1' }],
+  ]) {
+    assert.throws(
+      () => planBankFeedReplay({ ...base(), events }),
+      /Duplicate provider event identity within one feed page/,
+    );
+  }
+
+  // Transaction IDs are scoped by account: different accounts remain valid.
+  const distinct = planBankFeedReplay({
+    ...base(),
+    events: [event('shared'), event('shared', { accountId: 'acct-b' })],
+  });
+  assert.equal(distinct.applied, 2);
+});
+
 test('explicit pending-to-posted link supersedes pending without posting twice', () => {
   const pending = planBankFeedReplay({ ...base(), events: [event('pending-1', { pending: true })] });
   const posted = planBankFeedReplay({ ...base(), existing: pending.entries, events: [event('posted-1', { pendingTransactionId: 'pending-1' })] });
