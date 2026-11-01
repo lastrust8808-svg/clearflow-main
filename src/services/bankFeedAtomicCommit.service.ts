@@ -6,6 +6,7 @@
  */
 import {
   planBankFeedCursorPage,
+  planBankFeedReplay,
   MAX_FEED_PAGE_EVENTS,
   MAX_FEED_ACCOUNT_SCOPE,
   type FeedCursorCheckpoint,
@@ -121,6 +122,11 @@ function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvi
     (event) => snapshotRecord(event, EVENT_FIELDS, new Set(['kind', 'accountId', 'transactionId']), 'event'),
     'events', MAX_FEED_PAGE_EVENTS,
   );
+  // Fail closed on malformed or ambiguous tenant/account scope before opening
+  // a database transaction. Reuse the canonical planner's ID, provider and
+  // duplicate-account checks rather than letting a store interpret bad scope.
+  // This is input validation, NOT proof of authenticated authorization.
+  planBankFeedReplay({ ...safeScope, existing: [], events: [] });
   return { scope: safeScope, page: safePage };
 }
 
