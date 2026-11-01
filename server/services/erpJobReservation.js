@@ -620,6 +620,10 @@ export async function quarantineExpiredErpOperationJob({
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
     throw new TypeError('Invalid ERP job id');
   }
+  // PostgreSQL UUID columns are returned in canonical lowercase after a write.
+  // Normalize before the atomic quarantine so a persisted outcome_unknown
+  // transition cannot be misreported as a failed recovery for uppercase input.
+  const canonicalJobId = jobId.toLowerCase();
   const result = await db.query(
     `UPDATE erp_operation_jobs
      SET status = 'outcome_unknown',
@@ -629,14 +633,14 @@ export async function quarantineExpiredErpOperationJob({
        AND status = 'processing' AND lease_expires_at <= now()
      RETURNING id, tenant_id, actor_id, operation, status, failure_code,
                claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
-    [tenantId, operation, jobId],
+    [tenantId, operation, canonicalJobId],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid quarantine result');
   }
   const row = result.rows[0];
   if (!row) return null;
-  if (row.id !== jobId || row.tenant_id !== tenantId ||
+  if (row.id !== canonicalJobId || row.tenant_id !== tenantId ||
       row.operation !== operation || row.status !== 'outcome_unknown' ||
       row.failure_code != null || row.claimed_by != null ||
       row.claimed_at != null || row.lease_expires_at != null ||
@@ -652,7 +656,7 @@ export async function quarantineExpiredErpOperationJob({
     throw new Error('ERP job storage returned an invalid quarantine timestamp');
   }
   return Object.freeze({
-    id: jobId, tenantId, operation, status: 'outcome_unknown',
+    id: canonicalJobId, tenantId, operation, status: 'outcome_unknown',
     requiresReconciliation: true, createdAt, updatedAt,
   });
 }
