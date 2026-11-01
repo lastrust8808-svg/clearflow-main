@@ -489,3 +489,35 @@ test('private-note history rejects accessor elements and hidden or symbol metada
   extra.extra = 'unreviewed';
   assert.throws(() => project(extra), /events must contain only array indices/);
 });
+
+test('rejects non-NFC Unicode aliases in private-note snapshot scope', () => {
+  const decomposed = 'cafe\u0301';
+  for (const key of Object.keys(scope)) {
+    assert.throws(() => projectPrivateNoteLifecycle({
+      ...scope, [key]: decomposed, asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+    }), new RegExp(key + '.*NFC-normalized'));
+  }
+  // Canonical international identifiers are valid; do not require ASCII.
+  assert.equal(projectPrivateNoteLifecycle({
+    ...scope, trustId: 'caf\u00e9', asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+  }).status, 'draft');
+});
+
+test('rejects non-NFC journal, actor, document, evidence and notice-lineage references', () => {
+  const decomposed = 'cafe\u0301';
+  for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+    assert.throws(() => project([event('issued', 1, { [key]: decomposed })]),
+      new RegExp(key + '.*NFC-normalized'));
+  }
+  const history = [
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3), event('disputed', 4),
+  ];
+  assert.throws(() => project([...history,
+    event('notice_prepared', 5, { supersedesDocumentRef: decomposed }),
+  ]), /supersedesDocumentRef.*NFC-normalized/);
+  assert.equal(project([event('issued', 1, {
+    eventId: 'caf\u00e9-event', actorId: 'caf\u00e9-actor',
+    documentRef: 'caf\u00e9-document', evidenceRef: 'caf\u00e9-evidence',
+  })]).status, 'issued');
+});
