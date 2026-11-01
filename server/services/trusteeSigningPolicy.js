@@ -94,6 +94,12 @@ function id(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Reject lone UTF-16 surrogates before an identifier reaches UTF-8 storage:
+  // encoding can replace malformed code units and collapse distinct trustee,
+  // signer, scope or evidence identifiers. Paired supplementary characters pass.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(`${field} must contain well-formed Unicode`);
+  }
   // Reject canonically equivalent aliases rather than letting distinct
   // spellings represent the same trustee, signer or governance evidence.
   // This is an identity-integrity guard, not authentication of authority.
