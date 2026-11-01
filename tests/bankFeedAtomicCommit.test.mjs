@@ -170,7 +170,7 @@ test('malformed or ambiguous authorized scopes fail before transaction acquisiti
     { ...scope(), connectionId: '' },
     { ...scope(), provider: 'unrecognized' },
     { ...scope(), allowedAccountIds: ['acct-a', 'acct-a'] },
-    { ...scope(), allowedAccountIds: ['acct-a', 'acct\\nforeign'] },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct' + String.fromCharCode(10) + 'foreign'] },
     { ...scope(), allowedAccountIds: [] },
   ];
   for (const invalidScope of invalidScopes) {
