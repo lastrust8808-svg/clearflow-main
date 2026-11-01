@@ -52,7 +52,7 @@ test('note schedules require an explicit trust scope and preserve it in projecti
   const missing = { ...terms };
   delete missing.trustId;
   assert.throws(() => buildFixedMonthlyNoteSchedule(missing), /Note terms.trustId/);
-  for (const trustId of [undefined, null, '', ' trust-a ', 'trust-a\\u0000']) {
+  for (const trustId of [undefined, null, '', ' trust-a ', 'trust-a\u0000']) {
     assert.throws(() => schedule({ trustId }), /trustId/);
   }
   const first = schedule();
