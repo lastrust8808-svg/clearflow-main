@@ -288,6 +288,13 @@ export async function reserveErpOperationJob({
       record.payload_sha256 !== digest) {
     throw new Error('ERP job storage returned an invalid tenant-bound receipt');
   }
+  // A newly inserted reservation must start queued. Only an idempotent
+  // replay may legitimately report a previously claimed, failed, or
+  // quarantined job. Never acknowledge a fresh INSERT as already processing
+  // or terminal: that would fabricate a job lifecycle without a worker claim.
+  if (created && record.status !== 'queued') {
+    throw new Error('ERP job storage returned an invalid initial reservation status');
+  }
   if (typeof record.id !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(record.id) ||
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
