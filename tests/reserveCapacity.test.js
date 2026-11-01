@@ -368,3 +368,23 @@ test('rejects non-NFC reserve scope, asset and provenance aliases before classif
     ]), new RegExp('entry\\.' + key + '.*NFC'));
   }
 });
+
+test('reserve classification bounds entry history before enumerating oversized arrays', () => {
+  let enumerated = false;
+  const oversized = new Proxy(new Array(10001), {
+    ownKeys() {
+      enumerated = true;
+      throw new Error('Oversized reserve entries must not be enumerated');
+    },
+  });
+  assert.throws(() => calculate(oversized), /exceeds maximum entry count/);
+  assert.equal(enumerated, false);
+
+  // The exact limit remains valid: no silently dropped reserve entries.
+  const atLimit = Array.from({ length: 10000 }, (_, index) =>
+    entry('bounded-' + index, 1));
+  const result = calculate(atLimit);
+  assert.equal(result.cashTotalMinor, 10000);
+  assert.equal(result.unencumberedCashMinor, 10000);
+  assert.equal(result.oldestEvidenceAt, '2026-10-30T05:00:00.000Z');
+});
