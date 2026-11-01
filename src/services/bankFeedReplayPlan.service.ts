@@ -5,6 +5,11 @@
  * database transaction; never acknowledge a provider page before that commit.
  */
 export type FeedProvider = 'plaid' | 'mercury';
+// Bound untrusted provider pages and authorized account scopes before allocating
+// replay maps or holding a database transaction lock. Large historical entry
+// sets are intentionally not capped here; those require paged DB access.
+export const MAX_FEED_PAGE_EVENTS = 5000;
+export const MAX_FEED_ACCOUNT_SCOPE = 1000;
 export type FeedEntryStatus = 'pending' | 'posted' | 'superseded' | 'removed';
 
 export interface FeedReplayEntry {
@@ -75,9 +80,12 @@ const EVENT_POSTING_FIELDS = new Set([
   ...EVENT_IDENTITY_FIELDS, 'amountCents', 'pending',
 ]);
 
-function assertCanonicalFeedList(value: unknown, label: string): void {
+function assertCanonicalFeedList(value: unknown, label: string, maxItems = Infinity): void {
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     throw new Error(`malformed canonical feed ${label} array.`);
+  }
+  if (value.length > maxItems) {
+    throw new Error(`Canonical feed ${label} exceeds configured size limit.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
@@ -147,9 +155,9 @@ export function planBankFeedReplay(input: FeedReplayInput): {
       !Array.isArray(input.existing) || !Array.isArray(input.events)) {
     throw new Error('Invalid authorized feed scope or event collection.');
   }
-  assertCanonicalFeedList(input.allowedAccountIds, 'authorized accounts');
+  assertCanonicalFeedList(input.allowedAccountIds, 'authorized accounts', MAX_FEED_ACCOUNT_SCOPE);
   assertCanonicalFeedList(input.existing, 'existing records');
-  assertCanonicalFeedList(input.events, 'provider events');
+  assertCanonicalFeedList(input.events, 'provider events', MAX_FEED_PAGE_EVENTS);
   if (!input.allowedAccountIds.length ||
       input.allowedAccountIds.some((id) => !validId(id)) ||
       new Set(input.allowedAccountIds).size !== input.allowedAccountIds.length) {
