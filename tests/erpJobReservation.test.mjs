@@ -766,6 +766,36 @@ test('pre-dispatch fence is atomic, tenant-bound, lease-bound, and not a deliver
   assert.equal(Object.isFrozen(result), true);
 });
 
+test('uppercase UUID input cannot turn a persisted dispatch fence into a false failure', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  const requestedJobId = claimedJobId.toUpperCase();
+  let calls = 0;
+  const db = { async query(sql, params) {
+    calls++;
+    assert.match(sql, /dispatch_started_at = now\(\)/);
+    assert.deepEqual(params, ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a']);
+    // PostgreSQL uuid columns return canonical lowercase text.
+    return { rows: [dispatchedRow()] };
+  } };
+  const receipt = await mark({
+    db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId,
+  });
+  assert.equal(calls, 1);
+  assert.equal(receipt.id, claimedJobId);
+  assert.equal(receipt.status, 'processing');
+  assert.equal(receipt.outcomeMayBeUnknown, true);
+  assert.equal(Object.isFrozen(receipt), true);
+
+  // Canonicalization must not weaken the tenant/worker receipt boundary.
+  await assert.rejects(mark({
+    db: { query: async () => ({ rows: [dispatchedRow({ tenant_id: 'other-tenant' })] }) },
+    authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId,
+  }), /invalid tenant-bound dispatch fence/);
+});
+
 test('expired or already dispatched lease cannot start another dispatch; database failures propagate', async () => {
   const { markErpOperationJobDispatchStarted: mark } =
     await import('../server/services/erpJobReservation.js');
