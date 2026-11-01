@@ -60,6 +60,12 @@ const EVENT_FIELDS = new Set([
   'kind', 'accountId', 'transactionId', 'amountCents', 'pending',
   'pendingTransactionId', 'providerPayloadHash',
 ]);
+// The database adapter's locked checkpoint is also an evidence boundary.
+// Reject accessors, inherited identities, hidden metadata and missing fields
+// before reading tenant identifiers or loading historical financial records.
+const CHECKPOINT_FIELDS = new Set([
+  'tenantId', 'provider', 'connectionId', 'cursor', 'revision',
+]);
 
 function snapshotRecord<T extends object>(
   value: T, fields: ReadonlySet<string>, required: ReadonlySet<string>, label: string,
@@ -227,7 +233,13 @@ export async function commitAuthorizedBankFeedPage(
 ): Promise<FeedCursorPagePlan> {
   const { scope, page: detachedPage } = snapshotPageInput(authorizedScope, page);
   return store.withTransaction(async (tx) => {
-    const checkpoint = await tx.loadCheckpointForUpdate(scope);
+    const loadedCheckpoint = await tx.loadCheckpointForUpdate(scope);
+    if (!loadedCheckpoint) {
+      throw new Error('Feed cursor checkpoint is outside the authorized connection scope.');
+    }
+    const checkpoint = snapshotRecord(
+      loadedCheckpoint, CHECKPOINT_FIELDS, CHECKPOINT_FIELDS, 'checkpoint',
+    );
     // Reject a foreign checkpoint or an obsolete provider response BEFORE
     // loading potentially large historical transaction sets under the lock.
     // The replay planner independently validates the complete checkpoint and
