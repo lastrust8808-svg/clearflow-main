@@ -392,3 +392,47 @@ test('oversized provider pages and authorized scopes fail before transaction acq
   assert.equal(store.calls.transactions, 0, 'no transaction lock for oversized untrusted input');
   assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
 });
+
+test('noncanonical locked checkpoint evidence fails before historical reads or writes', async () => {
+  let getterCalls = 0;
+  const accessor = checkpoint();
+  Object.defineProperty(accessor, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return 'tenant-a'; },
+  });
+  const inherited = Object.assign(Object.create({ tenantId: 'tenant-a' }), {
+    provider: 'plaid', connectionId: 'item-a', cursor: null, revision: 0,
+  });
+  const missing = checkpoint();
+  delete missing.revision;
+  const hidden = checkpoint();
+  Object.defineProperty(hidden, 'revision', { value: 0, enumerable: false });
+  const invalidCheckpoints = [
+    accessor,
+    inherited,
+    missing,
+    hidden,
+    { ...checkpoint(), unreviewedMetadata: 'discarded' },
+  ];
+  for (const invalid of invalidCheckpoints) {
+    const store = fakeTransactionalStore();
+    const originalWithTransaction = store.withTransaction.bind(store);
+    store.withTransaction = (operation) => originalWithTransaction(async (tx) => {
+      tx.loadCheckpointForUpdate = async () => invalid;
+      return operation(tx);
+    });
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page()),
+      /Malformed bank feed checkpoint/,
+    );
+    assert.equal(store.calls.transactions, 1);
+    assert.equal(store.calls.entryReads, 0, 'reject checkpoint before historical reads');
+    assert.equal(store.calls.rows, 0);
+    assert.equal(store.calls.cursor, 0);
+    assert.equal(store.calls.rollbacks, 1);
+    assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  }
+  assert.equal(getterCalls, 0, 'checkpoint accessors must not execute');
+  const valid = fakeTransactionalStore();
+  assert.equal((await commitAuthorizedBankFeedPage(valid, scope(), page())).applied, 1);
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
+});
