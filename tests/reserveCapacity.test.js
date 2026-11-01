@@ -253,3 +253,46 @@ test('reserve entries require own plain-data values and reject unreviewed settle
   assert.throws(() => calculate([missing]), /Reserve entry.amountMinor/);
   assert.equal(calculate([Object.assign(Object.create(null), valid)]).unencumberedCashMinor, 100);
 });
+
+test('reserve entry lists reject sparse, inherited, accessor and hidden metadata without running getters', () => {
+  const valid = entry('cash-a', 100);
+  const sparse = new Array(2);
+  sparse[0] = valid;
+  assert.throws(() => calculate(sparse), /must not contain holes/);
+
+  const inherited = [valid];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  assert.throws(() => calculate(inherited), /plain array/);
+
+  let getterCalled = false;
+  const accessor = [valid];
+  Object.defineProperty(accessor, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalled = true; return valid; },
+  });
+  assert.throws(() => calculate(accessor), /enumerable data elements/);
+  assert.equal(getterCalled, false);
+
+  const extended = [valid];
+  extended.paymentReceived = true;
+  assert.throws(() => calculate(extended), /only array indices/);
+  const hidden = [valid];
+  Object.defineProperty(hidden, 'settled', { value: true, enumerable: false });
+  assert.throws(() => calculate(hidden), /only array indices/);
+  const symbol = [valid];
+  symbol[Symbol('funded')] = true;
+  assert.throws(() => calculate(symbol), /only array indices/);
+
+  assert.equal(calculate(Object.freeze([Object.freeze(valid)])).unencumberedCashMinor, 100);
+});
+
+test('reserve entry preflight rejects a malformed later record without executing its getter', () => {
+  let getterCalled = false;
+  const invalid = entry('cash-b', 200);
+  Object.defineProperty(invalid, 'amountMinor', {
+    enumerable: true, get() { getterCalled = true; return 200; },
+  });
+  assert.throws(() => calculate([entry('cash-a', 100), invalid]), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  assert.equal(calculate([entry('cash-a', 100), entry('cash-b', 200)]).unencumberedCashMinor, 300);
+});
