@@ -492,3 +492,23 @@ test('Proxy-wrapped membership identities, event records and batches fail before
   const inertEvent = Object.freeze(Object.assign(Object.create(null), paid()));
   assert.equal(project(inertScope, Object.freeze([inertEvent]), asOf).status, 'active');
 });
+
+test('decomposed Unicode cannot create visually identical billing identity aliases', () => {
+  const decomposed = 'cafe\u0301';
+  const composed = 'caf\u00e9';
+  assert.notEqual(decomposed, composed);
+  assert.equal(composed.normalize('NFC'), composed);
+  for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+    const alteredScope = { ...scope, [field]: decomposed };
+    const alteredPayment = { ...paid(), [field]: decomposed };
+    assert.throws(() => project(alteredScope, [alteredPayment], asOf), /canonical/);
+  }
+  for (const field of ['id', 'invoiceId', 'settlementId']) {
+    assert.throws(() => project(scope, [paid('evt-normal', { [field]: decomposed })], asOf),
+      /canonical/, field);
+  }
+  const accepted = project(scope, [paid('evt-' + composed, {
+    invoiceId: 'inv-' + composed, settlementId: 'settle-' + composed,
+  })], asOf);
+  assert.equal(accepted.entitled, true);
+});
