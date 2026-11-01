@@ -75,6 +75,18 @@ test('rejects non-NFC tenant, entity, trust and note identity aliases', () => {
   }
 });
 
+test('rejects unpaired Unicode surrogates in private-note scope without rewriting valid IDs', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const invalid of ['scope-\\uD800', 'scope-\\uDC00', '\\uDC00scope', 'scope-\\uD800x']) {
+      assert.throws(() => schedule({ [key]: invalid }), new RegExp(key + '.*well-formed Unicode'));
+    }
+    const valid = 'scope-\\u{1F4DC}';
+    const result = schedule({ [key]: valid });
+    assert.equal(result[key], valid);
+    assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  }
+});
+
 test('rejects invalid or unsafe amounts, rate, and term lengths', () => {
   for (const principalMinor of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(() => schedule({ principalMinor }), /principalMinor/);
