@@ -189,9 +189,9 @@ test('malformed or ambiguous authorized scopes fail before transaction acquisiti
 test('malformed provider cursor evidence fails before acquiring a transaction', async () => {
   const store = fakeTransactionalStore();
   const invalidPages = [
-    { ...page(), requestedCursor: 'cursor with spaces' },
+    { ...page(), requestedCursor: ' cursor-padded' },
     { ...page(), nextCursor: '' },
-    { ...page(), nextCursor: 'cursor\\nforged' },
+    { ...page(), nextCursor: 'cursor\nforged' },
     { ...page(), nextCursor: null },
     { ...page(), hasMore: 'false' },
     page([event()], 'cursor-1', 'cursor-1'),
@@ -216,7 +216,7 @@ test('malformed locked checkpoint fails before historical reads or cursor writes
     { ...checkpoint(), revision: -1 },
     { ...checkpoint(), revision: Number.NaN },
     { ...checkpoint(), revision: -0 },
-    { ...checkpoint(), cursor: 'bad\\ncursor' },
+    { ...checkpoint(), cursor: 'bad\ncursor' },
     { ...checkpoint(), revision: Number.MAX_SAFE_INTEGER },
   ];
   for (const invalid of badCheckpoints) {
