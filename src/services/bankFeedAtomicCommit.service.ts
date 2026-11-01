@@ -6,6 +6,8 @@
  */
 import {
   planBankFeedCursorPage,
+  MAX_FEED_PAGE_EVENTS,
+  MAX_FEED_ACCOUNT_SCOPE,
   type FeedCursorCheckpoint,
   type FeedCursorPagePlan,
   type FeedProvider,
@@ -83,8 +85,9 @@ function snapshotRecord<T extends object>(
   return snapshot as T;
 }
 
-function snapshotList<T>(value: T[], item: (value: T) => T, label: string): T[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+function snapshotList<T>(value: T[], item: (value: T) => T, label: string, maxItems: number): T[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype ||
+      value.length > maxItems) {
     throw new Error(`Malformed bank feed ${label} list.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -106,12 +109,14 @@ function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvi
   scope: AuthorizedBankFeedScope; page: BankFeedPageEvidence;
 } {
   const safeScope = snapshotRecord(scope, SCOPE_FIELDS, SCOPE_FIELDS, 'scope');
-  safeScope.allowedAccountIds = snapshotList(safeScope.allowedAccountIds, (id) => id, 'accounts');
+  safeScope.allowedAccountIds = snapshotList(
+    safeScope.allowedAccountIds, (id) => id, 'accounts', MAX_FEED_ACCOUNT_SCOPE,
+  );
   const safePage = snapshotRecord(page, PAGE_FIELDS, PAGE_FIELDS, 'page');
   safePage.events = snapshotList(
     safePage.events,
     (event) => snapshotRecord(event, EVENT_FIELDS, new Set(['kind', 'accountId', 'transactionId']), 'event'),
-    'events',
+    'events', MAX_FEED_PAGE_EVENTS,
   );
   return { scope: safeScope, page: safePage };
 }
