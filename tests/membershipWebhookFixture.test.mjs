@@ -370,3 +370,21 @@ test('signed fixture rejects proxy-backed authenticated scope before invoking tr
     authenticatedScope: Object.freeze({ ...authenticatedScope }),
   }))?.verified, true);
 });
+
+test('signed webhook fixture refuses non-NFC scope and payment identities', () => {
+  const decomposed = 'cafe\u0301';
+  for (const field of ['id', 'invoiceId', 'settlementId']) {
+    assert.equal(verifyScoped(scopedInput({
+      ...scopedPayload, [field]: decomposed,
+    })), null, field);
+  }
+  for (const field of ['tenantId', 'memberId', 'subscriptionId']) {
+    const payload = { ...scopedPayload, [field]: decomposed };
+    const scope = { ...authenticatedScope, [field]: decomposed };
+    assert.equal(verifyScoped(scopedInput(payload, { authenticatedScope: scope })), null, field);
+  }
+  const composed = 'caf\u00e9';
+  assert.equal(verifyScoped(scopedInput({
+    ...scopedPayload, id: composed, invoiceId: composed, settlementId: composed,
+  }))?.verified, true);
+});
