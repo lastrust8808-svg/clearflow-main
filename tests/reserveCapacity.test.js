@@ -52,6 +52,26 @@ test('explicitly unknown reserve encumbrances cannot be treated as zero', () => 
   })]).unencumberedCashMinor, 100);
 });
 
+test('negative-zero reserve amounts and encumbrances are not silently normalized', () => {
+  // JSON serialization erases the sign of -0, so it cannot be accepted as
+  // trustworthy exact-minor-unit evidence even though -0 is a safe integer.
+  for (const field of ['amountMinor', 'restrictedMinor', 'pledgedMinor']) {
+    assert.throws(
+      () => calculate([entry('cash-a', 100, { [field]: -0 })]),
+      new RegExp(field + ' must be a nonnegative safe integer'),
+    );
+    assert.throws(
+      () => calculate([entry('note-a', 100, {
+        kind: 'noncash_collateral', sourceType: 'private_note', [field]: -0,
+      })]),
+      new RegExp(field + ' must be a nonnegative safe integer'),
+    );
+  }
+  assert.equal(calculate([entry('cash-a', 0, {
+    restrictedMinor: 0, pledgedMinor: 0,
+  })]).unencumberedCashMinor, 0);
+});
+
 test('rejects mixed tenant, entity, trust or currency rather than silently mixing books', () => {
   for (const change of [{ tenantId: 'tenant-b' }, { entityId: 'entity-b' }, { trustId: 'trust-b' }, { currency: 'EUR' }]) {
     assert.throws(() => calculate([entry('x', 100, change)]), /scope or currency mismatch/);
