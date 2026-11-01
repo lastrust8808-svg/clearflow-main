@@ -314,18 +314,22 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
     throw new TypeError('Invalid ERP job id');
   }
+  // PostgreSQL UUID parameters accept uppercase input but returned UUIDs are
+  // canonical lowercase. Normalize before SQL and receipt validation so a
+  // legitimate status read does not falsely fail after the database responds.
+  const canonicalJobId = jobId.toLowerCase();
   const result = await db.query(
     `SELECT id, tenant_id, actor_id, operation, status, created_at, updated_at
      FROM erp_operation_jobs
      WHERE tenant_id = $1 AND actor_id = $2 AND id = $3`,
-    [tenantId, actorId, jobId],
+    [tenantId, actorId, canonicalJobId],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid status result');
   }
   const record = result.rows[0];
   if (!record) return null;
-  if (record.id !== jobId || record.tenant_id !== tenantId ||
+  if (record.id !== canonicalJobId || record.tenant_id !== tenantId ||
       record.actor_id !== actorId || !operations.has(record.operation) ||
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
     throw new Error('ERP job storage returned an invalid tenant-bound status');
@@ -337,7 +341,7 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
     throw new Error('ERP job storage returned an invalid status timestamp');
   }
   return Object.freeze({
-    id: jobId, tenantId, operation: record.operation,
+    id: canonicalJobId, tenantId, operation: record.operation,
     status: record.status, createdAt, updatedAt,
   });
 }
