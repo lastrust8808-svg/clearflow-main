@@ -425,6 +425,10 @@ export async function renewErpOperationJobLease({
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 300) {
     throw new TypeError('Invalid ERP worker lease');
   }
+  // PostgreSQL returns UUID columns as lowercase text. Canonicalize before
+  // the write so a committed lease renewal cannot be reported as a failure
+  // solely because a caller supplied an uppercase UUID.
+  const canonicalJobId = jobId.toLowerCase();
   // Compare-and-swap in one SQL statement: no resurrection of an expired
   // lease, no takeover by another worker, and no renewal of a finished job.
   const result = await db.query(
@@ -436,14 +440,14 @@ export async function renewErpOperationJobLease({
        AND lease_expires_at > now()
      RETURNING id, tenant_id, actor_id, operation, status, claimed_by,
                claimed_at, lease_expires_at, created_at, updated_at`,
-    [tenantId, operation, jobId, workerId, leaseSeconds],
+    [tenantId, operation, canonicalJobId, workerId, leaseSeconds],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid lease renewal result');
   }
   const record = result.rows[0];
   if (!record) return null;
-  if (record.id !== jobId || record.tenant_id !== tenantId ||
+  if (record.id !== canonicalJobId || record.tenant_id !== tenantId ||
       record.operation !== operation || record.status !== 'processing' ||
       record.claimed_by !== workerId || typeof record.actor_id !== 'string' ||
       !record.actor_id) {
@@ -464,7 +468,7 @@ export async function renewErpOperationJobLease({
     throw new Error('ERP job storage returned an invalid lease renewal timestamp');
   }
   return Object.freeze({
-    id: jobId, tenantId, operation, status: 'processing',
+    id: canonicalJobId, tenantId, operation, status: 'processing',
     claimedBy: workerId, claimedAt, leaseExpiresAt, updatedAt,
   });
 }
