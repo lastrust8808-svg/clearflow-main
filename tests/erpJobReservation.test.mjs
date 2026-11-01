@@ -257,6 +257,42 @@ test('status lookup is tenant-and-actor scoped and returns persisted status only
   assert.equal('delivered' in result, false);
 });
 
+test('uppercase UUID status lookup matches canonical PostgreSQL receipt without weakening tenant scope', async () => {
+  const { readErpOperationJobStatus: readStatus } =
+    await import('../server/services/erpJobReservation.js');
+  const requestedJobId = statusJobId.toUpperCase();
+  const input = { authenticatedScope: scope, jobId: requestedJobId };
+  const base = {
+    id: statusJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+    operation: 'invoice_delivery', status: 'queued',
+    created_at: new Date('2026-10-29T12:00:00Z'),
+    updated_at: new Date('2026-10-29T12:01:00Z'),
+  };
+  let calls = 0;
+  const db = { async query(sql, params) {
+    calls++;
+    assert.match(sql, /WHERE tenant_id = \\$1 AND actor_id = \\$2 AND id = \\$3/);
+    assert.deepEqual(params, [scope.tenantId, scope.actorId, statusJobId]);
+    // PostgreSQL returns lowercase UUID text even when the caller used uppercase.
+    return { rows: [base] };
+  } };
+  const receipt = await readStatus({ ...input, db });
+  assert.equal(calls, 1);
+  assert.equal(receipt.id, statusJobId);
+  assert.equal(receipt.status, 'queued');
+  assert.equal(Object.isFrozen(receipt), true);
+  assert.equal('delivered' in receipt, false);
+  for (const forged of [
+    { ...base, tenant_id: 'other-tenant' },
+    { ...base, actor_id: 'other-actor' },
+    { ...base, id: '123e4567-e89b-42d3-a456-426614174001' },
+  ]) {
+    await assert.rejects(readStatus({
+      ...input, db: { query: async () => ({ rows: [forged] }) },
+    }), /invalid tenant-bound status/);
+  }
+});
+
 test('status lookup fails closed on missing scope, invalid ids, malformed or foreign records', async () => {
   const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
   let calls = 0;
