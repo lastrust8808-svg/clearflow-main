@@ -14,7 +14,7 @@
 const RATE_DENOMINATOR = 120_000n; // 12 months * 10,000 basis points
 const MAX_PERIODS = 600;
 const TERMS_FIELDS = new Set([
-  'tenantId', 'entityId', 'noteId', 'currency', 'principalMinor',
+  'tenantId', 'entityId', 'trustId', 'noteId', 'currency', 'principalMinor',
   'annualRateBps', 'paymentCount', 'firstDueDate',
 ]);
 
@@ -103,7 +103,7 @@ function monthlyDueDate(first, offset) {
 }
 
 /**
- * @param {{tenantId:string, entityId:string, noteId:string, currency:string,
+ * @param {{tenantId:string, entityId:string, trustId:string, noteId:string, currency:string,
  * principalMinor:number, annualRateBps:number, paymentCount:number,
  * firstDueDate:string}} terms
  */
@@ -111,6 +111,7 @@ export function buildFixedMonthlyNoteSchedule(terms) {
   requirePlainNoteTerms(terms);
   const tenantId = requiredString(terms.tenantId, 'tenantId');
   const entityId = requiredString(terms.entityId, 'entityId');
+  const trustId = requiredString(terms.trustId, 'trustId');
   const noteId = requiredString(terms.noteId, 'noteId');
   const currency = requiredString(terms.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
@@ -159,7 +160,7 @@ export function buildFixedMonthlyNoteSchedule(terms) {
     }));
   }
   return Object.freeze({
-    tenantId, entityId, noteId, currency, principalMinor, annualRateBps,
+    tenantId, entityId, trustId, noteId, currency, principalMinor, annualRateBps,
     paymentCount, firstDueDate: terms.firstDueDate, scheduledPaymentMinor,
     totalInterestMinor: safeNumber(totalInterest, 'totalInterestMinor'),
     totalRepaymentMinor: safeNumber(principal + totalInterest, 'totalRepaymentMinor'),
