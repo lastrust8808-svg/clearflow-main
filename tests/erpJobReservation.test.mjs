@@ -1567,3 +1567,36 @@ test('reservation rejects invisible accounting property names without blocking v
   assert.equal(result.created, true);
   assert.equal(db.calls, 1);
 });
+
+
+test('snake_case minor-unit financial fields reject fractional and coerced values before database access', async () => {
+  const db = fakeDatabase();
+  for (const payload of [
+    { amount_cents: 1.5 },
+    { invoice: { lines: [{ line_total_minor: 99.99 }] } },
+    { fee_cents: '125' },
+    { balance_minor_units: null },
+    { amount_minor: false },
+    { adjustment_cents: -0 },
+    { total_minor: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    await assert.rejects(
+      reserve({ db, ...args, payload }),
+      /invalid minor-unit amount|negative zero|unsafe integer/,
+    );
+  }
+  assert.equal(db.calls, 0, 'invalid minor-unit amounts must not reach SQL');
+
+  const accepted = await reserve({
+    db, ...args,
+    payload: {
+      amount_cents: 1250,
+      fee_cents: -15,
+      invoice: { lines: [{ line_total_minor: 1265 }] },
+      balance_minor_units: 0,
+      tax_rate: 0.075,
+    },
+  });
+  assert.equal(accepted.created, true);
+  assert.equal(db.calls, 1);
+});
