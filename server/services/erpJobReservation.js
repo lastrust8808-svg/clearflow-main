@@ -771,6 +771,7 @@ export async function listErpOperationJobsNeedingReconciliation({
   const cursor = afterJobId === null ? null : afterJobId.toLowerCase();
   const result = await db.query(
     `SELECT id, tenant_id, actor_id, operation, status,
+            failure_code, claimed_by, claimed_at, lease_expires_at,
             dispatch_started_at, created_at, updated_at
      FROM erp_operation_jobs
      WHERE tenant_id = $1 AND operation = $2 AND status = 'outcome_unknown'
@@ -788,7 +789,12 @@ export async function listErpOperationJobsNeedingReconciliation({
         (previousId !== null && row.id <= previousId) ||
         row.tenant_id !== tenantId || row.operation !== operation ||
         row.status !== 'outcome_unknown' ||
-        typeof row.actor_id !== 'string' || !row.actor_id) {
+        typeof row.actor_id !== 'string' || !row.actor_id ||
+        // An unknown-outcome job must have no active lease or failure code.
+        // Otherwise the reconciliation backlog could falsely present an
+        // inconsistent worker state as a safely quarantined job.
+        row.failure_code != null || row.claimed_by != null ||
+        row.claimed_at != null || row.lease_expires_at != null) {
       throw new Error('ERP job storage returned an invalid tenant-bound reconciliation record');
     }
     previousId = row.id;
