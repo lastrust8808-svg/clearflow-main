@@ -643,7 +643,8 @@ export async function quarantineExpiredErpOperationJob({
      WHERE tenant_id = $1 AND operation = $2 AND id = $3
        AND status = 'processing' AND lease_expires_at <= now()
      RETURNING id, tenant_id, actor_id, operation, status, failure_code,
-               claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
+               claimed_by, claimed_at, lease_expires_at,
+               dispatch_started_at, created_at, updated_at`,
     [tenantId, operation, canonicalJobId],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
@@ -655,6 +656,7 @@ export async function quarantineExpiredErpOperationJob({
       row.operation !== operation || row.status !== 'outcome_unknown' ||
       row.failure_code != null || row.claimed_by != null ||
       row.claimed_at != null || row.lease_expires_at != null ||
+      !Object.hasOwn(row, 'dispatch_started_at') ||
       typeof row.actor_id !== 'string' || !row.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound quarantine');
   }
@@ -662,13 +664,19 @@ export async function quarantineExpiredErpOperationJob({
   // guess: reject normalized impossible dates and non-UTC strings.
   const createdAt = persistedUtcTimestamp(row.created_at);
   const updatedAt = persistedUtcTimestamp(row.updated_at);
+  const dispatchStartedAt = row.dispatch_started_at === null
+    ? null : persistedUtcTimestamp(row.dispatch_started_at);
   if (createdAt === null || updatedAt === null ||
-      Date.parse(updatedAt) < Date.parse(createdAt)) {
+      Date.parse(updatedAt) < Date.parse(createdAt) ||
+      (row.dispatch_started_at !== null && dispatchStartedAt === null) ||
+      (dispatchStartedAt !== null &&
+       (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
+        Date.parse(dispatchStartedAt) > Date.parse(updatedAt)))) {
     throw new Error('ERP job storage returned an invalid quarantine timestamp');
   }
   return Object.freeze({
     id: canonicalJobId, tenantId, operation, status: 'outcome_unknown',
-    requiresReconciliation: true, createdAt, updatedAt,
+    requiresReconciliation: true, dispatchStartedAt, createdAt, updatedAt,
   });
 }
 
