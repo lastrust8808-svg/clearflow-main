@@ -150,7 +150,10 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       // character), bypassing the minor-unit type guard and misleading audits.
       // Free-text VALUES may still contain ordinary newlines; only object
       // property names are required to be visible, canonical field labels.
-      if (/[\p{Cc}\p{Cf}\p{Cs}]/u.test(key)) {
+      if (/\p{Cs}/u.test(key)) {
+        throw new TypeError('ERP job payload contains malformed Unicode');
+      }
+      if (/[\p{Cc}\p{Cf}]/u.test(key)) {
         throw new TypeError('ERP job payload contains an unsafe Unicode property name');
       }
       if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable ||
