@@ -11,11 +11,12 @@ const operations = new Set([
 ]);
 
 // Authenticated identity fields must not contain invisible controls, bidi
-// overrides, malformed surrogate code units or boundary whitespace. These can
+// overrides, malformed surrogate code units, noncanonical Unicode or boundary whitespace. These can
 // make distinct tenant/actor/worker identities appear identical in audits.
 function requiredIdentifier(value, label) {
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
-      value !== value.trim() || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
+      value !== value.trim() || value !== value.normalize('NFC') ||
+      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
     throw new TypeError(`Invalid ${label}`);
   }
   return value;
