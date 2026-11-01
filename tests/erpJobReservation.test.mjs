@@ -711,6 +711,35 @@ test('expired lease is atomically quarantined, not requeued or marked delivered'
   assert.equal(Object.isFrozen(result), true);
 });
 
+test('uppercase UUID cannot turn a persisted expired-lease quarantine into a false failure', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  const requestedJobId = claimedJobId.toUpperCase();
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId };
+  const db = { async query(sql, params) {
+    assert.deepEqual(params, ['tenant-a', 'invoice_delivery', claimedJobId]);
+    assert.match(sql, /SET status = 'outcome_unknown'/);
+    // PostgreSQL returns a lowercase UUID even when input is uppercase.
+    return { rows: [quarantineRow()] };
+  } };
+  const receipt = await quarantine({ ...input, db });
+  assert.equal(receipt.id, claimedJobId);
+  assert.equal(receipt.status, 'outcome_unknown');
+  assert.equal(receipt.requiresReconciliation, true);
+  assert.equal('delivered' in receipt, false);
+
+  // Canonicalizing the input must not weaken the persisted receipt boundary.
+  for (const forged of [
+    quarantineRow({ tenant_id: 'other-tenant' }),
+    quarantineRow({ id: '123e4567-e89b-42d3-a456-426614174001' }),
+  ]) {
+    await assert.rejects(quarantine({ ...input, db: {
+      query: async () => ({ rows: [forged] }),
+    } }), /invalid tenant-bound quarantine/);
+  }
+});
+
 test('no expired lease returns null; database errors and duplicate receipts fail closed', async () => {
   const { quarantineExpiredErpOperationJob: quarantine } =
     await import('../server/services/erpJobReservation.js');
