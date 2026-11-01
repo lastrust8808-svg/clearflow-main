@@ -521,3 +521,17 @@ test('rejects non-NFC journal, actor, document, evidence and notice-lineage refe
     documentRef: 'caf\u00e9-document', evidenceRef: 'caf\u00e9-evidence',
   })]).status, 'issued');
 });
+
+test('event type must be a string and cannot execute coercion hooks', () => {
+  let coercions = 0;
+  const disguised = {
+    [Symbol.toPrimitive]() { coercions++; return 'issued'; },
+    toString() { coercions++; return 'issued'; },
+  };
+  for (const invalid of [disguised, null, undefined, 42, Symbol('issued'), ['issued']]) {
+    assert.throws(() => project([event('issued', 1, { type: invalid })]),
+      /event type must be a string/);
+  }
+  assert.equal(coercions, 0, 'event type must not execute user-defined coercion');
+  assert.equal(project([event('issued', 1)]).status, 'issued');
+});
