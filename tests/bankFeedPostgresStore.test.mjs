@@ -245,3 +245,43 @@ test('PostgreSQL adapter rejects persisted JSONB identities that disagree with s
   assert.equal(valid.state.entries.length, 2);
   assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
 });
+
+
+test('PostgreSQL adapter independently rejects ambiguous authorization scopes before scoped SQL', async () => {
+  const invalidScopes = [
+    { ...scope(), tenantId: 42 },
+    { ...scope(), tenantId: ' tenant-a' },
+    { ...scope(), tenantId: 'tenant-a\\u200b'.replace('\\u200b', '\u200b') },
+    { ...scope(), connectionId: { toString: () => 'item-a' } },
+    { ...scope(), connectionId: 'item-a\\n'.replace('\\n', '\n') },
+    { ...scope(), connectionId: 'x'.repeat(257) },
+    { ...scope(), allowedAccountIds: [7] },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct-a'] },
+    { ...scope(), allowedAccountIds: [' acct-a'] },
+    { ...scope(), allowedAccountIds: ['acct-a\\u202e'.replace('\\u202e', '\u202e')] },
+    { ...scope(), allowedAccountIds: ['x'.repeat(257)] },
+    { ...scope(), provider: 'unknown' },
+  ];
+  for (const badScope of invalidScopes) {
+    const db = mockPg();
+    const store = createBankFeedPostgresStore(db.pool);
+    await assert.rejects(
+      store.withTransaction((tx) => tx.loadCheckpointForUpdate(badScope)),
+      /Invalid authenticated banking scope/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'invalid authorization must never issue scoped SELECT/UPDATE SQL');
+    assert.deepEqual(db.state, initial(), 'rejected scope must preserve banking state');
+    assert.equal(db.releases, 1);
+  }
+
+  // A direct store caller must not bypass this check through the write path.
+  const db = mockPg();
+  await assert.rejects(
+    createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+      tx.saveEntries({ ...scope(), tenantId: 1 }, [])),
+    /Invalid authenticated banking scope/,
+  );
+  assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK']);
+  assert.deepEqual(db.state, initial());
+});
