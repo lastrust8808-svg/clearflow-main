@@ -124,6 +124,34 @@ export function assertPlainTrustDocumentVersions(versions) {
   for (const version of versions) requirePlainVersionRecord(version);
 }
 
+// Document proofs are untrusted inputs, even when the version registry was
+// authenticated. Admit inert own data before reading the version identifier,
+// supplied digest, or bytes. A legacy sha256 field on byte proofs is accepted
+// only for compatibility and is NEVER used instead of hashing actual bytes.
+function requirePlainDocumentProof(proof, allowedFields, requiredFields, label) {
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
+    throw new TypeError(label + ' required');
+  }
+  const prototype = Object.getPrototypeOf(proof);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(proof);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !allowedFields.includes(key)) {
+      throw new TypeError(label + ' contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError(label + ' fields must be enumerable own data properties');
+    }
+  }
+  for (const key of requiredFields) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError(label + ' required own field: ' + key);
+    }
+  }
+}
+
 /**
  * @param {{tenantId:string,entityId:string,trustId:string,documentId:string,versions:Array<{
  *   versionId:string,tenantId:string,entityId:string,trustId:string,documentId:string,sequence:number,sha256:string,status:'current'|'superseded'|'revoked',
@@ -135,9 +163,8 @@ export function verifyTrustDocumentVersion(registry, proof) {
   assertPlainTrustDocumentRegistry(registry);
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) identifier(registry[key], key);
   requirePlainVersionList(registry.versions);
-  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
-    throw new TypeError('Document proof required');
-  }
+  requirePlainDocumentProof(proof, ['versionId', 'sha256'],
+    ['versionId', 'sha256'], 'Document proof');
   const versionId = identifier(proof.versionId, 'proof.versionId');
   const providedDigest = Buffer.from(digest(proof.sha256, 'proof.sha256'), 'hex');
 
@@ -218,9 +245,8 @@ export function verifyTrustDocumentVersion(registry, proof) {
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}}
  */
 export function verifyTrustDocumentBytes(registry, proof) {
-  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
-    throw new TypeError('Document byte proof required');
-  }
+  requirePlainDocumentProof(proof, ['versionId', 'content', 'sha256'],
+    ['versionId', 'content'], 'Document byte proof');
   const { content } = proof;
   if ((!Buffer.isBuffer(content) && !(content instanceof Uint8Array)) || content.byteLength === 0) {
     throw new TypeError('Nonempty finalized document bytes required');
