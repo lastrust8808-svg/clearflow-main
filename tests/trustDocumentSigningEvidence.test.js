@@ -283,11 +283,11 @@ test('finalization timestamp must be anchored to the immutable registered versio
   assert.equal(assess({
     finalizedAt: '2026-10-28T08:00:00.000Z',
   }).reason, 'document_finalization_provenance_mismatch');
-  assert.equal(assess({
+  assert.throws(() => assess({
     versionRegistry: registryWith({
       finalizedAt: '2026-10-28T10:00:00.000Z',
     }),
-  }).reason, 'document_finalization_provenance_mismatch');
+  }), /Document finalization must not follow registration/);
   assert.throws(() => assess({
     versionRegistry: registryWith({ finalizedAt: '2026-02-30T09:00:00.000Z' }),
   }), /version.finalizedAt.*canonical/);
