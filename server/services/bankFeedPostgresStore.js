@@ -49,6 +49,15 @@ function parseRevision(value) {
   return number;
 }
 
+// Checkpoint cursors are opaque provider tokens, never SQL-coercible values.
+// Validate even when this adapter is invoked without the page planner.
+function validCursor(value) {
+  return value === null ||
+    (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
+      value === value.trim() &&
+      !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
+}
+
 function transactionQueries(client) {
   return {
     async loadCheckpointForUpdate(scope) {
@@ -61,6 +70,9 @@ function transactionQueries(client) {
       );
       if (result.rows.length !== 1) return null;
       const row = result.rows[0];
+      if (!validCursor(row.cursor)) {
+        throw new Error('Invalid persisted banking checkpoint cursor.');
+      }
       return {
         tenantId: row.tenant_id, provider: row.provider,
         connectionId: row.connection_id, cursor: row.cursor,
@@ -157,13 +169,17 @@ function transactionQueries(client) {
     },
     async compareAndSwapCheckpoint(scope, previous, next) {
       params(scope);
-      if (previous.tenantId !== scope.tenantId ||
+      if (!previous || typeof previous !== 'object' ||
+          !next || typeof next !== 'object' ||
+          previous.tenantId !== scope.tenantId ||
           previous.provider !== scope.provider ||
           previous.connectionId !== scope.connectionId ||
           next.tenantId !== scope.tenantId ||
           next.provider !== scope.provider ||
           next.connectionId !== scope.connectionId ||
-          !Number.isSafeInteger(previous.revision) ||
+          !validCursor(previous.cursor) ||
+          !validCursor(next.cursor) || next.cursor === null ||
+          !Number.isSafeInteger(previous.revision) || previous.revision < 0 ||
           !Number.isSafeInteger(next.revision) ||
           next.revision !== previous.revision + 1) {
         throw new Error('Refusing out-of-scope banking checkpoint update.');
