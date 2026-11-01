@@ -64,6 +64,35 @@ function requirePlainVersionList(versions) {
 // A version is a financial/legal document provenance record, not an arbitrary
 // executable object. Reject unsupported assertions and accessor/hidden fields
 // before reading any version data. This does not authenticate its source.
+// Registry scope and version-list identity must be admitted as explicit own
+// data before any consumer reads fields. This is structural validation only;
+// the caller remains responsible for authenticated, immutable provenance.
+const REGISTRY_FIELDS = new Set(['tenantId', 'entityId', 'trustId', 'documentId', 'versions']);
+
+export function assertPlainTrustDocumentRegistry(registry) {
+  if (!registry || typeof registry !== 'object' || Array.isArray(registry)) {
+    throw new TypeError('Document registry required');
+  }
+  const prototype = Object.getPrototypeOf(registry);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Document registry must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(registry);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !REGISTRY_FIELDS.has(key)) {
+      throw new TypeError('Document registry contains unsupported fields');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Document registry fields must be enumerable own data properties');
+    }
+  }
+  for (const key of REGISTRY_FIELDS) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Document registry missing own field: ' + key);
+    }
+  }
+}
+
 const VERSION_FIELDS = new Set([
   'versionId', 'tenantId', 'entityId', 'trustId', 'documentId',
   'sequence', 'sha256', 'status', 'registeredAt', 'evidenceRef',
@@ -103,9 +132,7 @@ export function assertPlainTrustDocumentVersions(versions) {
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Frozen, metadata-free result
  */
 export function verifyTrustDocumentVersion(registry, proof) {
-  if (!registry || typeof registry !== 'object' || Array.isArray(registry)) {
-    throw new TypeError('Document registry required');
-  }
+  assertPlainTrustDocumentRegistry(registry);
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) identifier(registry[key], key);
   requirePlainVersionList(registry.versions);
   if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
