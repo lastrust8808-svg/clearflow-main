@@ -29,6 +29,29 @@ test('rejects overpledged or negative and fractional balances', () => {
   assert.throws(() => calculate([entry('x', 1.5)]), /safe integer/);
 });
 
+test('explicitly unknown reserve encumbrances cannot be treated as zero', () => {
+  for (const field of ['restrictedMinor', 'pledgedMinor']) {
+    for (const unknown of [null, undefined]) {
+      assert.throws(
+        () => calculate([entry('cash-a', 100, { [field]: unknown })]),
+        new RegExp(field + ' must be a nonnegative safe integer'),
+      );
+      // Noncash entries must not bypass the same integrity requirement.
+      assert.throws(
+        () => calculate([entry('note-a', 100, {
+          kind: 'noncash_collateral', sourceType: 'private_note', [field]: unknown,
+        })]),
+        new RegExp(field + ' must be a nonnegative safe integer'),
+      );
+    }
+  }
+  // Truly absent optional fields and explicit numeric zero remain supported.
+  assert.equal(calculate([entry('cash-a', 100)]).unencumberedCashMinor, 100);
+  assert.equal(calculate([entry('cash-a', 100, {
+    restrictedMinor: 0, pledgedMinor: 0,
+  })]).unencumberedCashMinor, 100);
+});
+
 test('rejects mixed tenant, entity, trust or currency rather than silently mixing books', () => {
   for (const change of [{ tenantId: 'tenant-b' }, { entityId: 'entity-b' }, { trustId: 'trust-b' }, { currency: 'EUR' }]) {
     assert.throws(() => calculate([entry('x', 100, change)]), /scope or currency mismatch/);
