@@ -9,6 +9,7 @@ on:
       - 'server/services/bankFeedPostgresStore.js'
       - 'server/db/versions/003_banking_feed_checkpoints.sql'
       - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
       - 'tests/bankFeedAtomicCommit.test.mjs'
@@ -23,6 +24,7 @@ on:
       - 'server/services/bankFeedPostgresStore.js'
       - 'server/db/versions/003_banking_feed_checkpoints.sql'
       - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
       - 'tests/bankFeedAtomicCommit.test.mjs'
@@ -45,3 +47,35 @@ jobs:
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
           node --check server/services/bankFeedPostgresStore.js
           node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs
+
+  banking-postgres-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: banking-ci-disposable-only
+          POSTGRES_DB: clearflow_banking_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d clearflow_banking_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PG_CONTAINER: ${{ job.services.postgres.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap only the reviewed 001 migration registry in disposable DB
+        run: |
+          printf '%s\\n' 'CREATE TABLE public.clearflow_schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());' |
+            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci
+      - name: Apply proposed banking migration twice (idempotence)
+        run: |
+          for attempt in 1 2; do
+            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci \\
+              < server/db/versions/003_banking_feed_checkpoints.sql
+          done
+      - name: Verify real PostgreSQL rollback, deduplication and cursor constraints
+        run: |
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci \\
+            < tests/bankFeedPostgresSchema.test.sql
