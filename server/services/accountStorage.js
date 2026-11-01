@@ -204,6 +204,10 @@ function assertBoundedParsedRecordDepth(record) {
 // keys separately. JSON.parse remains responsible for full syntax validation.
 function assertUniqueJsonObjectKeys(text) {
   const stack = [];
+  // JSON.parse silently rounds tiny nonzero numbers to zero (e.g. 1e-400).
+  // Preserve financial evidence by rejecting that underflow before parsing.
+  // The sticky pattern scans only numeric tokens outside quoted strings.
+  const jsonNumber = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
   for (let i = 0; i < text.length;) {
     const char = text[i];
     if (char === '{' || char === '[') {
@@ -218,6 +222,19 @@ function assertUniqueJsonObjectKeys(text) {
       stack.pop();
       i++;
       continue;
+    }
+    if (char === '-' || (char >= '0' && char <= '9')) {
+      jsonNumber.lastIndex = i;
+      const match = jsonNumber.exec(text);
+      if (match) {
+        const token = match[0];
+        const mantissa = token.split(/[eE]/, 1)[0];
+        if (Number(token) === 0 && /[1-9]/.test(mantissa)) {
+          throw new TypeError('Unsafe storage record numeric value: underflow.');
+        }
+        i = jsonNumber.lastIndex;
+        continue;
+      }
     }
     if (char !== '"') {
       i++;
