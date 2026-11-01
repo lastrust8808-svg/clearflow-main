@@ -698,6 +698,7 @@ function failedRow(overrides = {}) {
     actor_id: 'actor-a', operation: 'invoice_delivery',
     status: 'failed', failure_code: 'ERP_WORKER_ERROR',
     claimed_by: null, claimed_at: null, lease_expires_at: null,
+    dispatch_started_at: null,
     created_at: new Date('2026-10-29T12:00:00Z'),
     updated_at: new Date('2026-10-29T12:03:00Z'),
     ...overrides,
@@ -724,6 +725,39 @@ test('worker terminal failure is atomic, tenant-scoped, lease-bound and clears c
   assert.equal(result.failureCode, 'ERP_WORKER_ERROR');
   assert.equal('sent' in result, false);
   assert.equal(Object.isFrozen(result), true);
+});
+
+test('terminal failure receipt must prove no external dispatch was fenced', async () => {
+  const { failErpOperationJob: fail } = await import('../server/services/erpJobReservation.js');
+  const input = {
+    authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    jobId: claimedJobId, failureCode: 'ERP_WORKER_ERROR',
+  };
+  let statement;
+  const valid = await fail({ ...input, db: { async query(sql) {
+    statement = sql;
+    return { rows: [failedRow()] };
+  } } });
+  assert.equal(valid.status, 'failed');
+  assert.match(statement, /dispatch_started_at IS NULL/);
+  assert.match(statement, /RETURNING[\\s\\S]*dispatch_started_at, created_at/);
+
+  // A simulated adapter returning contradictory or absent dispatch evidence
+  // must never be acknowledged as a safely failed job. A provider operation
+  // may already have started and needs reconciliation, not an automatic retry.
+  for (const dispatch_started_at of [
+    undefined, new Date('2026-10-29T12:01:00Z'),
+    '2026-10-29T12:01:00Z',
+  ]) {
+    await assert.rejects(fail({ ...input, db: {
+      query: async () => ({ rows: [failedRow({ dispatch_started_at })] }),
+    } }), /invalid tenant-bound failure/);
+  }
+  const missing = failedRow();
+  delete missing.dispatch_started_at;
+  await assert.rejects(fail({ ...input, db: {
+    query: async () => ({ rows: [missing] }),
+  } }), /invalid tenant-bound failure/);
 });
 
 test('uppercase UUID cannot turn a durable terminal failure into a false failure', async () => {
