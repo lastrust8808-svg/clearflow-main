@@ -371,11 +371,14 @@ export async function claimErpOperationJob({
   // SKIP LOCKED prevents two workers claiming the same queued row. A queued
   // record with an old dispatch fence or terminal failure code must NEVER be
   // reclaimed for external execution, even if schema constraints drift.
+  // Likewise, a queued row carrying a stale worker lease is inconsistent;
+  // never overwrite that lease and acknowledge another worker's claim.
   const result = await db.query(
     `WITH next_job AS (
        SELECT id FROM erp_operation_jobs
        WHERE tenant_id = $1 AND operation = $2 AND status = 'queued'
          AND dispatch_started_at IS NULL AND failure_code IS NULL
+         AND claimed_by IS NULL AND claimed_at IS NULL AND lease_expires_at IS NULL
        ORDER BY created_at, id
        FOR UPDATE SKIP LOCKED LIMIT 1
      )
@@ -387,6 +390,7 @@ export async function claimErpOperationJob({
      WHERE job.id = next_job.id AND job.tenant_id = $1
        AND job.operation = $2 AND job.status = 'queued'
        AND job.dispatch_started_at IS NULL AND job.failure_code IS NULL
+       AND job.claimed_by IS NULL AND job.claimed_at IS NULL AND job.lease_expires_at IS NULL
      RETURNING job.id, job.tenant_id, job.actor_id, job.operation,
                job.status, job.claimed_by, job.claimed_at,
                job.lease_expires_at, job.dispatch_started_at, job.failure_code,
