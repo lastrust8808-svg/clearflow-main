@@ -535,3 +535,18 @@ test('event type must be a string and cannot execute coercion hooks', () => {
   assert.equal(coercions, 0, 'event type must not execute user-defined coercion');
   assert.equal(project([event('issued', 1)]).status, 'issued');
 });
+
+test('oversized private-note journal is rejected before reading any event fields', () => {
+  const oversized = Array.from({ length: 10001 }, () => undefined);
+  let getterCalls = 0;
+  Object.defineProperty(oversized, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('untrusted journal getter executed'); },
+  });
+  assert.throws(() => project(oversized), /history exceeds maximum event count/);
+  assert.equal(getterCalls, 0);
+  // Exactly at the limit, normal event validation still runs. This is not
+  // permission to ignore invalid events or silently truncate the history.
+  assert.throws(() => project(Array.from({ length: 10000 }, () => undefined)),
+    /Invalid private note event/);
+});
