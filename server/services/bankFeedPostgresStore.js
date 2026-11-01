@@ -123,21 +123,30 @@ export function createBankFeedPostgresStore(pool) {
     async withTransaction(operation) {
       const client = await pool.connect();
       let began = false;
+      let commitAttempted = false;
+      let discardConnection = false;
       try {
         await client.query('BEGIN');
         began = true;
         const result = await operation(transactionQueries(client));
+        commitAttempted = true;
         await client.query('COMMIT');
         return result;
       } catch (error) {
+        // A failed BEGIN or COMMIT leaves connection state uncertain. Never
+        // return that client to the pool, even if a subsequent ROLLBACK works.
+        discardConnection = !began || commitAttempted;
         if (began) {
           try { await client.query('ROLLBACK'); } catch {
-            // Preserve the original failure. Connection is released as broken.
+            // A failed rollback also makes the client unsafe to reuse.
+            discardConnection = true;
           }
         }
         throw error;
       } finally {
-        client.release();
+        client.release(discardConnection
+          ? new Error('Discard banking PostgreSQL client after uncertain transaction state.')
+          : undefined);
       }
     },
   };
