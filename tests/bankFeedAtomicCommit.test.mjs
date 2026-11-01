@@ -9,7 +9,7 @@ const page = (events = [event()], nextCursor = 'cursor-1', requestedCursor = nul
 
 function fakeTransactionalStore(options = {}) {
   const state = { checkpoint: checkpoint(), entries: [] };
-  const calls = { transactions: 0, rows: 0, cursor: 0, rollbacks: 0 };
+  const calls = { transactions: 0, rows: 0, cursor: 0, rollbacks: 0, entryReads: 0 };
   return {
     state, calls,
     async withTransaction(fn) {
@@ -17,7 +17,7 @@ function fakeTransactionalStore(options = {}) {
       const pending = structuredClone(state);
       const tx = {
         async loadCheckpointForUpdate() { return structuredClone(pending.checkpoint); },
-        async loadEntries() { return structuredClone(pending.entries); },
+        async loadEntries() { calls.entryReads++; return structuredClone(pending.entries); },
         async saveEntries(_scope, entries) {
           calls.rows++;
           if (options.failRows) throw new Error('simulated row write failure');
@@ -118,6 +118,28 @@ test('stale provider response cannot regress a committed cursor or add stale row
   assert.equal(store.state.checkpoint.cursor, 'cursor-2');
   assert.equal(store.state.checkpoint.revision, 2);
   assert.deepEqual(store.state.entries.map((entry) => entry.transactionId), ['tx-1', 'tx-2']);
+});
+
+test('stale and cross-tenant checkpoints fail before historical transaction reads', async () => {
+  const store = fakeTransactionalStore();
+  await commitAuthorizedBankFeedPage(store, scope(), page());
+  const committed = structuredClone(store.state);
+  const reads = store.calls.entryReads;
+  assert.equal(reads, 1);
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('stale')], 'old-next', null)),
+    /Stale feed cursor checkpoint/,
+  );
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'foreign' },
+      page([event('foreign')], 'next', 'cursor-1')),
+    /outside the authorized connection scope/,
+  );
+  assert.equal(store.calls.entryReads, reads, 'invalid pages must not read historical rows');
+  assert.equal(store.calls.rows, 1, 'no additional row writes');
+  assert.equal(store.calls.cursor, 1, 'no cursor advancement');
+  assert.equal(store.calls.rollbacks, 2);
+  assert.deepEqual(store.state, committed);
 });
 
 test('missing or accessor-backed requested cursor fails before transaction acquisition', async () => {
