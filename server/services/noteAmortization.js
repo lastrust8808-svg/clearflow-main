@@ -56,6 +56,12 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Reject unpaired UTF-16 surrogates before downstream UTF-8 serialization
+  // could silently replace distinct note identities with U+FFFD. Valid
+  // supplementary Unicode scalar values (surrogate pairs) remain supported.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(`${field} must contain well-formed Unicode`);
+  }
   // Reject decomposed Unicode aliases instead of silently normalizing trust
   // identities that will be matched to authenticated storage records.
   if (value.normalize('NFC') !== value) {
