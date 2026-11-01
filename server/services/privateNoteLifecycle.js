@@ -35,6 +35,12 @@ function requiredId(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must not contain control characters');
   }
+  // A journal must not treat canonically equivalent Unicode spellings as
+  // independent actors, events, document versions or provenance records.
+  // Reject aliases instead of silently changing externally persisted IDs.
+  if (value !== value.normalize('NFC')) {
+    throw new TypeError(field + ' must be NFC-normalized');
+  }
   return value;
 }
 
