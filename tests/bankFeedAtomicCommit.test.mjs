@@ -5,7 +5,7 @@ import { commitAuthorizedBankFeedPage } from '../src/services/bankFeedAtomicComm
 const scope = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', allowedAccountIds: ['acct-a'] });
 const checkpoint = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', cursor: null, revision: 0 });
 const event = (transactionId = 'tx-1') => ({ kind: 'added', accountId: 'acct-a', transactionId, amountCents: 2500, pending: false });
-const page = (events = [event()], nextCursor = 'cursor-1') => ({ events, nextCursor, hasMore: false });
+const page = (events = [event()], nextCursor = 'cursor-1', requestedCursor = null) => ({ requestedCursor, events, nextCursor, hasMore: false });
 
 function fakeTransactionalStore(options = {}) {
   const state = { checkpoint: checkpoint(), entries: [] };
@@ -87,11 +87,58 @@ test('unchanged terminal empty poll makes no writes', async () => {
   const store = fakeTransactionalStore();
   const first = await commitAuthorizedBankFeedPage(store, scope(), page([], 'cursor-1'));
   assert.equal(first.commitRequired, true, 'first empty page advances from null cursor');
-  const again = await commitAuthorizedBankFeedPage(store, scope(), page([], 'cursor-1'));
+  const again = await commitAuthorizedBankFeedPage(store, scope(), page([], 'cursor-1', 'cursor-1'));
   assert.equal(again.commitRequired, false);
   assert.equal(store.calls.rows, 0);
   assert.equal(store.calls.cursor, 1);
   assert.equal(store.state.checkpoint.revision, 1);
+});
+
+test('stale provider response cannot regress a committed cursor or add stale rows', async () => {
+  const store = fakeTransactionalStore();
+  await commitAuthorizedBankFeedPage(store, scope(), page([event('tx-1')], 'cursor-1'));
+  const committed = structuredClone(store.state);
+  const writes = { rows: store.calls.rows, cursor: store.calls.cursor };
+  // This response was fetched from the initial null cursor, but another
+  // worker has already committed cursor-1 before this transaction obtains lock.
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('stale-tx')], 'cursor-stale', null)),
+    /Stale feed cursor checkpoint/,
+  );
+  assert.deepEqual(store.state, committed, 'no stale rows or cursor regression');
+  assert.equal(store.calls.rows, writes.rows);
+  assert.equal(store.calls.cursor, writes.cursor);
+  assert.equal(store.calls.rollbacks, 1);
+
+  // A response actually fetched from the current cursor can still advance.
+  const fresh = await commitAuthorizedBankFeedPage(
+    store, scope(), page([event('tx-2')], 'cursor-2', 'cursor-1'),
+  );
+  assert.equal(fresh.applied, 1);
+  assert.equal(store.state.checkpoint.cursor, 'cursor-2');
+  assert.equal(store.state.checkpoint.revision, 2);
+  assert.deepEqual(store.state.entries.map((entry) => entry.transactionId), ['tx-1', 'tx-2']);
+});
+
+test('missing or accessor-backed requested cursor fails before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const missing = page();
+  delete missing.requestedCursor;
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), missing),
+    /Malformed bank feed page required field/,
+  );
+  const accessor = page();
+  let getterCalls = 0;
+  Object.defineProperty(accessor, 'requestedCursor', {
+    enumerable: true, get() { getterCalls++; return null; },
+  });
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), accessor),
+    /Malformed bank feed page field/,
+  );
+  assert.equal(getterCalls, 0);
+  assert.equal(store.calls.transactions, 0);
 });
 
 test('out-of-scope checkpoint or provider event fails before any write', async () => {
