@@ -374,3 +374,29 @@ test('byte proof envelope rejects executable and hidden claims before reading by
   Object.setPrototypeOf(inherited, { content: Buffer.from('forged') });
   assert.throws(() => verify(inherited), /Document byte proof must be a plain data record/);
 });
+
+
+test('document finalization cannot postdate version registration in digest or byte verification', () => {
+  const bytes = Buffer.from('finalized trust document bytes');
+  const base = version(1, { sha256: fileDigest(bytes) });
+  const proof = { versionId: 'version-1', sha256: base.sha256 };
+  const validFinalizedAt = '2026-10-01T12:00:00.000Z';
+  const earlyFinalizedAt = '2026-10-01T11:59:59.999Z';
+  for (const finalizedAt of [validFinalizedAt, earlyFinalizedAt]) {
+    assert.deepEqual(check([{ ...base, finalizedAt }], proof), { status: 'valid' });
+    assert.deepEqual(verifyTrustDocumentBytes(registry([{ ...base, finalizedAt }]), {
+      versionId: 'version-1', content: bytes,
+    }), { status: 'valid' });
+  }
+  for (const finalizedAt of ['2026-10-01T12:00:00.001Z', '2026-02-30T12:00:00.000Z', 'invalid']) {
+    const bad = registry([{ ...base, finalizedAt }]);
+    assert.throws(() => verifyTrustDocumentVersion(bad, proof),
+      /finalization must not follow registration|version.finalizedAt.*canonical/);
+    assert.throws(() => verifyTrustDocumentBytes(bad, {
+      versionId: 'version-1', content: bytes,
+    }), /finalization must not follow registration|version.finalizedAt.*canonical/);
+  }
+  // Legacy records without a finalization field remain structurally admissible.
+  // They are NOT sufficient for signing readiness.
+  assert.deepEqual(check([base], proof), { status: 'valid' });
+});
