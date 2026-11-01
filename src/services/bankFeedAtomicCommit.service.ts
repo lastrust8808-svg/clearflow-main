@@ -142,6 +142,30 @@ function assertLockedCheckpointEvidence(
   }
 }
 
+// Check the provider page's account/transaction identities before obtaining
+// a database lock. A malformed or cross-account event cannot require a
+// historical-record read merely to be rejected by the replay planner.
+function assertPageEventIdentities(
+  scope: AuthorizedBankFeedScope, page: BankFeedPageEvidence,
+): void {
+  const allowed = new Set(scope.allowedAccountIds);
+  const identities = new Set<string>();
+  const validId = (value: unknown): value is string =>
+    typeof value === 'string' && value.length > 0 && value.length <= 256 &&
+    value === value.trim() && !/[\\u0000-\\u001f\\u007f-\\u009f\\p{Cf}]/u.test(value);
+  for (const event of page.events) {
+    if (!allowed.has(event.accountId) || !validId(event.transactionId) ||
+        (event.kind !== 'added' && event.kind !== 'modified' && event.kind !== 'removed')) {
+      throw new Error('Feed event has an invalid or unauthorized account/transaction identity.');
+    }
+    const identity = JSON.stringify([event.accountId, event.transactionId]);
+    if (identities.has(identity)) {
+      throw new Error('Duplicate provider event identity within one feed page.');
+    }
+    identities.add(identity);
+  }
+}
+
 function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvidence): {
   scope: AuthorizedBankFeedScope; page: BankFeedPageEvidence;
 } {
@@ -161,6 +185,7 @@ function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvi
   // duplicate-account checks rather than letting a store interpret bad scope.
   // This is input validation, NOT proof of authenticated authorization.
   planBankFeedReplay({ ...safeScope, existing: [], events: [] });
+  assertPageEventIdentities(safeScope, safePage);
   return { scope: safeScope, page: safePage };
 }
 
