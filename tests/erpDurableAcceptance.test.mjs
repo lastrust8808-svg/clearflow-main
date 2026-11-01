@@ -21,7 +21,7 @@ export default {
 };
 `);
 writeFileSync(join(directory, 'paymentExecution.mjs'), `
-export function buildExecutionCapabilities() { return { testOnly: true, provider: 'mercury', executionMode: 'staged', mercuryApprovalReady: true, achOriginationReady: true, wireOriginationReady: true, liveBankExecutionReady: true, printableCheckReady: true, positivePayReady: true, supportedMethods: ['ach', 'wire', 'check'], notes: ['token configured'] }; }
+export function buildExecutionCapabilities() { throw new Error('provider capability probe must not run'); }
 export async function buildSettlementExecution() { throw new Error('unexpected settlement execution'); }
 `);
 writeFileSync(join(directory, 'erp.mjs'), source
@@ -125,7 +125,10 @@ try {
     const response = await invoke('GET', '/settlements/execution-capabilities');
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.success, true); // read-only probe succeeded
-    assert.equal(response.body.capabilities.testOnly, true);
+    assert.equal(response.body.capabilities.testOnly, undefined);
+    assert.equal(response.body.capabilities.token, undefined);
+    assert.doesNotMatch(JSON.stringify(response.body), /token configured|provider capability probe must not run/);
+    assert.doesNotMatch(source, /buildExecutionCapabilities/, 'disabled route must not consult provider configuration');
     assert.equal(response.body.capabilities.provider, 'manual');
     assert.equal(response.body.capabilities.executionMode, 'disabled');
     assert.equal(response.body.capabilities.settlementExecutionAvailable, false);
