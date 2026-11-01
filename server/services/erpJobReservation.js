@@ -164,7 +164,10 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       // JSON.stringify would otherwise preserve a fractional cent in a
       // reservation that downstream accounting may round differently.
       // Other decimal fields (e.g. taxRate) remain permitted.
-      if (/(?:Minor|Cents)$/i.test(key) &&
+      // Accept both camelCase and snake_case accounting conventions. Without
+      // this, amount_cents: 1.5 bypasses the same exact-minor-unit rule that
+      // rejects amountCents: 1.5, creating inconsistent financial receipts.
+      if (/(?:Minor|Cents|MinorUnits|(?:_|-)(?:minor|cents|minor_units))$/i.test(key) &&
           (typeof descriptor.value !== 'number' ||
            (Number.isFinite(descriptor.value) && !Number.isInteger(descriptor.value)))) {
         // A string, null, boolean, object, or fractional amount can be
