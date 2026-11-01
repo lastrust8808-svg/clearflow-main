@@ -82,7 +82,6 @@ function plainQrBindings(bindings) {
     throw new RangeError('QR binding list exceeds maximum entry count');
   }
   const descriptors = Object.getOwnPropertyDescriptors(bindings);
-  const length = descriptors.length.value;
   let count = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
