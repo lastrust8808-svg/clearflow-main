@@ -1897,7 +1897,7 @@ test('single-job expired-lease recovery preserves dispatch evidence and rejects 
       return { rows: [quarantineRow({ dispatch_started_at: dispatchStarted })] };
     },
   } });
-  assert.match(capturedSql, /RETURNING[\\s\\S]*dispatch_started_at/);
+  assert.match(capturedSql, /RETURNING[\s\S]*dispatch_started_at/);
   assert.equal(receipt.dispatchStartedAt, '2026-10-29T12:01:30.000Z');
   assert.equal(receipt.status, 'outcome_unknown');
   assert.equal(receipt.requiresReconciliation, true);
