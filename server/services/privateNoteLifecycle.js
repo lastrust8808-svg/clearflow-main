@@ -54,6 +54,11 @@ function utcInstant(value, field) {
   return value;
 }
 
+// Bound the work for a single in-memory projection. Larger authenticated
+// journals require a separately reviewed checkpoint/pagination design;
+// silently truncating history would conceal enforcement events.
+const MAX_PRIVATE_NOTE_EVENTS = 10000;
+
 // A lifecycle journal must be an explicit dense data array. Sparse histories,
 // inherited array elements, getters and hidden metadata are not trustworthy
 // evidence of the complete ordered sequence of note events.
@@ -61,8 +66,12 @@ function requirePlainEventHistory(events) {
   if (!Array.isArray(events) || Object.getPrototypeOf(events) !== Array.prototype) {
     throw new TypeError('Private note events must be a plain array');
   }
+  // Check length before enumerating elements or allocating a descriptor map.
+  const length = Object.getOwnPropertyDescriptor(events, 'length').value;
+  if (length > MAX_PRIVATE_NOTE_EVENTS) {
+    throw new RangeError('Private note history exceeds maximum event count');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(events);
-  const length = descriptors.length.value;
   let indexed = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
