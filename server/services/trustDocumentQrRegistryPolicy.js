@@ -66,9 +66,20 @@ function plainQrRecord(record, label, allowed, required = allowed) {
   }
 }
 
+// Bound untrusted in-memory QR registry snapshots before enumerating indexed
+// descriptors or comparing token digests. Larger authenticated registries need
+// server-side checkpointing/pagination, not silent truncation.
+const MAX_QR_BINDINGS = 10000;
+
 function plainQrBindings(bindings) {
   if (!Array.isArray(bindings) || Object.getPrototypeOf(bindings) !== Array.prototype) {
     throw new TypeError('QR bindings must be a plain array');
+  }
+  // Array length is an own non-accessor data property. Do not read any
+  // binding or indexed descriptor until the bounded size has been checked.
+  const length = Object.getOwnPropertyDescriptor(bindings, 'length').value;
+  if (length > MAX_QR_BINDINGS) {
+    throw new RangeError('QR binding list exceeds maximum entry count');
   }
   const descriptors = Object.getOwnPropertyDescriptors(bindings);
   const length = descriptors.length.value;
