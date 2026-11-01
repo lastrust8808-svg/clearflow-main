@@ -319,3 +319,56 @@ test('PostgreSQL adapter preflights duplicate, malformed and rewritten entry ide
   assert.deepEqual(db.state.entries.map(({ transactionId }) => transactionId), ['tx-one', 'tx-two']);
   assert.equal(db.calls.filter(({ sql }) => /INSERT INTO/.test(sql)).length, 2);
 });
+
+
+test('PostgreSQL adapter rejects malformed persisted and proposed cursors before financial SQL', async () => {
+  for (const badCursor of [42, '', ' padded', 'cursor\\n'.replace('\\n', '\n'), 'x'.repeat(4097)]) {
+    const db = mockPg();
+    db.state.checkpoint.cursor = badCursor;
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.loadCheckpointForUpdate(scope())),
+      /Invalid persisted banking checkpoint cursor/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql).filter((sql) => /SELECT|UPDATE|INSERT/.test(sql))
+      .map((sql) => sql.includes('FOR UPDATE') ? 'checkpoint SELECT' : sql),
+      ['checkpoint SELECT'], 'bad persisted cursor must not trigger historical reads or writes');
+    assert.deepEqual(db.state.entries, []);
+    assert.equal(db.state.checkpoint.cursor, badCursor);
+  }
+
+  const previous = {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    cursor: null, revision: 0,
+  };
+  for (const [prior, next] of [
+    [previous, { ...previous, cursor: 123, revision: 1 }],
+    [previous, { ...previous, cursor: '', revision: 1 }],
+    [previous, { ...previous, cursor: ' padded', revision: 1 }],
+    [previous, { ...previous, cursor: 'x'.repeat(4097), revision: 1 }],
+    [{ ...previous, cursor: 'invalid\\u200b'.replace('\\u200b', '\u200b') },
+      { ...previous, cursor: 'cursor-1', revision: 1 }],
+    [{ ...previous, revision: -1 }, { ...previous, cursor: 'cursor-1', revision: 0 }],
+    [null, { ...previous, cursor: 'cursor-1', revision: 1 }],
+    [previous, null],
+  ]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.compareAndSwapCheckpoint(scope(), prior, next)),
+      /Refusing out-of-scope banking checkpoint update/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'invalid cursor/revision must be rejected before any checkpoint UPDATE');
+    assert.deepEqual(db.state, initial());
+  }
+
+  const db = mockPg();
+  const success = await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.compareAndSwapCheckpoint(scope(), previous, {
+      ...previous, cursor: 'cursor-1', revision: 1,
+    }));
+  assert.equal(success, true);
+  assert.equal(db.state.checkpoint.cursor, 'cursor-1');
+  assert.equal(db.state.checkpoint.revision, '1');
+});
