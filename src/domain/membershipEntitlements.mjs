@@ -26,7 +26,8 @@ function required(value, label) {
   // keys. In particular, whitespace and Unicode formatting controls can
   // make distinct tenant, invoice, and settlement IDs look identical in logs.
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
-      value !== value.trim() || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
+      value !== value.trim() || value !== value.normalize('NFC') ||
+      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
     throw new TypeError(label + ' must be a canonical nonempty string');
   }
   return value;
