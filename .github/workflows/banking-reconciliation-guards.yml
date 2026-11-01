@@ -6,6 +6,9 @@ on:
       - 'src/services/reconciliationControls.service.ts'
       - 'src/services/bankFeedReplayPlan.service.ts'
       - 'src/services/bankFeedAtomicCommit.service.ts'
+      - 'server/services/bankFeedPostgresStore.js'
+      - 'server/db/versions/003_banking_feed_checkpoints.sql'
+      - 'tests/bankFeedPostgresStore.test.mjs'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
       - 'tests/bankFeedAtomicCommit.test.mjs'
@@ -37,4 +40,5 @@ jobs:
         run: |
           node --experimental-strip-types --check src/services/bankFeedReplayPlan.service.ts
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs
+          node --check server/services/bankFeedPostgresStore.js
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs
