@@ -5,8 +5,10 @@ on:
     paths:
       - 'src/services/reconciliationControls.service.ts'
       - 'src/services/bankFeedReplayPlan.service.ts'
+      - 'src/services/bankFeedAtomicCommit.service.ts'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedAtomicCommit.test.mjs'
       - '.github/workflows/banking-reconciliation-guards.yml'
   push:
     branches:
@@ -14,8 +16,10 @@ on:
     paths:
       - 'src/services/reconciliationControls.service.ts'
       - 'src/services/bankFeedReplayPlan.service.ts'
+      - 'src/services/bankFeedAtomicCommit.service.ts'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedAtomicCommit.test.mjs'
       - '.github/workflows/banking-reconciliation-guards.yml'
 
 permissions:
@@ -32,4 +36,5 @@ jobs:
       - name: Verify close guards (no external provider credentials)
         run: |
           node --experimental-strip-types --check src/services/bankFeedReplayPlan.service.ts
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs
+          node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs
