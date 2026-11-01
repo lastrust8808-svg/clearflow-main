@@ -97,6 +97,36 @@ test('durable idempotency ignores object key order but preserves invoice line or
   assert.equal(db.rows.size, 1);
 });
 
+test('fresh durable reservation must be queued; replay may report an existing lifecycle state', async () => {
+  // A fresh INSERT reporting processing/failed/outcome_unknown would claim a
+  // lifecycle transition without a worker lease or audited failure. A replay
+  // is different: the stored job may legitimately have progressed meanwhile.
+  for (const status of ['processing', 'failed', 'outcome_unknown']) {
+    const db = fakeDatabase();
+    const original = db.query.bind(db);
+    db.query = async (sql, params) => {
+      const result = await original(sql, params);
+      return /INSERT INTO erp_operation_jobs/.test(sql)
+        ? { rows: result.rows.map(row => ({ ...row, status })) }
+        : result;
+    };
+    await assert.rejects(reserve({ db, ...args }),
+      /invalid initial reservation status/, 'fresh INSERT must not claim ' + status);
+    assert.equal(db.calls, 1, 'invalid fresh receipt must not trigger fallback queries');
+  }
+
+  for (const status of ['queued', 'processing', 'failed', 'outcome_unknown']) {
+    const db = fakeDatabase();
+    const initial = await reserve({ db, ...args });
+    [...db.rows.values()][0].status = status;
+    const replay = await reserve({ db, ...args });
+    assert.equal(replay.id, initial.id);
+    assert.equal(replay.status, status);
+    assert.equal(replay.created, false);
+    assert.equal(replay.replayed, true);
+  }
+});
+
 test('reservation never acknowledges fabricated or noncanonical database job IDs', async () => {
   // UUID is the proposed schema's primary key. A synthetic ID is not
   // durable database evidence, whether returned by INSERT or replay SELECT.
