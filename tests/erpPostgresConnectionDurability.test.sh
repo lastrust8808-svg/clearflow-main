@@ -12,11 +12,13 @@ trap cleanup EXIT
 
 # Session 1 commits a reservation. psql exits and closes the connection.
 created_id=$(psql -X -v ON_ERROR_STOP=1 -At -c "
-  INSERT INTO erp_operation_jobs
-    (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
-  VALUES ('${fixture_tenant}', 'ci-actor', 'invoice_delivery', '${fixture_key}',
-          repeat('a', 64), '{\"invoiceId\":\"ci-fixture\"}'::jsonb)
-  RETURNING id;")
+  WITH inserted AS (
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('${fixture_tenant}', 'ci-actor', 'invoice_delivery', '${fixture_key}',
+            repeat('a', 64), '{\"invoiceId\":\"ci-fixture\"}'::jsonb)
+    RETURNING id
+  ) SELECT id FROM inserted;")
 if [[ ! "$created_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
   echo 'FAIL: first PostgreSQL session did not commit a valid job UUID' >&2
   exit 1
