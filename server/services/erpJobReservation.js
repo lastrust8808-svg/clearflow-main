@@ -596,7 +596,8 @@ export async function failErpOperationJob({
        AND claimed_by = $4 AND status = 'processing'
        AND lease_expires_at > now() AND dispatch_started_at IS NULL
      RETURNING id, tenant_id, actor_id, operation, status, failure_code,
-               claimed_by, claimed_at, lease_expires_at, created_at, updated_at`,
+               claimed_by, claimed_at, lease_expires_at,
+               dispatch_started_at, created_at, updated_at`,
     [tenantId, operation, canonicalJobId, workerId, failureCode],
   );
   if (!Array.isArray(result?.rows) || result.rows.length > 1) {
@@ -608,7 +609,7 @@ export async function failErpOperationJob({
       record.operation !== operation || record.status !== 'failed' ||
       record.failure_code !== failureCode ||
       record.claimed_by != null || record.claimed_at != null ||
-      record.lease_expires_at != null ||
+      record.lease_expires_at != null || record.dispatch_started_at !== null ||
       typeof record.actor_id !== 'string' || !record.actor_id) {
     throw new Error('ERP job storage returned an invalid tenant-bound failure');
   }
