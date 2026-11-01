@@ -2012,3 +2012,25 @@ test('batch recovery and reconciliation backlog require explicit dispatch-fence 
     name + ' must reject undefined fence values');
   }
 });
+
+
+test('batch recovery refuses noncanonical UUID receipts and case-aliased duplicates', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  const canonical = quarantineRow();
+  const uppercase = { ...canonical, id: canonical.id.toUpperCase() };
+  assert.notEqual(uppercase.id, canonical.id, 'fixture UUID must contain hex letters');
+  for (const rows of [[uppercase], [canonical, uppercase], [uppercase, canonical]]) {
+    await assert.rejects(sweep({ ...input, db: {
+      query: async () => ({ rows }),
+    } }), /invalid tenant-bound recovery record/,
+    'a case alias must not be exposed as a separate quarantined job');
+  }
+  const valid = await sweep({ ...input, db: {
+    query: async () => ({ rows: [canonical] }),
+  } });
+  assert.equal(valid.length, 1);
+  assert.equal(valid[0].id, canonical.id);
+  assert.equal(valid[0].requiresReconciliation, true);
+});
