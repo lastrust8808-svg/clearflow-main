@@ -1930,3 +1930,44 @@ test('single-job expired-lease recovery preserves dispatch evidence and rejects 
     'invalid or out-of-order dispatch fence cannot be acknowledged');
   }
 });
+
+
+test('batch recovery and reconciliation backlog require explicit dispatch-fence evidence', async () => {
+  // A missing or undefined dispatch_started_at must never be interpreted as
+  // "no dispatch" after an expired lease. Either case could conceal a
+  // previously attempted external delivery and encourage an unsafe retry.
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  for (const [name, run] of [
+    ['batch recovery', sweep],
+    ['reconciliation backlog', list],
+  ]) {
+    let selectedSql = '';
+    const valid = await run({
+      ...input, db: { async query(sql) {
+        selectedSql = sql;
+        return { rows: [quarantineRow({ dispatch_started_at: null })] };
+      } },
+    });
+    assert.match(selectedSql, /dispatch_started_at/, name + ' must select fence evidence');
+    const record = Array.isArray(valid) ? valid[0] : valid.jobs[0];
+    assert.equal(record.dispatchStartedAt, null);
+    assert.equal(record.requiresReconciliation, true);
+    assert.equal('delivered' in record, false);
+
+    const missing = quarantineRow();
+    delete missing.dispatch_started_at;
+    await assert.rejects(run({
+      ...input, db: { query: async () => ({ rows: [missing] }) },
+    }), /invalid tenant-bound (recovery|reconciliation) record/,
+    name + ' must reject absent fence column');
+
+    await assert.rejects(run({
+      ...input, db: { query: async () => ({
+        rows: [quarantineRow({ dispatch_started_at: undefined })],
+      }) },
+    }), /invalid (recovery|reconciliation) timestamp/,
+    name + ' must reject undefined fence values');
+  }
+});
