@@ -448,6 +448,41 @@ test('lease renewal is atomic and limited to the owning worker and unexpired pro
   assert.equal('delivered' in result, false);
 });
 
+test('uppercase UUID cannot turn a persisted lease renewal into a false failure', async () => {
+  const { renewErpOperationJobLease: renew } =
+    await import('../server/services/erpJobReservation.js');
+  const requestedJobId = claimedJobId.toUpperCase();
+  let calls = 0;
+  const db = { async query(sql, params) {
+    calls++;
+    assert.match(sql, /lease_expires_at = GREATEST/);
+    assert.deepEqual(params, ['tenant-a', 'invoice_delivery', claimedJobId, 'worker-a', 60]);
+    // PostgreSQL uuid columns return canonical lowercase text after a write.
+    return { rows: [claimedRow({ lease_expires_at: new Date('2026-10-29T12:04:00Z') })] };
+  } };
+  const receipt = await renew({
+    db, authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId,
+  });
+  assert.equal(calls, 1);
+  assert.equal(receipt.id, claimedJobId);
+  assert.equal(receipt.status, 'processing');
+  assert.equal(Object.isFrozen(receipt), true);
+  assert.equal('delivered' in receipt, false);
+
+  // Normalizing UUID case must not relax tenant or worker receipt checks.
+  await assert.rejects(renew({
+    db: { query: async () => ({ rows: [claimedRow({ tenant_id: 'other-tenant' })] }) },
+    authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId,
+  }), /invalid tenant-bound lease renewal/);
+  await assert.rejects(renew({
+    db: { query: async () => ({ rows: [claimedRow({ claimed_by: 'other-worker' })] }) },
+    authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: requestedJobId,
+  }), /invalid tenant-bound lease renewal/);
+});
+
 test('lease renewal rejects malformed UTC receipts and reversed lease chronology', async () => {
   const { renewErpOperationJobLease: renew } = await import('../server/services/erpJobReservation.js');
   const input = {
