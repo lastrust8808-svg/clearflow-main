@@ -109,7 +109,7 @@ function canonicalInstant(value, field) {
 }
 
 function minorUnits(value, field) {
-  if (!Number.isSafeInteger(value) || value < 0) {
+  if (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
     throw new RangeError(`${field} must be a nonnegative safe integer`);
   }
   return value;
