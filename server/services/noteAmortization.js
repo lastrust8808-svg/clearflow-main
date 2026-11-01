@@ -56,6 +56,11 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Reject decomposed Unicode aliases instead of silently normalizing trust
+  // identities that will be matched to authenticated storage records.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(`${field} must use NFC-normalized Unicode`);
+  }
   return value;
 }
 
