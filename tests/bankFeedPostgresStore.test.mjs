@@ -18,7 +18,7 @@ const initial = () => ({
   entries: [],
 });
 
-function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false } = {}) {
+function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false, tamperReadPayload = null } = {}) {
   const state = initial();
   const calls = [];
   let releases = 0;
@@ -54,12 +54,19 @@ function mockPg({ failWrite = false, failCommit = false, failCas = false, failBe
               row.provider === values[1] && row.connection_id === values[2];
             return { rows: matched ? [structuredClone(row)] : [], rowCount: matched ? 1 : 0 };
           }
-          if (/SELECT payload FROM/.test(sql)) {
+          if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
             assert.match(sql, /account_id = ANY\(\$4::text\[\]\)/);
             const rows = working.entries.filter((entry) =>
               entry.tenantId === values[0] && entry.provider === values[1] &&
               entry.connectionId === values[2] && values[3].includes(entry.accountId)
-            ).map((payload) => ({ payload: structuredClone(payload) }));
+            ).map((entry) => ({
+              tenant_id: entry.tenantId,
+              provider: entry.provider,
+              connection_id: entry.connectionId,
+              account_id: entry.accountId,
+              transaction_id: entry.transactionId,
+              payload: { ...structuredClone(entry), ...tamperReadPayload },
+            }));
             return { rows, rowCount: rows.length };
           }
           if (/INSERT INTO public.clearflow_bank_feed_entries/.test(sql)) {
@@ -201,4 +208,40 @@ test('PostgreSQL pool discards clients after uncertain BEGIN, COMMIT or ROLLBACK
   );
   assert.equal(ordinary.releases, 1);
   assert.equal(ordinary.releaseErrors[0], undefined);
+});
+
+test('PostgreSQL adapter rejects persisted JSONB identities that disagree with scoped SQL keys', async () => {
+  for (const field of ['tenantId', 'provider', 'connectionId', 'accountId', 'transactionId']) {
+    const db = mockPg({ tamperReadPayload: { [field]: 'forged-identity' } });
+    db.state.entries.push({
+      tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+      accountId: 'acct-a', transactionId: 'tx-legacy', amountCents: 500,
+      status: 'posted', requiresReview: true,
+    });
+    const before = structuredClone(db.state);
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Persisted banking entry identity does not match its scoped database key/,
+      field,
+    );
+    assert.deepEqual(db.state, before, 'corrupt historical evidence must not advance cursor');
+    assert.equal(db.calls.filter(({ sql }) => /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0);
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.equal(db.releases, 1);
+    assert.equal(db.releaseErrors[0], undefined, 'successful rollback permits safe pool reuse');
+  }
+
+  // Matching composite-key identities remain readable and process normally.
+  const valid = mockPg();
+  valid.state.entries.push({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-legacy', amountCents: 500,
+    status: 'posted', requiresReview: true,
+  });
+  const result = await commitAuthorizedBankFeedPage(
+    createBankFeedPostgresStore(valid.pool), scope(), page(),
+  );
+  assert.equal(result.applied, 1);
+  assert.equal(valid.state.entries.length, 2);
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
 });
