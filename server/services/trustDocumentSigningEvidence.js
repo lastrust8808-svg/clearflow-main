@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { evaluateTrusteeSigningPolicy } from './trusteeSigningPolicy.js';
-import { assertPlainTrustDocumentVersions, verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
+import { assertPlainTrustDocumentRegistry, assertPlainTrustDocumentVersions, verifyTrustDocumentBytes } from './trustDocumentVersionPolicy.js';
 
 /**
  * INTERNAL, non-posting signature-evidence readiness assessment. The caller
@@ -255,6 +255,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       Array.isArray(versionRegistry)) {
     throw new TypeError('Immutable document version registry required');
   }
+  assertPlainTrustDocumentRegistry(versionRegistry);
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
     if (versionRegistry[key] !== scope[key]) {
       throw new Error('Signing document version registry ' + key + ' scope mismatch');
