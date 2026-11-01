@@ -109,6 +109,39 @@ function snapshotList<T>(value: T[], item: (value: T) => T, label: string, maxIt
   return snapshot;
 }
 
+// Reject invalid cursor evidence before a DB lock or historical-row read.
+// The pure planner revalidates this metadata after loading canonical records.
+const validCursorEvidence = (value: unknown): value is string | null =>
+  value === null ||
+  (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
+   value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
+
+function assertPageCursorEvidence(page: BankFeedPageEvidence): void {
+  if (!validCursorEvidence(page.requestedCursor) ||
+      !validCursorEvidence(page.nextCursor) || page.nextCursor === null ||
+      typeof page.hasMore !== 'boolean') {
+    throw new Error('Invalid feed cursor checkpoint or page metadata.');
+  }
+  if (page.nextCursor === page.requestedCursor &&
+      (page.hasMore || page.events.length !== 0)) {
+    throw new Error('Nonempty or incomplete provider page cannot retain its cursor.');
+  }
+}
+
+function assertLockedCheckpointEvidence(
+  checkpoint: FeedCursorCheckpoint, page: BankFeedPageEvidence,
+): void {
+  if (!validCursorEvidence(checkpoint.cursor) ||
+      !Number.isSafeInteger(checkpoint.revision) || checkpoint.revision < 0 ||
+      Object.is(checkpoint.revision, -0)) {
+    throw new Error('Invalid feed cursor checkpoint or page metadata.');
+  }
+  if (checkpoint.revision === Number.MAX_SAFE_INTEGER &&
+      checkpoint.cursor !== page.nextCursor) {
+    throw new Error('Feed cursor revision would exceed safe integer precision.');
+  }
+}
+
 function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvidence): {
   scope: AuthorizedBankFeedScope; page: BankFeedPageEvidence;
 } {
@@ -122,6 +155,7 @@ function snapshotPageInput(scope: AuthorizedBankFeedScope, page: BankFeedPageEvi
     (event) => snapshotRecord(event, EVENT_FIELDS, new Set(['kind', 'accountId', 'transactionId']), 'event'),
     'events', MAX_FEED_PAGE_EVENTS,
   );
+  assertPageCursorEvidence(safePage);
   // Fail closed on malformed or ambiguous tenant/account scope before opening
   // a database transaction. Reuse the canonical planner's ID, provider and
   // duplicate-account checks rather than letting a store interpret bad scope.
@@ -151,6 +185,7 @@ export async function commitAuthorizedBankFeedPage(
         checkpoint.connectionId !== scope.connectionId) {
       throw new Error('Feed cursor checkpoint is outside the authorized connection scope.');
     }
+    assertLockedCheckpointEvidence(checkpoint, detachedPage);
     if (checkpoint.cursor !== detachedPage.requestedCursor) {
       throw new Error('Stale feed cursor checkpoint; reload and retry under transaction lock.');
     }
