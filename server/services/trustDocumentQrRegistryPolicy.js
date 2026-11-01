@@ -16,6 +16,11 @@ function id(value, field) {
       /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must be a nonempty unpadded identifier without control characters');
   }
+  // Canonically equivalent IDs must not create distinct token windows or
+  // revocation-evidence subjects. Reject aliases; never rewrite stored IDs.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(field + ' must use NFC-normalized Unicode');
+  }
   return value;
 }
 
