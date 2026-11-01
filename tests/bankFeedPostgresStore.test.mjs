@@ -18,10 +18,11 @@ const initial = () => ({
   entries: [],
 });
 
-function mockPg({ failWrite = false, failCommit = false, failCas = false } = {}) {
+function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false } = {}) {
   const state = initial();
   const calls = [];
   let releases = 0;
+  const releaseErrors = [];
   const pool = {
     async connect() {
       let working = null;
@@ -29,10 +30,12 @@ function mockPg({ failWrite = false, failCommit = false, failCas = false } = {})
         async query(sql, values = []) {
           calls.push({ sql, values });
           if (sql === 'BEGIN') {
+            if (failBegin) throw new Error('simulated BEGIN failure');
             working = structuredClone(state);
             return { rows: [], rowCount: null };
           }
           if (sql === 'ROLLBACK') {
+            if (failRollback) throw new Error('simulated ROLLBACK failure');
             working = null;
             return { rows: [], rowCount: null };
           }
@@ -91,11 +94,11 @@ function mockPg({ failWrite = false, failCommit = false, failCas = false } = {})
           }
           throw new Error('Unexpected SQL: ' + sql);
         },
-        release() { releases++; },
+        release(error) { releases++; releaseErrors.push(error); },
       };
     },
   };
-  return { pool, state, calls, get releases() { return releases; } };
+  return { pool, state, calls, get releases() { return releases; }, get releaseErrors() { return releaseErrors; } };
 }
 
 test('PostgreSQL adapter atomically persists scoped entries and cursor after COMMIT', async () => {
@@ -169,4 +172,33 @@ test('PostgreSQL adapter rejects unsafe BIGINT checkpoint revisions', async () =
   );
   assert.equal(db.calls.filter((call) => /SELECT payload FROM/.test(call.sql)).length, 0);
   assert.equal(db.releases, 1);
+});
+
+test('PostgreSQL pool discards clients after uncertain BEGIN, COMMIT or ROLLBACK outcomes', async () => {
+  for (const [options, expected, rollbackCount] of [
+    [{ failBegin: true }, /simulated BEGIN failure/, 0],
+    [{ failCommit: true }, /simulated commit failure/, 1],
+    [{ failWrite: true, failRollback: true }, /simulated entry write failure/, 1],
+  ]) {
+    const db = mockPg(options);
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      expected,
+    );
+    assert.equal(db.releases, 1, 'failed transaction must release exactly once');
+    assert.ok(db.releaseErrors[0] instanceof Error,
+      'uncertain connection must be discarded, not reused by pg pool');
+    assert.match(db.releaseErrors[0].message, /uncertain transaction state/);
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, rollbackCount);
+    assert.deepEqual(db.state, initial(), 'no failed transaction can acknowledge rows or cursor');
+  }
+
+  // Ordinary operation errors with successful rollback may safely reuse the client.
+  const ordinary = mockPg({ failWrite: true });
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(createBankFeedPostgresStore(ordinary.pool), scope(), page()),
+    /simulated entry write failure/,
+  );
+  assert.equal(ordinary.releases, 1);
+  assert.equal(ordinary.releaseErrors[0], undefined);
 });
