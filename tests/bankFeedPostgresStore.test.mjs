@@ -285,3 +285,37 @@ test('PostgreSQL adapter independently rejects ambiguous authorization scopes be
   assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK']);
   assert.deepEqual(db.state, initial());
 });
+
+test('PostgreSQL adapter preflights duplicate, malformed and rewritten entry identities before SQL', async () => {
+  const valid = (transactionId, amountCents = 1200) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents,
+    status: 'posted', requiresReview: true,
+  });
+  const rewritten = valid('tx-original');
+  rewritten.toJSON = () => valid('tx-rewritten');
+
+  for (const [entries, expected] of [
+    [[valid('tx-duplicate', 100), valid('tx-duplicate', 200)], /Duplicate banking entry identity/],
+    [[valid('tx-valid'), valid(' tx-padded')], /out-of-scope banking entry write/],
+    [[valid('tx-valid'), valid(7)], /out-of-scope banking entry write/],
+    [[valid('tx-valid'), rewritten], /inconsistent serialized identity/],
+  ]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) => tx.saveEntries(scope(), entries)),
+      expected,
+    );
+    assert.equal(db.calls.filter(({ sql }) => /INSERT INTO/.test(sql)).length, 0,
+      'the entire batch must be rejected before the first financial INSERT');
+    assert.deepEqual(db.state, initial(), 'rejected batches must preserve banking records');
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK']);
+  }
+
+  // Distinct authorized identities still persist and commit as expected.
+  const db = mockPg();
+  await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [valid('tx-one'), valid('tx-two')]));
+  assert.deepEqual(db.state.entries.map(({ transactionId }) => transactionId), ['tx-one', 'tx-two']);
+  assert.equal(db.calls.filter(({ sql }) => /INSERT INTO/.test(sql)).length, 2);
+});
