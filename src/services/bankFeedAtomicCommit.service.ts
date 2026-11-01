@@ -152,7 +152,7 @@ function assertPageEventIdentities(
   const identities = new Set<string>();
   const validId = (value: unknown): value is string =>
     typeof value === 'string' && value.length > 0 && value.length <= 256 &&
-    value === value.trim() && !/[\\u0000-\\u001f\\u007f-\\u009f\\p{Cf}]/u.test(value);
+    value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
   for (const event of page.events) {
     if (!allowed.has(event.accountId) || !validId(event.transactionId) ||
         (event.kind !== 'added' && event.kind !== 'modified' && event.kind !== 'removed')) {
