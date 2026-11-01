@@ -145,8 +145,13 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     for (const [key, descriptor] of Object.entries(descriptors)) {
       // JSON.stringify silently omits non-enumerable object properties.
       // Reject them rather than hashing/storing a different financial payload.
-      if (/\p{Cs}/u.test(key)) {
-        throw new TypeError('ERP job payload contains malformed Unicode');
+      // Invisible controls and bidi formatting in JSON field names can
+      // disguise financial keys (for example amountCents with a zero-width
+      // character), bypassing the minor-unit type guard and misleading audits.
+      // Free-text VALUES may still contain ordinary newlines; only object
+      // property names are required to be visible, canonical field labels.
+      if (/[\p{Cc}\p{Cf}\p{Cs}]/u.test(key)) {
+        throw new TypeError('ERP job payload contains an unsafe Unicode property name');
       }
       if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key)) {
