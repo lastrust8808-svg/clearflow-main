@@ -1219,3 +1219,43 @@ test('negative zero must not be silently normalized in account storage or legacy
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('legacy account records reject duplicate keys, escaped aliases, and nested shadowing', async () => {
+  const accountId = 'duplicate-json-' + randomUUID();
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (v) => saveAccountAppData(accountId, v), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (v) => saveAccountDocumentFile(accountId, 'doc-1', v), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (v) => saveAccountRemittanceVault(accountId, 'vendor-1', v), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (v) => saveAccountTransactionProofVault(accountId, v), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (v) => saveAccountPlaidVault(accountId, v), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/sig-1.json', save: (v) => saveAccountExtractionRecord(accountId, 'sig-1', v), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      await fixture.save({ memo: 'original' });
+      const filePath = path.join(root, fixture.file);
+      const original = await fs.readFile(filePath, 'utf8');
+      assert.ok(original.includes('"memo": "original"'));
+      for (const replacement of [
+        '"memo": "original", "memo": "shadowed"',
+        '"memo": "original", "me\\u006do": "shadowed"',
+        '"memo": "original", "nested": {"amountMinor": 1, "amountMinor": 2}',
+      ]) {
+        await fs.writeFile(filePath, original.replace('"memo": "original"', replacement));
+        await assert.rejects(fixture.read(), /Duplicate storage record JSON property/);
+      }
+      // Distinct keys in sibling objects are legitimate, as are escaped
+      // punctuation and braces in ordinary string values.
+      const valid = original.replace('"memo": "original"',
+        '"memo": "text with \\"nested\\": {\\"amountMinor\\": 1}", "nested": [{"amountMinor": 1}, {"amountMinor": 2}]');
+      await fs.writeFile(filePath, valid);
+      assert.equal((await fixture.read()).nested.length, 2);
+      await fs.writeFile(filePath, original);
+      assert.equal((await fixture.read()).memo, 'original');
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
