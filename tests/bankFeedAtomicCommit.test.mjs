@@ -171,3 +171,19 @@ test('sparse, accessor-backed or metadata-bearing provider batches fail before t
   }
   assert.equal(store.calls.transactions, 0);
 });
+
+test('oversized provider pages and authorized scopes fail before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const oversizedEvents = Array.from({ length: 5001 }, (_, index) => event(`tx-${index}`));
+  const oversizedAccounts = Array.from({ length: 1001 }, (_, index) => `acct-${index}`);
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page(oversizedEvents)),
+    /Malformed bank feed events list/,
+  );
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, { ...scope(), allowedAccountIds: oversizedAccounts }, page()),
+    /Malformed bank feed accounts list/,
+  );
+  assert.equal(store.calls.transactions, 0, 'no transaction lock for oversized untrusted input');
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
