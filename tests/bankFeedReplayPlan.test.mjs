@@ -716,3 +716,21 @@ test('raw provider hashing snapshots mutable bytes and rejects invalid or oversi
     await assert.rejects(hashRawProviderPayloadBytes(invalid), /Raw provider payload/);
   }
 });
+
+test('oversized provider pages and account scopes fail before replay allocation', () => {
+  const oversizedEvents = Array.from({ length: 5001 }, (_, index) => event(`tx-${index}`));
+  const oversizedAccounts = Array.from({ length: 1001 }, (_, index) => `acct-${index}`);
+  assert.throws(
+    () => planBankFeedReplay({ ...base(), events: oversizedEvents }),
+    /provider events exceeds configured size limit/,
+  );
+  assert.throws(
+    () => planBankFeedReplay({ ...base(), allowedAccountIds: oversizedAccounts }),
+    /authorized accounts exceeds configured size limit/,
+  );
+  // The boundary itself is valid; normal provider pages remain supported.
+  const boundary = planBankFeedReplay({
+    ...base(), events: Array.from({ length: 5000 }, (_, index) => event(`tx-${index}`)),
+  });
+  assert.equal(boundary.applied, 5000);
+});
