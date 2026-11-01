@@ -549,3 +549,29 @@ test('QR byte verification rejects unsafe document history before any getter exe
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup,
     versionRegistry({ versions: frozen }), finalizedBytes), { status: 'valid' });
 });
+
+test('QR binding registry rejects oversized snapshots before inspecting any row', () => {
+  const { registry, lookup } = fixture();
+  const oversized = new Array(10001);
+  let getterCalls = 0;
+  Object.defineProperty(oversized, '0', {
+    enumerable: true,
+    get() {
+      getterCalls++;
+      throw new Error('Untrusted binding getter must not run');
+    },
+  });
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: oversized,
+  }, lookup), /QR binding list exceeds maximum entry count/);
+  assert.equal(getterCalls, 0);
+  // A complete, valid boundary-sized registry is admitted without truncation.
+  const bindings = Array.from({ length: 10000 }, (_, i) => ({
+    ...registry.bindings[0],
+    versionId: 'version-' + i,
+    tokenHashSha256: i.toString(16).padStart(64, '0'),
+  }));
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings,
+  }, { ...lookup, tokenHashSha256: 'f'.repeat(64) }), { status: 'unknown' });
+});
