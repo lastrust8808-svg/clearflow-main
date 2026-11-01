@@ -120,12 +120,12 @@ test('PostgreSQL adapter atomically persists scoped entries and cursor after COM
   assert.equal(db.calls.filter((call) => call.sql === 'COMMIT').length, 1);
   assert.equal(db.releases, 1);
   // A stale page cannot load historical entries or acknowledge its cursor.
-  const readsBefore = db.calls.filter((call) => /SELECT payload FROM/.test(call.sql)).length;
+  const readsBefore = db.calls.filter((call) => /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(call.sql)).length;
   await assert.rejects(
     commitAuthorizedBankFeedPage(store, scope(), page()),
     /Stale feed cursor checkpoint/
   );
-  assert.equal(db.calls.filter((call) => /SELECT payload FROM/.test(call.sql)).length, readsBefore);
+  assert.equal(db.calls.filter((call) => /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(call.sql)).length, readsBefore);
   assert.equal(db.state.entries.length, 1);
   assert.equal(db.state.checkpoint.cursor, 'cursor-1');
   assert.equal(db.releases, 2);
@@ -155,7 +155,7 @@ test('PostgreSQL adapter refuses cross-tenant checkpoint reads and out-of-scope 
     commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'tenant-b' }, page()),
     /outside the authorized connection scope/,
   );
-  assert.equal(db.calls.filter((call) => /SELECT payload FROM/.test(call.sql)).length, 0);
+  assert.equal(db.calls.filter((call) => /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(call.sql)).length, 0);
   await assert.rejects(
     store.withTransaction(async (tx) => {
       await tx.saveEntries(scope(), [{
@@ -177,7 +177,7 @@ test('PostgreSQL adapter rejects unsafe BIGINT checkpoint revisions', async () =
     commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
     /Unsafe persisted banking checkpoint revision/,
   );
-  assert.equal(db.calls.filter((call) => /SELECT payload FROM/.test(call.sql)).length, 0);
+  assert.equal(db.calls.filter((call) => /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(call.sql)).length, 0);
   assert.equal(db.releases, 1);
 });
 
