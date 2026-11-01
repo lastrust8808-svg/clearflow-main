@@ -92,3 +92,70 @@ test('out-of-scope checkpoint or provider event fails before any write', async (
   assert.equal(store.calls.rows, 0);
   assert.equal(store.calls.cursor, 0);
 });
+
+test('scope, page and event accessors fail before opening a transaction', async () => {
+  const store = fakeTransactionalStore();
+  let getterCalls = 0;
+  const hostileScope = { ...scope() };
+  Object.defineProperty(hostileScope, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return 'tenant-b'; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, hostileScope, page()),
+    /Malformed bank feed scope field/);
+  const hostilePage = { ...page() };
+  Object.defineProperty(hostilePage, 'events', {
+    enumerable: true, get() { getterCalls++; return [event()]; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), hostilePage),
+    /Malformed bank feed page field/);
+  const hostileEvent = { ...event() };
+  Object.defineProperty(hostileEvent, 'amountCents', {
+    enumerable: true, get() { getterCalls++; return 1; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page([hostileEvent])),
+    /Malformed bank feed event field/);
+  assert.equal(getterCalls, 0, 'untrusted accessors must never execute');
+  assert.equal(store.calls.transactions, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('mutating caller scope and provider page while waiting for checkpoint lock cannot redirect commit', async () => {
+  const store = fakeTransactionalStore();
+  const mutableScope = scope();
+  const mutablePage = page();
+  const originalTransaction = store.withTransaction.bind(store);
+  store.withTransaction = (operation) => originalTransaction(async (tx) => {
+    const originalLoad = tx.loadCheckpointForUpdate;
+    tx.loadCheckpointForUpdate = async (lockedScope) => {
+      const current = await originalLoad(lockedScope);
+      mutableScope.tenantId = 'tenant-foreign';
+      mutableScope.allowedAccountIds[0] = 'acct-foreign';
+      mutablePage.events[0].accountId = 'acct-foreign';
+      mutablePage.events[0].amountCents = 999999;
+      mutablePage.nextCursor = 'cursor-forged';
+      return current;
+    };
+    return operation(tx);
+  });
+  const result = await commitAuthorizedBankFeedPage(store, mutableScope, mutablePage);
+  assert.equal(result.applied, 1);
+  assert.equal(store.state.entries[0].tenantId, 'tenant-a');
+  assert.equal(store.state.entries[0].accountId, 'acct-a');
+  assert.equal(store.state.entries[0].amountCents, 2500);
+  assert.equal(store.state.checkpoint.cursor, 'cursor-1');
+});
+
+test('sparse, accessor-backed or metadata-bearing provider batches fail before transaction', async () => {
+  const store = fakeTransactionalStore();
+  const sparse = Array(1);
+  const extra = Object.assign([event()], { hiddenTransaction: 'discarded' });
+  const accessorArray = [event()];
+  Object.defineProperty(accessorArray, '0', {
+    enumerable: true, get() { throw new Error('unexpected provider getter'); },
+  });
+  for (const events of [sparse, extra, accessorArray]) {
+    await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page(events)),
+      /Malformed bank feed events list/);
+  }
+  assert.equal(store.calls.transactions, 0);
+});
