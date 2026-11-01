@@ -263,3 +263,48 @@ test('document version verification accepts frozen and null-prototype plain reco
     versionId: 'version-1', content: Buffer.from('unmatched bytes'),
   }), { status: 'unknown' });
 });
+
+test('document registry envelope rejects executable, hidden and inherited scope before verification', () => {
+  const valid = registry([version(1)]);
+  const proof = { versionId: 'version-1', sha256: digestA };
+  for (const field of ['tenantId', 'trustId', 'versions']) {
+    let getterCalls = 0;
+    const malicious = { ...valid };
+    Object.defineProperty(malicious, field, {
+      enumerable: true, configurable: true,
+      get() { getterCalls++; throw new Error('Registry getter executed'); },
+    });
+    assert.throws(() => verifyTrustDocumentVersion(malicious, proof),
+      /Document registry fields must be enumerable own data properties/);
+    assert.equal(getterCalls, 0, field + ' getter executed');
+  }
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => verifyTrustDocumentVersion(hidden, proof),
+    /Document registry contains unsupported fields/);
+  assert.throws(() => verifyTrustDocumentVersion({
+    ...valid, [Symbol('settled')]: true,
+  }, proof), /Document registry contains unsupported fields/);
+  assert.throws(() => verifyTrustDocumentVersion({
+    ...valid, paymentAuthorized: true,
+  }, proof), /Document registry contains unsupported fields/);
+  const inherited = { ...valid };
+  Object.setPrototypeOf(inherited, { tenantId: 'forged-tenant' });
+  assert.throws(() => verifyTrustDocumentVersion(inherited, proof),
+    /Document registry must be a plain data record/);
+  const missing = { ...valid };
+  delete missing.trustId;
+  assert.throws(() => verifyTrustDocumentVersion(missing, proof),
+    /Document registry missing own field: trustId/);
+  assert.deepEqual(verifyTrustDocumentVersion(Object.freeze(valid), proof), { status: 'valid' });
+  assert.deepEqual(verifyTrustDocumentVersion(Object.assign(Object.create(null), valid), proof),
+    { status: 'valid' });
+  const bytes = Buffer.from('finalized registry bytes');
+  const byteRegistry = registry([version(1, { sha256: fileDigest(bytes) })]);
+  Object.defineProperty(byteRegistry, 'versions', {
+    enumerable: true, get() { throw new Error('Byte verifier registry getter executed'); },
+  });
+  assert.throws(() => verifyTrustDocumentBytes(byteRegistry, {
+    versionId: 'version-1', content: bytes,
+  }), /Document registry fields must be enumerable own data properties/);
+});
