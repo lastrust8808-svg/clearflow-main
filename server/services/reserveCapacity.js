@@ -57,6 +57,36 @@ function requirePlainReserveRecord(record, allowed, required, label) {
   }
 }
 
+// Preflight the complete ledger entry list before reading any entry. Sparse,
+// accessor-backed, prototype-mutated or metadata-bearing arrays can conceal
+// assets or execute code during reserve classification. This does not verify
+// custody, asset ownership, or the provenance of supplied entries.
+function requirePlainReserveEntries(entries) {
+  if (!Array.isArray(entries) || Object.getPrototypeOf(entries) !== Array.prototype) {
+    throw new TypeError('Reserve entries must be a plain array');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(entries);
+  const length = descriptors.length.value;
+  let count = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('Reserve entries must contain only array indices');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Reserve entries must contain enumerable data elements');
+    }
+    count++;
+  }
+  if (count !== length) throw new TypeError('Reserve entries must not contain holes');
+  // Admit every record before classification begins; an invalid later entry
+  // cannot be silently skipped or treated as a partially trusted ledger.
+  for (const entry of entries) {
+    requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
+  }
+}
+
 function requiredString(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new TypeError(`${field} must be a nonempty unpadded string`);
@@ -111,7 +141,7 @@ export function calculateReserveCapacity(snapshot) {
     throw new RangeError('maxEvidenceAgeMs must be a nonnegative safe integer');
   }
   const asOfEpochMs = Date.parse(asOfAt);
-  if (!Array.isArray(snapshot.entries)) throw new TypeError('entries must be an array');
+  requirePlainReserveEntries(snapshot.entries);
 
   const totals = {
     cashTotalMinor: 0,
