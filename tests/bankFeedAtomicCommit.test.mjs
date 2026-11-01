@@ -186,6 +186,54 @@ test('malformed or ambiguous authorized scopes fail before transaction acquisiti
   assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
 });
 
+test('malformed provider cursor evidence fails before acquiring a transaction', async () => {
+  const store = fakeTransactionalStore();
+  const invalidPages = [
+    { ...page(), requestedCursor: 'cursor with spaces' },
+    { ...page(), nextCursor: '' },
+    { ...page(), nextCursor: 'cursor\\nforged' },
+    { ...page(), nextCursor: null },
+    { ...page(), hasMore: 'false' },
+    page([event()], 'cursor-1', 'cursor-1'),
+    { ...page([], 'cursor-1', 'cursor-1'), hasMore: true },
+  ];
+  for (const invalid of invalidPages) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), invalid),
+      /Invalid feed cursor checkpoint or page metadata|cannot retain its cursor/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0);
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('malformed locked checkpoint fails before historical reads or cursor writes', async () => {
+  const store = fakeTransactionalStore();
+  const badCheckpoints = [
+    { ...checkpoint(), revision: -1 },
+    { ...checkpoint(), revision: Number.NaN },
+    { ...checkpoint(), revision: -0 },
+    { ...checkpoint(), cursor: 'bad\\ncursor' },
+    { ...checkpoint(), revision: Number.MAX_SAFE_INTEGER },
+  ];
+  for (const invalid of badCheckpoints) {
+    store.state.checkpoint = invalid;
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page()),
+      /Invalid feed cursor checkpoint or page metadata|revision would exceed/,
+    );
+  }
+  assert.equal(store.calls.transactions, badCheckpoints.length);
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.equal(store.calls.rollbacks, badCheckpoints.length);
+  assert.deepEqual(store.state.entries, []);
+});
+
 test('out-of-scope checkpoint or provider event fails before any write', async () => {
   const store = fakeTransactionalStore();
   await assert.rejects(commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'tenant-b' }, page()),
