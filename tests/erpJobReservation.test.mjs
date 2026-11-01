@@ -56,6 +56,47 @@ test('first reservation is recorded, identical replay returns the original job',
   assert.equal(db.calls, 3);
 });
 
+test('durable idempotency ignores object key order but preserves invoice line order', async () => {
+  const db = fakeDatabase();
+  const insertedJson = [];
+  const originalQuery = db.query.bind(db);
+  db.query = async (sql, params) => {
+    if (/INSERT INTO erp_operation_jobs/.test(sql)) insertedJson.push(params[5]);
+    return originalQuery(sql, params);
+  };
+  const firstPayload = {
+    invoiceId: 'invoice-123',
+    metadata: { taxRate: 0.06, note: 'café' },
+    lines: [
+      { description: 'paint', amountCents: 1250 },
+      { description: 'trim', amountCents: 250 },
+    ],
+  };
+  const reorderedKeys = {
+    lines: [
+      { amountCents: 1250, description: 'paint' },
+      { amountCents: 250, description: 'trim' },
+    ],
+    metadata: { note: 'café', taxRate: 0.06 },
+    invoiceId: 'invoice-123',
+  };
+  const first = await reserve({ db, ...args, payload: firstPayload });
+  const replay = await reserve({ db, ...args, payload: reorderedKeys });
+  assert.equal(first.created, true);
+  assert.equal(replay.replayed, true);
+  assert.equal(first.id, replay.id);
+  assert.equal(db.rows.size, 1);
+  assert.equal(insertedJson[0], insertedJson[1],
+    'equivalent nested JSON must persist and hash identically');
+
+  // Array order is economically meaningful: line items cannot be reordered
+  // under the same idempotency key and silently acknowledged as a replay.
+  await assert.rejects(reserve({ db, ...args, payload: {
+    ...firstPayload, lines: [...firstPayload.lines].reverse(),
+  } }), { code: 'ERP_IDEMPOTENCY_CONFLICT' });
+  assert.equal(db.rows.size, 1);
+});
+
 test('reservation never acknowledges fabricated or noncanonical database job IDs', async () => {
   // UUID is the proposed schema's primary key. A synthetic ID is not
   // durable database evidence, whether returned by INSERT or replay SELECT.
