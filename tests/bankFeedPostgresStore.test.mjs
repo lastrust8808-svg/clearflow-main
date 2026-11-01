@@ -328,7 +328,7 @@ test('PostgreSQL adapter preflights duplicate, malformed and rewritten entry ide
     [[valid('tx-duplicate', 100), valid('tx-duplicate', 200)], /Duplicate banking entry identity/],
     [[valid('tx-valid'), valid(' tx-padded')], /out-of-scope banking entry write/],
     [[valid('tx-valid'), valid(7)], /out-of-scope banking entry write/],
-    [[valid('tx-valid'), rewritten], /inconsistent serialized identity/],
+    [[valid('tx-valid'), rewritten], /non-JSON banking entry/],
   ]) {
     const db = mockPg();
     await assert.rejects(
@@ -400,4 +400,55 @@ test('PostgreSQL adapter rejects malformed persisted and proposed cursors before
   assert.equal(success, true);
   assert.equal(db.state.checkpoint.cursor, 'cursor-1');
   assert.equal(db.state.checkpoint.revision, '1');
+});
+
+test('PostgreSQL adapter refuses lossy or executable JSONB evidence before any batch INSERT', async () => {
+  const valid = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+    details: { posted: true, adjustments: [1.25, 2] },
+  });
+  const getter = valid('tx-getter');
+  Object.defineProperty(getter.details, 'amount', {
+    enumerable: true, get() { throw new Error('getter must never execute'); },
+  });
+  const customSerializer = valid('tx-tojson');
+  customSerializer.details.toJSON = () => ({ amount: 999999 });
+  const sparse = valid('tx-sparse');
+  sparse.details.adjustments = [, 1];
+  const cycle = valid('tx-cycle');
+  cycle.details.self = cycle.details;
+  const hidden = valid('tx-hidden');
+  Object.defineProperty(hidden.details, 'hidden', { value: 'lost', enumerable: false });
+  const poisoned = valid('tx-poison');
+  Object.defineProperty(poisoned.details, '__proto__', {
+    value: { admin: true }, enumerable: true,
+  });
+  const invalid = [
+    { ...valid('tx-nan'), amountCents: NaN },
+    { ...valid('tx-infinity'), amountCents: Infinity },
+    { ...valid('tx-precision'), amountCents: Number.MAX_SAFE_INTEGER + 1 },
+    { ...valid('tx-negative-zero'), amountCents: -0 },
+    { ...valid('tx-undefined'), details: { amount: undefined } },
+    { ...valid('tx-date'), details: { posted: new Date() } },
+    getter, customSerializer, sparse, cycle, hidden, poisoned,
+    { ...valid('tx-proxy'), details: new Proxy({ amount: 12 }, {}) },
+  ];
+  for (const entry of invalid) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(scope(), [valid('tx-first'), entry])),
+      /Refusing non-JSON banking entry write/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'a rejected later entry must prevent all earlier INSERTs');
+    assert.deepEqual(db.state, initial());
+  }
+
+  const db = mockPg();
+  await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [valid('tx-safe'), valid('tx-other')]));
+  assert.equal(db.state.entries.length, 2);
+  assert.deepEqual(db.state.entries[0].details.adjustments, [1.25, 2]);
 });
