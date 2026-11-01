@@ -67,15 +67,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Bootstrap only the reviewed 001 migration registry in disposable DB
         run: |
-          printf '%s\\n' 'CREATE TABLE public.clearflow_schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());' |
-            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci
+          echo 'CREATE TABLE public.clearflow_schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());' | docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci
       - name: Apply proposed banking migration twice (idempotence)
         run: |
           for attempt in 1 2; do
-            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci \\
-              < server/db/versions/003_banking_feed_checkpoints.sql
+            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci < server/db/versions/003_banking_feed_checkpoints.sql
           done
       - name: Verify real PostgreSQL rollback, deduplication and cursor constraints
         run: |
-          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci \\
-            < tests/bankFeedPostgresSchema.test.sql
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci < tests/bankFeedPostgresSchema.test.sql
