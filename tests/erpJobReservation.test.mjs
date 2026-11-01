@@ -1539,3 +1539,31 @@ test('reservation rejects malformed Unicode before idempotency hashing or SQL', 
   assert.equal(valid.created, true);
   assert.equal(db.calls, 1);
 });
+
+
+test('reservation rejects invisible accounting property names without blocking visible text', async () => {
+  const db = fakeDatabase();
+  // A visually disguised amountCents key must not bypass minor-unit
+  // validation or enter the persisted idempotency fingerprint.
+  const invalid = [
+    { ['amount\u200bCents']: 125.5 },
+    { ['amount\u202eCents']: 125.5 },
+    { invoice: { lines: [{ ['fee\u200dCents']: 0.25 }] } },
+    { ['recipient\\nEmail']: 'member@example.test' },
+    { ['memo\u0000']: 'hidden field' },
+  ];
+  for (const payload of invalid) {
+    await assert.rejects(reserve({ db, ...args, payload }),
+      /unsafe Unicode property name/);
+  }
+  assert.equal(db.calls, 0, 'invisible accounting keys must be rejected before SQL');
+
+  // Unicode letters in property names and newlines in ordinary free-text
+  // values remain valid, preserving legitimate international invoice notes.
+  const result = await reserve({ db, ...args, payload: {
+    invoiceId: 'invoice-123', 'référence': 'café',
+    amountCents: 1250, note: 'Line one\\nLine two',
+  } });
+  assert.equal(result.created, true);
+  assert.equal(db.calls, 1);
+});
