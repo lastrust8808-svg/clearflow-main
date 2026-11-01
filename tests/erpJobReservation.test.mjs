@@ -376,6 +376,7 @@ function claimedRow(overrides = {}) {
     id: claimedJobId, tenant_id: workerScope.tenantId,
     actor_id: 'actor-a', operation: 'invoice_delivery',
     status: 'processing', claimed_by: workerScope.workerId,
+    dispatch_started_at: null, failure_code: null,
     claimed_at: new Date('2026-10-29T12:01:00Z'),
     lease_expires_at: new Date('2026-10-29T12:02:00Z'),
     created_at: new Date('2026-10-29T12:00:00Z'),
@@ -404,6 +405,46 @@ test('atomic worker claim is tenant-scoped, queued-only and locked across worker
   assert.equal(result.leaseExpiresAt, '2026-10-29T12:02:00.000Z');
   assert.equal(Object.isFrozen(result), true);
   assert.equal('delivered' in result, false);
+});
+
+test('worker claim excludes stale dispatch fences and failure codes before side effects', async () => {
+  const args = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  let queryCount = 0;
+  const db = { async query(sql, params) {
+    queryCount++;
+    assert.deepEqual(params, ['tenant-a', 'invoice_delivery', 'worker-a', 60]);
+    // Both the candidate selection and the atomic update must exclude jobs
+    // that already carry dispatch evidence or a terminal failure marker.
+    assert.match(sql, /status = 'queued'\s+AND dispatch_started_at IS NULL AND failure_code IS NULL/);
+    assert.match(sql, /job\.status = 'queued'\s+AND job\.dispatch_started_at IS NULL AND job\.failure_code IS NULL/);
+    assert.match(sql, /RETURNING[\s\S]*job\.dispatch_started_at, job\.failure_code/);
+    return { rows: [claimedRow()] };
+  } };
+  const receipt = await claim({ ...args, db });
+  assert.equal(queryCount, 1);
+  assert.equal(receipt.status, 'processing');
+  assert.equal('delivered' in receipt, false);
+
+  // Even if a database adapter violates the SQL predicate or schema
+  // constraints, contradictory evidence must never be acknowledged as a
+  // valid worker claim eligible for provider dispatch.
+  for (const row of [
+    claimedRow({ dispatch_started_at: new Date('2026-10-29T12:00:30Z') }),
+    claimedRow({ failure_code: 'ERP_PROVIDER_REJECTED' }),
+    claimedRow({ dispatch_started_at: undefined }),
+    claimedRow({ failure_code: undefined }),
+  ]) {
+    await assert.rejects(claim({
+      ...args, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid tenant-bound worker claim/);
+  }
+  for (const missing of ['dispatch_started_at', 'failure_code']) {
+    const row = claimedRow();
+    delete row[missing];
+    await assert.rejects(claim({
+      ...args, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid tenant-bound worker claim/);
+  }
 });
 
 test('no queued job returns null; storage errors are never successful claims', async () => {
