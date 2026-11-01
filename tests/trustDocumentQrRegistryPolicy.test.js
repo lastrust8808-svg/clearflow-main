@@ -28,6 +28,44 @@ test('resolves only an authorized-scoped active digest to an internal version bi
   assert.equal(JSON.stringify(registry).includes(link.url.split('/').at(-1)), false);
 });
 
+test('QR binding identities and revocation receipts reject non-NFC Unicode aliases', () => {
+  const { registry, lookup } = fixture();
+  const composed = 'é';
+  const decomposed = 'e\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, [key]: 'scope-' + decomposed,
+    }, { ...lookup, [key]: 'scope-' + decomposed }), /NFC-normalized Unicode/);
+  }
+  for (const key of ['documentId', 'versionId']) {
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, bindings: [{ ...registry.bindings[0], [key]: 'record-' + decomposed }],
+    }, lookup), /NFC-normalized Unicode/);
+  }
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [{
+      ...registry.bindings[0], status: 'revoked', revokedAt,
+      revocationEvidenceRef: 'receipt-' + decomposed,
+    }],
+  }, lookup), /NFC-normalized Unicode/);
+
+  // Composed international identifiers remain valid without rewriting.
+  const canonicalScope = {
+    tenantId: 'tenant-' + composed, entityId: 'entity-' + composed,
+    trustId: 'trust-' + composed,
+  };
+  const canonicalRegistry = {
+    ...canonicalScope,
+    bindings: [{
+      ...registry.bindings[0], ...canonicalScope,
+      documentId: 'document-' + composed, versionId: 'version-' + composed,
+    }],
+  };
+  assert.deepEqual(resolveTrustDocumentQrBinding(canonicalRegistry, {
+    ...lookup, ...canonicalScope,
+  }), { status: 'bound', documentId: 'document-' + composed, versionId: 'version-' + composed });
+});
+
 test('revoked and unrecognized tokens are indistinguishable to the resolver', () => {
   const { registry, lookup } = fixture();
   const revoked = { ...registry, bindings: [{ ...registry.bindings[0], status: 'revoked',
