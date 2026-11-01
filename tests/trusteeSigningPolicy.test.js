@@ -333,3 +333,28 @@ test('rejects non-NFC governance evidence and preserves canonical international 
   assert.equal(result.activeTrusteeCount, 1);
   assert.equal(result.signerCount, 1);
 });
+
+test('governance list size is bounded before enumerating untrusted appointments or signers', () => {
+  for (const field of ['appointments', 'signerIds']) {
+    let enumerated = false;
+    const oversized = new Proxy(new Array(10001), {
+      ownKeys() {
+        enumerated = true;
+        throw new Error('Oversized governance list must not be enumerated');
+      },
+    });
+    assert.throws(() => evaluate({ [field]: oversized }),
+      new RegExp(field + ' exceeds maximum entry count'));
+    assert.equal(enumerated, false);
+  }
+
+  // The exact boundary is admitted to normal identity checks, not truncated.
+  // Duplicate identities at the end of either list must still fail closed.
+  assert.throws(() => evaluate({
+    appointments: Array(10000).fill(appointment('a')),
+  }), /Duplicate trustee appointment/);
+  assert.throws(() => evaluate({
+    signerIds: Array(10000).fill('a'),
+  }), /Duplicate signer ID/);
+  assert.equal(evaluate().eligible, true);
+});
