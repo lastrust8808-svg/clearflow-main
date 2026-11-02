@@ -3,7 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
-import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -785,62 +785,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }));
           }
         } catch (error) {
-          console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
-          const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
-          if (localGoogleMatch) {
-            const mergedAppData = mergeStoredTermsAcceptance(
-              {
-                ...localGoogleMatch.appData,
-                user: {
-                  ...localGoogleMatch.appData.user,
-                  name: localGoogleMatch.appData.user.name || state.gsiUser.name,
-                  email: state.gsiUser.email,
-                  primaryContactType: 'google' as const,
-                },
-              },
-              state.gsiUser
-            );
-            needsDriveCatchUpRef.current = true;
-            setPendingDriveState((current) => ({
-              ...current,
-              localAccountId: localGoogleMatch.userId,
-              status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
-              appData: mergedAppData,
-              gsiUser: null,
-            }));
-            return;
-          }
-
-          if (state.pendingGoogleMode !== 'new') {
-            setPendingDriveState((current) => ({
-              ...current,
-              status: 'unauthenticated',
-              token: null,
-              apiAccessToken: null,
-              appData: null,
-              gsiUser: null,
-              pendingGoogleMode: null,
-              authMessage:
-                'ClearFlow could not verify an existing workspace. Retry Existing User Login, or choose Create New Account if this is your first enrollment.',
-            }));
-            return;
-          }
-
-          const newUser: User = {
-            id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
-            ...state.gsiUser,
-            isVerified: false,
-            primaryContactType: 'google',
-          };
-          const newAppData = { user: newUser, entities: [] };
-          setPendingDriveState(current => ({
-            ...current,
-            status: 'pending-profile-setup',
-            appData: newAppData,
-            gsiUser: null,
-            pendingGoogleMode: null,
-            authMessage: null,
-          }));
+          console.error('Unable to verify Google workspace after sign-in:', error);
+          needsDriveCatchUpRef.current = false;
+          setPendingDriveState((current) => rejectFailedGoogleDriveRecovery(current) as AuthState);
         }
       }
     };
