@@ -686,3 +686,49 @@ test('QR revocation receipts cannot alias registry identities, even in later row
     ...registry, bindings: [revoked, later],
   }, lookup), { status: 'unknown' });
 });
+
+test('QR registry separates owner, document, version and token identities across all rows', () => {
+  const { registry, lookup } = fixture();
+  const original = registry.bindings[0];
+  // Reject scope aliases even if every binding and lookup repeats them.
+  for (const [left, right] of [
+    ['tenantId', 'entityId'], ['tenantId', 'trustId'], ['entityId', 'trustId'],
+  ]) {
+    const alteredScope = { ...scope, [right]: scope[left] };
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, ...alteredScope,
+      bindings: [{ ...original, ...alteredScope }],
+    }, { ...lookup, ...alteredScope }), /QR tenant, entity and trust identifiers must be distinct/);
+  }
+  // An active binding cannot borrow a scope ID as its document/version ID.
+  for (const field of ['documentId', 'versionId']) {
+    for (const value of Object.values(scope)) {
+      assert.throws(() => resolveTrustDocumentQrBinding({
+        ...registry, bindings: [{ ...original, [field]: value }],
+      }, lookup), /QR (document|version) identifier collides/);
+    }
+  }
+  assert.throws(() => resolveTrustDocumentQrBinding({
+    ...registry, bindings: [{ ...original, versionId: original.documentId }],
+  }, lookup), /QR document identifier collides/);
+  // Check across all rows, in either order: an identity introduced later
+  // cannot impersonate a document, version or token digest in an earlier row.
+  const later = {
+    ...original, documentId: 'document-2', versionId: 'version-2',
+    tokenHashSha256: createHash('sha256').update('another-qr-token').digest('hex'),
+  };
+  for (const altered of [
+    { ...later, documentId: original.versionId },
+    { ...later, versionId: original.documentId },
+    { ...later, documentId: original.tokenHashSha256 },
+    { ...later, versionId: original.tokenHashSha256 },
+  ]) {
+    for (const bindings of [[original, altered], [altered, original]]) {
+      assert.throws(() => resolveTrustDocumentQrBinding({ ...registry, bindings }, lookup),
+        /QR (document|version) identifier collides/);
+    }
+  }
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings: [original, later],
+  }, lookup), { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
+});
