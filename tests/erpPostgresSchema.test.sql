@@ -69,7 +69,7 @@ BEGIN
   -- Nonempty but malformed identities must fail at the DB boundary too.
   -- These rows bypass the JS reservation service to exercise SQL constraints.
   FOR bad_identity IN SELECT unnest(ARRAY[
-    ' leading-tenant', 'trailing-tenant ', E'tenant\\tcontrol',
+    ' leading-tenant', 'trailing-tenant ', E'tenant\tcontrol',
     repeat('t', 256)
   ]) LOOP
     BEGIN
@@ -82,7 +82,7 @@ BEGIN
     END;
   END LOOP;
   FOR bad_identity IN SELECT unnest(ARRAY[
-    ' leading-actor', 'trailing-actor ', E'actor\\ncontrol',
+    ' leading-actor', 'trailing-actor ', E'actor\ncontrol',
     repeat('a', 256)
   ]) LOOP
     BEGIN
@@ -95,7 +95,7 @@ BEGIN
     END;
   END LOOP;
   FOR bad_identity IN SELECT unnest(ARRAY[
-    'short', 'bad key', E'bad\\tkey', repeat('k', 129)
+    'short', 'bad key', E'bad\tkey', repeat('k', 129)
   ]) LOOP
     BEGIN
       INSERT INTO erp_operation_jobs
