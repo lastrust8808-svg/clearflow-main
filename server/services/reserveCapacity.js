@@ -234,5 +234,15 @@ export function calculateReserveCapacity(snapshot) {
     totals.cashPledgedMinor = safeAdd(totals.cashPledgedMinor, pledged, 'cashPledgedMinor');
     totals.unencumberedCashMinor = safeAdd(totals.unencumberedCashMinor, amount - encumbered, 'unencumberedCashMinor');
   }
+  // Asset identity and independent provenance identity are different roles.
+  // A later entry must not reuse an earlier asset ID as purported evidence,
+  // or vice versa. Check the entire snapshot regardless of entry order.
+  // This is structural integrity only; the caller must still authenticate
+  // asset ownership and verify the underlying evidence record.
+  for (const assetId of assetIds) {
+    if (evidenceRefs.has(assetId)) {
+      throw new Error('Reserve asset and evidence identifiers must be distinct');
+    }
+  }
   return Object.freeze({ tenantId, entityId, trustId, currency, asOfAt, maxEvidenceAgeMs, oldestEvidenceAt, ...totals });
 }
