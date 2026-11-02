@@ -45,6 +45,16 @@ CREATE TABLE IF NOT EXISTS erp_operation_jobs (
   CONSTRAINT erp_dispatch_fence_consistency CHECK (
     dispatch_started_at IS NULL OR status IN ('processing', 'outcome_unknown')
   ),
+  -- A processing worker must not acquire a pre-dispatch fence before its
+  -- claim or after its lease expires. Once quarantined as outcome_unknown,
+  -- the lease is deliberately cleared but the original fence is retained.
+  -- Keep timestamps monotonic even for direct SQL writes bypassing the API.
+  CONSTRAINT erp_job_time_ordering CHECK (
+    updated_at >= created_at
+    AND (status <> 'processing' OR dispatch_started_at IS NULL OR
+         (dispatch_started_at >= claimed_at AND
+          dispatch_started_at < lease_expires_at))
+  ),
   CONSTRAINT erp_failure_reason_consistency CHECK (
     (status = 'failed' AND failure_code IS NOT NULL)
     OR (status <> 'failed' AND failure_code IS NULL)
