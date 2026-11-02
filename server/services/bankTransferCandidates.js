@@ -113,7 +113,10 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
   const candidates = [];
   for (const [id, matches] of adjacency) {
     const row = byId.get(id);
-    if (matches.length > 1) {
+    // A source with one apparent match is still ambiguous when its partner
+    // has multiple possible matches. Surface every affected source for review.
+    if (matches.length > 1 ||
+        (matches.length === 1 && adjacency.get(matches[0]).length !== 1)) {
       ambiguous.push({ accountId: row.accountId,
         transactionId: row.transactionId, candidateCount: matches.length });
     }
