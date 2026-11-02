@@ -191,6 +191,35 @@ function snapshotBankingEntryBatch(entries) {
   return snapshot;
 }
 
+// PostgreSQL returns plain row objects, but a broken adapter or injected
+// fixture can supply executable getters or a Proxy. Never access persisted
+// checkpoint identities or revision until all selected fields are inert.
+function snapshotPersistedCheckpointRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row) ||
+      nodeTypes.isProxy(row)) {
+    throw new Error('Invalid persisted banking checkpoint row.');
+  }
+  const prototype = Object.getPrototypeOf(row);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('Invalid persisted banking checkpoint row.');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(row);
+  const keys = ['tenant_id', 'provider', 'connection_id', 'cursor', 'revision'];
+  if (Reflect.ownKeys(descriptors).length !== keys.length) {
+    throw new Error('Invalid persisted banking checkpoint row.');
+  }
+  const snapshot = Object.create(null);
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, 'value')) {
+      throw new Error('Invalid persisted banking checkpoint row.');
+    }
+    snapshot[key] = descriptor.value;
+  }
+  return snapshot;
+}
+
 function transactionQueries(client) {
   return {
     async loadCheckpointForUpdate(scope) {
@@ -203,7 +232,7 @@ function transactionQueries(client) {
         requestedScope,
       );
       if (result.rows.length !== 1) return null;
-      const row = result.rows[0];
+      const row = snapshotPersistedCheckpointRow(result.rows[0]);
       // Verify database-returned identity independently of the WHERE clause.
       // A faulty adapter, corrupted fixture or unexpected row must never be
       // treated as an authorized checkpoint by direct store callers.
