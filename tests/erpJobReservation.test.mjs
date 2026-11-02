@@ -2151,3 +2151,29 @@ test('recovery and reconciliation reject noncanonical persisted audit actors', a
     assert.equal(record.status, 'outcome_unknown');
   }
 });
+
+
+test('worker claim rejects noncanonical persisted actor and UUID receipts before dispatch', async () => {
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  const invalid = [
+    claimedRow({ actor_id: ' actor-a' }),
+    claimedRow({ actor_id: 'actor-a ' }),
+    claimedRow({ actor_id: 'actor\\u200b-a' }),
+    claimedRow({ actor_id: 'actor\\u202e-a' }),
+    claimedRow({ actor_id: 'cafe\\u0301' }),
+    claimedRow({ actor_id: 'x'.repeat(256) }),
+    claimedRow({ actor_id: 'actor\\ud800' }),
+    claimedRow({ id: claimedJobId.toUpperCase() }),
+  ];
+  for (const row of invalid) {
+    await assert.rejects(claim({
+      ...input, db: { query: async () => ({ rows: [row] }) },
+    }), /invalid tenant-bound worker claim/);
+  }
+  const receipt = await claim({
+    ...input, db: { query: async () => ({ rows: [claimedRow({ actor_id: 'caf\\u00e9' })] }) },
+  });
+  assert.equal(receipt.id, claimedJobId);
+  assert.equal(receipt.status, 'processing');
+  assert.equal('delivered' in receipt, false);
+});
