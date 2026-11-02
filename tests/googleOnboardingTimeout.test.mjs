@@ -37,7 +37,12 @@ test('timeout cannot change a completed or already-aborted sign-in', () => {
 
 test('React pending-GSI timeout is wired to fail-closed reducer, not remembered identity', () => {
   const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
-  assert.match(source, /setState\(\(current\) => expirePendingGoogleSignIn\(current\) as AuthState\)/);
-  assert.doesNotMatch(source, /const fallbackIdentity = current\.gsiUser \|\| lastKnownGoogleUser/);
-  assert.doesNotMatch(source, /current\.appData\?\.user \|\| buildProvisionalGoogleUser\(fallbackIdentity\)/);
+  const effectStart = source.indexOf("if (state.status !== 'pending-gsi')");
+  assert.notEqual(effectStart, -1, 'pending-GSI timeout effect must exist');
+  const effectEnd = source.indexOf('  useEffect(() => {', effectStart);
+  assert.notEqual(effectEnd, -1, 'pending-GSI effect must be bounded');
+  const timeoutEffect = source.slice(effectStart, effectEnd);
+  assert.match(timeoutEffect, /setState\(\(current\) => expirePendingGoogleSignIn\(current\) as AuthState\)/);
+  assert.doesNotMatch(timeoutEffect, /const fallbackIdentity = current\.gsiUser \|\| lastKnownGoogleUser/);
+  assert.doesNotMatch(timeoutEffect, /current\.appData\?\.user \|\| buildProvisionalGoogleUser\(fallbackIdentity\)/);
 });
