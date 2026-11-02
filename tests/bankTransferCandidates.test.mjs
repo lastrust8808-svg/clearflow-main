@@ -69,8 +69,8 @@ test('ambiguous many-to-one evidence is never proposed as a pair', () => {
   assert.deepEqual(result.candidates, []);
   assert.deepEqual(result.ambiguous, [
     { provider: 'plaid', connectionId: 'item-a', accountId: 'checking', transactionId: 'out', candidateCount: 2 },
-    { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'in1', candidateCount: 1 },
     { provider: 'plaid', connectionId: 'item-a', accountId: 'reserve', transactionId: 'in2', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'in1', candidateCount: 1 },
   ]);
 });
 
@@ -145,4 +145,23 @@ test('provider and connection are required canonical source identities', () => {
     row('checking', 'tx-1', 500, { connectionId: 'item-b' }),
   ]);
   assert.deepEqual(result, { candidates: [], ambiguous: [] });
+});
+
+
+test('candidate and ambiguity review queues are deterministic across bank-feed replay ordering', () => {
+  const transactions = [
+    row('checking', 'out1', -500, { providerReference: 'ref-1' }),
+    row('savings', 'in1', 500, { providerReference: 'ref-1' }),
+    row('payroll', 'out2', -800, { providerReference: 'ref-2' }),
+    row('reserve', 'in2', 800, { providerReference: 'ref-2' }),
+    row('holding', 'out3', -900, { providerReference: 'ref-3' }),
+    row('wallet', 'in3', 900, { providerReference: 'ref-3' }),
+    row('vault', 'in4', 900, { providerReference: 'ref-3' }),
+  ];
+  const expected = plan(transactions);
+  assert.equal(expected.candidates.length, 2);
+  assert.equal(expected.ambiguous.length, 3);
+  assert.deepEqual(plan([...transactions].reverse()), expected);
+  assert.deepEqual(plan([transactions[6], transactions[3], transactions[1], transactions[4],
+    transactions[0], transactions[5], transactions[2]]), expected);
 });
