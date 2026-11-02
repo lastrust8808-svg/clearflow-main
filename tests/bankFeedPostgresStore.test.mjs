@@ -750,3 +750,52 @@ test('PostgreSQL adapter preflights entry identity descriptors before any getter
     tx.saveEntries(scope(), [valid('tx-ordinary')]));
   assert.deepEqual(normal.state.entries.map(({ transactionId }) => transactionId), ['tx-ordinary']);
 });
+
+
+test('PostgreSQL adapter rejects inherited JSON serializers before banking evidence is rewritten', async () => {
+  const entry = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1250,
+    details: { tags: ['verified'] },
+  });
+  for (const prototype of [Object.prototype, Array.prototype]) {
+    const db = mockPg();
+    db.state.entries.push(entry('tx-historical'));
+    const store = createBankFeedPostgresStore(db.pool);
+    const original = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+    let serializerCalls = 0;
+    Object.defineProperty(prototype, 'toJSON', {
+      configurable: true,
+      value() {
+        serializerCalls++;
+        return { transactionId: 'tx-forged', amountCents: 0 };
+      },
+    });
+    try {
+      await assert.rejects(
+        store.withTransaction((tx) => tx.saveEntries(scope(), [entry('tx-new')])),
+        /Refusing non-JSON banking entry write/,
+      );
+      assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+        'unsafe prototype must reject before any financial INSERT');
+      await assert.rejects(
+        store.withTransaction((tx) => tx.loadEntries(scope())),
+        /Inherited banking JSON serializer would alter evidence/,
+      );
+      assert.equal(serializerCalls, 0, 'inherited serializer must never execute');
+      assert.equal(db.calls.filter(({ sql }) =>
+        /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0);
+      assert.equal(db.state.entries.length, 1, 'failed reads/writes preserve historical records');
+      assert.equal(db.state.entries[0].transactionId, 'tx-historical');
+      assert.equal(db.state.checkpoint.cursor, null, 'cursor must not advance');
+    } finally {
+      if (original) Object.defineProperty(prototype, 'toJSON', original);
+      else delete prototype.toJSON;
+    }
+    // A normal runtime must still accept the same ordinary financial evidence.
+    await store.withTransaction((tx) => tx.saveEntries(scope(), [entry('tx-new')]));
+    const historical = await store.withTransaction((tx) => tx.loadEntries(scope()));
+    assert.deepEqual(historical.map(({ transactionId }) => transactionId),
+      ['tx-historical', 'tx-new']);
+  }
+});
