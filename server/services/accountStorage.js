@@ -173,6 +173,15 @@ async function secureExistingReadDirectories(directory) {
   await assertSafeStorageDirectory(directory);
 }
 
+// JSON.stringify escapes lone UTF-16 surrogates, and JSON.parse accepts
+// escaped lone surrogates. Neither is well-formed Unicode: refuse identity,
+// memo and evidence strings that cannot be represented without ambiguity.
+function assertWellFormedStorageString(value) {
+  if (!value.isWellFormed()) {
+    throw new TypeError('Unsafe storage record Unicode string.');
+  }
+}
+
 // Iterate rather than recurse: even hostile legacy JSON must fail with a
 // controlled error instead of overflowing the JavaScript call stack.
 function assertBoundedParsedRecordDepth(record) {
@@ -183,7 +192,9 @@ function assertBoundedParsedRecordDepth(record) {
       throw new TypeError('Storage record nesting exceeds safety limit.');
     }
     if (value && typeof value === 'object') {
-      for (const child of Object.values(value)) {
+      for (const [key, child] of Object.entries(value)) {
+        assertWellFormedStorageString(key);
+        if (typeof child === 'string') assertWellFormedStorageString(child);
         // JSON.parse accepts exponents that overflow to Infinity and rounds
         // integers beyond the exact IEEE-754 range. Neither may be returned
         // as trustworthy persisted financial evidence.
@@ -401,7 +412,11 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet(), depth = 0
   // JSON.stringify silently drops undefined/functions/symbols, changes
   // non-finite numbers to null, and throws on bigint. Do not acknowledge a
   // durable save whose data is silently different from the submitted record.
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'string') {
+    assertWellFormedStorageString(value);
+    return;
+  }
+  if (value === null || typeof value === 'boolean') return;
   if (typeof value === 'number' && Number.isFinite(value)) {
     // JSON.stringify cannot restore precision already lost in an unsafe
     // integer. Reject such values before any durable-save acknowledgement.
@@ -441,6 +456,7 @@ function assertNoCustomSerialization(value, ancestors = new WeakSet(), depth = 0
       throw new TypeError('Unsafe storage record property.');
     }
     const descriptor = descriptors[key];
+    if (typeof key === 'string') assertWellFormedStorageString(key);
     if (typeof key !== 'string' || !descriptor.enumerable ||
         (isArray && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))) {
       throw new TypeError('Storage record payload must contain JSON-compatible enumerable properties.');
