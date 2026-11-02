@@ -103,12 +103,18 @@ router.get('/ops-status', (_req, res) => {
       reconciliationCloses: { available: false, reason: 'durable_job_store_required' },
       statementImports: { available: false, reason: 'durable_job_store_required' },
     },
+    // There is no authenticated durable count query yet. Zero would
+    // incorrectly represent an unknown historical queue as empty and can
+    // mislead operators into believing invoice work was never accepted.
+    // Keep the existing count keys but mark each unavailable explicitly.
+    countsAvailable: false,
+    countsUnavailableReason: 'durable_job_store_required',
     counts: {
-      invoiceDeliveries: 0,
-      invoiceExports: 0,
-      statementImports: 0,
-      reconciliationCloses: 0,
-      settlementExecutions: 0,
+      invoiceDeliveries: null,
+      invoiceExports: null,
+      statementImports: null,
+      reconciliationCloses: null,
+      settlementExecutions: null,
     },
   });
 });
