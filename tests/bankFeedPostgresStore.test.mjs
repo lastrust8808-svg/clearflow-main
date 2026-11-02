@@ -803,3 +803,30 @@ test('PostgreSQL adapter rejects inherited JSON serializers before banking evide
       ['tx-historical', 'tx-new']);
   }
 });
+
+test('PostgreSQL adapter rejects malformed persisted transaction IDs before replay or checkpoint advance', async () => {
+  const invalidIds = [
+    '', ' tx-padded', 'tx-trailing ', 'tx\\nnewline'.replace('\\n', '\n'),
+    'tx\\u200bhidden'.replace('\\u200b', '\u200b'), 'x'.repeat(257), 7,
+  ];
+  for (const transactionId of invalidIds) {
+    const db = mockPg();
+    db.state.entries.push({
+      tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+      accountId: 'acct-a', transactionId, amountCents: 500,
+      status: 'posted', requiresReview: true,
+    });
+    const before = structuredClone(db.state);
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Persisted banking entry identity does not match its scoped database key/,
+      String(transactionId),
+    );
+    assert.deepEqual(db.state, before, 'invalid historical identity must not change bank evidence');
+    assert.equal(db.calls.filter(({ sql }) =>
+      /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)
+    ).length, 0, 'corrupt history must not insert rows or advance cursor');
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.equal(db.releases, 1);
+  }
+});
