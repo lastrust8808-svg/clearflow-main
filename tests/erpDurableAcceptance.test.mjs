@@ -248,6 +248,56 @@ try {
     assert.equal(response.body.counts.statementImports, null);
     assert.doesNotMatch(source, /statementImportJobs|randomUUID/);
   });
+
+  await test('ERP HTTP routes reject ambiguous accounting identities before durable-job admission', async () => {
+    const invalid = [null, 0, true, {}, [], '', ' ', ' padded', 'padded ',
+      'line\\nbreak', 'zero\\u200bwidth', 'bidi\\u202ealias',
+      'cafe\\u0301', '\\ud800', 'x'.repeat(256)];
+    const requests = [
+      { method: 'POST', path: '/invoice-deliveries',
+        body: { ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid' },
+        fields: ['invoiceId', 'entityId', 'invoiceNumber'] },
+      { method: 'POST', path: '/invoice-exports',
+        body: invoice, fields: ['invoiceId', 'entityId', 'invoiceNumber'] },
+      { method: 'POST', path: '/settlements/execute',
+        body: { entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 100 },
+        fields: ['entityId', 'paymentId', 'settlementId'] },
+      { method: 'POST', path: '/reconciliations/:reconciliationId/statement-import',
+        body: { bankAccountId: 'bank-test', statementEndingBalance: 100 },
+        params: { reconciliationId: 'recon-test' }, fields: ['bankAccountId', 'reconciliationId'] },
+      { method: 'POST', path: '/reconciliations/:reconciliationId/close',
+        body: { closeSummary: 'balanced' }, params: { reconciliationId: 'recon-test' },
+        fields: ['reconciliationId'] },
+    ];
+    for (const request of requests) {
+      for (const field of request.fields) {
+        for (const value of invalid) {
+          const body = { ...request.body };
+          const params = { ...request.params };
+          if (field === 'reconciliationId') params[field] = value;
+          else body[field] = value;
+          const response = await invoke(request.method, request.path, body, params);
+          assert.equal(response.statusCode, 400,
+            request.path + ' ' + field + ' ' + JSON.stringify(value));
+          assert.equal(response.body.success, false);
+          assert.equal(response.body.job, undefined);
+          assert.equal(response.body.importJob, undefined);
+          assert.equal(response.body.closeJob, undefined);
+        }
+      }
+      // Legitimate internal spaces and composed international identifiers
+      // remain valid, but cannot queue or execute without durable persistence.
+      const body = { ...request.body };
+      const params = { ...request.params };
+      for (const field of request.fields) {
+        if (field === 'reconciliationId') params[field] = 'recon-2026 Q4';
+        else body[field] = 'caf\\u00e9 2026';
+      }
+      const acceptedShape = await invoke(request.method, request.path, body, params);
+      assert.equal(acceptedShape.statusCode, 503, request.path);
+      assert.equal(acceptedShape.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    }
+  });
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
