@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../src/domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery } from '../src/domain/googleOnboardingTimeout.mjs';
 
 const pending = (mode) => ({
   status: 'pending-gsi', pendingGoogleMode: mode,
@@ -181,8 +181,42 @@ test('late Drive recovery cannot overwrite a timed-out or independently changed 
   assert.match(effect, /current.status !== 'pending-drive-check'/);
   assert.match(effect, /current.apiAccessToken !== pendingAccessToken/);
   assert.match(effect, /current.gsiUser\?\.email !== pendingEmail/);
-  assert.equal((effect.match(/setPendingDriveState\(/g) || []).length, 7,
-    'all seven Drive lookup results must use the attempt-guarded state transition');
+  assert.equal((effect.match(/setPendingDriveState\(/g) || []).length, 5,
+    'all five Drive lookup results must use the attempt-guarded state transition');
   assert.equal((effect.match(/setState\(/g) || []).length, 1,
     'only the guarded wrapper may call the raw React state setter');
+});
+
+for (const mode of ['new', 'existing', 'returning', null]) {
+  test('failed Drive recovery rejects cached workspace for ' + String(mode) + ' sign-in', () => {
+    const previous = Object.freeze({ ...pending(mode), status: 'pending-drive-check' });
+    const result = rejectFailedGoogleDriveRecovery(previous);
+    assert.equal(previous.status, 'pending-drive-check');
+    assert.equal(result.status, 'unauthenticated');
+    for (const key of ['appData', 'token', 'apiAccessToken', 'localAccountId',
+      'gsiUser', 'pendingCredentialAuth', 'pendingGoogleMode']) {
+      assert.equal(result[key], null, key + ' must be cleared after a failed lookup');
+    }
+    assert.match(result.authMessage, /workspace recovery failed/);
+    assert.equal(result.otherUiState, 'preserve');
+  });
+}
+
+test('late Drive recovery failure cannot sign out an unrelated completed session', () => {
+  for (const status of ['authenticated', 'pending-profile-setup', 'pending-verification', 'pending-gsi', 'unauthenticated']) {
+    const current = Object.freeze({ ...pending('new'), status });
+    assert.equal(rejectFailedGoogleDriveRecovery(current), current);
+  }
+  assert.equal(rejectFailedGoogleDriveRecovery(null), null);
+});
+
+test('React Drive lookup exception fails closed rather than using local fallback or provisional enrollment', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf("console.error('Unable to verify Google workspace after sign-in:'");
+  const end = source.indexOf('    checkDrive();', start);
+  assert.ok(start >= 0 && end > start, 'Drive failure branch must be present');
+  const failure = source.slice(start, end);
+  assert.match(failure, /needsDriveCatchUpRef.current = false/);
+  assert.match(failure, /setPendingDriveState\(\(current\) => rejectFailedGoogleDriveRecovery\(current\) as AuthState\)/);
+  assert.doesNotMatch(failure, /findLocalAccountByGoogleEmail|pending-profile-setup|newAppData|status:\\s*'authenticated'/);
 });
