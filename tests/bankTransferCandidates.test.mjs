@@ -198,3 +198,29 @@ test('unmatched posted record sharing a reused reference also enters manual revi
     { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'credit', candidateCount: 1 },
   ]);
 });
+
+test('pending source sharing a provider reference quarantines an otherwise valid posted pair', () => {
+  const posted = [
+    row('checking', 'debit', -500, { providerReference: 'reused-reference' }),
+    row('savings', 'credit', 500, { providerReference: 'reused-reference' }),
+  ];
+  const pending = row('reserve', 'pending-third', 125, {
+    providerReference: 'reused-reference', status: 'pending',
+  });
+  const expected = {
+    candidates: [],
+    ambiguous: [
+      { provider: 'plaid', connectionId: 'item-a', accountId: 'checking', transactionId: 'debit', candidateCount: 1 },
+      { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'credit', candidateCount: 1 },
+    ],
+  };
+  assert.deepEqual(plan([...posted, pending]), expected);
+  assert.deepEqual(plan([pending, ...posted].reverse()), expected);
+  // Once the extra evidence is removed or superseded, it no longer blocks
+  // review-only matching of the two current posted records.
+  for (const status of ['removed', 'superseded']) {
+    const result = plan([...posted, { ...pending, status }]);
+    assert.equal(result.candidates.length, 1);
+    assert.deepEqual(result.ambiguous, []);
+  }
+});
