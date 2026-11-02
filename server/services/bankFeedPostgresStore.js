@@ -226,6 +226,35 @@ function snapshotPersistedCheckpointRow(row) {
   return snapshot;
 }
 
+// Treat PostgreSQL row envelopes as untrusted at the adapter boundary.
+// Validate their own data descriptors before reading payload or SQL keys;
+// accessors, Proxies and inherited fields must never affect reconciliation.
+function snapshotPersistedEntryRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row) ||
+      nodeTypes.isProxy(row)) {
+    throw new Error('Invalid persisted banking entry row.');
+  }
+  const prototype = Object.getPrototypeOf(row);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('Invalid persisted banking entry row.');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(row);
+  const keys = ['tenant_id', 'provider', 'connection_id', 'account_id', 'transaction_id', 'payload'];
+  if (Reflect.ownKeys(descriptors).length !== keys.length) {
+    throw new Error('Invalid persisted banking entry row.');
+  }
+  const snapshot = Object.create(null);
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, 'value')) {
+      throw new Error('Invalid persisted banking entry row.');
+    }
+    snapshot[key] = descriptor.value;
+  }
+  return snapshot;
+}
+
 function transactionQueries(client) {
   return {
     async loadCheckpointForUpdate(scope) {
@@ -271,7 +300,8 @@ function transactionQueries(client) {
       // payload agrees with its database composite key and the authorized
       // scope before the replay planner can use any historical evidence.
       const allowed = new Set(authorized.allowedAccountIds);
-      return result.rows.map((row) => {
+      return result.rows.map((untrustedRow) => {
+        const row = snapshotPersistedEntryRow(untrustedRow);
         const entry = row.payload;
         // Validate the complete JSONB object *before* reading identity fields.
         // A faulty adapter or in-memory fixture may return getters/Proxies;
