@@ -387,3 +387,26 @@ test('rejects malformed UTF-16 in trustee scope, appointments, signer IDs and go
     signerIds: [supplementary],
   }).eligible, true);
 });
+
+
+test('governance scope and trustee principals cannot reuse ownership identifiers', () => {
+  for (const [first, second] of [
+    ['tenantId', 'entityId'], ['tenantId', 'trustId'], ['entityId', 'trustId'],
+  ]) {
+    const aliased = snapshot({ [second]: snapshot()[first], appointments: [], signerIds: [] });
+    // Reject even without appointments or signers; no implicit authority can
+    // be inferred from a collapsed tenant/entity/trust namespace.
+    assert.throws(() => evaluateTrusteeSigningPolicy(aliased),
+      /Governance tenant, entity and trust identifiers must be distinct/);
+  }
+  for (const scopeId of ['tenant-a', 'entity-a', 'trust-a']) {
+    for (const mode of ['independent', 'joint']) {
+      assert.throws(() => evaluate({
+        mode, appointments: [appointment(scopeId)], signerIds: [scopeId],
+      }), /Trustee identifier collides with governance scope/);
+    }
+  }
+  // Valid trustees and signers retain the existing independent/joint rules.
+  assert.equal(evaluate().eligible, true);
+  assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
+});
