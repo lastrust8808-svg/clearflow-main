@@ -9,6 +9,8 @@ VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'invoice-key',
         repeat('a', 64), '{"invoiceId":"invoice-1"}'::jsonb);
 
 DO $test$
+DECLARE
+  bad_identity text;
 BEGIN
   -- A database reservation must never be accepted without a meaningful
   -- tenant, actor, or idempotency identity. These checks protect persisted
@@ -63,6 +65,47 @@ BEGIN
     RAISE EXCEPTION 'tab/newline-only idempotency key was accepted';
   EXCEPTION WHEN check_violation THEN NULL;
   END;
+
+  -- Nonempty but malformed identities must fail at the DB boundary too.
+  -- These rows bypass the JS reservation service to exercise SQL constraints.
+  FOR bad_identity IN SELECT unnest(ARRAY[
+    ' leading-tenant', 'trailing-tenant ', E'tenant\\tcontrol',
+    repeat('t', 256)
+  ]) LOOP
+    BEGIN
+      INSERT INTO erp_operation_jobs
+        (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+      VALUES (bad_identity, 'actor-a', 'invoice_delivery', 'invalid-tenant-test',
+              repeat('a', 64), '{}'::jsonb);
+      RAISE EXCEPTION 'invalid tenant identity was accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  FOR bad_identity IN SELECT unnest(ARRAY[
+    ' leading-actor', 'trailing-actor ', E'actor\\ncontrol',
+    repeat('a', 256)
+  ]) LOOP
+    BEGIN
+      INSERT INTO erp_operation_jobs
+        (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+      VALUES ('tenant-a', bad_identity, 'invoice_delivery', 'invalid-actor-test',
+              repeat('a', 64), '{}'::jsonb);
+      RAISE EXCEPTION 'invalid actor identity was accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  FOR bad_identity IN SELECT unnest(ARRAY[
+    'short', 'bad key', E'bad\\tkey', repeat('k', 129)
+  ]) LOOP
+    BEGIN
+      INSERT INTO erp_operation_jobs
+        (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+      VALUES ('tenant-a', 'actor-a', 'invoice_delivery', bad_identity,
+              repeat('a', 64), '{}'::jsonb);
+      RAISE EXCEPTION 'invalid idempotency key was accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
 
   -- The exact lowercase 64-character digest is part of the durable
   -- idempotency receipt. Uppercase, non-hex, and truncated digests fail.
