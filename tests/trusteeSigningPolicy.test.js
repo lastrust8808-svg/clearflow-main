@@ -10,6 +10,12 @@ const appointment = (trusteeId, overrides = {}) => ({
     ? { revocationEvidenceRef: 'revocation-' + trusteeId } : {}),
   ...overrides,
 });
+const unaccepted = (trusteeId) => {
+  const record = appointment(trusteeId);
+  delete record.acceptedOn;
+  delete record.acceptanceEvidenceRef;
+  return record;
+};
 const snapshot = (overrides = {}) => ({
   tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
   asOfDate: '2026-10-28', mode: 'independent',
@@ -32,22 +38,22 @@ test('joint mode requires all currently active accepted trustees', () => {
   assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
 });
 test('unaccepted or future-effective appointment is not active', () => {
-  const appointments = [appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined }),
+  const appointments = [unaccepted('a'),
     appointment('b', { effectiveOn: '2027-01-01' })];
   assert.equal(evaluate({ appointments }).reason, 'no_active_accepted_trustees');
 });
 test('orphan acceptance and revocation pointers cannot claim trustee governance events', () => {
   assert.throws(() => evaluate({
-    appointments: [appointment('a', { acceptedOn: undefined })],
+    appointments: [{ ...unaccepted('a'), acceptanceEvidenceRef: 'orphan-acceptance' }],
   }), /Unaccepted trustee appointment cannot claim acceptance evidence/);
   assert.throws(() => evaluate({
-    appointments: [appointment('a', { revokedOn: undefined, revocationEvidenceRef: 'revocation-a' })],
+    appointments: [appointment('a', { revocationEvidenceRef: 'revocation-a' })],
   }), /Unrevoked trustee appointment cannot claim revocation evidence/);
   assert.equal(evaluate({
-    appointments: [appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined })],
+    appointments: [unaccepted('a')],
   }).reason, 'no_active_accepted_trustees');
   assert.equal(evaluate({
-    appointments: [appointment('a', { revokedOn: undefined })], signerIds: ['a'],
+    appointments: [appointment('a')], signerIds: ['a'],
   }).eligible, true);
 });
 test('acceptance after evaluation date does not confer eligibility', () => {
@@ -409,4 +415,25 @@ test('governance scope and trustee principals cannot reuse ownership identifiers
   // Valid trustees and signers retain the existing independent/joint rules.
   assert.equal(evaluate().eligible, true);
   assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
+});
+
+test('governance event absence rejects explicit null/undefined and orphan provenance', () => {
+  for (const invalid of [null, undefined]) {
+    for (const field of ['acceptedOn', 'revokedOn']) {
+      assert.throws(() => evaluate({
+        appointments: [appointment('a', { [field]: invalid })],
+      }), new RegExp('appointment\\.' + field));
+    }
+    assert.throws(() => evaluate({
+      appointments: [{ ...unaccepted('a'), acceptanceEvidenceRef: invalid }],
+    }), /Unaccepted trustee appointment cannot claim acceptance evidence/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { revocationEvidenceRef: invalid })],
+    }), /Unrevoked trustee appointment cannot claim revocation evidence/);
+  }
+  // Explicit absence is valid; the supplied policy still never authorizes
+  // an unaccepted trustee, and ordinary accepted trustees remain eligible.
+  assert.equal(evaluate({ appointments: [unaccepted('a')] }).reason,
+    'no_active_accepted_trustees');
+  assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
 });
