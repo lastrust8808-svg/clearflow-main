@@ -1,7 +1,8 @@
 /**
  * Read-only transfer candidates. Never posts, reconciles, or confirms a transfer.
  * A trusted server must authorize the tenant and account set before calling.
- * Only a shared provider reference supports a candidate; amount/date alone
+ * Only a shared reference within the SAME provider connection supports a
+ * candidate. Provider references are not globally unique; amount/date alone
  * cannot establish that two unrelated transactions are an internal transfer.
  */
 import { types as nodeTypes } from 'node:util';
@@ -9,10 +10,10 @@ import { types as nodeTypes } from 'node:util';
 const MAX_TRANSACTIONS = 1000;
 const MAX_DAY_GAP = 3;
 const FIELDS = new Set([
-  'tenantId', 'accountId', 'transactionId', 'amountCents', 'currency',
+  'tenantId', 'provider', 'connectionId', 'accountId', 'transactionId', 'amountCents', 'currency',
   'postedDate', 'status', 'providerReference',
 ]);
-const REQUIRED = ['tenantId', 'accountId', 'transactionId', 'amountCents',
+const REQUIRED = ['tenantId', 'provider', 'connectionId', 'accountId', 'transactionId', 'amountCents',
   'currency', 'postedDate', 'status'];
 
 function validId(value) {
@@ -50,7 +51,8 @@ function snapshotTransaction(value, tenantId) {
     row[key] = d.value;
   }
   if (REQUIRED.some((key) => !Object.hasOwn(row, key)) ||
-      row.tenantId !== tenantId || !validId(row.accountId) ||
+      row.tenantId !== tenantId || !['plaid', 'mercury'].includes(row.provider) ||
+      !validId(row.connectionId) || !validId(row.accountId) ||
       !validId(row.transactionId) ||
       !Number.isSafeInteger(row.amountCents) || row.amountCents === 0 ||
       Object.is(row.amountCents, -0) ||
@@ -65,7 +67,7 @@ function snapshotTransaction(value, tenantId) {
 }
 
 function identity(row) {
-  return JSON.stringify([row.accountId, row.transactionId]);
+  return JSON.stringify([row.provider, row.connectionId, row.accountId, row.transactionId]);
 }
 
 /**
@@ -101,7 +103,8 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
   for (let i = 0; i < rows.length; i++) {
     for (let j = i + 1; j < rows.length; j++) {
       const a = rows[i], b = rows[j];
-      if (a.accountId === b.accountId || a.currency !== b.currency ||
+      if (a.provider !== b.provider || a.connectionId !== b.connectionId ||
+          a.accountId === b.accountId || a.currency !== b.currency ||
           a.providerReference !== b.providerReference ||
           a.amountCents !== -b.amountCents ||
           Math.abs(a.day - b.day) > MAX_DAY_GAP) continue;
@@ -117,14 +120,16 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     // has multiple possible matches. Surface every affected source for review.
     if (matches.length > 1 ||
         (matches.length === 1 && adjacency.get(matches[0]).length !== 1)) {
-      ambiguous.push({ accountId: row.accountId,
-        transactionId: row.transactionId, candidateCount: matches.length });
+      ambiguous.push({ provider: row.provider, connectionId: row.connectionId,
+        accountId: row.accountId, transactionId: row.transactionId,
+        candidateCount: matches.length });
     }
     if (matches.length !== 1) continue;
     const partnerId = matches[0];
     if (adjacency.get(partnerId).length !== 1 || id >= partnerId) continue;
     const partner = byId.get(partnerId);
     candidates.push({
+      provider: row.provider, connectionId: row.connectionId,
       left: { accountId: row.accountId, transactionId: row.transactionId },
       right: { accountId: partner.accountId, transactionId: partner.transactionId },
       amountCents: Math.abs(row.amountCents), currency: row.currency,
