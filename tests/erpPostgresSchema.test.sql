@@ -184,6 +184,38 @@ BEGIN
     RAISE EXCEPTION 'processing job without a worker lease was accepted';
   EXCEPTION WHEN check_violation THEN NULL;
   END;
+
+  -- Database chronology must reject forged timestamps even if the caller
+  -- bypasses the reservation/dispatch service's receipt validation.
+  BEGIN
+    UPDATE erp_operation_jobs
+    SET updated_at = created_at - interval '1 second'
+    WHERE tenant_id = 'tenant-a' AND idempotency_key = 'invoice-key';
+    RAISE EXCEPTION 'job update timestamp predating creation was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload,
+       status, claimed_by, claimed_at, lease_expires_at, dispatch_started_at)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'preclaim-dispatch',
+            repeat('a', 64), '{}'::jsonb, 'processing', 'worker-a',
+            '2026-10-29T12:00:00Z', '2026-10-29T12:05:00Z',
+            '2026-10-29T11:59:59Z');
+    RAISE EXCEPTION 'dispatch fence predating worker claim was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload,
+       status, claimed_by, claimed_at, lease_expires_at, dispatch_started_at)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'expired-dispatch',
+            repeat('a', 64), '{}'::jsonb, 'processing', 'worker-a',
+            '2026-10-29T12:00:00Z', '2026-10-29T12:05:00Z',
+            '2026-10-29T12:05:00Z');
+    RAISE EXCEPTION 'dispatch fence at expired lease boundary was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
 END
 $test$;
 
