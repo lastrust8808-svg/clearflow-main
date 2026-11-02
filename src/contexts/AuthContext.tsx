@@ -3,7 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
-import { expirePendingGoogleSignIn } from '../domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -409,39 +409,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const handleAuthorizationCodeResponse = useCallback((response: any) => {
-    if (response.error || !response.code) {
-        console.error('OAuth Error:', response.error || 'Missing authorization code.');
-        setState((current) => {
-          if (
-            (current.status === 'pending-gsi' || current.status === 'pending-drive-check') &&
-            current.appData?.user
-          ) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
-        return;
+    if (response?.error || !response?.code) {
+      console.error('OAuth Error:', response?.error || 'Missing authorization code.');
+      needsDriveCatchUpRef.current = false;
+      setState((current) => rejectFailedGoogleAuthorization(current) as AuthState);
+      return;
     }
 
     needsDriveCatchUpRef.current = true;
@@ -451,35 +423,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       )
       .catch((error) => {
         console.error('OAuth profile hydration failed:', error);
-        setState((current) => {
-          if (current.appData?.user) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
+        needsDriveCatchUpRef.current = false;
+        setState((current) => rejectFailedGoogleAuthorization(current) as AuthState);
       });
-  }, [canBypassProfileSetupForGoogleIdentity, exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
+  }, [exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
