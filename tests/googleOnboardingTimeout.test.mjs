@@ -46,3 +46,17 @@ test('React pending-GSI timeout is wired to fail-closed reducer, not remembered 
   assert.doesNotMatch(timeoutEffect, /const fallbackIdentity = current\.gsiUser \|\| lastKnownGoogleUser/);
   assert.doesNotMatch(timeoutEffect, /current\.appData\?\.user \|\| buildProvisionalGoogleUser\(fallbackIdentity\)/);
 });
+
+test('remembered Google identity cannot silently restore an authenticated tenant workspace', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  // A remembered email may remain as a UI hint, but must not promote a local
+  // Google match into an authenticated workspace on page load.
+  assert.match(source, /LAST_GOOGLE_USER_STORAGE_KEY/);
+  assert.match(source, /lastKnownGoogleUser: lastKnownGoogleUser/);
+  assert.doesNotMatch(source, /restoreRememberedSession/);
+  assert.doesNotMatch(source, /status:\s*getGoogleWorkspaceStatus\(mergedAppData,\s*lastKnownGoogleUser\)/);
+  assert.doesNotMatch(source, /localAccountId:\s*localGoogleMatch\.userId,\s*appData:\s*mergedAppData/);
+  // Explicit local credential flows must remain available for account recovery.
+  assert.match(source, /authenticateLocalPassword\(/);
+  assert.match(source, /verifyLocalAuthChallenge\(/);
+});
