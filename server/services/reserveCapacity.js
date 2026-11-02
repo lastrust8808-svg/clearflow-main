@@ -253,5 +253,24 @@ export function calculateReserveCapacity(snapshot) {
       throw new Error('Reserve asset and evidence identifiers must be distinct');
     }
   }
+  // Journal entry IDs, asset IDs, provenance receipts and owning scope IDs
+  // represent different roles. A later entry must not reuse an earlier role's
+  // identifier (or vice versa), even when individual entries look valid.
+  // This is structural namespace integrity, not proof of custody or ownership.
+  const scopeIds = new Set([tenantId, entityId, trustId]);
+  for (const [role, values] of [
+    ['entry', ids], ['asset', assetIds], ['evidence', evidenceRefs],
+  ]) {
+    for (const value of values) {
+      if (scopeIds.has(value)) {
+        throw new Error('Reserve ' + role + ' identifier collides with reserve scope');
+      }
+    }
+  }
+  for (const entryId of ids) {
+    if (assetIds.has(entryId) || evidenceRefs.has(entryId)) {
+      throw new Error('Reserve entry, asset and evidence identifiers must be distinct');
+    }
+  }
   return Object.freeze({ tenantId, entityId, trustId, currency, asOfAt, maxEvidenceAgeMs, oldestEvidenceAt, ...totals });
 }
