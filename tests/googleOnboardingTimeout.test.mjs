@@ -220,3 +220,18 @@ test('React Drive lookup exception fails closed rather than using local fallback
   assert.match(failure, /setPendingDriveState\(\(current\) => rejectFailedGoogleDriveRecovery\(current\) as AuthState\)/);
   assert.doesNotMatch(failure, /findLocalAccountByGoogleEmail|pending-profile-setup|newAppData|status:\\s*'authenticated'/);
 });
+
+
+test('stale Drive recovery cannot mutate a local account cache before session admission', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const pendingEmail = state.gsiUser?.email;');
+  const end = source.indexOf("if (state.status !== 'pending-drive-check' || !state.gsiUser) {", start);
+  assert.ok(start >= 0 && end > start, 'Drive recovery effect must be bounded');
+  const effect = source.slice(start, end);
+  assert.match(effect, /loadAccountAppData\(localGoogleMatch\.userId\)/,
+    'durable linked-account recovery must remain supported');
+  assert.match(effect, /setPendingDriveState\(\(current\) => \(\{/,
+    'recovered data must be admitted only through the pending-attempt guard');
+  assert.doesNotMatch(effect, /saveLocalAuthAppData\(/,
+    'an async response may not write local cache before its pending session is accepted');
+});
