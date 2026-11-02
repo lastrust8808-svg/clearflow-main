@@ -9,6 +9,10 @@ import { types as nodeTypes } from 'node:util';
 
 const CHECKPOINT = 'public.clearflow_bank_feed_checkpoints';
 const ENTRIES = 'public.clearflow_bank_feed_entries';
+// Bound untrusted JSONB evidence independently of provider page event counts.
+// This adapter is also callable directly, without the replay planner.
+const MAX_ENTRY_JSON_BYTES = 1024 * 1024;
+const MAX_BATCH_JSON_BYTES = 16 * 1024 * 1024;
 
 // This adapter can be called without the atomic page planner. Treat even
 // server-supplied scopes as untrusted input before issuing scoped SQL; truthy
@@ -169,6 +173,9 @@ function transactionQueries(client) {
         // adapter fixtures or corrupted read paths before replay can advance
         // an authenticated connection's synchronization checkpoint.
         assertPlainBankingEvidence(entry);
+        if (Buffer.byteLength(JSON.stringify(entry), 'utf8') > MAX_ENTRY_JSON_BYTES) {
+          throw new Error('Oversized persisted banking entry evidence.');
+        }
         return entry;
       });
     },
@@ -183,6 +190,7 @@ function transactionQueries(client) {
       }
       const prepared = [];
       const seen = new Set();
+      let totalJsonBytes = 0;
       for (const entry of entries) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
             entry.tenantId !== scope.tenantId ||
@@ -210,6 +218,14 @@ function transactionQueries(client) {
             snapshot.accountId !== entry.accountId ||
             snapshot.transactionId !== entry.transactionId) {
           throw new Error('Refusing banking entry with inconsistent serialized identity.');
+        }
+        const jsonBytes = Buffer.byteLength(serialized, 'utf8');
+        if (jsonBytes > MAX_ENTRY_JSON_BYTES) {
+          throw new Error('Refusing oversized banking entry write.');
+        }
+        totalJsonBytes += jsonBytes;
+        if (totalJsonBytes > MAX_BATCH_JSON_BYTES) {
+          throw new Error('Refusing oversized banking batch write.');
         }
         const key = JSON.stringify([snapshot.accountId, snapshot.transactionId]);
         if (seen.has(key)) {
