@@ -290,6 +290,7 @@ test('PostgreSQL adapter independently rejects ambiguous authorization scopes be
     { ...scope(), allowedAccountIds: ['acct-a\\u202e'.replace('\\u202e', '\u202e')] },
     { ...scope(), allowedAccountIds: ['x'.repeat(257)] },
     { ...scope(), provider: 'unknown' },
+    { ...scope(), tenantId: 'tenant-' + String.fromCharCode(0xD800) },
   ];
   for (const badScope of invalidScopes) {
     const db = mockPg();
@@ -451,4 +452,56 @@ test('PostgreSQL adapter refuses lossy or executable JSONB evidence before any b
     tx.saveEntries(scope(), [valid('tx-safe'), valid('tx-other')]));
   assert.equal(db.state.entries.length, 2);
   assert.deepEqual(db.state.entries[0].details.adjustments, [1.25, 2]);
+});
+
+
+test('PostgreSQL adapter rejects malformed Unicode evidence before any batch INSERT', async () => {
+  const broken = String.fromCharCode(0xD800);
+  const valid = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+    memo: 'café / 東京 / 🏦',
+  });
+  for (const corrupted of [
+    { ...valid('tx-bad-value'), memo: 'memo-' + broken },
+    { ...valid('tx-bad-key'), ['memo-' + broken]: 'bad' },
+    { ...valid('tx-bad-nested'), details: [{ note: broken }] },
+  ]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(scope(), [valid('tx-good-first'), corrupted])),
+      /Refusing non-JSON banking entry write/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'malformed Unicode must reject the entire batch before INSERT');
+    assert.deepEqual(db.state, initial());
+  }
+  const db = mockPg();
+  await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [valid('tx-valid-unicode')]));
+  assert.equal(db.state.entries[0].memo, 'café / 東京 / 🏦');
+});
+
+test('PostgreSQL adapter rejects malformed persisted Unicode before advancing a cursor', async () => {
+  const broken = String.fromCharCode(0xD800);
+  for (const tamperReadPayload of [
+    { memo: broken },
+    { ['memo-' + broken]: 'bad' },
+  ]) {
+    const db = mockPg({ tamperReadPayload });
+    db.state.entries.push({
+      tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+      accountId: 'acct-a', transactionId: 'tx-legacy', amountCents: 500,
+      status: 'posted', requiresReview: true,
+    });
+    const before = structuredClone(db.state);
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Malformed Unicode banking evidence/,
+    );
+    assert.deepEqual(db.state, before);
+    assert.equal(db.calls.filter(({ sql }) => /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0);
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+  }
 });
