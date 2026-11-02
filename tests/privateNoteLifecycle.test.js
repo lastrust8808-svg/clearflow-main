@@ -618,3 +618,22 @@ test('scope identifiers cannot be reused as private-note actor, event, document 
     event('notice_prepared', 3),
   ]).status, 'notice_prepared');
 });
+
+test('private-note ownership roles require distinct canonical IDs', () => {
+  const roles = Object.keys(scope);
+  for (let i = 0; i < roles.length; i++) {
+    for (let j = i + 1; j < roles.length; j++) {
+      // Every pair of tenant/entity/trust/note identities must be separate.
+      // Even an empty history must not claim ambiguous ownership.
+      const aliased = { ...scope, [roles[j]]: scope[roles[i]] };
+      assert.throws(() => projectPrivateNoteLifecycle({
+        ...aliased, asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+      }), /scope identifiers must be distinct/, roles[i] + ' and ' + roles[j]);
+      assert.throws(() => projectPrivateNoteLifecycle({
+        ...aliased, asOfAt: '2026-11-01T00:00:00.000Z',
+        events: [event('issued', 1, aliased)],
+      }), /scope identifiers must be distinct/);
+    }
+  }
+  assert.equal(project([event('issued', 1), event('presented', 2)]).status, 'presented');
+});
