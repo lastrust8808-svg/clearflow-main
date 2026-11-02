@@ -28,6 +28,54 @@ test('resolves only an authorized-scoped active digest to an internal version bi
   assert.equal(JSON.stringify(registry).includes(link.url.split('/').at(-1)), false);
 });
 
+test('QR binding identities reject malformed UTF-16 without rejecting supplementary Unicode', () => {
+  const { registry, lookup } = fixture();
+  // An unpaired surrogate is replaced on UTF-8 encoding; accepting it could
+  // alias two different trust, document or revocation-evidence identities.
+  for (const invalid of [String.fromCharCode(0xd800), String.fromCharCode(0xdc00)]) {
+    for (const key of ['tenantId', 'entityId', 'trustId']) {
+      const changedScope = { ...scope, [key]: 'scope-' + invalid };
+      assert.throws(() => resolveTrustDocumentQrBinding({
+        ...registry, ...changedScope,
+        bindings: [{ ...registry.bindings[0], ...changedScope }],
+      }, { ...lookup, ...changedScope }), /well-formed Unicode/);
+    }
+    for (const key of ['documentId', 'versionId']) {
+      assert.throws(() => resolveTrustDocumentQrBinding({
+        ...registry, bindings: [{ ...registry.bindings[0], [key]: 'record-' + invalid }],
+      }, lookup), /well-formed Unicode/);
+    }
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, bindings: [{
+        ...registry.bindings[0], status: 'revoked', revokedAt,
+        revocationEvidenceRef: 'receipt-' + invalid,
+      }],
+    }, lookup), /well-formed Unicode/);
+  }
+
+  const supplementary = String.fromCodePoint(0x1f4ce);
+  const validScope = {
+    tenantId: 'tenant-' + supplementary,
+    entityId: 'entity-' + supplementary,
+    trustId: 'trust-' + supplementary,
+  };
+  const validRegistry = {
+    ...registry, ...validScope,
+    bindings: [{
+      ...registry.bindings[0], ...validScope,
+      documentId: 'document-' + supplementary,
+      versionId: 'version-' + supplementary,
+    }],
+  };
+  assert.deepEqual(resolveTrustDocumentQrBinding(validRegistry, {
+    ...lookup, ...validScope,
+  }), {
+    status: 'bound',
+    documentId: 'document-' + supplementary,
+    versionId: 'version-' + supplementary,
+  });
+});
+
 test('QR binding identities and revocation receipts reject non-NFC Unicode aliases', () => {
   const { registry, lookup } = fixture();
   const composed = 'é';
