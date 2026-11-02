@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../src/domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../src/domain/googleOnboardingTimeout.mjs';
 
 const pending = (mode) => ({
   status: 'pending-gsi', pendingGoogleMode: mode,
@@ -136,4 +136,38 @@ test('React manual onboarding continue uses fail-closed reducer and never cached
   assert.match(callback, /rejectUnverifiedGoogleOnboardingFallback\(current\)/);
   assert.doesNotMatch(callback, /pending-profile-setup|buildProvisionalGoogleUser|lastKnownGoogleUser|current\.appData\?\.user/);
   assert.doesNotMatch(source, /const buildProvisionalGoogleUser =/);
+});
+
+for (const mode of ['new', 'existing', 'returning', null]) {
+  test('unverified Drive lookup timeout rejects cached workspace in ' + String(mode) + ' mode', () => {
+    const current = Object.freeze({ ...pending(mode), status: 'pending-drive-check' });
+    const result = expirePendingGoogleDriveCheck(current);
+    assert.equal(current.status, 'pending-drive-check');
+    assert.equal(result.status, 'unauthenticated');
+    for (const key of [
+      'appData', 'token', 'apiAccessToken', 'localAccountId', 'gsiUser',
+      'pendingCredentialAuth', 'pendingGoogleMode',
+    ]) assert.equal(result[key], null, key + ' must be cleared');
+    assert.equal(result.otherUiState, 'preserve');
+    assert.match(result.authMessage, /lookup timed out before verification/);
+  });
+}
+
+test('late Drive timeout cannot invalidate completed or unrelated sessions', () => {
+  for (const status of ['authenticated', 'pending-profile-setup', 'pending-verification', 'pending-gsi', 'unauthenticated']) {
+    const current = Object.freeze({ ...pending('new'), status });
+    assert.equal(expirePendingGoogleDriveCheck(current), current, status);
+  }
+  assert.equal(expirePendingGoogleDriveCheck(null), null);
+});
+
+test('React Drive lookup timeout cannot manufacture a profile or reuse cached identity', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const effectStart = source.indexOf("if (state.status !== 'pending-drive-check' || !state.gsiUser) {");
+  assert.ok(effectStart >= 0, 'Drive lookup timeout effect must exist');
+  const effectEnd = source.indexOf('  useEffect(() => {', effectStart);
+  assert.ok(effectEnd > effectStart, 'Drive lookup timeout effect must be bounded');
+  const effect = source.slice(effectStart, effectEnd);
+  assert.match(effect, /expirePendingGoogleDriveCheck\(current\)/);
+  assert.doesNotMatch(effect, /pending-profile-setup|newUser: User|findLocalAccountByGoogleEmail/);
 });
