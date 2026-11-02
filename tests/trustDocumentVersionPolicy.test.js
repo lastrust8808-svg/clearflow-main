@@ -233,6 +233,26 @@ test('version registry rejects malformed arrays before accessing any version', (
 });
 
 
+test('document version histories are bounded before reading indexed records', () => {
+  const oversized = new Array(10_001).fill(version(1));
+  let getterCalls = 0;
+  Object.defineProperty(oversized, '0', {
+    configurable: true, enumerable: true,
+    get() { getterCalls++; throw new Error('oversized history getter executed'); },
+  });
+  const proof = { versionId: 'version-1', sha256: digestA };
+  assert.throws(() => check(oversized, proof), /10000-record review limit/);
+  assert.throws(() => verifyTrustDocumentBytes(registry(oversized), {
+    versionId: 'version-1', content: Buffer.from('finalized bytes'),
+  }), /10000-record review limit/);
+  assert.equal(getterCalls, 0);
+
+  // The boundary remains reviewable: its duplicate provenance is rejected by
+  // normal integrity checks, not silently truncated or rejected for size.
+  const boundary = new Array(10_000).fill(version(1));
+  assert.throws(() => check(boundary, proof), /Duplicate document version ID/);
+});
+
 test('document version records reject getters, hidden claims and unsupported fields without executing code', () => {
   let getterCalls = 0;
   const accessor = version(1);
