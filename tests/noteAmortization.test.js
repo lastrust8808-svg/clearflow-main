@@ -180,3 +180,16 @@ test('null-prototype note terms with explicit own data values remain valid', () 
   assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
   assert.equal(Object.isFrozen(result), true);
 });
+
+
+test('note amortization rejects all pairwise aliases of tenant, entity, trust and note IDs', () => {
+  const roles = ['tenantId', 'entityId', 'trustId', 'noteId'];
+  for (let i = 0; i < roles.length; i++) {
+    for (let j = i + 1; j < roles.length; j++) {
+      assert.throws(() => schedule({ [roles[j]]: terms[roles[i]] }), /identifiers must be distinct/);
+    }
+  }
+  const valid = schedule();
+  assert.equal(valid.installments.length, terms.paymentCount);
+  assert.equal(valid.installments.at(-1).remainingPrincipalMinor, 0);
+});
