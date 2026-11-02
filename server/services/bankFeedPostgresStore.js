@@ -110,7 +110,18 @@ function validCursor(value) {
 // silently converts NaN/Infinity to null, -0 to 0, drops undefined fields,
 // invokes getters/toJSON, and accepts already-imprecise integers. Reject
 // those shapes before any INSERT, including when called without the planner.
+// JSON.stringify invokes inherited toJSON on otherwise plain objects and
+// arrays before any replacer can inspect the evidence. A polluted runtime
+// prototype must never rewrite financial entries or historical JSONB records.
+function assertNativeBankingJsonPrototypesSafe() {
+  if (Object.getOwnPropertyDescriptor(Object.prototype, 'toJSON') ||
+      Object.getOwnPropertyDescriptor(Array.prototype, 'toJSON')) {
+    throw new TypeError('Inherited banking JSON serializer would alter evidence.');
+  }
+}
+
 function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0) {
+  if (depth === 0) assertNativeBankingJsonPrototypesSafe();
   if (typeof value === 'string') {
     if (!value.isWellFormed()) throw new TypeError('Malformed Unicode banking evidence.');
     return;
