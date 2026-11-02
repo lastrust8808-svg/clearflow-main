@@ -137,6 +137,10 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
   const seenRevocationEvidence = new Set();
+  // Keep document and version identities separate from independent revocation
+  // receipts, including identities introduced by later registry rows.
+  const documentIds = new Set();
+  const versionIds = new Set();
   const activeVersions = new Set();
   // Each document version has a single non-overlapping QR-token validity
   // window. Revocation and replacement at the same instant are permitted.
@@ -151,6 +155,8 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     }
     const documentId = id(binding.documentId, 'binding.documentId');
     const versionId = id(binding.versionId, 'binding.versionId');
+    documentIds.add(documentId);
+    versionIds.add(versionId);
     const hash = digest(binding.tokenHashSha256, 'binding.tokenHashSha256');
     if (seenHashes.has(hash)) throw new Error('Duplicate QR token hash');
     seenHashes.add(hash);
@@ -195,6 +201,16 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     versionWindows.set(versionKey, windows);
     if (timingSafeEqual(Buffer.from(hash, 'hex'), requested)) {
       matched = binding.status === 'active' ? { status: 'bound', documentId, versionId } : null;
+    }
+  }
+  // Revocation evidence is an independent receipt, never a tenant/entity/trust
+  // identity, document/version ID, or QR token digest. Check after all rows
+  // so registry order cannot hide a later cross-role identity collision.
+  const scopeIds = new Set([tenantId, entityId, trustId]);
+  for (const receipt of seenRevocationEvidence) {
+    if (scopeIds.has(receipt) || documentIds.has(receipt) ||
+        versionIds.has(receipt) || seenHashes.has(receipt)) {
+      throw new Error('QR revocation evidence identifier collides with registry identity');
     }
   }
   // Once sorted by issuance, any overlap must occur between adjacent
