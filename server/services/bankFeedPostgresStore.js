@@ -167,6 +167,30 @@ function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0)
   }
 }
 
+// Direct adapter callers can bypass the atomic page planner. Never iterate
+// a caller-owned array: a Proxy, accessor-backed index, sparse batch, or
+// custom iterator could execute code or change the rows selected for INSERT.
+// Snapshot indexed data descriptors before inspecting any financial record.
+function snapshotBankingEntryBatch(entries) {
+  if (!Array.isArray(entries) || nodeTypes.isProxy(entries) ||
+      Object.getPrototypeOf(entries) !== Array.prototype) {
+    throw new Error('Refusing malformed banking entry batch.');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(entries);
+  if (Reflect.ownKeys(descriptors).length !== entries.length + 1) {
+    throw new Error('Refusing malformed banking entry batch.');
+  }
+  const snapshot = [];
+  for (let index = 0; index < entries.length; index++) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new Error('Refusing malformed banking entry batch.');
+    }
+    snapshot.push(descriptor.value);
+  }
+  return snapshot;
+}
+
 function transactionQueries(client) {
   return {
     async loadCheckpointForUpdate(scope) {
@@ -246,13 +270,11 @@ function transactionQueries(client) {
       const authorized = snapshotScope(scope);
       const requestedScope = [authorized.tenantId, authorized.provider, authorized.connectionId];
       const allowed = new Set(authorized.allowedAccountIds);
-      if (!Array.isArray(entries)) {
-        throw new Error('Refusing out-of-scope banking entry write.');
-      }
+      const detachedEntries = snapshotBankingEntryBatch(entries);
       const prepared = [];
       const seen = new Set();
       let totalJsonBytes = 0;
-      for (const entry of entries) {
+      for (const entry of detachedEntries) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
           throw new Error('Refusing out-of-scope banking entry write.');
         }
