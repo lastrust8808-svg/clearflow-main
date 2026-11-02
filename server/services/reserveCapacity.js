@@ -216,6 +216,15 @@ export function calculateReserveCapacity(snapshot) {
     const amount = minorUnits(entry.amountMinor, 'amountMinor');
     // Omission means no reported encumbrance. An explicitly present null or
     // undefined is unknown, not zero: treating it as zero overstates cash.
+    // Unknown encumbrances must never become apparently spendable cash.
+    // Cash sources must explicitly attest both amounts, including zero;
+    // missing values are not equivalent to an independently verified zero.
+    if (entry.kind === 'cash' &&
+        (!Object.hasOwn(entry, 'restrictedMinor') || !Object.hasOwn(entry, 'pledgedMinor'))) {
+      throw new TypeError('Cash reserve entries require explicit restrictedMinor and pledgedMinor');
+    }
+    // Noncash collateral may omit cash-specific encumbrances, but any
+    // explicitly supplied values must still be valid numeric zeros.
     const restricted = Object.hasOwn(entry, 'restrictedMinor')
       ? minorUnits(entry.restrictedMinor, 'restrictedMinor') : 0;
     const pledged = Object.hasOwn(entry, 'pledgedMinor')
