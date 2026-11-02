@@ -46,3 +46,26 @@ export function rejectFailedGoogleAuthorization(current) {
     authMessage: 'Google sign-in could not be verified. Please retry.',
   };
 }
+
+/**
+ * An explicit "continue" action cannot substitute a remembered email or
+ * locally cached profile for completed Google authentication and workspace
+ * recovery. This includes a pending Drive lookup after an OAuth exchange:
+ * an unconfirmed workspace is not permission to open profile setup.
+ */
+export function rejectUnverifiedGoogleOnboardingFallback(current) {
+  if (!current || !['pending-gsi', 'pending-drive-check'].includes(current.status)) return current;
+
+  return {
+    ...current,
+    status: 'unauthenticated',
+    appData: null,
+    token: null,
+    apiAccessToken: null,
+    localAccountId: null,
+    gsiUser: null,
+    pendingCredentialAuth: null,
+    pendingGoogleMode: null,
+    authMessage: 'Google sign-in or workspace verification is incomplete. Retry Google sign-in to continue.',
+  };
+}
