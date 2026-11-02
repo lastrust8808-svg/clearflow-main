@@ -458,3 +458,34 @@ test('reserve asset and evidence references cannot impersonate one another acros
   ]);
   assert.equal(valid.unencumberedCashMinor, 300);
 });
+
+test('reserve entry, asset, evidence and owning-scope identities remain distinct', () => {
+  // An entry's journal ID cannot masquerade as the underlying asset or an
+  // independent provenance record, including when the collision is in a
+  // different entry or appears earlier in the list.
+  for (const key of ['assetId', 'evidenceRef']) {
+    assert.throws(() => calculate([entry('cash-a', 100, { [key]: 'cash-a' })]),
+      /Reserve entry, asset and evidence identifiers must be distinct/);
+    for (const rows of [
+      [entry('cash-a', 100), entry('cash-b', 200, { [key]: 'cash-a' })],
+      [entry('cash-a', 100, { [key]: 'cash-b' }), entry('cash-b', 200)],
+    ]) {
+      assert.throws(() => calculate(rows),
+        /Reserve entry, asset and evidence identifiers must be distinct/);
+    }
+  }
+  // Tenant/entity/trust identifiers must not be repurposed as an entry,
+  // asset or evidence ID. This is not independent proof of asset ownership.
+  for (const scopeId of Object.values(base).filter(value => value !== 'USD')) {
+    for (const key of ['id', 'assetId', 'evidenceRef']) {
+      assert.throws(() => calculate([entry('cash-a', 100, { [key]: scopeId })]),
+        /identifier collides with reserve scope/);
+      assert.throws(() => calculate([
+        entry('cash-a', 100), entry('cash-b', 200, { [key]: scopeId }),
+      ]), /identifier collides with reserve scope/);
+    }
+  }
+  assert.equal(calculate([
+    entry('cash-a', 100), entry('cash-b', 200),
+  ]).unencumberedCashMinor, 300);
+});
