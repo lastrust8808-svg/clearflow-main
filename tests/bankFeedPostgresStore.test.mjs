@@ -1029,3 +1029,68 @@ test('PostgreSQL historical JSONB identity accessors and Proxies cannot execute 
   assert.equal(getterCalls, 0, 'historical JSONB identity getters must never execute');
   assert.equal(proxyTrapCalls, 0, 'historical JSONB Proxy traps must never execute');
 });
+
+test('PostgreSQL historical entry row envelopes reject accessors and Proxies before identity reads', async () => {
+  const historical = {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-historical',
+    amountCents: 500, status: 'posted', requiresReview: true,
+  };
+  let getterCalls = 0;
+  let proxyTrapCalls = 0;
+  const mutations = [
+    ...['tenant_id', 'provider', 'connection_id', 'account_id', 'transaction_id', 'payload']
+      .map((field) => (row) => {
+        Object.defineProperty(row, field, {
+          enumerable: true,
+          get() { getterCalls++; throw new Error('historical SQL row getter executed'); },
+        });
+        return row;
+      }),
+    (row) => new Proxy(row, {
+      get() { proxyTrapCalls++; throw new Error('historical SQL row Proxy read executed'); },
+      ownKeys() { proxyTrapCalls++; throw new Error('historical SQL row Proxy keys executed'); },
+    }),
+    (row) => Object.assign(Object.create({ inherited: true }), row),
+    (row) => ({ ...row, unexpected: 'metadata' }),
+  ];
+  for (const mutate of mutations) {
+    const db = mockPg();
+    db.state.entries.push({ ...historical });
+    const before = structuredClone(db.state);
+    const originalConnect = db.pool.connect.bind(db.pool);
+    db.pool.connect = async () => {
+      const client = await originalConnect();
+      const originalQuery = client.query.bind(client);
+      client.query = async (sql, values) => {
+        const result = await originalQuery(sql, values);
+        if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
+          assert.equal(result.rows.length, 1);
+          result.rows[0] = mutate(result.rows[0]);
+        }
+        return result;
+      };
+      return client;
+    };
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Invalid persisted banking entry row/,
+    );
+    assert.deepEqual(db.state, before, 'rejected historical SQL row must preserve banking state');
+    assert.equal(db.calls.filter(({ sql }) =>
+      /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0,
+    'invalid SQL row cannot write entries or advance the cursor');
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.equal(db.releases, 1);
+  }
+  assert.equal(getterCalls, 0, 'historical SQL row getters must not execute');
+  assert.equal(proxyTrapCalls, 0, 'historical SQL row Proxy traps must not execute');
+
+  const valid = mockPg();
+  valid.state.entries.push({ ...historical });
+  const result = await commitAuthorizedBankFeedPage(
+    createBankFeedPostgresStore(valid.pool), scope(), page(),
+  );
+  assert.equal(result.applied, 1, 'ordinary PostgreSQL rows remain supported');
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
+});
