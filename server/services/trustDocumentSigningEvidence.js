@@ -20,6 +20,12 @@ function identifier(value, field) {
   // Canonically equivalent signer, document and evidence identifiers must
   // not become distinct audit subjects merely because their Unicode byte
   // representations differ. Do not rewrite an authenticated identifier.
+  // Lone UTF-16 surrogates become replacement characters when encoded as UTF-8,
+  // potentially aliasing distinct signer, scope and signing-receipt identities.
+  // Preserve valid supplementary-plane characters; never normalize on write.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(field + ' must contain well-formed Unicode');
+  }
   if (value.normalize('NFC') !== value) {
     throw new TypeError(field + ' must use NFC-normalized Unicode');
   }
