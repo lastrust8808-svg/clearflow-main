@@ -134,6 +134,13 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   const tenantId = id(snapshot.tenantId, 'tenantId');
   const entityId = id(snapshot.entityId, 'entityId');
   const trustId = id(snapshot.trustId, 'trustId');
+  // Tenant, legal entity and trust are separate ownership namespaces. Reject
+  // aliased scopes before inspecting any appointments, even an empty history.
+  // This is structural integrity, not authentication of trustee authority.
+  const scopeIds = new Set([tenantId, entityId, trustId]);
+  if (scopeIds.size !== 3) {
+    throw new Error('Governance tenant, entity and trust identifiers must be distinct');
+  }
   const asOfDate = calendarDate(snapshot.asOfDate, 'asOfDate');
   if (snapshot.mode !== 'independent' && snapshot.mode !== 'joint') {
     throw new TypeError('Unsupported trustee signing mode');
@@ -155,6 +162,11 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
     requirePlainGovernanceRecord(appointment, APPOINTMENT_FIELDS,
       APPOINTMENT_REQUIRED_FIELDS, 'Trustee appointment');
     const trusteeId = id(appointment.trusteeId, 'appointment.trusteeId');
+    // A trustee principal must not impersonate a tenant, entity or trust key.
+    // Signer IDs legitimately repeat trustee IDs, but not scope identities.
+    if (scopeIds.has(trusteeId)) {
+      throw new Error('Trustee identifier collides with governance scope');
+    }
     if (trustees.has(trusteeId)) throw new Error('Duplicate trustee appointment');
     trustees.add(trusteeId);
     if (appointment.tenantId !== tenantId || appointment.entityId !== entityId ||
