@@ -119,6 +119,27 @@ try {
     assert.equal(response.body.execution, undefined);
   });
 
+  await test('settlement amounts must be exact positive cents before durable execution is considered', async () => {
+    const base = { entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test' };
+    const invalid = [undefined, null, '', '100', {}, [], true, NaN, Infinity,
+      -Infinity, -0, 0, -0.01, 0.001, 1.005, 1.0000000001,
+      0.1 + 0.2, Number.MAX_SAFE_INTEGER, 90071992547409.92];
+    for (const amount of invalid) {
+      const response = await invoke('POST', '/settlements/execute', { ...base, amount });
+      assert.equal(response.statusCode, 400, String(amount));
+      assert.equal(response.body.success, false);
+      assert.equal(response.body.execution, undefined);
+      assert.equal(response.body.job, undefined);
+    }
+    for (const amount of [0.01, 0.07, 0.29, 1.25, 100, 123.45]) {
+      const response = await invoke('POST', '/settlements/execute', { ...base, amount });
+      assert.equal(response.statusCode, 503, String(amount));
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+      assert.equal(response.body.execution, undefined);
+      assert.equal(response.body.job, undefined);
+    }
+  });
+
   await test('missing settlement fields remain a 400 validation error', async () => {
     const response = await invoke('POST', '/settlements/execute', { paymentId: 'pay-test' });
     assert.equal(response.statusCode, 400);
