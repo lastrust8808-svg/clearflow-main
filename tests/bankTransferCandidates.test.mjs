@@ -165,3 +165,36 @@ test('candidate and ambiguity review queues are deterministic across bank-feed r
   assert.deepEqual(plan([transactions[6], transactions[3], transactions[1], transactions[4],
     transactions[0], transactions[5], transactions[2]]), expected);
 });
+
+
+test('reused batch reference cannot certify two otherwise independent transfer pairs', () => {
+  const transactions = [
+    row('checking', 'debit-1', -500, { providerReference: 'shared-batch' }),
+    row('savings', 'credit-1', 500, { providerReference: 'shared-batch' }),
+    row('payroll', 'debit-2', -800, { providerReference: 'shared-batch' }),
+    row('reserve', 'credit-2', 800, { providerReference: 'shared-batch' }),
+  ];
+  const result = plan(transactions);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'checking', transactionId: 'debit-1', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'payroll', transactionId: 'debit-2', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'reserve', transactionId: 'credit-2', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'credit-1', candidateCount: 1 },
+  ]);
+  assert.deepEqual(plan([...transactions].reverse()), result);
+});
+
+test('unmatched posted record sharing a reused reference also enters manual review', () => {
+  const result = plan([
+    row('checking', 'debit', -500, { providerReference: 'batch-123' }),
+    row('savings', 'credit', 500, { providerReference: 'batch-123' }),
+    row('reserve', 'other', 175, { providerReference: 'batch-123' }),
+  ]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'checking', transactionId: 'debit', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'reserve', transactionId: 'other', candidateCount: 0 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'credit', candidateCount: 1 },
+  ]);
+});
