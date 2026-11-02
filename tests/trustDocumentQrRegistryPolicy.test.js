@@ -645,3 +645,44 @@ test('active QR bindings reject explicitly present empty revocation metadata', (
     }],
   }, lookup), { status: 'unknown' });
 });
+
+test('QR revocation receipts cannot alias registry identities, even in later rows', () => {
+  const { registry, lookup } = fixture();
+  const original = registry.bindings[0];
+  const replacementHash = createHash('sha256').update('independent-rotation').digest('hex');
+  const revoked = {
+    ...original, status: 'revoked', revokedAt,
+    revocationEvidenceRef: 'receipt-independent',
+  };
+  // A receipt cannot masquerade as a scope, document, version or token identity.
+  for (const collision of [
+    ...Object.values(scope), original.documentId, original.versionId,
+    original.tokenHashSha256,
+  ]) {
+    assert.throws(() => resolveTrustDocumentQrBinding({
+      ...registry, bindings: [{ ...revoked, revocationEvidenceRef: collision }],
+    }, lookup), /revocation evidence identifier collides/);
+  }
+
+  const later = {
+    ...original, documentId: 'document-2', versionId: 'version-2',
+    tokenHashSha256: replacementHash, issuedAt: revokedAt,
+  };
+  for (const altered of [
+    { ...later, documentId: 'receipt-independent' },
+    { ...later, versionId: 'receipt-independent' },
+    later,
+  ]) {
+    const first = altered === later
+      ? { ...revoked, revocationEvidenceRef: replacementHash } : revoked;
+    for (const rows of [[first, altered], [altered, first]]) {
+      assert.throws(() => resolveTrustDocumentQrBinding({
+        ...registry, bindings: rows,
+      }, lookup), /revocation evidence identifier collides/);
+    }
+  }
+  // Independent receipts and distinct version/token identities still rotate.
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings: [revoked, later],
+  }, lookup), { status: 'unknown' });
+});
