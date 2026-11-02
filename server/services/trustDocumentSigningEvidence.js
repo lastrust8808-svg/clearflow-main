@@ -182,6 +182,12 @@ export function assessTrustDocumentSigningPacket(packet) {
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
     scope[key] = identifier(packet[key], key);
   }
+  // Scope and document/version identities have separate audit roles. A shared
+  // identifier would make a receipt or registry key ambiguous even when the
+  // caller repeats the same malformed scope in every supplied record.
+  if (new Set(Object.values(scope)).size !== Object.keys(scope).length) {
+    throw new Error('Signing tenant, entity, trust, document and version identifiers must be distinct');
+  }
   // finalizedAt must originate from the immutable document-version record,
   // not from an untrusted signer or request body. A signature on a draft must
   // never be counted as evidence for a subsequently finalized document.
@@ -219,6 +225,9 @@ export function assessTrustDocumentSigningPacket(packet) {
       }
     }
     const signerId = identifier(attestation.signerId, 'attestation.signerId');
+    if (Object.values(scope).includes(signerId)) {
+      throw new Error('Signing principal identifier collides with document or ownership scope');
+    }
     if (signers.has(signerId)) throw new Error('Duplicate signer attestation');
     signers.add(signerId);
     const signedAt = timestamp(attestation.signedAt, 'attestation.signedAt');
@@ -375,6 +384,18 @@ export function assessTrustDocumentSigningPacket(packet) {
         throw new Error('Reused cross-role signing provenance reference');
       }
       provenanceRefs.add(revocationRef);
+    }
+  }
+  // Signing, trustee and document-version evidence receipts must never
+  // masquerade as an owner, signer, document or version identifier. Check the
+  // full collected set so later receipts cannot alias earlier identities.
+  const identityRefs = new Set([...Object.values(scope), ...signers]);
+  for (const appointment of packet.governance.appointments) {
+    identityRefs.add(identifier(appointment.trusteeId, 'appointment.trusteeId'));
+  }
+  for (const evidenceRef of provenanceRefs) {
+    if (identityRefs.has(evidenceRef)) {
+      throw new Error('Signing provenance reference collides with principal or document identity');
     }
   }
   // The actual independent/joint governance rule is applied to the COMPLETE
