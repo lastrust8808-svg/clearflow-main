@@ -3,7 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
-import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization } from '../domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -315,23 +315,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [normalizeIdentityEmail, storedTermsAcceptanceIndex]
   );
 
-  const buildProvisionalGoogleUser = useCallback(
-    (identity?: { name: string; email: string } | null): User | null => {
-      if (!identity?.email) {
-        return null;
-      }
-
-      return {
-        id: buildGoogleDurableAccountId(identity.email) || crypto.randomUUID(),
-        name: identity.name || identity.email,
-        email: identity.email,
-        isVerified: false,
-        primaryContactType: 'google',
-      };
-    },
-    []
-  );
-  
   const hydrateGoogleAccessSession = useCallback(async (
     accessToken: string,
     providedProfile?: { name?: string; email?: string | null }
@@ -1745,52 +1728,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const continueGoogleOnboardingFallback = () => {
-    setState((current) => {
-      if (current.status !== 'pending-gsi' && current.status !== 'pending-drive-check') {
-        return current;
-      }
-
-      const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
-
-      if (current.pendingGoogleMode !== 'new') {
-        return {
-          ...current,
-          status: 'unauthenticated',
-          gsiUser: null,
-          token: null,
-          apiAccessToken: null,
-          appData: null,
-          pendingGoogleMode: null,
-          authMessage:
-            'ClearFlow could not confirm an existing account from this sign-in attempt. Retry Existing User Login or choose Create New Account.',
-        };
-      }
-
-      const fallbackUser =
-        current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
-
-      if (!fallbackUser) {
-        return {
-          ...current,
-          status: 'unauthenticated',
-          gsiUser: null,
-          token: null,
-          apiAccessToken: null,
-          appData: null,
-          pendingGoogleMode: null,
-          authMessage: 'New-account enrollment could not confirm an identity. Please retry.',
-        };
-      }
-
-      return {
-        ...current,
-        status: 'pending-profile-setup',
-        appData: current.appData || { user: fallbackUser, entities: [] },
-        gsiUser: null,
-        pendingGoogleMode: null,
-        authMessage: null,
-      };
-    });
+    // A remembered email, cached account, or stalled Drive lookup is not
+    // permission to enroll or open a workspace without verified recovery.
+    needsDriveCatchUpRef.current = false;
+    setState((current) => rejectUnverifiedGoogleOnboardingFallback(current) as AuthState);
   };
 
   const value: AuthContextType = {
