@@ -13,9 +13,19 @@ function rejectNonDurableJob(res, operation) {
   });
 }
 
+// Every ERP operation identifier must be an explicit, canonical identity.
+// A truthy object, padded ID or invisible Unicode alias must not be treated
+// as a valid future durable-job request or tenant/accounting audit key.
+function validErpIdentifier(value) {
+  return typeof value === 'string' && value.length <= 255 &&
+    Boolean(value.trim()) && value === value.trim() &&
+    value === value.normalize('NFC') &&
+    !/[\\p{Cc}\\p{Cf}\\p{Cs}]/u.test(value);
+}
+
 router.post('/invoice-deliveries', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-  if (!invoiceId || !entityId || !invoiceNumber) {
+  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return res.status(400).json({ success: false, error: 'Missing invoice delivery payload.' });
   }
   return rejectNonDurableJob(res, 'invoice_delivery');
@@ -23,7 +33,7 @@ router.post('/invoice-deliveries', (req, res) => {
 
 router.post('/invoice-exports', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-  if (!invoiceId || !entityId || !invoiceNumber) {
+  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return res.status(400).json({ success: false, error: 'Missing invoice export payload.' });
   }
   return rejectNonDurableJob(res, 'invoice_export');
@@ -33,7 +43,7 @@ router.post('/invoice-exports', (req, res) => {
 // approval and audit persistence are not yet implemented for this endpoint.
 router.post('/settlements/execute', (req, res) => {
   const { entityId, paymentId, settlementId, amount } = req.body || {};
-  if (!entityId || !paymentId || !settlementId || !amount) {
+  if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !amount) {
     return res.status(400).json({ success: false, error: 'Missing settlement execution payload.' });
   }
   return rejectNonDurableJob(res, 'settlement_execution');
@@ -73,7 +83,7 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
   const { reconciliationId } = req.params;
   const { bankAccountId, statementEndingBalance } = req.body || {};
 
-  if (!reconciliationId || !bankAccountId) {
+  if (![reconciliationId, bankAccountId].every(validErpIdentifier)) {
     return res.status(400).json({ success: false, error: 'Missing statement import payload.' });
   }
   // Independently enforce the same exact-cent contract as the ERP client.
@@ -103,7 +113,7 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
 // queue is not a closed accounting period; never acknowledge one as processed.
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
-  if (!reconciliationId) {
+  if (!validErpIdentifier(reconciliationId)) {
     return res.status(400).json({ success: false, error: 'Missing reconciliation id.' });
   }
   return rejectNonDurableJob(res, 'reconciliation_close');
