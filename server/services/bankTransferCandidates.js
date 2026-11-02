@@ -98,6 +98,18 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     seen.add(key);
     if (row.status === 'posted' && row.providerReference !== undefined) rows.push(row);
   }
+  // A provider reference may be a batch or statement identifier, not a
+  // unique transfer ID. If three or more posted source records share one
+  // reference within a connection, none can be independently proposed as a
+  // one-to-one transfer, even when their amounts form apparent pairs.
+  const referenceCounts = new Map();
+  for (const row of rows) {
+    const referenceKey = JSON.stringify([row.provider, row.connectionId, row.providerReference]);
+    referenceCounts.set(referenceKey, (referenceCounts.get(referenceKey) ?? 0) + 1);
+  }
+  const hasReferenceCollision = (row) =>
+    referenceCounts.get(JSON.stringify([row.provider, row.connectionId, row.providerReference])) > 2;
+
   const adjacency = new Map(rows.map((row) => [identity(row), []]));
   const byId = new Map(rows.map((row) => [identity(row), row]));
   for (let i = 0; i < rows.length; i++) {
@@ -122,13 +134,13 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     const row = byId.get(id);
     // A source with one apparent match is still ambiguous when its partner
     // has multiple possible matches. Surface every affected source for review.
-    if (matches.length > 1 ||
+    if (hasReferenceCollision(row) || matches.length > 1 ||
         (matches.length === 1 && adjacency.get(matches[0]).length !== 1)) {
       ambiguous.push({ provider: row.provider, connectionId: row.connectionId,
         accountId: row.accountId, transactionId: row.transactionId,
         candidateCount: matches.length });
     }
-    if (matches.length !== 1) continue;
+    if (hasReferenceCollision(row) || matches.length !== 1) continue;
     const partnerId = matches[0];
     if (adjacency.get(partnerId).length !== 1 || id >= partnerId) continue;
     const partner = byId.get(partnerId);
