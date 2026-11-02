@@ -731,7 +731,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
                 if (durableAppData) {
                   recoveredAppData = durableAppData;
-                  saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
+                  // Keep recovery in memory until the pending OAuth attempt is
+                  // accepted. A stale Drive response must not overwrite the
+                  // next session's local cache before setPendingDriveState guards it.
                 }
               } catch (error) {
                 console.warn('Unable to load durable Google-linked workspace. Falling back to local recovery.', error);
