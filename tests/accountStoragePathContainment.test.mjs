@@ -1299,7 +1299,7 @@ test('legacy JSON underflow cannot silently turn nonzero financial evidence into
 
 
 test('unpaired UTF-16 surrogate keys and values fail closed across all account record families', async () => {
-  const accountId = \`unicode-evidence-\${randomUUID()}\`;
+  const accountId = `unicode-evidence-${randomUUID()}`;
   const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
   const fixtures = [
     { file: 'app-data.json', save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
