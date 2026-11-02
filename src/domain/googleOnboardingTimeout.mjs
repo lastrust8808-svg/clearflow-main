@@ -69,3 +69,25 @@ export function rejectUnverifiedGoogleOnboardingFallback(current) {
     authMessage: 'Google sign-in or workspace verification is incomplete. Retry Google sign-in to continue.',
   };
 }
+
+/**
+ * A completed OAuth exchange does not prove that Drive or durable workspace
+ * recovery succeeded. Timeout must not turn an unverified lookup into a new
+ * account, even when the user selected Create New Account.
+ */
+export function expirePendingGoogleDriveCheck(current) {
+  if (!current || current.status !== 'pending-drive-check') return current;
+
+  return {
+    ...current,
+    status: 'unauthenticated',
+    appData: null,
+    token: null,
+    apiAccessToken: null,
+    localAccountId: null,
+    gsiUser: null,
+    pendingCredentialAuth: null,
+    pendingGoogleMode: null,
+    authMessage: 'Google workspace lookup timed out before verification. Please retry Google sign-in.',
+  };
+}
