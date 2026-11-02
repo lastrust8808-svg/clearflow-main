@@ -174,19 +174,23 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
       throw new Error('Trustee appointment tenant/entity/trust mismatch');
     }
     const effectiveOn = calendarDate(appointment.effectiveOn, 'appointment.effectiveOn');
-    const acceptedOn = appointment.acceptedOn == null ? null :
-      calendarDate(appointment.acceptedOn, 'appointment.acceptedOn');
-    const revokedOn = appointment.revokedOn == null ? null :
-      calendarDate(appointment.revokedOn, 'appointment.revokedOn');
-    // Evidence references describe specific acceptance/revocation events. A
-    // pointer without its corresponding event date is a contradictory claim,
-    // not independent proof of authority or removal of authority.
-    if (acceptedOn === null && appointment.acceptanceEvidenceRef != null) {
+    // A missing governance event is represented by ABSENT fields, never by
+    // present-but-null/undefined metadata. Preserve an unambiguous immutable
+    // appointment history for later authenticated storage and audit adapters.
+    const hasAcceptance = Object.hasOwn(appointment, 'acceptedOn');
+    const hasRevocation = Object.hasOwn(appointment, 'revokedOn');
+    if (!hasAcceptance && Object.hasOwn(appointment, 'acceptanceEvidenceRef')) {
       throw new Error('Unaccepted trustee appointment cannot claim acceptance evidence');
     }
-    if (revokedOn === null && appointment.revocationEvidenceRef != null) {
+    if (!hasRevocation && Object.hasOwn(appointment, 'revocationEvidenceRef')) {
       throw new Error('Unrevoked trustee appointment cannot claim revocation evidence');
     }
+    // A present event date must be a real calendar date, including when the
+    // supplied value is explicitly null or undefined.
+    const acceptedOn = hasAcceptance ?
+      calendarDate(appointment.acceptedOn, 'appointment.acceptedOn') : null;
+    const revokedOn = hasRevocation ?
+      calendarDate(appointment.revokedOn, 'appointment.revokedOn') : null;
     if (acceptedOn !== null) {
       const acceptanceEvidenceRef = id(appointment.acceptanceEvidenceRef, 'appointment.acceptanceEvidenceRef');
       if (acceptanceEvidenceRefs.has(acceptanceEvidenceRef)) {
