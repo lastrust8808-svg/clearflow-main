@@ -410,3 +410,23 @@ test('reserve identifiers reject ill-formed Unicode without rewriting valid supp
     assert.equal(calculate([entry('cash-a', 100, { [key]: 'asset-\u{1F4B0}' })]).unencumberedCashMinor, 100);
   }
 });
+
+test('reserve asset and evidence references cannot impersonate one another across entries', () => {
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { assetId: 'shared-ref', evidenceRef: 'shared-ref' }),
+  ]), /Reserve asset and evidence identifiers must be distinct/);
+  // Cross-entry reuse is rejected even when each individual entry looks valid.
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { assetId: 'asset-a', evidenceRef: 'asset-b' }),
+    entry('cash-b', 200, { assetId: 'asset-b', evidenceRef: 'evidence-b' }),
+  ]), /Reserve asset and evidence identifiers must be distinct/);
+  assert.throws(() => calculate([
+    entry('cash-a', 100, { assetId: 'asset-a', evidenceRef: 'evidence-a' }),
+    entry('cash-b', 200, { assetId: 'evidence-a', evidenceRef: 'evidence-b' }),
+  ]), /Reserve asset and evidence identifiers must be distinct/);
+  const valid = calculate([
+    entry('cash-a', 100, { assetId: 'asset-a', evidenceRef: 'evidence-a' }),
+    entry('cash-b', 200, { assetId: 'asset-b', evidenceRef: 'evidence-b' }),
+  ]);
+  assert.equal(valid.unencumberedCashMinor, 300);
+});
