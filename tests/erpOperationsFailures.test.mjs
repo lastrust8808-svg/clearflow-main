@@ -126,7 +126,10 @@ try {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected request'); };
     for (const balance of [NaN, Infinity, -Infinity, -0, 1.005, -2.999, Number.MAX_SAFE_INTEGER,
-      '100.00', null, undefined]) {
+      // A floating-point tolerance previously let these sub-cent values
+      // reach the backend, potentially changing the recorded amount.
+      1.0000000001, -0.0000000001, 1e-11, 0.1 + 0.2, 2.0000000000001,
+      90071992547409.92, '100.00', null, undefined]) {
       await assert.rejects(
         api.importReconciliationStatement({ ...payloads[2], statementEndingBalance: balance }),
         /Invalid statement ending balance/,
@@ -135,7 +138,7 @@ try {
     }
     assert.equal(requests, 0, 'invalid accounting amounts must never reach the server');
     // Negative overdrafts and ordinary cent-denominated balances remain valid.
-    for (const balance of [-23.45, 0, 100.25]) {
+    for (const balance of [-23.45, 0, 0.07, 0.29, 0.57, 100.25]) {
       globalThis.fetch = async () => ({ ok: true, json: async () => accepted[2] });
       assert.deepEqual(await api.importReconciliationStatement({
         ...payloads[2], statementEndingBalance: balance,
