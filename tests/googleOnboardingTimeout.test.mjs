@@ -52,7 +52,7 @@ test('remembered Google identity cannot silently restore an authenticated tenant
   // A remembered email may remain as a UI hint, but must not promote a local
   // Google match into an authenticated workspace on page load.
   assert.match(source, /LAST_GOOGLE_USER_STORAGE_KEY/);
-  assert.match(source, /lastKnownGoogleUser: lastKnownGoogleUser/);
+  assert.match(source, /\blastKnownGoogleUser,\s*authStatus: state\.status/);
   assert.doesNotMatch(source, /restoreRememberedSession/);
   assert.doesNotMatch(source, /status:\s*getGoogleWorkspaceStatus\(mergedAppData,\s*lastKnownGoogleUser\)/);
   assert.doesNotMatch(source, /localAccountId:\s*localGoogleMatch\.userId,\s*appData:\s*mergedAppData/);
