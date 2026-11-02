@@ -183,3 +183,47 @@ export function projectReserveJournal(snapshot) {
   return Object.freeze({ ...capacity, journalSha256, journalEventCount: eventIds.size,
     activeAssetCount: active.size, removedAssetCount });
 }
+
+
+/**
+ * Validate a proposed journal extension against a separately authenticated
+ * predecessor checkpoint. This is a pure preflight gate: it neither persists
+ * the new journal nor makes an untrusted checkpoint authoritative.
+ *
+ * The caller must obtain expectedPreviousSha256 from trusted durable storage,
+ * authorize both scopes, and atomically compare-and-swap the stored checkpoint
+ * before committing any append. A caller-supplied digest alone is insufficient.
+ */
+export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expectedPreviousSha256) {
+  if (typeof expectedPreviousSha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(expectedPreviousSha256)) {
+    throw new TypeError('Expected reserve checkpoint must be a lowercase SHA-256 digest');
+  }
+  // Full replay validates every historical and proposed event before any
+  // comparison. The previous snapshot must independently pass its own policy.
+  const previous = projectReserveJournal(previousSnapshot);
+  const next = projectReserveJournal(nextSnapshot);
+  if (previous.journalSha256 !== expectedPreviousSha256) {
+    throw new Error('Reserve journal predecessor checkpoint mismatch');
+  }
+  for (const field of [...SCOPE_FIELDS, 'currency']) {
+    if (previousSnapshot[field] !== nextSnapshot[field]) {
+      throw new Error('Reserve journal append cannot change owner scope or currency');
+    }
+  }
+  if (nextSnapshot.asOfAt < previousSnapshot.asOfAt) {
+    throw new Error('Reserve journal append cannot roll back as-of time');
+  }
+  if (nextSnapshot.events.length <= previousSnapshot.events.length) {
+    throw new Error('Reserve journal append requires at least one new event');
+  }
+  // Replaying valid event sets alone cannot detect a rewritten historical
+  // prefix. Compare canonical event bytes so key insertion order is irrelevant.
+  for (let i = 0; i < previousSnapshot.events.length; i++) {
+    if (JSON.stringify(canonicalJournalEvent(previousSnapshot.events[i])) !==
+        JSON.stringify(canonicalJournalEvent(nextSnapshot.events[i]))) {
+      throw new Error('Reserve journal append cannot rewrite historical events');
+    }
+  }
+  return next;
+}
