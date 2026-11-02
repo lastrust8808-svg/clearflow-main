@@ -342,6 +342,16 @@ async function readJsonSafely(targetPath) {
   }
 }
 
+// Object.prototype/Array.prototype may be polluted with an inherited toJSON.
+// JSON.stringify invokes it before any replacer, even on otherwise inert
+// plain records. Reject rather than silently changing tenant financial evidence.
+function assertNativeJsonPrototypesSafe() {
+  if (Object.getOwnPropertyDescriptor(Object.prototype, 'toJSON') ||
+      Object.getOwnPropertyDescriptor(Array.prototype, 'toJSON')) {
+    throw new TypeError('Inherited JSON serializer would alter storage evidence.');
+  }
+}
+
 // Replace JSON records atomically: readers see the old complete record or the
 // new complete record, never a partially written/truncated JSON document.
 // File sync precedes rename and the containing directory is synced after
@@ -349,6 +359,7 @@ async function readJsonSafely(targetPath) {
 // transaction durability remain separate acceptance gates.
 async function writeJsonAtomically(targetPath, value) {
   await assertSafeStorageDirectory(path.dirname(targetPath));
+  assertNativeJsonPrototypesSafe();
   const serialized = JSON.stringify(value, null, 2);
   if (Buffer.byteLength(serialized, 'utf8') > MAX_RECORD_JSON_BYTES) {
     throw new Error('Storage record exceeds size limit.');
@@ -503,6 +514,7 @@ function assertWritableRecordPayload(payload) {
 // between validation and the eventual JSON.stringify.
 function snapshotWritableRecord(payload) {
   assertWritableRecordPayload(payload);
+  assertNativeJsonPrototypesSafe();
   return JSON.parse(JSON.stringify(payload));
 }
 
