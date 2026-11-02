@@ -249,7 +249,7 @@ test('document version histories are bounded before reading indexed records', ()
 
   // The boundary remains reviewable: its duplicate provenance is rejected by
   // normal integrity checks, not silently truncated or rejected for size.
-  const boundary = new Array(10_000).fill(version(1));
+  const boundary = new Array(10_000).fill(version(1, { status: 'superseded' }));
   assert.throws(() => check(boundary, proof), /Duplicate document version ID/);
 });
 
