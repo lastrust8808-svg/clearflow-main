@@ -521,8 +521,9 @@ export async function markErpOperationJobDispatchStarted({
      WHERE tenant_id = $1 AND operation = $2 AND id = $3
        AND claimed_by = $4 AND status = 'processing'
        AND lease_expires_at > now() AND dispatch_started_at IS NULL
+       AND failure_code IS NULL AND claimed_at IS NOT NULL
      RETURNING id, tenant_id, actor_id, operation, status, claimed_by,
-               claimed_at, dispatch_started_at, lease_expires_at,
+               claimed_at, dispatch_started_at, failure_code, lease_expires_at,
                created_at, updated_at`,
     [tenantId, operation, canonicalJobId, workerId],
   );
@@ -534,7 +535,8 @@ export async function markErpOperationJobDispatchStarted({
   if (row.id !== canonicalJobId || row.tenant_id !== tenantId ||
       row.operation !== operation || row.status !== 'processing' ||
       row.claimed_by !== workerId || typeof row.actor_id !== 'string' ||
-      !row.actor_id) {
+      !row.actor_id || !Object.hasOwn(row, 'failure_code') ||
+      row.failure_code !== null) {
     throw new Error('ERP job storage returned an invalid tenant-bound dispatch fence');
   }
   // A dispatch fence is a durable pre-side-effect boundary. Reject informal
