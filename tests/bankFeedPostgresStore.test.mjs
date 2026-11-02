@@ -401,6 +401,57 @@ test('PostgreSQL adapter preflights duplicate, malformed and rewritten entry ide
 });
 
 
+test('PostgreSQL adapter rejects accessor, Proxy and noncanonical batches before any INSERT', async () => {
+  const valid = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+    status: 'posted', requiresReview: true,
+  });
+  let getterCalls = 0;
+  let proxyTrapCalls = 0;
+  let iteratorCalls = 0;
+  const accessor = [valid('tx-accessor')];
+  Object.defineProperty(accessor, '0', {
+    enumerable: true,
+    get() { getterCalls++; throw new Error('bank batch index getter executed'); },
+  });
+  const proxied = new Proxy([valid('tx-proxy')], {
+    get() { proxyTrapCalls++; throw new Error('bank batch Proxy get executed'); },
+    ownKeys() { proxyTrapCalls++; throw new Error('bank batch Proxy keys executed'); },
+  });
+  const customIterator = [valid('tx-iterator')];
+  Object.defineProperty(customIterator, Symbol.iterator, {
+    value() { iteratorCalls++; throw new Error('bank batch iterator executed'); },
+  });
+  const sparse = Array(2);
+  sparse[0] = valid('tx-sparse');
+  const metadata = Object.assign([valid('tx-metadata')], { hidden: 'discarded' });
+  const inherited = [valid('tx-inherited')];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+
+  for (const unsafe of [accessor, proxied, customIterator, sparse, metadata, inherited]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(scope(), unsafe)),
+      /Refusing malformed banking entry batch/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'invalid batches must fail before any financial INSERT');
+    assert.deepEqual(db.state, initial(), 'rejected batch must not change financial records');
+    assert.equal(db.releases, 1);
+  }
+  assert.equal(getterCalls, 0, 'array index getter must not execute');
+  assert.equal(proxyTrapCalls, 0, 'Proxy traps must not execute');
+  assert.equal(iteratorCalls, 0, 'custom iterators must not execute');
+
+  const normal = mockPg();
+  await createBankFeedPostgresStore(normal.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [valid('tx-one'), valid('tx-two')]));
+  assert.deepEqual(normal.state.entries.map(({ transactionId }) => transactionId),
+    ['tx-one', 'tx-two'], 'canonical arrays still persist normally');
+});
+
 test('PostgreSQL adapter rejects malformed persisted and proposed cursors before financial SQL', async () => {
   for (const badCursor of [42, '', ' padded', 'cursor\\n'.replace('\\n', '\n'), 'x'.repeat(4097)]) {
     const db = mockPg();
