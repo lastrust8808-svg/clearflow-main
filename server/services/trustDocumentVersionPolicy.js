@@ -236,10 +236,14 @@ export function verifyTrustDocumentVersion(registry, proof) {
       }
       seenEvidence.add(revocationEvidenceRef);
     } else {
-      if (version.revocationEvidenceRef != null) {
+      // Current/superseded versions have no revocation event. Even an own
+      // null/undefined field is ambiguous evidence metadata and must not be
+      // interpreted as an absent revocation. This matches the QR binding
+      // contract and prevents inconsistent downstream serialization.
+      if (Object.hasOwn(version, 'revocationEvidenceRef')) {
         throw new Error('Nonrevoked document version cannot carry revocation evidence');
       }
-      if (version.revokedAt != null) {
+      if (Object.hasOwn(version, 'revokedAt')) {
         throw new Error('Nonrevoked document version cannot carry revocation timestamp');
       }
     }
