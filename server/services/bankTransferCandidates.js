@@ -114,7 +114,11 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
   }
   const ambiguous = [];
   const candidates = [];
-  for (const [id, matches] of adjacency) {
+  // Stable provider/connection/account/transaction ordering makes repeated
+  // read-only reviews reproducible when bank feeds arrive in a new row order.
+  // Never let provider arrival order become an implicit approval or audit key.
+  for (const id of [...adjacency.keys()].sort()) {
+    const matches = adjacency.get(id);
     const row = byId.get(id);
     // A source with one apparent match is still ambiguous when its partner
     // has multiple possible matches. Surface every affected source for review.
