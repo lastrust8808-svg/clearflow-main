@@ -71,10 +71,26 @@ router.get('/settlements/execution-capabilities', (_req, res) => {
 
 router.post('/reconciliations/:reconciliationId/statement-import', (req, res) => {
   const { reconciliationId } = req.params;
-  const { bankAccountId } = req.body || {};
+  const { bankAccountId, statementEndingBalance } = req.body || {};
 
   if (!reconciliationId || !bankAccountId) {
     return res.status(400).json({ success: false, error: 'Missing statement import payload.' });
+  }
+  // Independently enforce the same exact-cent contract as the ERP client.
+  // JSON numbers may be fractional, overflowed or rounded before reaching
+  // the handler. Never allow a future durable adapter to accept a different
+  // accounting amount than the one represented by the request.
+  const cents = typeof statementEndingBalance === 'number'
+    ? Math.round(statementEndingBalance * 100) : NaN;
+  if (!Number.isFinite(statementEndingBalance) ||
+      Object.is(statementEndingBalance, -0) ||
+      !Number.isSafeInteger(cents) ||
+      cents / 100 !== statementEndingBalance) {
+    return res.status(400).json({
+      success: false,
+      code: 'ERP_INVALID_STATEMENT_BALANCE',
+      error: 'Statement ending balance must be a finite exact-cent amount.',
+    });
   }
 
   // Import acceptance must persist the statement and evidence transactionally.
