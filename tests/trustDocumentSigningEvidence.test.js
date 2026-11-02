@@ -769,3 +769,40 @@ test('signing evidence rejects Unicode-normalization aliases without excluding c
     attestations: [attestation(canonical)],
   }).status, 'evidence_ready_for_review');
 });
+
+test('signing packet keeps owner, document, version, principal and provenance namespaces distinct', () => {
+  // All five packet scope roles must remain distinct before governance or
+  // registry matching can treat the same alias as a legitimate identity.
+  for (const [key, alias] of [
+    ['entityId', scope.tenantId],
+    ['trustId', scope.entityId],
+    ['documentId', scope.trustId],
+    ['versionId', scope.documentId],
+  ]) {
+    assert.throws(() => assess({ [key]: alias }), /identifiers must be distinct/, key);
+  }
+  // A trustee ID can be syntactically valid and still impersonate the
+  // document identity; a matching appointment must not make it admissible.
+  const documentSigner = scope.documentId;
+  assert.throws(() => assess({
+    governance: { ...packet().governance, appointments: [appointment(documentSigner)] },
+    attestations: [attestation(documentSigner)],
+  }), /principal identifier collides/);
+
+  for (const [field, alias] of [
+    ['identityEvidenceRef', scope.tenantId],
+    ['consentEvidenceRef', 'a'],
+    ['signatureEvidenceRef', scope.versionId],
+  ]) {
+    assert.throws(() => assess({
+      attestations: [attestation('a', { [field]: alias })],
+    }), /provenance reference collides/, field);
+  }
+  assert.throws(() => assess({
+    governance: {
+      ...packet().governance,
+      appointments: [appointment('a', { acceptanceEvidenceRef: scope.documentId })],
+    },
+  }), /provenance reference collides/);
+  assert.equal(assess().status, 'evidence_ready_for_review');
+});
