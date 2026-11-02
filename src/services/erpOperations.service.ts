@@ -247,6 +247,16 @@ export async function importReconciliationStatement(payload: {
   statementFileName: string;
   exceptionNotes: string;
 }) {
+  // JSON.stringify silently converts NaN/Infinity to null and -0 to zero.
+  // Reject unrepresentable or fractional-cent statement balances before any
+  // network request; never submit a different accounting amount than entered.
+  const balance = payload.statementEndingBalance;
+  const minorUnits = typeof balance === 'number' ? balance * 100 : NaN;
+  if (!Number.isFinite(balance) || Object.is(balance, -0) ||
+      !Number.isSafeInteger(Math.round(minorUnits)) ||
+      Math.abs(minorUnits - Math.round(minorUnits)) > 1e-7) {
+    throw new TypeError('Invalid statement ending balance: a finite, exact cent amount is required.');
+  }
   return postErp<StatementImportResponse>(
     `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/statement-import`,
     payload, 'Statement import', (result) => isAcceptedJob(result, 'importJob', undefined,
