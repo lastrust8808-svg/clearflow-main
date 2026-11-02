@@ -481,3 +481,42 @@ test('document version identity rejects malformed Unicode and canonical aliases'
     versionId: canonical, evidenceRef, sha256: fileDigest(bytes),
   })]), { versionId: canonical, content: bytes }), { status: 'valid' });
 });
+
+test('document version and provenance identities cannot alias registry roles across history', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  for (const reused of ['tenant-a', 'trust-a', 'doc-a', 'version-1']) {
+    assert.throws(() => check([version(1, { evidenceRef: reused })], proof),
+      /Document provenance evidence collides|Document version identifier collides/);
+  }
+  for (const reused of ['tenant-a', 'trust-a', 'doc-a']) {
+    assert.throws(() => check([version(1, { versionId: reused })],
+      { versionId: reused, sha256: digestA }),
+    /Document version identifier collides/);
+  }
+  // Earlier receipts cannot become later version IDs, and earlier version
+  // IDs cannot become later registration receipts. Registry order must not
+  // affect the cross-role collision decision.
+  assert.throws(() => check([
+    version(1, { status: 'superseded', evidenceRef: 'version-2' }),
+    version(2),
+  ], proof), /Document version identifier collides/);
+  assert.throws(() => check([
+    version(1, { status: 'superseded', versionId: 'registration-2' }),
+    version(2),
+  ], proof), /Document version identifier collides/);
+  for (const reused of ['tenant-a', 'doc-a', 'version-1', 'version-2']) {
+    assert.throws(() => check([
+      version(1, { status: 'superseded' }),
+      version(2, { status: 'revoked', revocationEvidenceRef: reused }),
+    ], { versionId: 'version-2', sha256: digestB }),
+    /Document provenance evidence collides|Document version identifier collides/);
+  }
+  // Actual finalized-byte verification delegates to the same strict
+  // registry contract; a caller-provided digest cannot bypass it.
+  const bytes = Buffer.from('document provenance alias test');
+  assert.throws(() => verifyTrustDocumentBytes(registry([
+    version(1, { sha256: fileDigest(bytes), evidenceRef: 'doc-a' }),
+  ]), { versionId: 'version-1', content: bytes }),
+  /Document provenance evidence collides/);
+  assert.deepEqual(check([version(1)], proof), { status: 'valid' });
+});
