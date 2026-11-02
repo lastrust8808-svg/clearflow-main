@@ -211,6 +211,35 @@ try {
     assert.equal(response.body.success, false);
   });
 
+  await test('server statement import rejects lossy, sub-cent and nonnumeric balances', async () => {
+    const invalid = [undefined, null, '100.00', NaN, Infinity, -Infinity, -0,
+      1.005, -2.999, 1.0000000001, -0.0000000001, 1e-11,
+      0.1 + 0.2, 2.0000000000001, Number.MAX_SAFE_INTEGER,
+      90071992547409.92];
+    for (const statementEndingBalance of invalid) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import', {
+        bankAccountId: 'bank-test', statementEndingBalance,
+        statementFileName: 'test-statement.csv',
+      }, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 400, String(statementEndingBalance));
+      assert.equal(response.body.success, false);
+      assert.equal(response.body.code, 'ERP_INVALID_STATEMENT_BALANCE');
+      assert.equal(response.body.importJob, undefined);
+    }
+  });
+
+  await test('valid server-side cent balances remain unavailable until durable persistence', async () => {
+    for (const statementEndingBalance of [-23.45, 0, 0.07, 0.29, 0.57, 100.25]) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import', {
+        bankAccountId: 'bank-test', statementEndingBalance,
+        statementFileName: 'test-statement.csv',
+      }, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 503, String(statementEndingBalance));
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+      assert.equal(response.body.importJob, undefined);
+    }
+  });
+
   await test('statement imports report unavailable and cannot accumulate in memory', async () => {
     const response = await invoke('GET', '/ops-status');
     assert.equal(response.statusCode, 200);
