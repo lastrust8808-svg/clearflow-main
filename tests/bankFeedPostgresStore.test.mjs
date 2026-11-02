@@ -426,6 +426,10 @@ test('PostgreSQL adapter rejects malformed persisted and proposed cursors before
     [previous, { ...previous, cursor: '', revision: 1 }],
     [previous, { ...previous, cursor: ' padded', revision: 1 }],
     [previous, { ...previous, cursor: 'x'.repeat(4097), revision: 1 }],
+    // Direct adapter callers must not inflate revisions on terminal no-op polls.
+    [previous, { ...previous, cursor: null, revision: 1 }],
+    [{ ...previous, cursor: 'cursor-1', revision: 4 },
+      { ...previous, cursor: 'cursor-1', revision: 5 }],
     [{ ...previous, cursor: 'invalid\\u200b'.replace('\\u200b', '\u200b') },
       { ...previous, cursor: 'cursor-1', revision: 1 }],
     [{ ...previous, revision: -1 }, { ...previous, cursor: 'cursor-1', revision: 0 }],
