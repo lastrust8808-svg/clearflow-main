@@ -237,14 +237,12 @@ function transactionQueries(client) {
       const seen = new Set();
       let totalJsonBytes = 0;
       for (const entry of entries) {
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
-            entry.tenantId !== requestedScope[0] ||
-            entry.provider !== requestedScope[1] ||
-            entry.connectionId !== requestedScope[2] ||
-            !allowed.has(entry.accountId) ||
-            !validScopeId(entry.transactionId)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
           throw new Error('Refusing out-of-scope banking entry write.');
         }
+        // Never read an untrusted entry's identity before checking its own
+        // property descriptors. Accessors and Proxy traps could otherwise run
+        // during the scope check, before the JSON evidence guard executes.
         let serialized;
         let snapshot;
         try {
@@ -254,15 +252,15 @@ function transactionQueries(client) {
         } catch {
           throw new Error('Refusing non-JSON banking entry write.');
         }
-        // A custom serializer or a mutating getter must not change the SQL
-        // composite key independently of the JSONB evidence being stored.
+        // Construct SQL identity exclusively from the inert serialized
+        // snapshot; no unvalidated entry property may influence a query.
         if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
             snapshot.tenantId !== requestedScope[0] ||
             snapshot.provider !== requestedScope[1] ||
             snapshot.connectionId !== requestedScope[2] ||
-            snapshot.accountId !== entry.accountId ||
-            snapshot.transactionId !== entry.transactionId) {
-          throw new Error('Refusing banking entry with inconsistent serialized identity.');
+            !allowed.has(snapshot.accountId) ||
+            !validScopeId(snapshot.transactionId)) {
+          throw new Error('Refusing out-of-scope banking entry write.');
         }
         const jsonBytes = Buffer.byteLength(serialized, 'utf8');
         if (jsonBytes > MAX_ENTRY_JSON_BYTES) {
