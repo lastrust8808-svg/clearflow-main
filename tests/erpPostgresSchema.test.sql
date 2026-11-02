@@ -233,6 +233,30 @@ VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'fenced-job',
         repeat('c', 64), '{}'::jsonb, 'processing', 'worker-a',
         '2026-10-29T12:00:00Z', '2026-10-29T12:01:00Z');
 
+-- Direct SQL writes must not persist misleading worker audit identities.
+-- The service also validates Unicode NFC/format controls before SQL access.
+DO $test$
+DECLARE
+  bad_worker text;
+BEGIN
+  FOR bad_worker IN SELECT unnest(ARRAY[
+    ' ', ' worker-a', 'worker-a ', E'worker\\tid', E'worker\\nid',
+    repeat('w', 256)
+  ]) LOOP
+    BEGIN
+      UPDATE erp_operation_jobs SET claimed_by = bad_worker
+      WHERE tenant_id = 'tenant-a' AND idempotency_key = 'fenced-job';
+      RAISE EXCEPTION 'invalid persisted worker identity accepted: %', bad_worker;
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  IF (SELECT claimed_by FROM erp_operation_jobs
+      WHERE tenant_id = 'tenant-a' AND idempotency_key = 'fenced-job') <> 'worker-a' THEN
+    RAISE EXCEPTION 'invalid worker update changed durable claim ownership';
+  END IF;
+END
+$test$;
+
 UPDATE erp_operation_jobs
 SET dispatch_started_at = '2026-10-29T12:00:30Z'
 WHERE tenant_id = 'tenant-a' AND idempotency_key = 'fenced-job';
