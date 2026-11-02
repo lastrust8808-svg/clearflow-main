@@ -125,6 +125,11 @@ export function buildFixedMonthlyNoteSchedule(terms) {
   const trustId = requiredString(terms.trustId, 'trustId');
   const noteId = requiredString(terms.noteId, 'noteId');
   const currency = requiredString(terms.currency, 'currency');
+  // A note projection must not collapse tenant, entity, trust and instrument
+  // ownership into one audit identity. Runtime authorization is still required.
+  if (new Set([tenantId, entityId, trustId, noteId]).size !== 4) {
+    throw new Error('Note tenant, entity, trust and note identifiers must be distinct');
+  }
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
   const principalMinor = safeInteger(terms.principalMinor, 'principalMinor', 1);
   const annualRateBps = safeInteger(terms.annualRateBps, 'annualRateBps', 0, 100_000);
