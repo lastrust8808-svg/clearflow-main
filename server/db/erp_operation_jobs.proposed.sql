@@ -4,12 +4,12 @@
 -- Apply only through the versioned migration/restore gate after Security review.
 CREATE TABLE IF NOT EXISTS erp_operation_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id text NOT NULL CHECK (length(btrim(tenant_id)) > 0),
-  actor_id text NOT NULL CHECK (length(btrim(actor_id)) > 0),
+  tenant_id text NOT NULL CHECK (tenant_id ~ '[^[:space:]]'),
+  actor_id text NOT NULL CHECK (actor_id ~ '[^[:space:]]'),
   operation text NOT NULL CHECK (operation IN (
     'invoice_delivery', 'invoice_export', 'statement_import', 'reconciliation_close'
   )),
-  idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) > 0),
+  idempotency_key text NOT NULL CHECK (idempotency_key ~ '[^[:space:]]'),
   -- The reservation digest is always lowercase SHA-256 hex. Reject malformed
   -- database rows before they can be mistaken for an idempotent acceptance.
   payload_sha256 char(64) NOT NULL CONSTRAINT erp_payload_digest_format
