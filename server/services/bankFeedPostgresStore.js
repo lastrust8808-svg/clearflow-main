@@ -218,6 +218,9 @@ function transactionQueries(client) {
             row.tenant_id !== requestedScope[0] || row.provider !== requestedScope[1] ||
             row.connection_id !== requestedScope[2] ||
             !allowed.has(row.account_id) ||
+            // Corrupt legacy JSONB must not introduce ambiguous transaction IDs
+            // into replay planning, even when its payload matches the SQL key.
+            !validScopeId(row.transaction_id) ||
             entry.tenantId !== row.tenant_id || entry.provider !== row.provider ||
             entry.connectionId !== row.connection_id ||
             entry.accountId !== row.account_id ||
