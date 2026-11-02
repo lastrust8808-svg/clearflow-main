@@ -703,3 +703,50 @@ test('PostgreSQL scope getters and sparse account grants fail before scoped SQL'
   }
   assert.equal(getterCalls, 0, 'scope getters must never execute');
 });
+
+test('PostgreSQL adapter preflights entry identity descriptors before any getter or Proxy trap', async () => {
+  const valid = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+  });
+  let getterCalls = 0;
+  for (const field of ['tenantId', 'provider', 'connectionId', 'accountId', 'transactionId']) {
+    const unsafe = valid('tx-unsafe');
+    Object.defineProperty(unsafe, field, {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        throw new Error('untrusted banking identity getter executed');
+      },
+    });
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(scope(), [valid('tx-safe-first'), unsafe])),
+      /Refusing non-JSON banking entry write/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'a later unsafe identity must reject the whole batch before INSERT');
+    assert.deepEqual(db.state, initial());
+  }
+  const proxied = new Proxy(valid('tx-proxy'), {
+    get() {
+      getterCalls++;
+      throw new Error('untrusted banking Proxy trap executed');
+    },
+  });
+  const db = mockPg();
+  await assert.rejects(
+    createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+      tx.saveEntries(scope(), [valid('tx-safe-first'), proxied])),
+    /Refusing non-JSON banking entry write/,
+  );
+  assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK']);
+  assert.deepEqual(db.state, initial());
+  assert.equal(getterCalls, 0, 'no untrusted entry getter or Proxy trap may execute');
+
+  const normal = mockPg();
+  await createBankFeedPostgresStore(normal.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [valid('tx-ordinary')]));
+  assert.deepEqual(normal.state.entries.map(({ transactionId }) => transactionId), ['tx-ordinary']);
+});
