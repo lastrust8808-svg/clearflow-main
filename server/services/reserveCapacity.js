@@ -155,6 +155,12 @@ export function calculateReserveCapacity(snapshot) {
   const tenantId = requiredString(snapshot.tenantId, 'tenantId');
   const entityId = requiredString(snapshot.entityId, 'entityId');
   const trustId = requiredString(snapshot.trustId, 'trustId');
+  // Tenant, legal entity and trust are separate ownership scopes. Even an
+  // empty snapshot must not collapse their identities into one ledger key.
+  // This is structural validation, not authenticated trustee authority.
+  if (new Set([tenantId, entityId, trustId]).size !== 3) {
+    throw new Error('Reserve tenant, entity and trust identifiers must be distinct');
+  }
   const currency = requiredString(snapshot.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
   const asOfAt = canonicalInstant(snapshot.asOfAt, 'asOfAt');
