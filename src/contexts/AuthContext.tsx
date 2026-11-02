@@ -1005,76 +1005,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => window.clearTimeout(timeoutId);
   }, [state.status]);
 
-  useEffect(() => {
-    if (state.status !== 'unauthenticated' || state.appData || !lastKnownGoogleUser?.email) {
-      return;
-    }
-
-    const localGoogleMatch = findLocalAccountByGoogleEmail(lastKnownGoogleUser.email);
-    if (!localGoogleMatch) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const restoreRememberedSession = async () => {
-      let recoveredAppData = localGoogleMatch.appData;
-
-      try {
-        const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
-        if (durableAppData) {
-          recoveredAppData = durableAppData;
-          saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
-        }
-      } catch (error) {
-        console.warn('Failed to rehydrate remembered Google session from durable storage.', error);
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      const mergedAppData = mergeStoredTermsAcceptance(
-        {
-          ...recoveredAppData,
-          user: {
-            ...recoveredAppData.user,
-            name: recoveredAppData.user.name || lastKnownGoogleUser.name,
-            email: lastKnownGoogleUser.email,
-            primaryContactType: 'google',
-          },
-        },
-        lastKnownGoogleUser
-      );
-
-      initialDataLoaded.current = false;
-      userDataService.setActiveUserEmail(lastKnownGoogleUser.email);
-      setState((current) => {
-        if (current.status !== 'unauthenticated' || current.appData) {
-          return current;
-        }
-
-        return {
-          ...current,
-          localAccountId: localGoogleMatch.userId,
-          appData: mergedAppData,
-          status: getGoogleWorkspaceStatus(mergedAppData, lastKnownGoogleUser),
-        };
-      });
-    };
-
-    void restoreRememberedSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    getGoogleWorkspaceStatus,
-    lastKnownGoogleUser,
-    mergeStoredTermsAcceptance,
-    state.appData,
-    state.status,
-  ]);
+  // A remembered Google identity is only a sign-in hint. It cannot restore an
+  // authenticated tenant workspace without fresh Google or local credentials.
+  // Local-account recovery remains available through explicit credential auth.
 
   useEffect(() => {
     setIsInitialized(true);
