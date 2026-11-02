@@ -3,7 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
-import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -846,43 +846,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const timeoutId = window.setTimeout(() => {
-      setState((current) => {
-        if (current.status !== 'pending-drive-check' || !current.gsiUser) {
-          return current;
-        }
-
-        if (current.pendingGoogleMode !== 'new') {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            gsiUser: null,
-            pendingGoogleMode: null,
-            authMessage:
-              'Existing-account lookup timed out before a saved workspace was confirmed. Retry Existing User Login.',
-          };
-        }
-
-        const newUser: User = {
-          ...(current.appData?.user || {
-            id: buildGoogleDurableAccountId(current.gsiUser.email) || crypto.randomUUID(),
-            ...current.gsiUser,
-            isVerified: false,
-            primaryContactType: 'google' as const,
-          }),
-        };
-
-        return {
-          ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: newUser, entities: [] },
-          gsiUser: null,
-          pendingGoogleMode: null,
-          authMessage: null,
-        };
-      });
+      setState((current) => expirePendingGoogleDriveCheck(current) as AuthState);
     }, 8000);
 
     return () => window.clearTimeout(timeoutId);
