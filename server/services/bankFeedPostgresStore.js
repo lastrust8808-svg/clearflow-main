@@ -295,20 +295,46 @@ function transactionQueries(client) {
       }
     },
     async compareAndSwapCheckpoint(scope, previous, next) {
-      params(scope);
-      if (!previous || typeof previous !== 'object' ||
-          !next || typeof next !== 'object' ||
-          previous.tenantId !== scope.tenantId ||
-          previous.provider !== scope.provider ||
-          previous.connectionId !== scope.connectionId ||
-          next.tenantId !== scope.tenantId ||
-          next.provider !== scope.provider ||
-          next.connectionId !== scope.connectionId ||
-          !validCursor(previous.cursor) ||
-          !validCursor(next.cursor) || next.cursor === null ||
-          !Number.isSafeInteger(previous.revision) || previous.revision < 0 ||
-          !Number.isSafeInteger(next.revision) ||
-          next.revision !== previous.revision + 1) {
+      // A direct caller must not retarget the checkpoint between validation
+      // and SQL parameter construction. Snapshot authorization exactly once.
+      const authorized = snapshotScope(scope);
+      const requestedScope = [authorized.tenantId, authorized.provider, authorized.connectionId];
+      // Never invoke getters or Proxy traps on supplied checkpoint evidence.
+      // Snapshot all fields before constructing the UPDATE parameters.
+      const snapshotCheckpoint = (value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value) ||
+            nodeTypes.isProxy(value)) {
+          throw new Error('Refusing out-of-scope banking checkpoint update.');
+        }
+        const descriptors = Object.getOwnPropertyDescriptors(value);
+        const read = (key) => {
+          const descriptor = descriptors[key];
+          if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
+            throw new Error('Refusing out-of-scope banking checkpoint update.');
+          }
+          return descriptor.value;
+        };
+        return {
+          tenantId: read('tenantId'),
+          provider: read('provider'),
+          connectionId: read('connectionId'),
+          cursor: read('cursor'),
+          revision: read('revision'),
+        };
+      };
+      const prior = snapshotCheckpoint(previous);
+      const following = snapshotCheckpoint(next);
+      if (prior.tenantId !== requestedScope[0] ||
+          prior.provider !== requestedScope[1] ||
+          prior.connectionId !== requestedScope[2] ||
+          following.tenantId !== requestedScope[0] ||
+          following.provider !== requestedScope[1] ||
+          following.connectionId !== requestedScope[2] ||
+          !validCursor(prior.cursor) ||
+          !validCursor(following.cursor) || following.cursor === null ||
+          !Number.isSafeInteger(prior.revision) || prior.revision < 0 ||
+          !Number.isSafeInteger(following.revision) ||
+          following.revision !== prior.revision + 1) {
         throw new Error('Refusing out-of-scope banking checkpoint update.');
       }
       const result = await client.query(
@@ -318,7 +344,7 @@ function transactionQueries(client) {
            AND cursor IS NOT DISTINCT FROM $6
            AND revision = $7
          RETURNING revision`,
-        [...params(scope), next.cursor, next.revision, previous.cursor, previous.revision],
+        [...requestedScope, following.cursor, following.revision, prior.cursor, prior.revision],
       );
       return result.rowCount === 1;
     },
