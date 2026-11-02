@@ -26,10 +26,12 @@ const accepted = [
   { success: true, job: { id: '123e4567-e89b-42d3-a456-426614174001', invoiceId: 'inv-1', entityId: 'ent-1', invoiceNumber: 'INV-1', operation: 'export', status: 'queued', queuedAt: '2026-10-28T00:00:00Z', persistence: 'durable', persistedAt: '2026-10-28T00:00:01Z' } },
   { success: true, importJob: { id: '123e4567-e89b-42d3-a456-426614174002', reconciliationId: 'rec-1', bankAccountId: 'bank-1', operation: 'statement_import', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
-    persistence: 'durable', importedAt: '2026-10-28T00:00:02Z' } },
+    persistence: 'durable', importedAt: '2026-10-28T00:00:02Z',
+    completionReceiptId: '123e4567-e89b-42d3-a456-426614174102', completionPersistedAt: '2026-10-28T00:00:03Z' } },
   { success: true, closeJob: { id: '123e4567-e89b-42d3-a456-426614174003', reconciliationId: 'rec-1', operation: 'reconciliation_close', status: 'processed',
     queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
-    persistence: 'durable', closedAt: '2026-10-28T00:00:02Z' } },
+    persistence: 'durable', closedAt: '2026-10-28T00:00:02Z',
+    completionReceiptId: '123e4567-e89b-42d3-a456-426614174103', completionPersistedAt: '2026-10-28T00:00:03Z' } },
 ];
 try {
   for (let i = 0; i < operations.length; i++) {
@@ -325,6 +327,34 @@ try {
         success: true, closeJob: { ...valid, ...changes },
       }) });
       await assert.rejects(api.closeReconciliationJob(payloads[3]), /not confirmed/);
+    }
+  });
+  await test('processed accounting jobs require a separate persisted completion receipt', async () => {
+    // A durable queued job is not proof of statement posting or ledger closure.
+    // A timestamp alone, synthetic receipt, or receipt reusing the reservation
+    // UUID must never cause AccountingPage to apply a processed transition.
+    for (const index of [2, 3]) {
+      const key = index === 2 ? 'importJob' : 'closeJob';
+      const job = accepted[index][key];
+      for (const changes of [
+        { completionReceiptId: undefined },
+        { completionReceiptId: '' },
+        { completionReceiptId: 'in-memory-completion-1' },
+        { completionReceiptId: job.id },
+        { completionReceiptId: job.completionReceiptId.toUpperCase() },
+        { completionPersistedAt: undefined },
+        { completionPersistedAt: 'not-a-date' },
+        { completionPersistedAt: '2026-10-28T00:00:01Z' },
+        { completionPersistedAt: '2099-01-01T00:00:00Z' },
+      ]) {
+        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+          success: true, [key]: { ...job, ...changes },
+        }) });
+        await assert.rejects(operations[index](payloads[index]), /not confirmed/,
+          `operation ${index + 1} accepted invalid completion evidence ${JSON.stringify(changes)}`);
+      }
+      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[index] });
+      assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
     }
   });
   await test('sent acknowledgement must occur after durable acceptance', async () => {
