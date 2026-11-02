@@ -87,8 +87,15 @@ test('out-of-order signed refund for older invoice cannot erase independent rene
 
   const currentRefund = admit(event('evt-current-refund', 'payment_refunded',
     '2026-11-02T12:00:00Z', 'inv-2'));
-  assert.equal(projectMembershipEntitlement(scope,
-    [admit(initial), admit(renewal), currentRefund], asOf).entitled, false);
+  // The refunded renewal must not extend the paid-through date, but an
+  // independently settled older invoice still covers its original period.
+  const afterRefund = projectMembershipEntitlement(scope,
+    [admit(initial), admit(renewal), currentRefund], asOf);
+  assert.equal(afterRefund.entitled, true);
+  assert.equal(afterRefund.periodEnd, initial.periodEnd);
+  const afterOriginalExpiry = projectMembershipEntitlement(scope,
+    [admit(initial), admit(renewal), currentRefund], '2026-12-01T00:00:00Z');
+  assert.equal(afterOriginalExpiry.entitled, false);
 });
 
 test('signed unpaid renewal fails closed and cancellation stays terminal', () => {
