@@ -85,8 +85,14 @@ function params(scope) {
   return [stable.tenantId, stable.provider, stable.connectionId];
 }
 
+// The SQL projection explicitly requests revision::text. Never coerce an
+// unexpected adapter value: String(object) can invoke attacker-controlled
+// toString/Symbol.toPrimitive and turn a malformed checkpoint into revision 0.
 function parseRevision(value) {
-  const text = String(value);
+  if (typeof value !== 'string') {
+    throw new Error('Invalid persisted banking checkpoint revision.');
+  }
+  const text = value;
   if (!/^(0|[1-9][0-9]*)$/.test(text)) {
     throw new Error('Invalid persisted banking checkpoint revision.');
   }
