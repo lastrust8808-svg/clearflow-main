@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { expirePendingGoogleSignIn } from '../src/domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization } from '../src/domain/googleOnboardingTimeout.mjs';
 
 const pending = (mode) => ({
   status: 'pending-gsi', pendingGoogleMode: mode,
@@ -59,4 +59,45 @@ test('remembered Google identity cannot silently restore an authenticated tenant
   // Explicit local credential flows must remain available for account recovery.
   assert.match(source, /authenticateLocalPassword\(/);
   assert.match(source, /verifyLocalAuthChallenge\(/);
+});
+
+for (const status of ['pending-gsi', 'pending-drive-check']) {
+  test('failed OAuth callback rejects cached Google workspace in ' + status, () => {
+    const current = Object.freeze({ ...pending('returning'), status });
+    const next = rejectFailedGoogleAuthorization(current);
+    assert.equal(next.status, 'unauthenticated');
+    for (const key of [
+      'appData', 'token', 'apiAccessToken', 'localAccountId', 'gsiUser',
+      'pendingCredentialAuth', 'pendingGoogleMode',
+    ]) assert.equal(next[key], null, key + ' must be cleared');
+    assert.match(next.authMessage, /could not be verified/);
+    assert.equal(next.otherUiState, 'preserve');
+    assert.equal(current.status, status, 'previous state must not be mutated');
+  });
+}
+
+test('late OAuth error cannot sign out a completed or unrelated session', () => {
+  for (const status of ['authenticated', 'pending-profile-setup', 'pending-verification', 'unauthenticated']) {
+    const current = Object.freeze({ ...pending('new'), status });
+    assert.equal(rejectFailedGoogleAuthorization(current), current);
+  }
+  assert.equal(rejectFailedGoogleAuthorization(null), null);
+});
+
+test('OAuth callback and code-exchange failures both fail closed without cached-profile fallback', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const handleAuthorizationCodeResponse = useCallback(');
+  const end = source.indexOf('const debouncedSave =', start);
+  assert.ok(start >= 0 && end > start, 'OAuth callback must be present');
+  const callback = source.slice(start, end);
+  assert.match(callback, /if \(response\?\.error \|\| !response\?\.code\)/);
+  assert.match(callback, /\.catch\(\(error\) => \{/);
+  assert.equal(
+    (callback.match(/setState\(\(current\) => rejectFailedGoogleAuthorization\(current\) as AuthState\)/g) || []).length,
+    2,
+    'both failure branches must reject the unverified session'
+  );
+  assert.doesNotMatch(callback, /canBypassProfileSetupForGoogleIdentity/);
+  assert.doesNotMatch(callback, /pending-profile-setup|status:\s*'authenticated'/);
+  assert.doesNotMatch(callback, /current\.appData\?\.user/);
 });
