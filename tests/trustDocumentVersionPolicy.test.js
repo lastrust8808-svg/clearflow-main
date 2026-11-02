@@ -423,7 +423,7 @@ test('document finalization cannot postdate version registration in digest or by
 
 test('document version identity rejects malformed Unicode and canonical aliases', () => {
   const proof = { versionId: 'version-1', sha256: digestA };
-  const invalid = ['ref-\\uD800', 'ref-\\uDC00', 'ref-e\\u0301'];
+  const invalid = ['ref-\uD800', 'ref-\uDC00', 'ref-e\u0301'];
   for (const value of invalid) {
     for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
       assert.throws(() => verifyTrustDocumentVersion({
@@ -443,8 +443,8 @@ test('document version identity rejects malformed Unicode and canonical aliases'
   }
   // Precomposed international identifiers and paired supplementary Unicode
   // remain valid for both digest and actual finalized-byte verification.
-  const canonical = 'id-\\u00e9-\\u{1F680}';
-  const evidenceRef = 'registration-\\u00e9-\\u{1F680}';
+  const canonical = 'id-\u00e9-\u{1F680}';
+  const evidenceRef = 'registration-\u00e9-\u{1F680}';
   assert.deepEqual(check([version(1, {
     versionId: canonical, evidenceRef,
   })], { versionId: canonical, sha256: digestA }), { status: 'valid' });
