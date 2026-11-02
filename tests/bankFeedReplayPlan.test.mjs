@@ -738,6 +738,33 @@ test('raw provider fingerprints reject shared memory that can mutate during snap
   );
 });
 
+test('provider fingerprint uses native bytes, not spoofed view getters or iterators', async () => {
+  const known = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  const bytes = new Uint8Array([97, 98, 99]);
+  let hostileCalls = 0;
+  const unexpected = () => { hostileCalls++; throw new Error('untrusted provider view hook executed'); };
+  Object.defineProperty(bytes, 'byteLength', { get: unexpected });
+  Object.defineProperty(bytes, 'buffer', { get: unexpected });
+  Object.defineProperty(bytes, Symbol.iterator, { value: unexpected });
+  assert.equal(await hashRawProviderPayloadBytes(bytes), known);
+  assert.equal(await verifyRawProviderPayloadHash(bytes, known), known);
+  assert.equal(hostileCalls, 0);
+
+  // A Proxy can pass instanceof Uint8Array but is not a real typed-array view.
+  const proxy = new Proxy(new Uint8Array([97, 98, 99]), {});
+  await assert.rejects(hashRawProviderPayloadBytes(proxy), /Raw provider payload/);
+
+  if (typeof SharedArrayBuffer !== 'undefined') {
+    const shared = new Uint8Array(new SharedArrayBuffer(3));
+    shared.set([97, 98, 99]);
+    Object.defineProperty(shared, 'buffer', {
+      get() { hostileCalls++; return new ArrayBuffer(3); },
+    });
+    await assert.rejects(hashRawProviderPayloadBytes(shared), /shared mutable memory/);
+    assert.equal(hostileCalls, 0);
+  }
+});
+
 test('oversized provider pages and account scopes fail before replay allocation', () => {
   const oversizedEvents = Array.from({ length: 5001 }, (_, index) => event(`tx-${index}`));
   const oversizedAccounts = Array.from({ length: 1001 }, (_, index) => `acct-${index}`);
