@@ -1104,7 +1104,13 @@ test('PostgreSQL SQL result envelopes and row arrays reject executable access be
   let executableCalls = 0;
   const unsafe = [
     (result) => new Proxy(result, {
-      get() { executableCalls++; throw new Error('SQL result Proxy getter executed'); },
+      get(target, key) {
+        // Async mock query resolves through Promise assimilation, which reads
+        // "then" before the application receives the result envelope.
+        if (key === 'then') return undefined;
+        executableCalls++;
+        throw new Error('SQL result Proxy getter executed');
+      },
       ownKeys() { executableCalls++; throw new Error('SQL result Proxy keys executed'); },
     }),
     (result) => {
