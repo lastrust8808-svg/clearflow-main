@@ -420,3 +420,36 @@ test('document finalization cannot postdate version registration in digest or by
   // They are NOT sufficient for signing readiness.
   assert.deepEqual(check([base], proof), { status: 'valid' });
 });
+
+test('document version identity rejects malformed Unicode and canonical aliases', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  const invalid = ['ref-\\uD800', 'ref-\\uDC00', 'ref-e\\u0301'];
+  for (const value of invalid) {
+    for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
+      assert.throws(() => verifyTrustDocumentVersion({
+        ...registry([version(1)]), [key]: value,
+      }, proof), /well-formed Unicode|NFC-normalized Unicode/);
+    }
+    assert.throws(() => check([version(1)], {
+      ...proof, versionId: value,
+    }), /well-formed Unicode|NFC-normalized Unicode/);
+    for (const key of ['versionId', 'evidenceRef']) {
+      assert.throws(() => check([version(1, { [key]: value })], proof),
+        /well-formed Unicode|NFC-normalized Unicode/);
+    }
+    assert.throws(() => check([version(1, {
+      status: 'revoked', revocationEvidenceRef: value,
+    })], proof), /well-formed Unicode|NFC-normalized Unicode/);
+  }
+  // Precomposed international identifiers and paired supplementary Unicode
+  // remain valid for both digest and actual finalized-byte verification.
+  const canonical = 'id-\\u00e9-\\u{1F680}';
+  const evidenceRef = 'registration-\\u00e9-\\u{1F680}';
+  assert.deepEqual(check([version(1, {
+    versionId: canonical, evidenceRef,
+  })], { versionId: canonical, sha256: digestA }), { status: 'valid' });
+  const bytes = Buffer.from('finalized canonical document bytes');
+  assert.deepEqual(verifyTrustDocumentBytes(registry([version(1, {
+    versionId: canonical, evidenceRef, sha256: fileDigest(bytes),
+  })]), { versionId: canonical, content: bytes }), { status: 'valid' });
+});

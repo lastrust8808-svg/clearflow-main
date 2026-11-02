@@ -17,6 +17,17 @@ function identifier(value, field) {
       /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must be a nonempty unpadded identifier without control characters');
   }
+  // Malformed UTF-16 is replaced during UTF-8 encoding and can alias
+  // distinct registry, proof or evidence identifiers in durable storage.
+  // A valid surrogate pair (supplementary Unicode) remains admissible.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(field + ' must contain well-formed Unicode');
+  }
+  // Canonically equivalent spellings must not become distinct version or
+  // provenance subjects. Reject aliases rather than rewriting stored IDs.
+  if (value.normalize('NFC') !== value) {
+    throw new TypeError(field + ' must use NFC-normalized Unicode');
+  }
   return value;
 }
 
