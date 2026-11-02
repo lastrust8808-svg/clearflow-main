@@ -91,3 +91,24 @@ export function expirePendingGoogleDriveCheck(current) {
     authMessage: 'Google workspace lookup timed out before verification. Please retry Google sign-in.',
   };
 }
+
+/**
+ * A failed Drive lookup is not proof of an empty workspace. Never use a cached
+ * local account or create a provisional membership after recovery throws.
+ */
+export function rejectFailedGoogleDriveRecovery(current) {
+  if (!current || current.status !== 'pending-drive-check') return current;
+
+  return {
+    ...current,
+    status: 'unauthenticated',
+    appData: null,
+    token: null,
+    apiAccessToken: null,
+    localAccountId: null,
+    gsiUser: null,
+    pendingCredentialAuth: null,
+    pendingGoogleMode: null,
+    authMessage: 'Google workspace recovery failed. Please retry Google sign-in.',
+  };
+}
