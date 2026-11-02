@@ -38,6 +38,32 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
 
+  -- POSIX whitespace includes tabs/newlines, not only ASCII spaces.
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES (E'\\t', 'actor-a', 'invoice_delivery', 'tab-tenant',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'tab-only tenant was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', E'\\n', 'invoice_delivery', 'newline-actor',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'newline-only actor was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', E'\\t\\n',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'tab/newline-only idempotency key was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
   -- The exact lowercase 64-character digest is part of the durable
   -- idempotency receipt. Uppercase, non-hex, and truncated digests fail.
   BEGIN
