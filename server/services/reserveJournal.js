@@ -1,0 +1,167 @@
+/**
+ * Pure replay of reserve-classification journal events. Append-only inputs
+ * preserve historical asset additions/removals; removal is NOT a lien release,
+ * settlement, transfer, or evidence of title. No writes or payments occur.
+ *
+ * The caller must authenticate scope, independently verify every evidenceRef,
+ * supply asOfAt/maxEvidenceAgeMs from trusted policy, and durably persist the
+ * ordered journal with transactional concurrency protection.
+ */
+import { calculateReserveCapacity } from './reserveCapacity.js';
+
+const SCOPE_FIELDS = ['tenantId', 'entityId', 'trustId'];
+const SNAPSHOT_FIELDS = new Set([...SCOPE_FIELDS, 'currency', 'asOfAt', 'maxEvidenceAgeMs', 'events']);
+const COMMON_FIELDS = ['eventId', 'type', 'occurredAt', ...SCOPE_FIELDS, 'assetId', 'evidenceRef'];
+const RECORDED_FIELDS = new Set([...COMMON_FIELDS, 'currency', 'kind', 'sourceType',
+  'amountMinor', 'restrictedMinor', 'pledgedMinor']);
+const REMOVED_FIELDS = new Set(COMMON_FIELDS);
+const MAX_EVENTS = 10000;
+
+function plainRecord(value, allowed, required, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !allowed.has(key)) {
+      throw new TypeError('Unsupported ' + label + ' field');
+    }
+    if (!descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError(label + ' fields must be enumerable data properties');
+    }
+  }
+  for (const key of required) {
+    if (!Object.hasOwn(descriptors, key)) {
+      throw new TypeError('Missing ' + label + ' field: ' + key);
+    }
+  }
+  return descriptors;
+}
+
+function plainEvents(events) {
+  if (!Array.isArray(events) || Object.getPrototypeOf(events) !== Array.prototype) {
+    throw new TypeError('Reserve journal events must be a plain array');
+  }
+  const length = Object.getOwnPropertyDescriptor(events, 'length').value;
+  if (length > MAX_EVENTS) throw new RangeError('Reserve journal exceeds maximum event count');
+  const descriptors = Object.getOwnPropertyDescriptors(events);
+  let count = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key ||
+        !descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) {
+      throw new TypeError('Reserve journal must contain only dense data elements');
+    }
+    count++;
+  }
+  if (count !== length) throw new TypeError('Reserve journal must not contain holes');
+}
+
+function identifier(value, label) {
+  if (typeof value !== 'string' || !value || value.trim() !== value ||
+      /[\u0000-\u001f\u007f-\u009f]/u.test(value) ||
+      /[\uD800-\uDFFF]/u.test(value) || value.normalize('NFC') !== value) {
+    throw new TypeError(label + ' must be a canonical nonempty identifier');
+  }
+  return value;
+}
+
+function instant(value, label) {
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) {
+    throw new TypeError(label + ' must be a canonical UTC timestamp');
+  }
+  return value;
+}
+
+/**
+ * Replays immutable asset_recorded / asset_removed classifications.
+ * Returns a frozen reserve capacity projection, not a spendable balance.
+ */
+export function projectReserveJournal(snapshot) {
+  plainRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve journal snapshot');
+  const scope = Object.fromEntries(SCOPE_FIELDS.map(key => [key, identifier(snapshot[key], key)]));
+  if (new Set(Object.values(scope)).size !== 3) {
+    throw new Error('Reserve journal scope identifiers must be distinct');
+  }
+  // Reuse the canonical reserve classifier for snapshot policy admission.
+  const base = { ...scope, currency: snapshot.currency, asOfAt: snapshot.asOfAt,
+    maxEvidenceAgeMs: snapshot.maxEvidenceAgeMs };
+  calculateReserveCapacity({ ...base, entries: [] });
+  plainEvents(snapshot.events);
+  const active = new Map();
+  const historicalAssets = new Set();
+  const eventIds = new Set();
+  const evidenceRefs = new Set();
+  let previousAt = null;
+  let removedAssetCount = 0;
+  for (const event of snapshot.events) {
+    const header = plainRecord(event, new Set([...RECORDED_FIELDS, ...REMOVED_FIELDS]),
+      COMMON_FIELDS, 'Reserve journal event');
+    const type = header.type.value;
+    if (type !== 'asset_recorded' && type !== 'asset_removed') {
+      throw new TypeError('Unsupported reserve journal event type');
+    }
+    plainRecord(event, type === 'asset_recorded' ? RECORDED_FIELDS : REMOVED_FIELDS,
+      type === 'asset_recorded' ?
+        [...COMMON_FIELDS, 'currency', 'kind', 'sourceType', 'amountMinor'] :
+        COMMON_FIELDS, 'Reserve journal event');
+    const eventId = identifier(event.eventId, 'eventId');
+    const assetId = identifier(event.assetId, 'assetId');
+    const evidenceRef = identifier(event.evidenceRef, 'evidenceRef');
+    if (eventIds.has(eventId)) throw new Error('Duplicate reserve journal event ID');
+    if (evidenceRefs.has(evidenceRef)) throw new Error('Reused reserve journal evidence reference');
+    eventIds.add(eventId);
+    evidenceRefs.add(evidenceRef);
+    for (const key of SCOPE_FIELDS) {
+      if (event[key] !== scope[key]) throw new Error('Reserve journal scope mismatch');
+    }
+    const occurredAt = instant(event.occurredAt, 'occurredAt');
+    if (occurredAt > snapshot.asOfAt) throw new Error('Reserve journal event occurs after as-of time');
+    if (previousAt !== null && occurredAt <= previousAt) {
+      throw new Error('Reserve journal timestamps must strictly increase');
+    }
+    previousAt = occurredAt;
+    if (type === 'asset_recorded') {
+      if (historicalAssets.has(assetId)) {
+        throw new Error('Reserve asset cannot be recorded more than once');
+      }
+      historicalAssets.add(assetId);
+      const entry = { id: eventId, assetId, evidenceRef, observedAt: occurredAt,
+        ...scope, currency: event.currency, kind: event.kind, sourceType: event.sourceType,
+        amountMinor: event.amountMinor };
+      if (Object.hasOwn(event, 'restrictedMinor')) entry.restrictedMinor = event.restrictedMinor;
+      if (Object.hasOwn(event, 'pledgedMinor')) entry.pledgedMinor = event.pledgedMinor;
+      // Every historical record must be valid even if a later event removes it.
+      calculateReserveCapacity({ ...base, asOfAt: occurredAt, maxEvidenceAgeMs: 0,
+        entries: [entry] });
+      active.set(assetId, entry);
+    } else {
+      if (!active.has(assetId)) {
+        throw new Error('Reserve removal requires a currently recorded asset');
+      }
+      active.delete(assetId);
+      removedAssetCount++;
+    }
+  }
+  const scopes = new Set(Object.values(scope));
+  for (const value of eventIds) {
+    if (scopes.has(value) || historicalAssets.has(value) || evidenceRefs.has(value)) {
+      throw new Error('Reserve journal identity namespaces must be distinct');
+    }
+  }
+  for (const value of evidenceRefs) {
+    if (scopes.has(value) || historicalAssets.has(value)) {
+      throw new Error('Reserve journal identity namespaces must be distinct');
+    }
+  }
+  for (const value of historicalAssets) {
+    if (scopes.has(value)) throw new Error('Reserve journal identity namespaces must be distinct');
+  }
+  const capacity = calculateReserveCapacity({ ...base, entries: [...active.values()] });
+  return Object.freeze({ ...capacity, journalEventCount: eventIds.size,
+    activeAssetCount: active.size, removedAssetCount });
+}
