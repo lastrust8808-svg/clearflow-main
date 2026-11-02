@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectReserveJournal } from '../server/services/reserveJournal.js';
+import { projectReserveJournal, verifyReserveJournalAppend } from '../server/services/reserveJournal.js';
 
 const scope = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a' };
 const base = { ...scope, currency: 'USD', asOfAt: '2026-11-02T00:00:00.000Z',
@@ -92,4 +92,54 @@ test('canonical SHA-256 journal fingerprint detects event changes without depend
   assert.notEqual(projectReserveJournal({ ...base, trustId: 'trust-b',
     events: events.map(event => ({ ...event, trustId: 'trust-b' })) }).journalSha256,
     fingerprint);
+});
+
+
+test('checkpointed append accepts only new events with an unchanged canonical history', () => {
+  const previousSnapshot = { ...base, events: [record()] };
+  const checkpoint = projectReserveJournal(previousSnapshot).journalSha256;
+  const nextSnapshot = { ...base, events: [
+    Object.fromEntries(Object.entries(record()).reverse()), remove(),
+  ] };
+  const result = verifyReserveJournalAppend(previousSnapshot, nextSnapshot, checkpoint);
+  assert.equal(result.journalEventCount, 2);
+  assert.equal(result.activeAssetCount, 0);
+  assert.notEqual(result.journalSha256, checkpoint);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('checkpointed append rejects stale or malformed checkpoints and history rewrites', () => {
+  const previous = { ...base, events: [record()] };
+  const next = { ...base, events: [record(), remove()] };
+  const checkpoint = projectReserveJournal(previous).journalSha256;
+  assert.throws(() => verifyReserveJournalAppend(previous, next, 'A'.repeat(64)),
+    /lowercase SHA-256/);
+  assert.throws(() => verifyReserveJournalAppend(previous, next, '0'.repeat(64)),
+    /checkpoint mismatch/);
+  assert.throws(() => verifyReserveJournalAppend(previous, { ...next,
+    events: [record({ amountMinor: 10001 }), remove()] }, checkpoint),
+    /rewrite historical/);
+  assert.throws(() => verifyReserveJournalAppend(previous, previous, checkpoint),
+    /at least one new event/);
+  assert.throws(() => verifyReserveJournalAppend(next, previous,
+    projectReserveJournal(next).journalSha256), /at least one new event/);
+});
+
+test('checkpointed append rejects scope changes, clock rollback and invalid new events', () => {
+  const previous = { ...base, events: [record()] };
+  const checkpoint = projectReserveJournal(previous).journalSha256;
+  const next = { ...base, events: [record(), remove()] };
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, asOfAt: '2026-11-01T20:00:00.000Z',
+  }, checkpoint), /roll back as-of/);
+  const newScope = { ...scope, trustId: 'trust-b' };
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, ...newScope, events: next.events.map(event => ({ ...event, ...newScope })),
+  }, checkpoint), /change owner scope/);
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, currency: 'EUR', events: [record({ currency: 'EUR' }), remove()],
+  }, checkpoint), /change owner scope or currency/);
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, events: [record(), remove({ eventId: 'event-1' })],
+  }, checkpoint), /Duplicate.*event ID/);
 });
