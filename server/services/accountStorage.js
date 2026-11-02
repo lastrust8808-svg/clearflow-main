@@ -2,12 +2,9 @@ import { recordsConfigured, readRecord, writeRecord } from './durableAccountReco
 import { durableAccountStorageConfigured, readAccountSnapshot, writeAccountSnapshot } from './durableAccountSnapshots.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { sanitizeStorageSegment as sanitizeSegment } from '../utils/storageSegment.js';
 
 const STORAGE_ROOT = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
-
-function sanitizeSegment(value) {
-  return encodeURIComponent(String(value || 'unknown'));
-}
 
 function accountDirectory(accountId) {
   return path.join(STORAGE_ROOT, sanitizeSegment(accountId));
