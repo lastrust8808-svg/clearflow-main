@@ -130,6 +130,12 @@ export function projectPrivateNoteLifecycle(snapshot) {
     trustId: requiredId(snapshot.trustId, 'trustId'),
     noteId: requiredId(snapshot.noteId, 'noteId'),
   };
+  // Each scope role must have its own canonical identity. Reusing a tenant ID
+  // as a trust, entity or note ID makes audit/provenance namespace ownership
+  // ambiguous even when every event repeats the same malformed scope.
+  if (new Set(Object.values(scope)).size !== 4) {
+    throw new Error('Private note tenant, entity, trust and note scope identifiers must be distinct');
+  }
   requirePlainEventHistory(snapshot.events);
   // Snapshot time is supplied by the caller; runtime integration must use a
   // trusted server-side clock, not an untrusted request parameter.
