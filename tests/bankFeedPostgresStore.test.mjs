@@ -199,6 +199,56 @@ test('PostgreSQL adapter rejects mismatched persisted checkpoint identities befo
   });
 });
 
+test('PostgreSQL checkpoint CAS snapshots scope and rejects executable or mutable evidence', async () => {
+  const checkpoint = (cursor, revision) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    cursor, revision,
+  });
+  // A malicious getter could previously mutate scope after the first
+  // validation but before the second params(scope) call in the UPDATE.
+  const mutableScope = scope();
+  const poisonedPrevious = checkpoint(null, 0);
+  Object.defineProperty(poisonedPrevious, 'tenantId', {
+    enumerable: true,
+    get() {
+      mutableScope.tenantId = 'tenant-b';
+      return 'tenant-b';
+    },
+  });
+  const poisonedNext = checkpoint('cursor-1', 1);
+  Object.defineProperty(poisonedNext, 'cursor', {
+    enumerable: true,
+    get() { throw new Error('checkpoint getter must not execute'); },
+  });
+  for (const [inputScope, previous, next] of [
+    [mutableScope, poisonedPrevious, checkpoint('cursor-1', 1)],
+    [scope(), checkpoint(null, 0), poisonedNext],
+    [scope(), checkpoint(null, 0), new Proxy(checkpoint('cursor-1', 1), {})],
+  ]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.compareAndSwapCheckpoint(inputScope, previous, next)),
+      /Refusing out-of-scope banking checkpoint update/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'invalid checkpoint evidence must not issue UPDATE');
+    assert.deepEqual(db.state, initial());
+    assert.equal(db.releases, 1);
+  }
+  assert.equal(mutableScope.tenantId, 'tenant-a',
+    'checkpoint getter must not execute or retarget authorization');
+
+  const valid = mockPg();
+  const updated = await createBankFeedPostgresStore(valid.pool).withTransaction(
+    (tx) => tx.compareAndSwapCheckpoint(
+      scope(), checkpoint(null, 0), checkpoint('cursor-1', 1)),
+  );
+  assert.equal(updated, true, 'ordinary authorized checkpoint CAS still works');
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
+  assert.equal(valid.state.checkpoint.revision, '1');
+});
+
 test('PostgreSQL adapter rejects unsafe BIGINT checkpoint revisions', async () => {
   const db = mockPg();
   db.state.checkpoint.revision = '9007199254740992';
