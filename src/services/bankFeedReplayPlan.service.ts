@@ -484,18 +484,28 @@ export function planBankFeedCursorPage(input: FeedCursorPageInput): FeedCursorPa
 export async function hashRawProviderPayloadBytes(rawPayload: Uint8Array): Promise<string> {
   // A bounded snapshot prevents callers from changing the bytes while the
   // asynchronous digest is pending and rejects unbounded/empty evidence.
-  if (!(rawPayload instanceof Uint8Array) ||
-      rawPayload.byteLength === 0 || rawPayload.byteLength > 1024 * 1024) {
+  // A Proxy can impersonate a Uint8Array via instanceof, while instance
+  // getters and iterators can lie about its length, buffer or actual bytes.
+  // Use native typed-array internal slots, not user-overridable properties.
+  if (!ArrayBuffer.isView(rawPayload) || !(rawPayload instanceof Uint8Array)) {
     throw new Error('Raw provider payload must be 1 to 1048576 bytes.');
   }
-  // A SharedArrayBuffer can be modified by another worker while the snapshot
-  // is copied. That would turn a purported exact provider-byte fingerprint
-  // into a hash of a torn, never-received payload. Require exclusive bytes.
+  const nativeView = Object.getPrototypeOf(Uint8Array.prototype);
+  const byteLength = Object.getOwnPropertyDescriptor(nativeView, 'byteLength').get.call(rawPayload);
+  const backingBuffer = Object.getOwnPropertyDescriptor(nativeView, 'buffer').get.call(rawPayload);
+  if (byteLength === 0 || byteLength > 1024 * 1024) {
+    throw new Error('Raw provider payload must be 1 to 1048576 bytes.');
+  }
+  // Shared bytes may change while copied by another worker. An overridden
+  // .buffer getter must not conceal the actual shared backing store.
   if (typeof SharedArrayBuffer !== 'undefined' &&
-      rawPayload.buffer instanceof SharedArrayBuffer) {
+      backingBuffer instanceof SharedArrayBuffer) {
     throw new Error('Raw provider payload must not use shared mutable memory.');
   }
-  const snapshot = Uint8Array.from(rawPayload);
+  const snapshot = new Uint8Array(byteLength);
+  // TypedArray#set copies internal bytes directly, without invoking a custom
+  // Symbol.iterator or numeric index getter on the provider's view.
+  snapshot.set(rawPayload);
   const digest = await globalThis.crypto.subtle.digest('SHA-256', snapshot);
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, '0')).join('');
