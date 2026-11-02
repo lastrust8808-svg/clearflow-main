@@ -75,3 +75,21 @@ test('rejects cross-role identifier reuse including removed historical assets', 
   assert.throws(() => project([record(), remove({ eventId: 'tenant-a' })]), /distinct/);
   assert.equal(project([record(), remove()]).activeAssetCount, 0);
 });
+
+
+test('canonical SHA-256 journal fingerprint detects event changes without depending on object key order or as-of policy', () => {
+  const events = [record(), remove()];
+  const fingerprint = project(events).journalSha256;
+  assert.match(fingerprint, /^[0-9a-f]{64}$/);
+  const reordered = events.map(event => Object.fromEntries(Object.entries(event).reverse()));
+  assert.equal(project(reordered).journalSha256, fingerprint);
+  assert.equal(projectReserveJournal({ ...base, asOfAt: '2026-11-02T01:00:00.000Z',
+    events }).journalSha256, fingerprint);
+  assert.notEqual(project([record()]).journalSha256, fingerprint);
+  assert.notEqual(project([record({ amountMinor: 10001 }), remove()]).journalSha256, fingerprint);
+  assert.notEqual(project([record(), remove({ evidenceRef: 'proof-3' })]).journalSha256,
+    fingerprint);
+  assert.notEqual(projectReserveJournal({ ...base, trustId: 'trust-b',
+    events: events.map(event => ({ ...event, trustId: 'trust-b' })) }).journalSha256,
+    fingerprint);
+});
