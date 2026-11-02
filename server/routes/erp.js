@@ -23,6 +23,15 @@ function validErpIdentifier(value) {
     !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(value);
 }
 
+// Settlement amounts must survive exact-cent conversion before any future
+// durable reservation or payment adapter can consume them. Reject coerced,
+// non-finite, nonpositive and unsafe-precision monetary values.
+function validSettlementAmount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return false;
+  const cents = Math.round(value * 100);
+  return Number.isSafeInteger(cents) && cents / 100 === value;
+}
+
 router.post('/invoice-deliveries', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
@@ -43,7 +52,7 @@ router.post('/invoice-exports', (req, res) => {
 // approval and audit persistence are not yet implemented for this endpoint.
 router.post('/settlements/execute', (req, res) => {
   const { entityId, paymentId, settlementId, amount } = req.body || {};
-  if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !amount) {
+  if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
     return res.status(400).json({ success: false, error: 'Missing settlement execution payload.' });
   }
   return rejectNonDurableJob(res, 'settlement_execution');
