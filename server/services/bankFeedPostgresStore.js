@@ -38,9 +38,51 @@ function assertScope(scope) {
   }
 }
 
+// Snapshot the authorization scope before the first asynchronous database
+// operation. A caller must not be able to retarget later INSERTs or expand
+// read permissions by mutating the original scope while a query is pending.
+// Read own data descriptors so getters/Proxies cannot supply shifting IDs.
+function snapshotScope(scope) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || nodeTypes.isProxy(scope)) {
+    throw new Error('Invalid authenticated banking scope.');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(scope);
+  const ownValue = (key) => {
+    const descriptor = descriptors[key];
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
+      throw new Error('Invalid authenticated banking scope.');
+    }
+    return descriptor.value;
+  };
+  const originalIds = ownValue('allowedAccountIds');
+  if (!Array.isArray(originalIds) || nodeTypes.isProxy(originalIds)) {
+    throw new Error('Invalid authenticated banking scope.');
+  }
+  const idDescriptors = Object.getOwnPropertyDescriptors(originalIds);
+  if (Reflect.ownKeys(idDescriptors).length !== originalIds.length + 1) {
+    throw new Error('Invalid authenticated banking scope.');
+  }
+  const allowedAccountIds = [];
+  for (let i = 0; i < originalIds.length; i++) {
+    const descriptor = idDescriptors[String(i)];
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new Error('Invalid authenticated banking scope.');
+    }
+    allowedAccountIds.push(descriptor.value);
+  }
+  const stable = {
+    tenantId: ownValue('tenantId'),
+    provider: ownValue('provider'),
+    connectionId: ownValue('connectionId'),
+    allowedAccountIds,
+  };
+  assertScope(stable);
+  return stable;
+}
+
 function params(scope) {
-  assertScope(scope);
-  return [scope.tenantId, scope.provider, scope.connectionId];
+  const stable = snapshotScope(scope);
+  return [stable.tenantId, stable.provider, stable.connectionId];
 }
 
 function parseRevision(value) {
@@ -145,23 +187,25 @@ function transactionQueries(client) {
       };
     },
     async loadEntries(scope) {
+      const authorized = snapshotScope(scope);
+      const requestedScope = [authorized.tenantId, authorized.provider, authorized.connectionId];
       const result = await client.query(
         `SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload
          FROM ${ENTRIES}
          WHERE tenant_id = $1 AND provider = $2 AND connection_id = $3
            AND account_id = ANY($4::text[])
          ORDER BY account_id, transaction_id`,
-        [...params(scope), scope.allowedAccountIds],
+        [...requestedScope, authorized.allowedAccountIds],
       );
       // JSONB is not a trusted identity boundary. Verify that each stored
       // payload agrees with its database composite key and the authorized
       // scope before the replay planner can use any historical evidence.
-      const allowed = new Set(scope.allowedAccountIds);
+      const allowed = new Set(authorized.allowedAccountIds);
       return result.rows.map((row) => {
         const entry = row.payload;
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
-            row.tenant_id !== scope.tenantId || row.provider !== scope.provider ||
-            row.connection_id !== scope.connectionId ||
+            row.tenant_id !== requestedScope[0] || row.provider !== requestedScope[1] ||
+            row.connection_id !== requestedScope[2] ||
             !allowed.has(row.account_id) ||
             entry.tenantId !== row.tenant_id || entry.provider !== row.provider ||
             entry.connectionId !== row.connection_id ||
@@ -183,8 +227,9 @@ function transactionQueries(client) {
       // This adapter is also callable without the page planner. Validate and
       // snapshot the entire batch before the first INSERT: conflicting replay
       // identities must not silently overwrite one another within a page.
-      params(scope);
-      const allowed = new Set(scope.allowedAccountIds);
+      const authorized = snapshotScope(scope);
+      const requestedScope = [authorized.tenantId, authorized.provider, authorized.connectionId];
+      const allowed = new Set(authorized.allowedAccountIds);
       if (!Array.isArray(entries)) {
         throw new Error('Refusing out-of-scope banking entry write.');
       }
@@ -193,9 +238,9 @@ function transactionQueries(client) {
       let totalJsonBytes = 0;
       for (const entry of entries) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
-            entry.tenantId !== scope.tenantId ||
-            entry.provider !== scope.provider ||
-            entry.connectionId !== scope.connectionId ||
+            entry.tenantId !== requestedScope[0] ||
+            entry.provider !== requestedScope[1] ||
+            entry.connectionId !== requestedScope[2] ||
             !allowed.has(entry.accountId) ||
             !validScopeId(entry.transactionId)) {
           throw new Error('Refusing out-of-scope banking entry write.');
@@ -212,9 +257,9 @@ function transactionQueries(client) {
         // A custom serializer or a mutating getter must not change the SQL
         // composite key independently of the JSONB evidence being stored.
         if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
-            snapshot.tenantId !== scope.tenantId ||
-            snapshot.provider !== scope.provider ||
-            snapshot.connectionId !== scope.connectionId ||
+            snapshot.tenantId !== requestedScope[0] ||
+            snapshot.provider !== requestedScope[1] ||
+            snapshot.connectionId !== requestedScope[2] ||
             snapshot.accountId !== entry.accountId ||
             snapshot.transactionId !== entry.transactionId) {
           throw new Error('Refusing banking entry with inconsistent serialized identity.');
@@ -245,7 +290,7 @@ function transactionQueries(client) {
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
            ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
            DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-          [...params(scope), entry.accountId, entry.transactionId, entry.serialized],
+          [...requestedScope, entry.accountId, entry.transactionId, entry.serialized],
         );
       }
     },
