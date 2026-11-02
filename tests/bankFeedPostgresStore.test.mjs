@@ -554,3 +554,102 @@ test('PostgreSQL adapter refuses oversized persisted JSONB before cursor advance
     /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0);
   assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
 });
+
+
+test('PostgreSQL batch INSERTs retain the originally authorized scope across asynchronous queries', async () => {
+  const db = mockPg();
+  const mutableScope = scope();
+  const entry = (transactionId) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+    status: 'posted', requiresReview: false,
+  });
+  const originalConnect = db.pool.connect.bind(db.pool);
+  let mutated = false;
+  db.pool.connect = async () => {
+    const client = await originalConnect();
+    const originalQuery = client.query.bind(client);
+    client.query = async (sql, values) => {
+      const result = await originalQuery(sql, values);
+      if (!mutated && /INSERT INTO public.clearflow_bank_feed_entries/.test(sql)) {
+        mutated = true;
+        // Another async caller changes the same object after the first INSERT.
+        mutableScope.tenantId = 'tenant-other';
+        mutableScope.connectionId = 'item-other';
+        mutableScope.allowedAccountIds.splice(0, 1, 'acct-other');
+      }
+      return result;
+    };
+    return client;
+  };
+  await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.saveEntries(mutableScope, [entry('tx-first'), entry('tx-second')]));
+  assert.equal(mutated, true);
+  assert.equal(db.state.entries.length, 2);
+  assert.deepEqual(db.state.entries.map((row) => row.transactionId), ['tx-first', 'tx-second']);
+  const inserts = db.calls.filter(({ sql }) => /INSERT INTO public.clearflow_bank_feed_entries/.test(sql));
+  assert.equal(inserts.length, 2);
+  for (const { values } of inserts) {
+    assert.deepEqual(values.slice(0, 5).slice(0, 3), ['tenant-a', 'plaid', 'item-a']);
+    assert.equal(values[3], 'acct-a');
+  }
+});
+
+test('PostgreSQL historical entry reads validate against the original scope after query awaits', async () => {
+  const db = mockPg();
+  db.state.entries.push({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-existing',
+    amountCents: 500, status: 'posted', requiresReview: false,
+  });
+  const mutableScope = scope();
+  const originalConnect = db.pool.connect.bind(db.pool);
+  let mutated = false;
+  db.pool.connect = async () => {
+    const client = await originalConnect();
+    const originalQuery = client.query.bind(client);
+    client.query = async (sql, values) => {
+      const result = await originalQuery(sql, values);
+      if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
+        mutated = true;
+        mutableScope.tenantId = 'tenant-other';
+        mutableScope.connectionId = 'item-other';
+        mutableScope.allowedAccountIds.splice(0, 1, 'acct-other');
+      }
+      return result;
+    };
+    return client;
+  };
+  const entries = await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.loadEntries(mutableScope));
+  assert.equal(mutated, true);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].transactionId, 'tx-existing');
+  assert.deepEqual(db.calls.find(({ sql }) => /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)).values,
+    ['tenant-a', 'plaid', 'item-a', ['acct-a']]);
+});
+
+test('PostgreSQL scope getters and sparse account grants fail before scoped SQL', async () => {
+  const entry = {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-1', amountCents: 100,
+  };
+  let getterCalls = 0;
+  const accessorScope = scope();
+  Object.defineProperty(accessorScope, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return 'tenant-a'; },
+  });
+  const sparseScope = { ...scope(), allowedAccountIds: Array(1) };
+  const proxyScope = new Proxy(scope(), { get() { throw new Error('scope trap executed'); } });
+  for (const invalid of [accessorScope, sparseScope, proxyScope]) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(invalid, [entry])),
+      /Invalid authenticated banking scope/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK']);
+    assert.deepEqual(db.state, initial());
+  }
+  assert.equal(getterCalls, 0, 'scope getters must never execute');
+});
