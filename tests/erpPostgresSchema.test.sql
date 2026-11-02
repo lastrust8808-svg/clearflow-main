@@ -10,6 +10,61 @@ VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'invoice-key',
 
 DO $test$
 BEGIN
+  -- A database reservation must never be accepted without a meaningful
+  -- tenant, actor, or idempotency identity. These checks protect persisted
+  -- rows even if a future caller bypasses the service-side validation.
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('   ', 'actor-a', 'invoice_delivery', 'blank-tenant',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'whitespace-only tenant was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', '  ', 'invoice_delivery', 'blank-actor',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'whitespace-only actor was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', '  ',
+            repeat('a', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'whitespace-only idempotency key was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  -- The exact lowercase 64-character digest is part of the durable
+  -- idempotency receipt. Uppercase, non-hex, and truncated digests fail.
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'uppercase-digest',
+            repeat('A', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'uppercase payload digest was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'nonhex-digest',
+            repeat('g', 64), '{}'::jsonb);
+    RAISE EXCEPTION 'non-hex payload digest was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO erp_operation_jobs
+      (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', 'short-digest',
+            'abc', '{}'::jsonb);
+    RAISE EXCEPTION 'truncated payload digest was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
   -- Idempotency is tenant + operation scoped, not a global key.
   BEGIN
     INSERT INTO erp_operation_jobs
