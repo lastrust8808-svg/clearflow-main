@@ -55,3 +55,9 @@ Security & Infrastructure: tenant auth, encryption, unique indexes, migration ru
 Plaid PR #19: Link products, token vault, transaction sync and webhook routes.
 Membership PR #17: settled/reversed state semantics and audit IDs.
 ERP: account mapping, balanced journal interface and reconciliation UI.
+
+## Review-only internal transfer candidate gate (2026-11-02)
+
+The isolated `server/services/bankTransferCandidates.js` module proposes, but never posts or confirms, an internal transfer only when two **posted** transactions have opposite exact-cent amounts, distinct bank accounts, the same currency, an identical nonempty provider reference, and posting dates within three calendar days. A source with multiple possible counterparts is reported as ambiguous and no candidate is proposed for it. Missing references and amount/date-only coincidences are not enough to infer a transfer. All input rows must belong to the explicit tenant scope and have unique account/transaction IDs. No bank-provider requests, database writes, ledger mutations, or payment actions occur.
+
+The candidate output has `status: 'review_required'` and is not a controller approval or a reconciled transfer. Integration requires Security's authenticated account scope, ERP's durable reviewed pairing/audit workflow, and a verified provider reference mapping. The isolated regression tests are in `tests/bankTransferCandidates.test.mjs`; CI run evidence must be inspected separately before claiming a pass.
