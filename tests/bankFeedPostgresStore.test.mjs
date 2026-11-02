@@ -830,3 +830,73 @@ test('PostgreSQL adapter rejects malformed persisted transaction IDs before repl
     assert.equal(db.releases, 1);
   }
 });
+
+test('PostgreSQL historical JSONB identity accessors and Proxies cannot execute during reads', async () => {
+  const historical = {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-historical',
+    amountCents: 500, status: 'posted', requiresReview: true,
+  };
+  let getterCalls = 0;
+  let proxyTrapCalls = 0;
+  const unsafe = [];
+  for (const field of ['tenantId', 'provider', 'connectionId', 'accountId', 'transactionId']) {
+    const record = { ...historical };
+    Object.defineProperty(record, field, {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        throw new Error('historical identity getter executed');
+      },
+    });
+    unsafe.push(record);
+  }
+  unsafe.push(new Proxy({ ...historical }, {
+    get() {
+      proxyTrapCalls++;
+      throw new Error('historical identity Proxy get executed');
+    },
+    ownKeys() {
+      proxyTrapCalls++;
+      throw new Error('historical identity Proxy keys executed');
+    },
+  }));
+  unsafe.push({ ...historical, details: new Proxy({ memo: 'test' }, {
+    get() {
+      proxyTrapCalls++;
+      throw new Error('nested historical Proxy get executed');
+    },
+  }) });
+
+  for (const injectedPayload of unsafe) {
+    const db = mockPg();
+    db.state.entries.push({ ...historical });
+    const before = structuredClone(db.state);
+    const originalConnect = db.pool.connect.bind(db.pool);
+    db.pool.connect = async () => {
+      const client = await originalConnect();
+      const originalQuery = client.query.bind(client);
+      client.query = async (sql, values) => {
+        const result = await originalQuery(sql, values);
+        if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
+          assert.equal(result.rows.length, 1);
+          result.rows[0].payload = injectedPayload;
+        }
+        return result;
+      };
+      return client;
+    };
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Unsafe banking evidence property|Banking evidence must contain bounded plain JSON values/,
+    );
+    assert.deepEqual(db.state, before, 'rejected historical evidence must preserve the checkpoint');
+    assert.equal(db.calls.filter(({ sql }) =>
+      /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0,
+    'unsafe historical evidence must not write entries or advance a cursor');
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.equal(db.releases, 1);
+  }
+  assert.equal(getterCalls, 0, 'historical JSONB identity getters must never execute');
+  assert.equal(proxyTrapCalls, 0, 'historical JSONB Proxy traps must never execute');
+});
