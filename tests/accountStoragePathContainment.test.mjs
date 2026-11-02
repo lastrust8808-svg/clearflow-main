@@ -1327,7 +1327,7 @@ test('unpaired UTF-16 surrogate keys and values fail closed across all account r
       const serialized = await fs.readFile(filePath, 'utf8');
       for (const suffix of [
         ', "unpairedValue": "\\ud800"}',
-        ', "nested": {"\\udc00": true}}',
+        ', "extraNested": {"\\udc00": true}}',
       ]) {
         await fs.writeFile(filePath, serialized.replace(/}\s*$/, suffix));
         await assert.rejects(fixture.read(), /Unsafe storage record Unicode string/);
