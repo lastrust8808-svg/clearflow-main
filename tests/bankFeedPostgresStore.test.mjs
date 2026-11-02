@@ -18,7 +18,7 @@ const initial = () => ({
   entries: [],
 });
 
-function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false, tamperReadPayload = null, tamperCheckpointRow = null } = {}) {
+function mockPg({ failWrite = false, failCommit = false, failCas = false, failBegin = false, failRollback = false, tamperReadPayload = null, tamperCheckpointRow = null, checkpointRowFactory = null } = {}) {
   const state = initial();
   const calls = [];
   let releases = 0;
@@ -52,7 +52,8 @@ function mockPg({ failWrite = false, failCommit = false, failCas = false, failBe
             const row = working.checkpoint;
             const matched = row.tenant_id === values[0] &&
               row.provider === values[1] && row.connection_id === values[2];
-            return { rows: matched ? [{ ...structuredClone(row), ...tamperCheckpointRow }] : [], rowCount: matched ? 1 : 0 };
+            const returnedRow = { ...structuredClone(row), ...tamperCheckpointRow };
+            return { rows: matched ? [checkpointRowFactory ? checkpointRowFactory(returnedRow) : returnedRow] : [], rowCount: matched ? 1 : 0 };
           }
           if (/SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql)) {
             assert.match(sql, /account_id = ANY\(\$4::text\[\]\)/);
@@ -197,6 +198,49 @@ test('PostgreSQL adapter rejects mismatched persisted checkpoint identities befo
     tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
     cursor: null, revision: 0,
   });
+});
+
+test('PostgreSQL checkpoint reads reject executable or noncanonical database rows before field access', async () => {
+  let getterCalls = 0;
+  let proxyTrapCalls = 0;
+  const poisoned = ['tenant_id', 'provider', 'connection_id', 'cursor', 'revision']
+    .map((field) => (row) => {
+      Object.defineProperty(row, field, {
+        enumerable: true,
+        get() { getterCalls++; throw new Error('checkpoint getter executed'); },
+      });
+      return row;
+    });
+  poisoned.push(
+    (row) => new Proxy(row, {
+      get() { proxyTrapCalls++; throw new Error('checkpoint Proxy read executed'); },
+      ownKeys() { proxyTrapCalls++; throw new Error('checkpoint Proxy keys executed'); },
+    }),
+    (row) => Object.assign(Object.create({ inherited: true }), row),
+    (row) => Object.assign(row, { unexpected: 'metadata' }),
+  );
+  for (const checkpointRowFactory of poisoned) {
+    const db = mockPg({ checkpointRowFactory });
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Invalid persisted banking checkpoint row/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql).filter((sql) =>
+      /SELECT|INSERT|UPDATE/.test(sql)).map((sql) =>
+      sql.includes('FOR UPDATE') ? 'checkpoint SELECT' : sql),
+    ['checkpoint SELECT'], 'invalid row must not read history or write financial records');
+    assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+    assert.deepEqual(db.state, initial());
+    assert.equal(db.releases, 1);
+  }
+  assert.equal(getterCalls, 0, 'checkpoint getter must not execute');
+  assert.equal(proxyTrapCalls, 0, 'checkpoint Proxy traps must not execute');
+
+  const valid = mockPg();
+  const checkpoint = await createBankFeedPostgresStore(valid.pool).withTransaction(
+    (tx) => tx.loadCheckpointForUpdate(scope()),
+  );
+  assert.equal(checkpoint.revision, 0, 'normal PostgreSQL rows remain readable');
 });
 
 test('PostgreSQL checkpoint CAS snapshots scope and rejects executable or mutable evidence', async () => {
