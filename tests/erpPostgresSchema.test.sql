@@ -240,7 +240,7 @@ DECLARE
   bad_worker text;
 BEGIN
   FOR bad_worker IN SELECT unnest(ARRAY[
-    ' ', ' worker-a', 'worker-a ', E'worker\\tid', E'worker\\nid',
+    ' ', ' worker-a', 'worker-a ', E'worker\tid', E'worker\nid',
     repeat('w', 256)
   ]) LOOP
     BEGIN
