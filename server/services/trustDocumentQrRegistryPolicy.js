@@ -16,6 +16,12 @@ function id(value, field) {
       /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(field + ' must be a nonempty unpadded identifier without control characters');
   }
+  // Reject malformed UTF-16 before a lossy UTF-8 encoding can collapse
+  // distinct registry, document, and revocation-evidence identities.
+  // The Unicode-aware regex preserves valid supplementary-plane characters.
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(field + ' must contain well-formed Unicode');
+  }
   // Canonically equivalent IDs must not create distinct token windows or
   // revocation-evidence subjects. Reject aliases; never rewrite stored IDs.
   if (value.normalize('NFC') !== value) {
