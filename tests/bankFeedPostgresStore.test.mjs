@@ -293,6 +293,40 @@ test('PostgreSQL checkpoint CAS snapshots scope and rejects executable or mutabl
   assert.equal(valid.state.checkpoint.revision, '1');
 });
 
+test('PostgreSQL checkpoint revision must be pg text without invoking coercion', async () => {
+  let coercionCalls = 0;
+  const coercible = {
+    toString() { coercionCalls++; return '0'; },
+    [Symbol.toPrimitive]() { coercionCalls++; return '0'; },
+  };
+  const proxied = new Proxy({}, {
+    get() { coercionCalls++; throw new Error('untrusted revision coercion executed'); },
+  });
+  // The SELECT projects revision::text. A non-string response indicates a
+  // broken adapter or injected row, not a valid PostgreSQL checkpoint.
+  for (const revision of [0, null, undefined, 0n, new String('0'), coercible, proxied]) {
+    const db = mockPg({ tamperCheckpointRow: { revision } });
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+      /Invalid persisted banking checkpoint revision/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) =>
+      sql.includes('FOR UPDATE') ? 'checkpoint SELECT' : sql),
+    ['BEGIN', 'checkpoint SELECT', 'ROLLBACK'],
+    'invalid revision must not read history, insert entries or advance a cursor');
+    assert.deepEqual(db.state, initial());
+    assert.equal(db.releases, 1);
+    assert.equal(db.releaseErrors[0], undefined);
+  }
+  assert.equal(coercionCalls, 0, 'untrusted revision coercion hooks must never execute');
+
+  const db = mockPg();
+  const valid = await createBankFeedPostgresStore(db.pool).withTransaction(
+    (tx) => tx.loadCheckpointForUpdate(scope()),
+  );
+  assert.equal(valid.revision, 0, 'canonical PostgreSQL text revision remains supported');
+});
+
 test('PostgreSQL adapter rejects unsafe BIGINT checkpoint revisions', async () => {
   const db = mockPg();
   db.state.checkpoint.revision = '9007199254740992';
