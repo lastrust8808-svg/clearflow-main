@@ -65,9 +65,25 @@ test('ambiguous many-to-one evidence is never proposed as a pair', () => {
     row('reserve', 'in2', 500),
   ]);
   assert.deepEqual(result.candidates, []);
-  assert.deepEqual(result.ambiguous, [{
-    accountId: 'checking', transactionId: 'out', candidateCount: 2,
-  }]);
+  assert.deepEqual(result.ambiguous, [
+    { accountId: 'checking', transactionId: 'out', candidateCount: 2 },
+    { accountId: 'savings', transactionId: 'in1', candidateCount: 1 },
+    { accountId: 'reserve', transactionId: 'in2', candidateCount: 1 },
+  ]);
+});
+
+test('every source in a many-to-one collision is reported for manual review', () => {
+  const result = plan([
+    row('checking', 'out1', -700),
+    row('reserve', 'out2', -700),
+    row('savings', 'in', 700),
+  ]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [
+    { accountId: 'checking', transactionId: 'out1', candidateCount: 1 },
+    { accountId: 'reserve', transactionId: 'out2', candidateCount: 1 },
+    { accountId: 'savings', transactionId: 'in', candidateCount: 2 },
+  ]);
 });
 
 test('distinct reference-backed transfers do not collapse equal-value payments', () => {
