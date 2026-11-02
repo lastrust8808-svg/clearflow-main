@@ -274,6 +274,24 @@ test('revised notices must identify the immediate preceding draft, not merely an
   ]).status, 'notice_prepared');
 });
 
+test('initial notice lineage must omit predecessor metadata entirely', () => {
+  const history = [event('issued', 1), event('presented', 2)];
+  // Explicit null and undefined are not equivalent to an absent lineage
+  // field in an immutable enforcement-document event.
+  for (const predecessor of [null, undefined]) {
+    assert.throws(() => project([
+      ...history, event('notice_prepared', 3, { supersedesDocumentRef: predecessor }),
+    ]), /Initial notice draft cannot supersede/);
+  }
+  // A valid first notice still needs no predecessor; a subsequent revision
+  // must identify the actual preceding document, not a null placeholder.
+  assert.equal(project([...history, event('notice_prepared', 3)]).status, 'notice_prepared');
+  assert.equal(project([
+    ...history, event('notice_prepared', 3), event('disputed', 4),
+    event('notice_prepared', 5, { supersedesDocumentRef: 'document-3' }),
+  ]).status, 'notice_prepared');
+});
+
 test('initial notice draft cannot falsely claim a predecessor', () => {
   const history = [event('issued', 1), event('presented', 2)];
   for (const invalid of ['document-1', 'document-unknown', '']) {
