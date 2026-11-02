@@ -4,7 +4,7 @@ import { calculateReserveCapacity } from '../server/services/reserveCapacity.js'
 
 const base = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', currency: 'USD' };
 const asOfAt = '2026-10-30T06:00:00.000Z';
-const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, observedAt: '2026-10-30T05:00:00.000Z', kind: 'cash', sourceType: 'bank_balance', amountMinor, ...options });
+const entry = (id, amountMinor, options = {}) => ({ id, assetId: 'asset-' + id, evidenceRef: 'source-' + id, ...base, observedAt: '2026-10-30T05:00:00.000Z', kind: 'cash', sourceType: 'bank_balance', amountMinor, restrictedMinor: 0, pledgedMinor: 0, ...options });
 const calculate = (entries, maxEvidenceAgeMs = 7 * 24 * 60 * 60 * 1000) =>
   calculateReserveCapacity({ ...base, asOfAt, maxEvidenceAgeMs, entries });
 
@@ -45,11 +45,39 @@ test('explicitly unknown reserve encumbrances cannot be treated as zero', () => 
       );
     }
   }
-  // Truly absent optional fields and explicit numeric zero remain supported.
+  // Only explicit numeric zeros count as reported zero encumbrances.
   assert.equal(calculate([entry('cash-a', 100)]).unencumberedCashMinor, 100);
   assert.equal(calculate([entry('cash-a', 100, {
     restrictedMinor: 0, pledgedMinor: 0,
   })]).unencumberedCashMinor, 100);
+});
+
+test('cash reserves require explicit zero or positive encumbrance declarations', () => {
+  for (const missingField of ['restrictedMinor', 'pledgedMinor']) {
+    const missing = entry('cash-a', 100);
+    delete missing[missingField];
+    assert.throws(() => calculate([missing]),
+      /Cash reserve entries require explicit restrictedMinor and pledgedMinor/);
+    // One missing encumbrance in a multi-asset snapshot invalidates the
+    // entire classification, rather than overstating unencumbered cash.
+    assert.throws(() => calculate([entry('cash-b', 200), missing]),
+      /Cash reserve entries require explicit restrictedMinor and pledgedMinor/);
+  }
+  const bothMissing = entry('cash-a', 100);
+  delete bothMissing.restrictedMinor;
+  delete bothMissing.pledgedMinor;
+  assert.throws(() => calculate([bothMissing]), /require explicit/);
+
+  // Cash-specific fields are optional for noncash collateral, which must
+  // never increase spendable cash even with no cash encumbrance fields.
+  const noncash = entry('note-a', 500, {
+    kind: 'noncash_collateral', sourceType: 'private_note',
+  });
+  delete noncash.restrictedMinor;
+  delete noncash.pledgedMinor;
+  const result = calculate([entry('cash-a', 100), noncash]);
+  assert.equal(result.unencumberedCashMinor, 100);
+  assert.equal(result.noncashCollateralMinor, 500);
 });
 
 test('negative-zero reserve amounts and encumbrances are not silently normalized', () => {
