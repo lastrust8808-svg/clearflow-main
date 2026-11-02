@@ -237,7 +237,10 @@ export function projectPrivateNoteLifecycle(snapshot) {
       const predecessorRef = Object.hasOwn(descriptors, 'supersedesDocumentRef')
         ? descriptors.supersedesDocumentRef.value : undefined;
       if (latestNoticeDocumentRef === null) {
-        if (predecessorRef != null) {
+        // An initial notice has no predecessor. Even an explicitly null or
+        // undefined predecessor field is an ambiguous lineage assertion and
+        // must not be silently treated as absent in an immutable journal.
+        if (Object.hasOwn(descriptors, 'supersedesDocumentRef')) {
           throw new Error('Initial notice draft cannot supersede another document');
         }
       } else {
