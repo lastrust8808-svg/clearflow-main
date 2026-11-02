@@ -302,5 +302,20 @@ export function projectPrivateNoteLifecycle(snapshot) {
       throw new Error('Private note actor identifiers must be distinct from event, document and evidence references');
     }
   }
+  // Scope identities name the owning tenant, entity, trust and note, never
+  // an action actor, journal event, immutable document or provenance receipt.
+  // Check the complete history so a later event cannot reuse a scope ID and
+  // make a forged record appear to have an authenticated identity.
+  const scopeIds = new Set(Object.values(scope));
+  for (const [role, identifiers] of [
+    ['event', seen], ['actor', actorIds],
+    ['document', documentRefs], ['evidence', lifecycleEvidenceRefs],
+  ]) {
+    for (const identifier of identifiers) {
+      if (scopeIds.has(identifier)) {
+        throw new Error('Private note ' + role + ' identifier collides with note scope');
+      }
+    }
+  }
   return Object.freeze({ status, eventCount: seen.size, lastEventId, lastEventAt });
 }
