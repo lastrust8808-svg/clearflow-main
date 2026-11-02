@@ -341,6 +341,9 @@ function transactionQueries(client) {
           following.connectionId !== requestedScope[2] ||
           !validCursor(prior.cursor) ||
           !validCursor(following.cursor) || following.cursor === null ||
+          // An unchanged provider cursor is a terminal no-op, not a new page.
+          // Reject revision-only advances even for direct adapter callers.
+          following.cursor === prior.cursor ||
           !Number.isSafeInteger(prior.revision) || prior.revision < 0 ||
           !Number.isSafeInteger(following.revision) ||
           following.revision !== prior.revision + 1) {
