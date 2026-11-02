@@ -44,8 +44,14 @@ function requirePlainVersionList(versions) {
   if (!Array.isArray(versions) || Object.getPrototypeOf(versions) !== Array.prototype) {
     throw new TypeError('Document versions must be a plain array');
   }
+  // Bound untrusted historical snapshots before allocating indexed descriptors
+  // or reading version records. Larger authenticated histories need reviewed
+  // pagination/checkpoints, not truncation or implicit acceptance.
+  const length = Object.getOwnPropertyDescriptor(versions, 'length').value;
+  if (length > 10_000) {
+    throw new RangeError('Document versions exceed the 10000-record review limit');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(versions);
-  const length = descriptors.length.value;
   let count = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
