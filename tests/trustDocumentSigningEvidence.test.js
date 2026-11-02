@@ -17,6 +17,12 @@ const appointment = (trusteeId, changes = {}) => ({
     ? { revocationEvidenceRef: 'revocation-' + trusteeId } : {}),
   ...changes,
 });
+const unacceptedAppointment = trusteeId => {
+  const record = appointment(trusteeId);
+  delete record.acceptedOn;
+  delete record.acceptanceEvidenceRef;
+  return record;
+};
 const attestation = (signerId, changes = {}) => ({
   ...scope, signerId, documentSha256: sha,
   signedAt: signerId === 'a' ? '2026-10-28T10:00:00.000Z' : '2026-10-28T11:00:00.000Z',
@@ -181,7 +187,7 @@ test('revoked and unaccepted signers cannot satisfy packet review', () => {
   ] };
   assert.equal(assess({ governance: revoked }).reason, 'signer_ineligible_at_signing');
   const unaccepted = { ...packet().governance, appointments: [
-    appointment('a', { acceptedOn: undefined, acceptanceEvidenceRef: undefined }), appointment('b'),
+    unacceptedAppointment('a'), appointment('b'),
   ] };
   assert.equal(assess({ governance: unaccepted }).reason, 'signer_ineligible_at_signing');
 });
