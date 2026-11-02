@@ -92,6 +92,34 @@ test('revoked versions require unique revocation provenance distinct from regist
     { versionId: 'version-1', sha256: digestA }), { status: 'revoked' });
 });
 
+
+test('nonrevoked document versions omit revocation metadata rather than supplying null or undefined', () => {
+  const proof = { versionId: 'version-1', sha256: digestA };
+  for (const status of ['current', 'superseded']) {
+    const versions = status === 'current'
+      ? [version(1)]
+      : [version(1, { status: 'superseded' }), version(2)];
+    for (const field of ['revokedAt', 'revocationEvidenceRef']) {
+      for (const value of [null, undefined]) {
+        const malformed = versions.map((item, index) =>
+          index === 0 ? { ...item, [field]: value } : item);
+        assert.throws(() => check(malformed, proof),
+          /Nonrevoked document version cannot carry revocation/,
+          `${status} version must omit ${field}, not store ${String(value)}`);
+      }
+    }
+  }
+  // The same invariant must hold for the finalized-byte verifier.
+  const bytes = Buffer.from('nonrevoked immutable document bytes');
+  assert.throws(() => verifyTrustDocumentBytes(registry([version(1, {
+    sha256: fileDigest(bytes), revokedAt: null,
+  })]), { versionId: 'version-1', content: bytes }),
+  /Nonrevoked document version cannot carry revocation timestamp/);
+  assert.deepEqual(check([version(1)], proof), { status: 'valid' });
+  assert.deepEqual(check([version(1, { status: 'revoked' })], proof),
+    { status: 'revoked' });
+});
+
 test('core version and byte verification reject invalid revocation chronology', () => {
   const proof = { versionId: 'version-1', sha256: digestA };
   for (const revokedAt of [undefined, null, '', '2026-02-30T12:00:00.000Z',
