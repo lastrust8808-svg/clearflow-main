@@ -2119,3 +2119,35 @@ test('batch recovery refuses noncanonical UUID receipts and case-aliased duplica
   assert.equal(valid[0].id, canonical.id);
   assert.equal(valid[0].requiresReconciliation, true);
 });
+
+
+test('recovery and reconciliation reject noncanonical persisted audit actors', async () => {
+  // A stored actor is audit evidence, not an untrusted display label. Reject
+  // misleading Unicode and boundary whitespace before exposing recovered jobs.
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope, operation: 'invoice_delivery' };
+  const calls = [
+    ['recovery', sweep, /invalid tenant-bound recovery record/],
+    ['reconciliation', list, /invalid tenant-bound reconciliation record/],
+  ];
+  const invalidActors = [
+    '', ' worker-a', 'worker-a ', 'worker\u202e-a',
+    'cafe\u0301', 'x'.repeat(256), 'worker\u0000-a',
+  ];
+  for (const [label, run, expectedError] of calls) {
+    for (const actor_id of invalidActors) {
+      await assert.rejects(run({
+        ...input,
+        db: { query: async () => ({ rows: [quarantineRow({ actor_id })] }) },
+      }), expectedError, label + ' must reject ambiguous persisted actor identity');
+    }
+    const result = await run({
+      ...input,
+      db: { query: async () => ({ rows: [quarantineRow({ actor_id: 'café' })] }) },
+    });
+    const record = Array.isArray(result) ? result[0] : result.jobs[0];
+    assert.equal(record.requiresReconciliation, true);
+    assert.equal(record.status, 'outcome_unknown');
+  }
+});
