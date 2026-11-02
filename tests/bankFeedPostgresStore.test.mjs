@@ -1094,3 +1094,106 @@ test('PostgreSQL historical entry row envelopes reject accessors and Proxies bef
   assert.equal(result.applied, 1, 'ordinary PostgreSQL rows remain supported');
   assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
 });
+
+test('PostgreSQL SQL result envelopes and row arrays reject executable access before replay', async () => {
+  const historical = {
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-historical',
+    amountCents: 500, status: 'posted', requiresReview: true,
+  };
+  let executableCalls = 0;
+  const unsafe = [
+    (result) => new Proxy(result, {
+      get() { executableCalls++; throw new Error('SQL result Proxy getter executed'); },
+      ownKeys() { executableCalls++; throw new Error('SQL result Proxy keys executed'); },
+    }),
+    (result) => {
+      Object.defineProperty(result, 'rows', {
+        enumerable: true, configurable: true,
+        get() { executableCalls++; throw new Error('SQL result rows getter executed'); },
+      });
+      return result;
+    },
+    (result) => {
+      result.rows = new Proxy(result.rows, {
+        get() { executableCalls++; throw new Error('SQL rows Proxy getter executed'); },
+        ownKeys() { executableCalls++; throw new Error('SQL rows Proxy keys executed'); },
+      });
+      return result;
+    },
+    (result) => {
+      Object.defineProperty(result.rows, '0', {
+        enumerable: true, configurable: true,
+        get() { executableCalls++; throw new Error('SQL rows index getter executed'); },
+      });
+      return result;
+    },
+    (result) => {
+      result.rows.map = () => {
+        executableCalls++;
+        throw new Error('SQL rows custom map executed');
+      };
+      return result;
+    },
+    (result) => {
+      result.rows[Symbol.iterator] = () => {
+        executableCalls++;
+        throw new Error('SQL rows custom iterator executed');
+      };
+      return result;
+    },
+    (result) => {
+      delete result.rows[0];
+      return result;
+    },
+    (result) => {
+      result.rows = { 0: result.rows[0], length: result.rows.length };
+      return result;
+    },
+  ];
+  for (const queryKind of ['checkpoint', 'entries']) {
+    for (const mutate of unsafe) {
+      const db = mockPg();
+      db.state.entries.push({ ...historical });
+      const before = structuredClone(db.state);
+      const originalConnect = db.pool.connect.bind(db.pool);
+      db.pool.connect = async () => {
+        const client = await originalConnect();
+        const originalQuery = client.query.bind(client);
+        client.query = async (sql, values) => {
+          const result = await originalQuery(sql, values);
+          const isCheckpoint = /SELECT tenant_id, provider, connection_id, cursor/.test(sql);
+          const isEntries = /SELECT tenant_id, provider, connection_id, account_id, transaction_id, payload/.test(sql);
+          if ((queryKind === 'checkpoint' && isCheckpoint) ||
+              (queryKind === 'entries' && isEntries)) {
+            assert.equal(result.rows.length, 1, 'fixture must contain a SQL row');
+            return mutate(result);
+          }
+          return result;
+        };
+        return client;
+      };
+      await assert.rejects(
+        commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+        /Refusing malformed banking SQL result (envelope|rows)/,
+        queryKind,
+      );
+      assert.deepEqual(db.state, before, 'malformed SQL results must preserve persisted evidence');
+      assert.equal(db.calls.filter(({ sql }) =>
+        /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0,
+      'malformed SQL results cannot insert entries or advance the cursor');
+      assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+      assert.equal(db.releases, 1);
+    }
+  }
+  assert.equal(executableCalls, 0, 'SQL result getters, Proxy traps and custom iterators never execute');
+
+  const valid = mockPg();
+  valid.state.entries.push({ ...historical });
+  const committed = await commitAuthorizedBankFeedPage(
+    createBankFeedPostgresStore(valid.pool), scope(), page(),
+  );
+  assert.equal(committed.applied, 1, 'ordinary pg query results remain supported');
+  assert.equal(valid.state.entries.length, 2);
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
+});
