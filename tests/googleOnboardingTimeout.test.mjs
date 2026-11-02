@@ -171,3 +171,18 @@ test('React Drive lookup timeout cannot manufacture a profile or reuse cached id
   assert.match(effect, /expirePendingGoogleDriveCheck\(current\)/);
   assert.doesNotMatch(effect, /pending-profile-setup|newUser: User|findLocalAccountByGoogleEmail/);
 });
+
+test('late Drive recovery cannot overwrite a timed-out or independently changed session', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const pendingEmail = state.gsiUser?.email;');
+  const end = source.indexOf("if (state.status !== 'pending-drive-check' || !state.gsiUser) {", start);
+  assert.ok(start >= 0 && end > start, 'Drive recovery effect must be bounded');
+  const effect = source.slice(start, end);
+  assert.match(effect, /current.status !== 'pending-drive-check'/);
+  assert.match(effect, /current.apiAccessToken !== pendingAccessToken/);
+  assert.match(effect, /current.gsiUser\?\.email !== pendingEmail/);
+  assert.equal((effect.match(/setPendingDriveState\(/g) || []).length, 7,
+    'all seven Drive lookup results must use the attempt-guarded state transition');
+  assert.equal((effect.match(/setState\(/g) || []).length, 1,
+    'only the guarded wrapper may call the raw React state setter');
+});
