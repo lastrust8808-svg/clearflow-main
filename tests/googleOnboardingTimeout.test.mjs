@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization } from '../src/domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback } from '../src/domain/googleOnboardingTimeout.mjs';
 
 const pending = (mode) => ({
   status: 'pending-gsi', pendingGoogleMode: mode,
@@ -100,4 +100,40 @@ test('OAuth callback and code-exchange failures both fail closed without cached-
   assert.doesNotMatch(callback, /canBypassProfileSetupForGoogleIdentity/);
   assert.doesNotMatch(callback, /pending-profile-setup|status:\s*'authenticated'/);
   assert.doesNotMatch(callback, /current\.appData\?\.user/);
+});
+
+for (const status of ['pending-gsi', 'pending-drive-check']) {
+  for (const mode of ['new', 'existing', 'returning', null]) {
+    test('manual Google fallback cannot create a workspace in ' + status + '/' + String(mode), () => {
+      const current = Object.freeze({ ...pending(mode), status });
+      const result = rejectUnverifiedGoogleOnboardingFallback(current);
+      assert.equal(current.status, status, 'input must not be mutated');
+      assert.equal(result.status, 'unauthenticated');
+      for (const key of [
+        'appData', 'token', 'apiAccessToken', 'localAccountId', 'gsiUser',
+        'pendingCredentialAuth', 'pendingGoogleMode',
+      ]) assert.equal(result[key], null, key + ' must not survive');
+      assert.match(result.authMessage, /verification is incomplete/);
+      assert.equal(result.otherUiState, 'preserve');
+    });
+  }
+}
+
+test('manual Google fallback cannot sign out an independently authenticated session', () => {
+  for (const status of ['authenticated', 'pending-profile-setup', 'pending-verification', 'unauthenticated']) {
+    const current = Object.freeze({ ...pending('new'), status });
+    assert.equal(rejectUnverifiedGoogleOnboardingFallback(current), current);
+  }
+  assert.equal(rejectUnverifiedGoogleOnboardingFallback(null), null);
+});
+
+test('React manual onboarding continue uses fail-closed reducer and never cached identity', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const continueGoogleOnboardingFallback = () => {');
+  const end = source.indexOf('const value: AuthContextType = {', start);
+  assert.ok(start >= 0 && end > start, 'manual fallback callback must be bounded');
+  const callback = source.slice(start, end);
+  assert.match(callback, /rejectUnverifiedGoogleOnboardingFallback\(current\)/);
+  assert.doesNotMatch(callback, /pending-profile-setup|buildProvisionalGoogleUser|lastKnownGoogleUser|current\.appData\?\.user/);
+  assert.doesNotMatch(source, /const buildProvisionalGoogleUser =/);
 });
