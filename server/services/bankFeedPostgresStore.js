@@ -16,7 +16,7 @@ const ENTRIES = 'public.clearflow_bank_feed_entries';
 function validScopeId(value) {
   return typeof value === 'string' &&
     value.length > 0 && value.length <= 256 &&
-    value === value.trim() &&
+    value === value.trim() && value.isWellFormed() &&
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
@@ -56,7 +56,7 @@ function parseRevision(value) {
 function validCursor(value) {
   return value === null ||
     (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
-      value === value.trim() &&
+      value === value.trim() && value.isWellFormed() &&
       !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
 }
 
@@ -65,7 +65,11 @@ function validCursor(value) {
 // invokes getters/toJSON, and accepts already-imprecise integers. Reject
 // those shapes before any INSERT, including when called without the planner.
 function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0) {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'string') {
+    if (!value.isWellFormed()) throw new TypeError('Malformed Unicode banking evidence.');
+    return;
+  }
+  if (value === null || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER || Object.is(value, -0)) {
       throw new TypeError('Unsafe banking evidence numeric value.');
@@ -90,6 +94,9 @@ function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0)
     for (const key of Reflect.ownKeys(descriptors)) {
       if (isArray && key === 'length') continue;
       const descriptor = descriptors[key];
+      if (typeof key === 'string' && !key.isWellFormed()) {
+        throw new TypeError('Malformed Unicode banking evidence property.');
+      }
       if (typeof key !== 'string' || !descriptor.enumerable ||
           !Object.hasOwn(descriptor, 'value') ||
           ['__proto__', 'constructor', 'prototype', 'toJSON'].includes(key) ||
@@ -158,6 +165,10 @@ function transactionQueries(client) {
             entry.transactionId !== row.transaction_id) {
           throw new Error('Persisted banking entry identity does not match its scoped database key.');
         }
+        // Database JSONB normally enforces valid Unicode, but reject malformed
+        // adapter fixtures or corrupted read paths before replay can advance
+        // an authenticated connection's synchronization checkpoint.
+        assertPlainBankingEvidence(entry);
         return entry;
       });
     },
