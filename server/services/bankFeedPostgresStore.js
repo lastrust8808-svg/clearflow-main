@@ -214,6 +214,10 @@ function transactionQueries(client) {
       const allowed = new Set(authorized.allowedAccountIds);
       return result.rows.map((row) => {
         const entry = row.payload;
+        // Validate the complete JSONB object *before* reading identity fields.
+        // A faulty adapter or in-memory fixture may return getters/Proxies;
+        // accessing entry.tenantId first could execute untrusted code.
+        assertPlainBankingEvidence(entry);
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
             row.tenant_id !== requestedScope[0] || row.provider !== requestedScope[1] ||
             row.connection_id !== requestedScope[2] ||
@@ -227,10 +231,8 @@ function transactionQueries(client) {
             entry.transactionId !== row.transaction_id) {
           throw new Error('Persisted banking entry identity does not match its scoped database key.');
         }
-        // Database JSONB normally enforces valid Unicode, but reject malformed
-        // adapter fixtures or corrupted read paths before replay can advance
-        // an authenticated connection's synchronization checkpoint.
-        assertPlainBankingEvidence(entry);
+        // Database JSONB normally enforces valid Unicode, but the guard above
+        // also rejects malformed adapter fixtures before replay or checkpoint updates.
         if (Buffer.byteLength(JSON.stringify(entry), 'utf8') > MAX_ENTRY_JSON_BYTES) {
           throw new Error('Oversized persisted banking entry evidence.');
         }
