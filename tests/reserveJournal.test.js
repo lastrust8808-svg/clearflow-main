@@ -36,7 +36,7 @@ test('removal eliminates reserve classification but does not claim legal release
 });
 test('rejects replay, unrecorded removal, re-recording and out-of-order history', () => {
   assert.throws(() => project([remove()]), /currently recorded asset/);
-  assert.throws(() => project([record(), record({ eventId: 'event-3', occurredAt: '2026-11-01T14:00:00.000Z' })]),
+  assert.throws(() => project([record(), record({ eventId: 'event-3', evidenceRef: 'proof-3', occurredAt: '2026-11-01T14:00:00.000Z' })]),
     /more than once/);
   assert.throws(() => project([record(), remove(), record({ eventId: 'event-3',
     evidenceRef: 'proof-3', occurredAt: '2026-11-01T14:00:00.000Z' })]), /more than once/);
