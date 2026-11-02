@@ -3,6 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
+import { expirePendingGoogleSignIn } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -995,64 +996,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
+    // A timed-out OAuth popup has not authenticated a Google identity.
+    // Never reuse lastKnownGoogleUser or cached appData to create a profile.
     const timeoutId = window.setTimeout(() => {
-      setState((current) => {
-        if (current.status !== 'pending-gsi') {
-          return current;
-        }
-
-        const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
-
-        if (current.pendingGoogleMode !== 'new') {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            pendingGoogleMode: null,
-            authMessage:
-              'Existing-account sign-in did not complete. Retry Existing User Login; first-time users must choose Create New Account.',
-          };
-        }
-
-        const fallbackUser =
-          current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
-
-        if (!fallbackUser) {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            pendingGoogleMode: null,
-            authMessage: 'New-account enrollment could not confirm your Google identity. Please retry.',
-          };
-        }
-
-        return {
-          ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: fallbackUser, entities: [] },
-          gsiUser: null,
-          pendingGoogleMode: null,
-          authMessage: null,
-        };
-      });
+      setState((current) => expirePendingGoogleSignIn(current) as AuthState);
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [
-    buildProvisionalGoogleUser,
-    getGoogleWorkspaceStatus,
-    lastKnownGoogleUser,
-    mergeStoredTermsAcceptance,
-    state.status,
-    state.pendingGoogleMode,
-  ]);
+  }, [state.status]);
 
   useEffect(() => {
     if (state.status !== 'unauthenticated' || state.appData || !lastKnownGoogleUser?.email) {
