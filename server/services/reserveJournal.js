@@ -7,6 +7,7 @@
  * supply asOfAt/maxEvidenceAgeMs from trusted policy, and durably persist the
  * ordered journal with transactional concurrency protection.
  */
+import { createHash } from 'node:crypto';
 import { calculateReserveCapacity } from './reserveCapacity.js';
 
 const SCOPE_FIELDS = ['tenantId', 'entityId', 'trustId'];
@@ -75,6 +76,16 @@ function instant(value, label) {
     throw new TypeError(label + ' must be a canonical UTC timestamp');
   }
   return value;
+}
+
+// Canonical field order makes the digest stable across object insertion order.
+// A digest is a comparison aid, NOT a trusted signature or proof of custody.
+function canonicalJournalEvent(event) {
+  const fields = event.type === 'asset_recorded' ?
+    [...COMMON_FIELDS, 'currency', 'kind', 'sourceType', 'amountMinor',
+      'restrictedMinor', 'pledgedMinor'] : COMMON_FIELDS;
+  return Object.fromEntries(fields.filter(key => Object.hasOwn(event, key))
+    .map(key => [key, event[key]]));
 }
 
 /**
@@ -162,6 +173,13 @@ export function projectReserveJournal(snapshot) {
     if (scopes.has(value)) throw new Error('Reserve journal identity namespaces must be distinct');
   }
   const capacity = calculateReserveCapacity({ ...base, entries: [...active.values()] });
-  return Object.freeze({ ...capacity, journalEventCount: eventIds.size,
+  // Fingerprint the validated journal history, not the as-of valuation policy.
+  // Store/compare this against an independently authenticated checkpoint;
+  // hashing attacker-controlled data alone does not establish append-only storage.
+  const journalSha256 = createHash('sha256').update(JSON.stringify({
+    format: 'clearflow-reserve-journal-v1', ...scope, currency: snapshot.currency,
+    events: snapshot.events.map(canonicalJournalEvent),
+  })).digest('hex');
+  return Object.freeze({ ...capacity, journalSha256, journalEventCount: eventIds.size,
     activeAssetCount: active.size, removedAssetCount });
 }
