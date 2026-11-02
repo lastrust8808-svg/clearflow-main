@@ -36,6 +36,9 @@ interface StatementImportResponse {
     persistedAt: string;
     persistence: 'durable';
     importedAt: string;
+    // Separate, durably persisted completion evidence; job reservation alone is not posting.
+    completionReceiptId: string;
+    completionPersistedAt: string;
   };
 }
 
@@ -50,6 +53,8 @@ interface ReconciliationCloseResponse {
     persistedAt: string;
     persistence: 'durable';
     closedAt: string;
+    completionReceiptId: string;
+    completionPersistedAt: string;
   };
 }
 
@@ -118,10 +123,20 @@ function isAcceptedJob(
   // invoice jobs. A process-local "processed" status is never sufficient.
   const expectedOperation = key === 'importJob' ? 'statement_import' : 'reconciliation_close';
   const completedAt = key === 'importJob' ? job.importedAt : job.closedAt;
+  // A reservation timestamp is not evidence that statement rows were posted
+  // or a reconciliation was durably closed. Require a separate persisted
+  // completion receipt with a canonical database identity and chronology.
+  // The authenticated backend must verify the actual ledger/audit transaction.
+  const completionId = job.completionReceiptId;
   return job.operation === expectedOperation && job.status === 'processed' &&
     hasDurableReceipt(job) && isUtcTimestamp(job.persistedAt) &&
     isUtcTimestamp(completedAt) &&
-    Date.parse(completedAt) >= Date.parse(job.persistedAt);
+    typeof completionId === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(completionId) &&
+    completionId !== job.id &&
+    isUtcTimestamp(job.completionPersistedAt) &&
+    Date.parse(completedAt) >= Date.parse(job.persistedAt) &&
+    Date.parse(job.completionPersistedAt) >= Date.parse(completedAt);
 }
 
 // The Accounting UI treats a successful internal delivery acknowledgement as
