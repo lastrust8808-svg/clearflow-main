@@ -664,6 +664,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
 
   useEffect(() => {
+    const pendingEmail = state.gsiUser?.email;
+    const pendingAccessToken = state.apiAccessToken;
+    // An old Drive request may settle after timeout, logout, or a new login.
+    // Only the matching pending attempt may advance the workspace state.
+    const setPendingDriveState = (update: (current: AuthState) => AuthState) => {
+      setState((current) => {
+        if (
+          current.status !== 'pending-drive-check' ||
+          current.apiAccessToken !== pendingAccessToken ||
+          current.gsiUser?.email !== pendingEmail
+        ) return current;
+        return update(current);
+      });
+    };
     const mergeGoogleIdentity = (appData: AppData, googleIdentity: { name: string; email: string }) => ({
       ...appData,
       user: {
@@ -699,7 +713,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               mergeGoogleIdentity(recoveredData, state.gsiUser),
               state.gsiUser
             );
-            setState(current => ({
+            setPendingDriveState(current => ({
               ...current,
               status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
               appData: mergedAppData,
@@ -728,7 +742,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 state.gsiUser
               );
               needsDriveCatchUpRef.current = true;
-              setState((current) => ({
+              setPendingDriveState((current) => ({
                 ...current,
                 localAccountId: localGoogleMatch.userId,
                 status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
@@ -740,7 +754,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             if (state.pendingGoogleMode !== 'new') {
               const missingEmail = state.gsiUser.email;
-              setState((current) => ({
+              setPendingDriveState((current) => ({
                 ...current,
                 status: 'unauthenticated',
                 token: null,
@@ -761,7 +775,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               primaryContactType: 'google',
             };
             const newAppData = { user: newUser, entities: [] };
-            setState(current => ({
+            setPendingDriveState(current => ({
               ...current,
               status: 'pending-profile-setup',
               appData: newAppData,
@@ -787,7 +801,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               state.gsiUser
             );
             needsDriveCatchUpRef.current = true;
-            setState((current) => ({
+            setPendingDriveState((current) => ({
               ...current,
               localAccountId: localGoogleMatch.userId,
               status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
@@ -798,7 +812,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           if (state.pendingGoogleMode !== 'new') {
-            setState((current) => ({
+            setPendingDriveState((current) => ({
               ...current,
               status: 'unauthenticated',
               token: null,
@@ -819,7 +833,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             primaryContactType: 'google',
           };
           const newAppData = { user: newUser, entities: [] };
-          setState(current => ({
+          setPendingDriveState(current => ({
             ...current,
             status: 'pending-profile-setup',
             appData: newAppData,
