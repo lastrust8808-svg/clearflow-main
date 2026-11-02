@@ -1341,3 +1341,46 @@ test('unpaired UTF-16 surrogate keys and values fail closed across all account r
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('inherited JSON serializers cannot rewrite tenant evidence before or after validation', async () => {
+  const accountId = `inherited-json-${randomUUID()}`;
+  const directory = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const retained = { evidence: { amountMinor: 1250 }, items: [1, 2] };
+  let serializerCalls = 0;
+  const maliciousToJSON = function () {
+    serializerCalls++;
+    return { evidence: { amountMinor: 999999 } };
+  };
+  const withInheritedSerializer = async (prototype, action) => {
+    const original = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+    Object.defineProperty(prototype, 'toJSON', {
+      configurable: true, writable: true, value: maliciousToJSON,
+    });
+    try {
+      await assert.rejects(action(), /Inherited JSON serializer would alter storage evidence/);
+      assert.equal(serializerCalls, 0, 'inherited serializer must never execute');
+    } finally {
+      if (original) Object.defineProperty(prototype, 'toJSON', original);
+      else delete prototype.toJSON;
+    }
+    assert.deepEqual(await loadAccountAppData(accountId), retained);
+  };
+  try {
+    await saveAccountAppData(accountId, retained);
+    await withInheritedSerializer(Object.prototype, () =>
+      saveAccountAppData(accountId, { evidence: { amountMinor: 2000 } })
+    );
+    await withInheritedSerializer(Array.prototype, () =>
+      saveAccountAppData(accountId, { items: [3, 4] })
+    );
+    // The first validation is synchronous; the second guard must also reject
+    // prototype pollution introduced while asynchronous filesystem I/O waits.
+    const pending = saveAccountAppData(accountId, { evidence: { amountMinor: 3000 } });
+    await withInheritedSerializer(Object.prototype, () => pending);
+    await saveAccountAppData(accountId, { evidence: { amountMinor: 4000 } });
+    assert.equal((await loadAccountAppData(accountId)).evidence.amountMinor, 4000);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
