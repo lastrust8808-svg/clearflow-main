@@ -24,3 +24,25 @@ export function expirePendingGoogleSignIn(current) {
       : 'Existing-account sign-in did not complete. Retry Existing User Login; first-time users must choose Create New Account.',
   };
 }
+
+/**
+ * Reject an OAuth callback error or a failed code exchange without granting
+ * access from an old local profile. A late callback must not sign out a
+ * completed, independently authenticated session.
+ */
+export function rejectFailedGoogleAuthorization(current) {
+  if (!current || !['pending-gsi', 'pending-drive-check'].includes(current.status)) return current;
+
+  return {
+    ...current,
+    status: 'unauthenticated',
+    appData: null,
+    token: null,
+    apiAccessToken: null,
+    localAccountId: null,
+    gsiUser: null,
+    pendingCredentialAuth: null,
+    pendingGoogleMode: null,
+    authMessage: 'Google sign-in could not be verified. Please retry.',
+  };
+}
