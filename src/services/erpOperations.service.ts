@@ -252,9 +252,13 @@ export async function importReconciliationStatement(payload: {
   // network request; never submit a different accounting amount than entered.
   const balance = payload.statementEndingBalance;
   const minorUnits = typeof balance === 'number' ? balance * 100 : NaN;
+  const roundedCents = Math.round(minorUnits);
+  // A tolerance around an integer cent silently admits sub-cent values
+  // (e.g. 1.0000000001). Require an exact round-trip through integer cents
+  // while accommodating ordinary binary floating-point representations.
   if (!Number.isFinite(balance) || Object.is(balance, -0) ||
-      !Number.isSafeInteger(Math.round(minorUnits)) ||
-      Math.abs(minorUnits - Math.round(minorUnits)) > 1e-7) {
+      !Number.isSafeInteger(roundedCents) ||
+      roundedCents / 100 !== balance) {
     throw new TypeError('Invalid statement ending balance: a finite, exact cent amount is required.');
   }
   return postErp<StatementImportResponse>(
