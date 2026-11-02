@@ -143,3 +143,25 @@ test('checkpointed append rejects scope changes, clock rollback and invalid new 
     ...next, events: [record(), remove({ eventId: 'event-1' })],
   }, checkpoint), /Duplicate.*event ID/);
 });
+
+test('checkpointed append refuses evidence freshness policy drift, even with otherwise valid replay', () => {
+  const previous = { ...base, events: [record()] };
+  const checkpoint = projectReserveJournal(previous).journalSha256;
+  const next = { ...base, events: [record(), remove()] };
+  assert.equal(projectReserveJournal({ ...next, maxEvidenceAgeMs: 50_400_000 }).journalEventCount, 2);
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, maxEvidenceAgeMs: 50_400_000,
+  }, checkpoint), /cannot change evidence freshness policy/);
+  assert.throws(() => verifyReserveJournalAppend(previous, {
+    ...next, maxEvidenceAgeMs: 172_800_000,
+  }, checkpoint), /cannot change evidence freshness policy/);
+
+  // The widened policy would otherwise revive a stale cash classification.
+  const added = record({ eventId: 'event-3', assetId: 'asset-2',
+    evidenceRef: 'proof-3', occurredAt: '2026-11-03T11:00:00.000Z' });
+  const staleUnderOldPolicy = { ...base, asOfAt: '2026-11-03T12:00:00.000Z',
+    maxEvidenceAgeMs: 259_200_000, events: [record(), added] };
+  assert.equal(projectReserveJournal(staleUnderOldPolicy).activeAssetCount, 2);
+  assert.throws(() => verifyReserveJournalAppend(previous, staleUnderOldPolicy, checkpoint),
+    /cannot change evidence freshness policy/);
+});
