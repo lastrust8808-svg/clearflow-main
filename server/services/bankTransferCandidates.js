@@ -86,6 +86,10 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     throw new Error('Malformed transfer transaction batch.');
   }
   const rows = [];
+  // Pending rows cannot be matched, but a pending row sharing a provider
+  // reference can prove that the reference is not a unique transfer ID.
+  // Count posted + pending evidence before proposing any posted pair.
+  const referenceCounts = new Map();
   const seen = new Set();
   for (let index = 0; index < transactions.length; index++) {
     const d = descriptors[String(index)];
@@ -96,17 +100,17 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     const key = identity(row);
     if (seen.has(key)) throw new Error('Duplicate transfer source identity.');
     seen.add(key);
-    if (row.status === 'posted' && row.providerReference !== undefined) rows.push(row);
+    if ((row.status === 'posted' || row.status === 'pending') &&
+        row.providerReference !== undefined) {
+      const referenceKey = JSON.stringify([row.provider, row.connectionId, row.providerReference]);
+      referenceCounts.set(referenceKey, (referenceCounts.get(referenceKey) ?? 0) + 1);
+      if (row.status === 'posted') rows.push(row);
+    }
   }
   // A provider reference may be a batch or statement identifier, not a
-  // unique transfer ID. If three or more posted source records share one
-  // reference within a connection, none can be independently proposed as a
-  // one-to-one transfer, even when their amounts form apparent pairs.
-  const referenceCounts = new Map();
-  for (const row of rows) {
-    const referenceKey = JSON.stringify([row.provider, row.connectionId, row.providerReference]);
-    referenceCounts.set(referenceKey, (referenceCounts.get(referenceKey) ?? 0) + 1);
-  }
+  // unique transfer ID. Three or more posted/pending records with the same
+  // connection-scoped reference make every posted source ambiguous. Removed
+  // and superseded records do not count as current transfer evidence.
   const hasReferenceCollision = (row) =>
     referenceCounts.get(JSON.stringify([row.provider, row.connectionId, row.providerReference])) > 2;
 
