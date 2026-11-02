@@ -1296,3 +1296,48 @@ test('legacy JSON underflow cannot silently turn nonzero financial evidence into
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('unpaired UTF-16 surrogate keys and values fail closed across all account record families', async () => {
+  const accountId = \`unicode-evidence-\${randomUUID()}\`;
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts', accountId);
+  const fixtures = [
+    { file: 'app-data.json', save: (value) => saveAccountAppData(accountId, value), read: () => loadAccountAppData(accountId) },
+    { file: 'files/doc-1.json', save: (value) => saveAccountDocumentFile(accountId, 'doc-1', value), read: () => loadAccountDocumentFile(accountId, 'doc-1') },
+    { file: 'remittance/vendor-1.json', save: (value) => saveAccountRemittanceVault(accountId, 'vendor-1', value), read: () => loadAccountRemittanceVault(accountId, 'vendor-1') },
+    { file: 'transaction-proof-chains/chains.json', save: (value) => saveAccountTransactionProofVault(accountId, value), read: () => loadAccountTransactionProofVault(accountId) },
+    { file: 'plaid/connections.json', save: (value) => saveAccountPlaidVault(accountId, value), read: () => loadAccountPlaidVault(accountId) },
+    { file: 'extractions/sig-1.json', save: (value) => saveAccountExtractionRecord(accountId, 'sig-1', value), read: () => loadAccountExtractionRecord(accountId, 'sig-1') },
+  ];
+  try {
+    for (const fixture of fixtures) {
+      const valid = { memo: '🌱 valid Unicode', nested: { ['pair-😀']: '𝄞' }, amountMinor: 1250 };
+      await fixture.save(valid);
+      const original = await fixture.read();
+      for (const invalid of [
+        { memo: '\uD800' },
+        { nested: ['\uDC00'] },
+        { nested: { ['broken-\uD800']: 'untrusted' } },
+      ]) {
+        await assert.rejects(fixture.save(invalid), /Unsafe storage record Unicode string/);
+        assert.deepEqual(await fixture.read(), original, 'rejected write must preserve the prior record');
+      }
+
+      const filePath = path.join(root, fixture.file);
+      const serialized = await fs.readFile(filePath, 'utf8');
+      for (const suffix of [
+        ', "unpairedValue": "\\ud800"}',
+        ', "nested": {"\\udc00": true}}',
+      ]) {
+        await fs.writeFile(filePath, serialized.replace(/}\s*$/, suffix));
+        await assert.rejects(fixture.read(), /Unsafe storage record Unicode string/);
+      }
+      await fixture.save(valid);
+      const restored = await fixture.read();
+      assert.equal(restored.memo, valid.memo);
+      assert.equal(restored.nested['pair-😀'], '𝄞');
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
