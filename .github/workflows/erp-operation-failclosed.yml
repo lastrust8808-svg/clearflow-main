@@ -12,6 +12,7 @@ on:
       - 'tests/erpPostgresSchema.test.sql'
       - 'tests/erpPostgresConnectionDurability.test.sh'
       - 'tests/erpPostgresConcurrentClaims.test.sh'
+      - 'tests/erpPostgresServerRestart.test.sh'
       - '.github/workflows/erp-operation-failclosed.yml'
   push:
     branches:
@@ -66,3 +67,5 @@ jobs:
         run: bash tests/erpPostgresConnectionDurability.test.sh
       - name: Verify concurrent worker claim exclusivity and tenant isolation
         run: bash tests/erpPostgresConcurrentClaims.test.sh
+      - name: Verify committed ERP job and lease survive a disposable PostgreSQL server restart
+        run: bash tests/erpPostgresServerRestart.test.sh
