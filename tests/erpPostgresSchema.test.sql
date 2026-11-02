@@ -42,7 +42,7 @@ BEGIN
   BEGIN
     INSERT INTO erp_operation_jobs
       (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
-    VALUES (E'\\t', 'actor-a', 'invoice_delivery', 'tab-tenant',
+    VALUES (E'\t', 'actor-a', 'invoice_delivery', 'tab-tenant',
             repeat('a', 64), '{}'::jsonb);
     RAISE EXCEPTION 'tab-only tenant was accepted';
   EXCEPTION WHEN check_violation THEN NULL;
@@ -50,7 +50,7 @@ BEGIN
   BEGIN
     INSERT INTO erp_operation_jobs
       (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
-    VALUES ('tenant-a', E'\\n', 'invoice_delivery', 'newline-actor',
+    VALUES ('tenant-a', E'\n', 'invoice_delivery', 'newline-actor',
             repeat('a', 64), '{}'::jsonb);
     RAISE EXCEPTION 'newline-only actor was accepted';
   EXCEPTION WHEN check_violation THEN NULL;
@@ -58,7 +58,7 @@ BEGIN
   BEGIN
     INSERT INTO erp_operation_jobs
       (tenant_id, actor_id, operation, idempotency_key, payload_sha256, payload)
-    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', E'\\t\\n',
+    VALUES ('tenant-a', 'actor-a', 'invoice_delivery', E'\t\n',
             repeat('a', 64), '{}'::jsonb);
     RAISE EXCEPTION 'tab/newline-only idempotency key was accepted';
   EXCEPTION WHEN check_violation THEN NULL;
