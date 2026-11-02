@@ -488,6 +488,13 @@ export async function hashRawProviderPayloadBytes(rawPayload: Uint8Array): Promi
       rawPayload.byteLength === 0 || rawPayload.byteLength > 1024 * 1024) {
     throw new Error('Raw provider payload must be 1 to 1048576 bytes.');
   }
+  // A SharedArrayBuffer can be modified by another worker while the snapshot
+  // is copied. That would turn a purported exact provider-byte fingerprint
+  // into a hash of a torn, never-received payload. Require exclusive bytes.
+  if (typeof SharedArrayBuffer !== 'undefined' &&
+      rawPayload.buffer instanceof SharedArrayBuffer) {
+    throw new Error('Raw provider payload must not use shared mutable memory.');
+  }
   const snapshot = Uint8Array.from(rawPayload);
   const digest = await globalThis.crypto.subtle.digest('SHA-256', snapshot);
   return Array.from(new Uint8Array(digest), (byte) =>
