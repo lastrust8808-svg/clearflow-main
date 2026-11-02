@@ -404,12 +404,15 @@ export async function claimErpOperationJob({
   }
   const record = result.rows[0];
   if (!record) return null;
+  // PostgreSQL UUIDs are canonical lowercase, and the persisted actor is
+  // part of the worker-claim audit trail. Reject ambiguous receipts before a
+  // worker can treat the lease as authorization to begin external dispatch.
   if (typeof record.id !== 'string' ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.id) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(record.id) ||
       record.tenant_id !== tenantId || record.operation !== operation ||
       record.claimed_by !== workerId || record.status !== 'processing' ||
       record.dispatch_started_at !== null || record.failure_code !== null ||
-      typeof record.actor_id !== 'string' || !record.actor_id) {
+      !isCanonicalIdentifier(record.actor_id)) {
     throw new Error('ERP job storage returned an invalid tenant-bound worker claim');
   }
   // A claim receipt is evidence of an exclusive database lease. Never accept
