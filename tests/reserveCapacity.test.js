@@ -489,3 +489,26 @@ test('reserve entry, asset, evidence and owning-scope identities remain distinct
     entry('cash-a', 100), entry('cash-b', 200),
   ]).unencumberedCashMinor, 300);
 });
+
+test('reserve snapshots reject all pairwise tenant, entity and trust identity aliases', () => {
+  const scopeRoles = ['tenantId', 'entityId', 'trustId'];
+  for (let i = 0; i < scopeRoles.length; i++) {
+    for (let j = i + 1; j < scopeRoles.length; j++) {
+      const aliasedScope = { ...base, [scopeRoles[j]]: base[scopeRoles[i]] };
+      // Empty snapshots must not bypass scope validation.
+      assert.throws(() => calculateReserveCapacity({
+        ...aliasedScope, asOfAt, maxEvidenceAgeMs: 3600000, entries: [],
+      }), /Reserve tenant, entity and trust identifiers must be distinct/);
+      // Matching aliases on every row are still ambiguous ownership.
+      const aliasedEntry = { ...entry('cash-a', 100), ...aliasedScope };
+      assert.throws(() => calculateReserveCapacity({
+        ...aliasedScope, asOfAt, maxEvidenceAgeMs: 3600000,
+        entries: [aliasedEntry],
+      }), /Reserve tenant, entity and trust identifiers must be distinct/);
+    }
+  }
+  const valid = calculate([entry('cash-a', 100)]);
+  assert.equal(valid.unencumberedCashMinor, 100);
+  assert.deepEqual([valid.tenantId, valid.entityId, valid.trustId],
+    [base.tenantId, base.entityId, base.trustId]);
+});
