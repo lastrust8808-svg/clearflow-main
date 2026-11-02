@@ -623,3 +623,25 @@ test('QR binding registry rejects oversized snapshots before inspecting any row'
     ...registry, bindings,
   }, { ...lookup, tokenHashSha256: 'f'.repeat(64) }), { status: 'unknown' });
 });
+
+test('active QR bindings reject explicitly present empty revocation metadata', () => {
+  const { registry, lookup } = fixture();
+  const active = registry.bindings[0];
+  // A present-but-null/undefined revocation claim is not the same as absence.
+  // Persisted active token rows must have an unambiguous revocation state.
+  for (const field of ['revokedAt', 'revocationEvidenceRef']) {
+    for (const value of [null, undefined]) {
+      assert.throws(() => resolveTrustDocumentQrBinding({
+        ...registry, bindings: [{ ...active, [field]: value }],
+      }, lookup), /Active QR binding cannot contain revocation evidence/);
+    }
+  }
+  assert.deepEqual(resolveTrustDocumentQrBinding(registry, lookup),
+    { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
+  assert.deepEqual(resolveTrustDocumentQrBinding({
+    ...registry, bindings: [{
+      ...active, status: 'revoked', revokedAt,
+      revocationEvidenceRef: 'revocation-receipt-1',
+    }],
+  }, lookup), { status: 'unknown' });
+});
