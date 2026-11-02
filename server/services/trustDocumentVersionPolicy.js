@@ -255,6 +255,24 @@ export function verifyTrustDocumentVersion(registry, proof) {
     }
     if (id === versionId) target = { sha256, status: version.status };
   }
+  // Immutable registration and revocation receipts identify independent audit
+  // evidence, never a tenant/entity/trust/document or version identity. Scan
+  // the complete history so a later version cannot reuse an earlier receipt
+  // as its version ID (or vice versa). This is structural namespace integrity,
+  // not authentication of the evidence or authorization of the caller.
+  const registryIdentities = new Set([
+    registry.tenantId, registry.entityId, registry.trustId, registry.documentId,
+  ]);
+  for (const id of seenIds) {
+    if (registryIdentities.has(id) || seenEvidence.has(id)) {
+      throw new Error('Document version identifier collides with registry identity or evidence');
+    }
+  }
+  for (const evidenceRef of seenEvidence) {
+    if (registryIdentities.has(evidenceRef)) {
+      throw new Error('Document provenance evidence collides with registry identity');
+    }
+  }
   if (!target) return Object.freeze({ status: 'unknown' });
   // A wrong digest must not reveal whether a known version was revoked or
   // superseded; compare fixed-size digests without a content-dependent branch.
