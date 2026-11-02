@@ -122,6 +122,26 @@ try {
       }
     }
   });
+  await test('statement imports reject lossy balances before contacting the API', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected request'); };
+    for (const balance of [NaN, Infinity, -Infinity, -0, 1.005, -2.999, Number.MAX_SAFE_INTEGER,
+      '100.00', null, undefined]) {
+      await assert.rejects(
+        api.importReconciliationStatement({ ...payloads[2], statementEndingBalance: balance }),
+        /Invalid statement ending balance/,
+        String(balance),
+      );
+    }
+    assert.equal(requests, 0, 'invalid accounting amounts must never reach the server');
+    // Negative overdrafts and ordinary cent-denominated balances remain valid.
+    for (const balance of [-23.45, 0, 100.25]) {
+      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[2] });
+      assert.deepEqual(await api.importReconciliationStatement({
+        ...payloads[2], statementEndingBalance: balance,
+      }), accepted[2]);
+    }
+  });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
