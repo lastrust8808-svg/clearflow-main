@@ -1037,6 +1037,29 @@ test('pre-dispatch fence is atomic, tenant-bound, lease-bound, and not a deliver
   assert.equal(Object.isFrozen(result), true);
 });
 
+test('pre-dispatch fence rejects stale or missing failure evidence before any external effect', async () => {
+  const { markErpOperationJobDispatchStarted: mark } =
+    await import('../server/services/erpJobReservation.js');
+  const input = { authenticatedWorker: workerScope,
+    operation: 'invoice_delivery', jobId: claimedJobId };
+  let sql;
+  const accepted = await mark({ ...input, db: { query: async (statement) => {
+    sql = statement;
+    return { rows: [dispatchedRow()] };
+  } } });
+  assert.equal(accepted.outcomeMayBeUnknown, true);
+  assert.match(sql, /dispatch_started_at IS NULL\s+AND failure_code IS NULL AND claimed_at IS NOT NULL/);
+  assert.match(sql, /RETURNING[\s\S]*dispatch_started_at, failure_code, lease_expires_at/);
+  for (const failureCode of ['ERP_WORKER_ERROR', undefined]) {
+    const row = dispatchedRow({ failure_code: failureCode });
+    if (failureCode === undefined) delete row.failure_code;
+    await assert.rejects(mark({ ...input, db: {
+      query: async () => ({ rows: [row] }),
+    } }), /invalid tenant-bound dispatch fence/);
+  }
+  assert.equal(await mark({ ...input, db: { query: async () => ({ rows: [] }) } }), null);
+});
+
 test('uppercase UUID input cannot turn a persisted dispatch fence into a false failure', async () => {
   const { markErpOperationJobDispatchStarted: mark } =
     await import('../server/services/erpJobReservation.js');
