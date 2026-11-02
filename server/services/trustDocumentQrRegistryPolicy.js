@@ -203,6 +203,29 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       matched = binding.status === 'active' ? { status: 'bound', documentId, versionId } : null;
     }
   }
+  // Ownership, document, version and token-digest identifiers have distinct
+  // roles. Check all rows together so a later document/version cannot reuse an
+  // earlier role's identity, even when the queried token is unknown. This is
+  // structural registry integrity, not authenticated tenant authorization.
+  const identityScope = new Set([tenantId, entityId, trustId]);
+  if (identityScope.size !== 3) {
+    throw new Error('QR tenant, entity and trust identifiers must be distinct');
+  }
+  for (const documentId of documentIds) {
+    if (identityScope.has(documentId) || versionIds.has(documentId) || seenHashes.has(documentId)) {
+      throw new Error('QR document identifier collides with registry identity');
+    }
+  }
+  for (const versionId of versionIds) {
+    if (identityScope.has(versionId) || seenHashes.has(versionId)) {
+      throw new Error('QR version identifier collides with registry identity');
+    }
+  }
+  for (const tokenHash of seenHashes) {
+    if (identityScope.has(tokenHash)) {
+      throw new Error('QR token digest collides with registry scope');
+    }
+  }
   // Revocation evidence is an independent receipt, never a tenant/entity/trust
   // identity, document/version ID, or QR token digest. Check after all rows
   // so registry order cannot hide a later cross-role identity collision.
