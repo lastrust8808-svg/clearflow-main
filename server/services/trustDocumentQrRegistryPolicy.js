@@ -160,7 +160,7 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
     }
     let revokedAt = null;
     if (binding.status === 'active') {
-      if (binding.revokedAt != null || binding.revocationEvidenceRef != null) {
+      // Even explicit null/undefined revocation fields are ambiguous evidence:\n      // active token records must omit revocation metadata entirely.\n      if (Object.hasOwn(binding, 'revokedAt') ||\n          Object.hasOwn(binding, 'revocationEvidenceRef')) {
         throw new Error('Active QR binding cannot contain revocation evidence');
       }
       const versionKey = JSON.stringify([documentId, versionId]);
