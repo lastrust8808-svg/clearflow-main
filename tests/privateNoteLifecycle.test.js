@@ -579,3 +579,24 @@ test('private-note journal IDs reject lone UTF-16 surrogates without rejecting v
     events: [astralEvent],
   }).status, 'issued');
 });
+
+test('scope identifiers cannot be reused as private-note actor, event, document or evidence identities', () => {
+  for (const scopeId of Object.values(scope)) {
+    for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+      assert.throws(() => project([event('issued', 1, { [key]: scopeId })]),
+        /identifier collides with note scope/,
+        key + ' must not reuse ' + scopeId);
+    }
+    // A later event cannot impersonate the owning scope even if earlier
+    // lifecycle actions were valid. This is namespace separation, not proof
+    // that a record came from an authenticated trustee or provider.
+    assert.throws(() => project([
+      event('issued', 1),
+      event('presented', 2, { evidenceRef: scopeId }),
+    ]), /identifier collides with note scope/);
+  }
+  assert.equal(project([
+    event('issued', 1), event('presented', 2),
+    event('notice_prepared', 3),
+  ]).status, 'notice_prepared');
+});
