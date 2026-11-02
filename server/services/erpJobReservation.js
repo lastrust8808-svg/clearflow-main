@@ -13,12 +13,14 @@ const operations = new Set([
 // Authenticated identity fields must not contain invisible controls, bidi
 // overrides, malformed surrogate code units, noncanonical Unicode or boundary whitespace. These can
 // make distinct tenant/actor/worker identities appear identical in audits.
+function isCanonicalIdentifier(value) {
+  return typeof value === 'string' && Boolean(value.trim()) && value.length <= 255 &&
+    value === value.trim() && value === value.normalize('NFC') &&
+    !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(value);
+}
+
 function requiredIdentifier(value, label) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
-      value !== value.trim() || value !== value.normalize('NFC') ||
-      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
-    throw new TypeError(`Invalid ${label}`);
-  }
+  if (!isCanonicalIdentifier(value)) throw new TypeError(`Invalid ${label}`);
   return value;
 }
 
@@ -744,7 +746,7 @@ export async function quarantineExpiredErpOperationJobsBatch({
         row.id !== row.id.toLowerCase() ||
         seenIds.has(row.id) || row.tenant_id !== tenantId ||
         row.operation !== operation || row.status !== 'outcome_unknown' ||
-        typeof row.actor_id !== 'string' || !row.actor_id ||
+        !isCanonicalIdentifier(row.actor_id) ||
         row.failure_code != null || row.claimed_by != null ||
         row.claimed_at != null || row.lease_expires_at != null ||
         !Object.hasOwn(row, 'dispatch_started_at')) {
@@ -814,7 +816,7 @@ export async function listErpOperationJobsNeedingReconciliation({
         (previousId !== null && row.id <= previousId) ||
         row.tenant_id !== tenantId || row.operation !== operation ||
         row.status !== 'outcome_unknown' ||
-        typeof row.actor_id !== 'string' || !row.actor_id ||
+        !isCanonicalIdentifier(row.actor_id) ||
         // An unknown-outcome job must have no active lease or failure code.
         // Otherwise the reconciliation backlog could falsely present an
         // inconsistent worker state as a safely quarantined job.
