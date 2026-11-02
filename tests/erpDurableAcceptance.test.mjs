@@ -81,8 +81,25 @@ try {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.capabilities.invoiceDeliveries.available, false);
     assert.equal(response.body.capabilities.invoiceExports.available, false);
-    assert.equal(response.body.counts.invoiceDeliveries, 0);
-    assert.equal(response.body.counts.invoiceExports, 0);
+    assert.equal(response.body.counts.invoiceDeliveries, null);
+    assert.equal(response.body.counts.invoiceExports, null);
+  });
+
+  await test('disabled ERP operations never fabricate empty queue counts', async () => {
+    const response = await invoke('GET', '/ops-status');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.countsAvailable, false);
+    assert.equal(response.body.countsUnavailableReason, 'durable_job_store_required');
+    assert.deepEqual(Object.keys(response.body.counts).sort(), [
+      'invoiceDeliveries', 'invoiceExports', 'statementImports',
+      'reconciliationCloses', 'settlementExecutions',
+    ].sort());
+    for (const [operation, count] of Object.entries(response.body.counts)) {
+      assert.equal(count, null, operation + ' count is unknown, not zero');
+      assert.equal(Object.values(response.body.capabilities)
+        .some(capability => capability.available === true), false);
+    }
+    assert.doesNotMatch(JSON.stringify(response.body), /"(?:invoiceDeliveries|invoiceExports|statementImports|reconciliationCloses|settlementExecutions)":0/);
   });
 
   await test('route has no in-memory invoice queue or SMTP send-before-persist path', () => {
@@ -113,7 +130,7 @@ try {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.capabilities.settlementExecutions.available, false);
     assert.equal(response.body.capabilities.settlementExecutions.reason, 'durable_job_store_required');
-    assert.equal(response.body.counts.settlementExecutions, 0);
+    assert.equal(response.body.counts.settlementExecutions, null);
     assert.equal(source.includes('buildSettlementExecution('), false);
     assert.doesNotMatch(source, /settlementExecutionJobs/);
   });
@@ -170,7 +187,7 @@ try {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.capabilities.reconciliationCloses.available, false);
     assert.equal(response.body.capabilities.reconciliationCloses.reason, 'durable_job_store_required');
-    assert.equal(response.body.counts.reconciliationCloses, 0);
+    assert.equal(response.body.counts.reconciliationCloses, null);
     assert.doesNotMatch(source, /reconciliationCloseJobs/);
   });
   await test('statement import fails closed without durable persistence', async () => {
@@ -199,7 +216,7 @@ try {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.capabilities.statementImports.available, false);
     assert.equal(response.body.capabilities.statementImports.reason, 'durable_job_store_required');
-    assert.equal(response.body.counts.statementImports, 0);
+    assert.equal(response.body.counts.statementImports, null);
     assert.doesNotMatch(source, /statementImportJobs|randomUUID/);
   });
 } finally {
