@@ -505,3 +505,52 @@ test('PostgreSQL adapter rejects malformed persisted Unicode before advancing a 
     assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
   }
 });
+
+
+test('PostgreSQL adapter rejects oversized JSONB entries and batches before any financial INSERT', async () => {
+  const entry = (transactionId, memo) => ({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId, amountCents: 1200,
+    status: 'posted', requiresReview: true, memo,
+  });
+  const cases = [
+    [entry('tx-first', 'valid'), entry('tx-oversized', 'x'.repeat(1024 * 1024))],
+    Array.from({ length: 18 }, (_, index) =>
+      entry('tx-' + index, 'x'.repeat(960 * 1024))),
+  ];
+  for (const entries of cases) {
+    const db = mockPg();
+    await assert.rejects(
+      createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+        tx.saveEntries(scope(), entries)),
+      /Refusing oversized banking (entry|batch) write/,
+    );
+    assert.deepEqual(db.calls.map(({ sql }) => sql), ['BEGIN', 'ROLLBACK'],
+      'no financial INSERT may occur when any entry or total batch exceeds budget');
+    assert.deepEqual(db.state, initial(), 'rejected page must not persist any evidence');
+    assert.equal(db.releases, 1);
+  }
+
+  const db = mockPg();
+  await createBankFeedPostgresStore(db.pool).withTransaction((tx) =>
+    tx.saveEntries(scope(), [entry('tx-small', 'café / 東京')]));
+  assert.equal(db.state.entries.length, 1, 'ordinary records remain writable');
+});
+
+test('PostgreSQL adapter refuses oversized persisted JSONB before cursor advancement', async () => {
+  const db = mockPg();
+  db.state.entries.push({
+    tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a',
+    accountId: 'acct-a', transactionId: 'tx-legacy', amountCents: 500,
+    status: 'posted', requiresReview: true, memo: 'x'.repeat(1024 * 1024),
+  });
+  const before = structuredClone(db.state);
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(createBankFeedPostgresStore(db.pool), scope(), page()),
+    /Oversized persisted banking entry evidence/,
+  );
+  assert.deepEqual(db.state, before, 'oversized historical evidence must not advance cursor');
+  assert.equal(db.calls.filter(({ sql }) =>
+    /INSERT INTO|UPDATE public.clearflow_bank_feed_checkpoints/.test(sql)).length, 0);
+  assert.equal(db.calls.filter(({ sql }) => sql === 'ROLLBACK').length, 1);
+});
