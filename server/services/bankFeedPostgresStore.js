@@ -177,24 +177,40 @@ function assertPlainBankingEvidence(value, ancestors = new WeakSet(), depth = 0)
 // a caller-owned array: a Proxy, accessor-backed index, sparse batch, or
 // custom iterator could execute code or change the rows selected for INSERT.
 // Snapshot indexed data descriptors before inspecting any financial record.
-function snapshotBankingEntryBatch(entries) {
+function snapshotBankingEntryBatch(entries, label = 'banking entry batch') {
   if (!Array.isArray(entries) || nodeTypes.isProxy(entries) ||
       Object.getPrototypeOf(entries) !== Array.prototype) {
-    throw new Error('Refusing malformed banking entry batch.');
+    throw new Error(`Refusing malformed ${label}.`);
   }
   const descriptors = Object.getOwnPropertyDescriptors(entries);
   if (Reflect.ownKeys(descriptors).length !== entries.length + 1) {
-    throw new Error('Refusing malformed banking entry batch.');
+    throw new Error(`Refusing malformed ${label}.`);
   }
   const snapshot = [];
   for (let index = 0; index < entries.length; index++) {
     const descriptor = descriptors[String(index)];
     if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
-      throw new Error('Refusing malformed banking entry batch.');
+      throw new Error(`Refusing malformed ${label}.`);
     }
     snapshot.push(descriptor.value);
   }
   return snapshot;
+}
+
+// pg QueryResult normally exposes an own data-valued rows array. Do not
+// access a getter-backed or Proxy result envelope, then iterate a caller-
+// controlled rows array: either could execute code before row validation.
+// Detach canonical indexed row references before reading any SQL identity.
+function snapshotBankingQueryRows(result) {
+  if (!result || typeof result !== 'object' || nodeTypes.isProxy(result)) {
+    throw new Error('Refusing malformed banking SQL result envelope.');
+  }
+  const rowsDescriptor = Object.getOwnPropertyDescriptor(result, 'rows');
+  if (!rowsDescriptor || !rowsDescriptor.enumerable ||
+      !Object.hasOwn(rowsDescriptor, 'value')) {
+    throw new Error('Refusing malformed banking SQL result envelope.');
+  }
+  return snapshotBankingEntryBatch(rowsDescriptor.value, 'banking SQL result rows');
 }
 
 // PostgreSQL returns plain row objects, but a broken adapter or injected
@@ -266,8 +282,9 @@ function transactionQueries(client) {
          FOR UPDATE`,
         requestedScope,
       );
-      if (result.rows.length !== 1) return null;
-      const row = snapshotPersistedCheckpointRow(result.rows[0]);
+      const rows = snapshotBankingQueryRows(result);
+      if (rows.length !== 1) return null;
+      const row = snapshotPersistedCheckpointRow(rows[0]);
       // Verify database-returned identity independently of the WHERE clause.
       // A faulty adapter, corrupted fixture or unexpected row must never be
       // treated as an authorized checkpoint by direct store callers.
@@ -300,7 +317,7 @@ function transactionQueries(client) {
       // payload agrees with its database composite key and the authorized
       // scope before the replay planner can use any historical evidence.
       const allowed = new Set(authorized.allowedAccountIds);
-      return result.rows.map((untrustedRow) => {
+      return snapshotBankingQueryRows(result).map((untrustedRow) => {
         const row = snapshotPersistedEntryRow(untrustedRow);
         const entry = row.payload;
         // Validate the complete JSONB object *before* reading identity fields.
