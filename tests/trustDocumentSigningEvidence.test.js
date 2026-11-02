@@ -191,6 +191,28 @@ test('later revocation prevents current readiness despite earlier recorded conse
   ] };
   assert.equal(assess({ governance }).reason, 'governance_signer_set_ineligible');
 });
+test('signing identities reject malformed UTF-16 without rejecting valid supplementary Unicode', () => {
+  const loneSurrogate = String.fromCharCode(0xD800);
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
+    assert.throws(() => assess({ [key]: 'id-' + loneSurrogate }), /well-formed Unicode/,
+      key + ' must not silently encode a replacement character');
+  }
+  for (const key of ['signerId', 'identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
+    assert.throws(() => assess({ attestations: [attestation('a', { [key]: 'id-' + loneSurrogate })] }),
+      /well-formed Unicode/, key + ' must not alias another evidence subject');
+  }
+  const supplementary = String.fromCodePoint(0x1F4DC);
+  const signerId = 'trustee-' + supplementary;
+  const governance = { ...packet().governance, appointments: [appointment(signerId)] };
+  const signed = attestation(signerId, {
+    identityEvidenceRef: 'identity-' + supplementary,
+    consentEvidenceRef: 'consent-' + supplementary,
+    signatureEvidenceRef: 'signature-' + supplementary,
+  });
+  assert.equal(assess({ governance, attestations: [signed] }).status,
+    'evidence_ready_for_review');
+});
+
 test('invalid or missing evidence references and document bytes are rejected', () => {
   for (const key of ['consentEvidenceRef', 'signatureEvidenceRef']) {
     assert.throws(() => assess({ attestations: [attestation('a', { [key]: '' })] }), /EvidenceRef/);
