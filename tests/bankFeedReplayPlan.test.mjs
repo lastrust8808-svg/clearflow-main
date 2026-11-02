@@ -717,6 +717,27 @@ test('raw provider hashing snapshots mutable bytes and rejects invalid or oversi
   }
 });
 
+test('raw provider fingerprints reject shared memory that can mutate during snapshot', async () => {
+  if (typeof SharedArrayBuffer === 'undefined') return;
+  const shared = new SharedArrayBuffer(8);
+  const sharedBytes = new Uint8Array(shared);
+  sharedBytes.set([97, 98, 99]);
+  await assert.rejects(
+    hashRawProviderPayloadBytes(sharedBytes),
+    /must not use shared mutable memory/,
+  );
+  await assert.rejects(
+    verifyRawProviderPayloadHash(sharedBytes.subarray(0, 3), 'a'.repeat(64)),
+    /must not use shared mutable memory/,
+  );
+  // A non-shared, offset view remains valid and hashes only its visible bytes.
+  const ordinary = new Uint8Array([0, 97, 98, 99, 0]).subarray(1, 4);
+  assert.equal(
+    await hashRawProviderPayloadBytes(ordinary),
+    'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  );
+});
+
 test('oversized provider pages and account scopes fail before replay allocation', () => {
   const oversizedEvents = Array.from({ length: 5001 }, (_, index) => event(`tx-${index}`));
   const oversizedAccounts = Array.from({ length: 1001 }, (_, index) => `acct-${index}`);
