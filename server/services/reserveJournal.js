@@ -214,6 +214,12 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   if (nextSnapshot.asOfAt < previousSnapshot.asOfAt) {
     throw new Error('Reserve journal append cannot roll back as-of time');
   }
+  // A journal append is not a policy-change authorization. In particular,
+  // widening the evidence age window could resurrect otherwise stale cash.
+  // Require a separately authorized policy migration for any policy change.
+  if (nextSnapshot.maxEvidenceAgeMs !== previousSnapshot.maxEvidenceAgeMs) {
+    throw new Error('Reserve journal append cannot change evidence freshness policy');
+  }
   if (nextSnapshot.events.length <= previousSnapshot.events.length) {
     throw new Error('Reserve journal append requires at least one new event');
   }
