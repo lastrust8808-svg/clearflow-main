@@ -251,8 +251,8 @@ try {
 
   await test('ERP HTTP routes reject ambiguous accounting identities before durable-job admission', async () => {
     const invalid = [null, 0, true, {}, [], '', ' ', ' padded', 'padded ',
-      'line\\nbreak', 'zero\\u200bwidth', 'bidi\\u202ealias',
-      'cafe\\u0301', '\\ud800', 'x'.repeat(256)];
+      'line\nbreak', 'zero\u200bwidth', 'bidi\u202ealias',
+      'cafe\u0301', '\ud800', 'x'.repeat(256)];
     const requests = [
       { method: 'POST', path: '/invoice-deliveries',
         body: { ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid' },
@@ -291,7 +291,7 @@ try {
       const params = { ...request.params };
       for (const field of request.fields) {
         if (field === 'reconciliationId') params[field] = 'recon-2026 Q4';
-        else body[field] = 'caf\\u00e9 2026';
+        else body[field] = 'caf\u00e9 2026';
       }
       const acceptedShape = await invoke(request.method, request.path, body, params);
       assert.equal(acceptedShape.statusCode, 503, request.path);
