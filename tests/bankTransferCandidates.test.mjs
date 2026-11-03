@@ -299,3 +299,20 @@ test('transfer candidates reject unsafe, fractional and signed-zero cent amounts
   assert.equal(result.candidates[0].amountCents, max);
   assert.equal(result.candidates[0].status, 'review_required');
 });
+
+test('transfer review uses inclusive three-day UTC calendar boundaries across leap day', () => {
+  const debit = row('checking', 'leap-out', -1250, {
+    postedDate: '2028-02-28', providerReference: 'leap-ref',
+  });
+  const within = row('savings', 'leap-in', 1250, {
+    postedDate: '2028-03-02', providerReference: 'leap-ref',
+  });
+  const outside = row('savings', 'late-in', 1250, {
+    postedDate: '2028-03-03', providerReference: 'leap-ref',
+  });
+  assert.equal(plan([debit, within]).candidates.length, 1);
+  assert.deepEqual(plan([debit, outside]), { candidates: [], ambiguous: [] });
+  assert.throws(() => plan([row('checking', 'invalid-leap', -1250, {
+    postedDate: '2027-02-29',
+  })]), /Invalid transfer posting date/);
+});
