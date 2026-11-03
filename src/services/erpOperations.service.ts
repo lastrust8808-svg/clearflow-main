@@ -117,6 +117,9 @@ function isAcceptedJob(
       typeof job.deliveryReceiptId === 'string' &&
       job.deliveryReceiptId.trim().length > 0 &&
       job.deliveryReceiptId.length <= 255 &&
+      // Reject control/invisible characters that can disguise a synthetic
+      // transport receipt or corrupt an audit trail.
+      !/[\p{Cc}\p{Cf}]/u.test(job.deliveryReceiptId) &&
       (job.deliveryChannel === 'smtp' || job.deliveryChannel === 'internal');
   }
   // Imports and accounting-period closure require the same durable receipt as
