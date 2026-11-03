@@ -16,7 +16,7 @@ const operations = new Set([
 function isCanonicalIdentifier(value) {
   return typeof value === 'string' && Boolean(value.trim()) && value.length <= 255 &&
     value === value.trim() && value === value.normalize('NFC') &&
-    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value);
+    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
 }
 
 function requiredIdentifier(value, label) {
