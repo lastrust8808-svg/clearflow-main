@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery } from '../src/domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery, admitVerifiedGoogleProfile } from '../src/domain/googleOnboardingTimeout.mjs';
 
 const pending = (mode) => ({
   status: 'pending-gsi', pendingGoogleMode: mode,
@@ -234,4 +234,45 @@ test('stale Drive recovery cannot mutate a local account cache before session ad
     'recovered data must be admitted only through the pending-attempt guard');
   assert.doesNotMatch(effect, /saveLocalAuthAppData\(/,
     'an async response may not write local cache before its pending session is accepted');
+});
+
+test('verified Google profile is admitted only during an active pending sign-in', () => {
+  const current = Object.freeze({ ...pending('returning'), status: 'pending-gsi', appData: null });
+  const user = Object.freeze({ id: 'verified-id', name: 'Example User', email: 'verified@example.test' });
+  const next = admitVerifiedGoogleProfile(current, 'fresh-access-token', user);
+  assert.equal(next.status, 'pending-drive-check');
+  assert.equal(next.apiAccessToken, 'fresh-access-token');
+  assert.deepEqual(next.gsiUser, { name: 'Example User', email: 'verified@example.test' });
+  assert.deepEqual(next.appData, { user, entities: [] });
+  assert.equal(current.status, 'pending-gsi', 'reducer must not mutate input');
+});
+
+test('late Google profile cannot reopen a timed-out, logged-out or independently authenticated session', () => {
+  const user = { id: 'late-id', name: 'Late', email: 'late@example.test' };
+  for (const status of ['unauthenticated', 'authenticated', 'pending-drive-check', 'pending-profile-setup', 'pending-verification']) {
+    const current = Object.freeze({ ...pending('new'), status });
+    assert.equal(admitVerifiedGoogleProfile(current, 'late-token', user), current, status);
+  }
+  const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
+  for (const [token, profile] of [
+    ['', user],
+    ['   ', user],
+    [null, user],
+    ['valid-token', null],
+    ['valid-token', { name: 'No Email' }],
+    ['valid-token', { email: '   ' }],
+  ]) {
+    assert.equal(admitVerifiedGoogleProfile(waiting, token, profile), waiting);
+  }
+});
+
+test('React OAuth hydration uses guarded admission and cannot mutate active Drive email first', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('const hydrateGoogleAccessSession = useCallback(');
+  const end = source.indexOf('const exchangeGoogleAuthorizationCode = useCallback(', start);
+  assert.ok(start >= 0 && end > start, 'Google hydration must be bounded');
+  const hydrate = source.slice(start, end);
+  assert.match(hydrate, /admitVerifiedGoogleProfile\\(current, accessToken, provisionalUser\\)/);
+  assert.doesNotMatch(hydrate, /userDataService\\.setActiveUserEmail\\(/);
+  assert.doesNotMatch(hydrate, /status:\\s*'pending-drive-check'/);
 });
