@@ -11,12 +11,21 @@
  * Limit the encoded ASCII segment to 250 bytes so the resulting basename
  * fits the common 255-byte filesystem component limit.
  */
+function containsUnicodeNoncharacter(value) {
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if ((code >= 0xFDD0 && code <= 0xFDEF) || (code & 0xFFFE) === 0xFFFE) return true;
+  }
+  return false;
+}
+
 export function sanitizeStorageSegment(value) {
   if (
     typeof value !== 'string' ||
     !value.trim() ||
     /^\s|\s$/u.test(value) ||
     value !== value.normalize('NFC') ||
+    containsUnicodeNoncharacter(value) ||
     value === '.' ||
     value === '..' ||
     /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u.test(value) ||
