@@ -56,7 +56,7 @@ function requiredId(value, field) {
   // Reject U+FDD0..FDEF and the final two code points of every Unicode plane.
   for (const scalar of value) {
     const cp = scalar.codePointAt(0);
-    if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFE) === 0xFFFE) {
+    if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFF) >= 0xFFFE) {
       throw new TypeError(field + ' must not contain Unicode noncharacters');
     }
   }
