@@ -224,3 +224,24 @@ test('pending source sharing a provider reference quarantines an otherwise valid
     assert.deepEqual(result.ambiguous, []);
   }
 });
+
+
+test('provider transaction ID reuse across accounts fails closed before transfer review', () => {
+  // A duplicated provider event must not become a fabricated internal transfer
+  // merely because the feed assigned the same transaction ID to two accounts.
+  assert.throws(() => plan([
+    row('checking', 'same-provider-id', -2500),
+    row('savings', 'same-provider-id', 2500),
+  ]), /Duplicate provider transaction identity/);
+  // Independent provider connections and providers have separate namespaces.
+  assert.deepEqual(plan([
+    row('checking', 'same-provider-id', -2500),
+    row('savings', 'same-provider-id', 2500, { connectionId: 'item-b' }),
+    row('reserve', 'same-provider-id', 2500, { provider: 'mercury' }),
+  ]), { candidates: [], ambiguous: [] });
+  // Distinct source IDs with a shared verified reference remain review-only.
+  assert.equal(plan([
+    row('checking', 'debit-id', -2500),
+    row('savings', 'credit-id', 2500),
+  ]).candidates.length, 1);
+});
