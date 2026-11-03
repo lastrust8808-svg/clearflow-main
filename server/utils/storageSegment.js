@@ -30,7 +30,7 @@ export function sanitizeStorageSegment(value) {
     value === '..' ||
     /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u.test(value) ||
     value.endsWith('.') ||
-    /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(value)
+    /^(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(value)
   ) {
     throw new TypeError('Invalid storage identifier.');
   }
