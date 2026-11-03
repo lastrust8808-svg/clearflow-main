@@ -124,7 +124,9 @@ export function rejectFailedGoogleDriveRecovery(current) {
 export function admitVerifiedGoogleProfile(current, accessToken, user) {
   if (!current || current.status !== 'pending-gsi') return current;
   if (typeof accessToken !== 'string' || !accessToken.trim() ||
-      !user || typeof user.email !== 'string' || !user.email.trim()) {
+      !user || typeof user.email !== 'string' ||
+      !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(user.email) ||
+      user.email !== user.email.normalize('NFC')) {
     return current;
   }
 
