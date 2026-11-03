@@ -293,7 +293,7 @@ test('Drive catch-up never writes provisional or unauthenticated Google workspac
 test('Google profile admission rejects malformed and noncanonical email identities', () => {
   const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
   const invalid = ['missing-at.example', 'a@@example.test', 'a@example', ' a@example.test',
-    'a@example.test ', 'a\\nb@example.test', 'a\\u200bb@example.test', 'e\\u0301@example.test'];
+    'a@example.test ', 'a\nb@example.test', 'a\u200bb@example.test', 'e\u0301@example.test'];
   for (const email of invalid) {
     assert.equal(admitVerifiedGoogleProfile(waiting, 'valid-access-token', { email, name: 'Test' }), waiting, email);
   }
