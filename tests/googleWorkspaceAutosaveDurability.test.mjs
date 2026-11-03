@@ -26,3 +26,17 @@ test('local workspace autosave does not acknowledge before durable mirror and re
   assert.match(block, /\.catch\(\(error\) => \{[\s\S]*?setSavingStatus\('error'\)/);
   assert.doesNotMatch(block, /void saveAccountAppData\(state\.localAccountId, state\.appData\)\.catch/);
 });
+
+test('Google Drive catch-up acknowledges only after durable mirror and retries failures', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('    needsDriveCatchUpRef.current = false;');
+  const end = source.indexOf('  }, [state.apiAccessToken, state.appData, state.status]);', start);
+  assert.ok(start >= 0 && end > start, 'catch-up effect must exist');
+  const block = source.slice(start, end);
+  assert.match(block, /\.then\(async \(\) => \{/);
+  assert.match(block, /if \(!googleDurableAccountId \|\| !state\.appData\) \{/);
+  assert.match(block, /await saveAccountAppData\(googleDurableAccountId, state\.appData\)/);
+  assert.doesNotMatch(block, /void saveAccountAppData\(/);
+  assert.ok(block.indexOf('await saveAccountAppData(') < block.indexOf("setSavingStatus('saved')"));
+  assert.match(block, /\.catch\(\(error\) => \{[\s\S]*needsDriveCatchUpRef\.current = true;[\s\S]*setSavingStatus\('error'\)/);
+});
