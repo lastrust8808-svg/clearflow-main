@@ -261,7 +261,7 @@ test('noncanonical Unicode source identifiers fail closed before transfer matchi
 
 
 test('Unicode line and paragraph separators cannot enter bank source identities', () => {
-  for (const separator of ['\\u2028', '\\u2029']) {
+  for (const separator of ['\u2028', '\u2029']) {
     for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
       const invalid = row('checking', 'out', -500, { [field]: 'segment' + separator + 'suffix' });
       assert.throws(() => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
