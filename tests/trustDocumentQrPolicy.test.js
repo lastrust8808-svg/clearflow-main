@@ -72,3 +72,17 @@ test('public QR links reject loopback, IP literals and internal-only DNS origins
   assert.match(createTrustDocumentQrLink('https://verify.example.org').url,
     /^https:\/\/verify\.example\.org\/verify\/document\//);
 });
+
+
+test('public QR origins reject noncanonical DNS labels without blocking valid public names', () => {
+  for (const host of ['verify.example.org.', 'bad_label.example.org',
+    '-verify.example.org', 'verify-.example.org', 'verify..example.org',
+    'a'.repeat(64) + '.example.org']) {
+    assert.throws(() => createTrustDocumentQrLink('https://' + host),
+      /Public DNS HTTPS verification origin required/);
+  }
+  for (const host of ['verify.example.org', 'v2-verify.example.org', 'a.example.org']) {
+    const link = createTrustDocumentQrLink('https://' + host);
+    assert.equal(digestTrustDocumentQrLink(link.url, 'https://' + host), link.tokenHashSha256);
+  }
+});
