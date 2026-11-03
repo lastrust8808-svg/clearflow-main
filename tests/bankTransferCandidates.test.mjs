@@ -270,3 +270,15 @@ test('Unicode line and paragraph separators cannot enter bank source identities'
   }
   assert.equal(plan([row('checking', 'out', -500), row('savings', 'in', 500)]).candidates.length, 1);
 });
+
+
+test('Unicode noncharacters cannot enter provider-scoped banking identities', () => {
+  for (const noncharacter of ['\\uFDD0', '\\uFDEF', '\\uFFFE', '\\uFFFF', '\\u{1FFFE}', '\\u{10FFFF}']) {
+    for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
+      const invalid = row('checking', 'out', -500, { [field]: 'id' + noncharacter });
+      assert.throws(() => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
+        /Invalid authorized transfer scope|Invalid or unauthorized transfer source record/);
+    }
+  }
+  assert.equal(plan([row('checking', 'out', -500), row('savings', 'in', 500)]).candidates.length, 1);
+});
