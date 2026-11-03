@@ -32,8 +32,8 @@ function canonicalOrigin(value) {
   // deployment must additionally pin an approved origin and control DNS.
   const host = parsed.hostname.toLowerCase();
   if (!host.includes('.') || host.startsWith('[') ||
-      /^\\d+(?:\\.\\d+){3}$/.test(host) ||
-      /\\.(?:localhost|local|internal|test|invalid)$/.test(host)) {
+      /^\d+(?:\.\d+){3}$/.test(host) ||
+      /\.(?:localhost|local|internal|test|invalid)$/.test(host)) {
     throw new TypeError('Public DNS HTTPS verification origin required');
   }
   return value;
