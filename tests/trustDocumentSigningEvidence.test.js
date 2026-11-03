@@ -806,3 +806,22 @@ test('signing packet keeps owner, document, version, principal and provenance na
   }), /provenance reference collides/);
   assert.equal(assess().status, 'evidence_ready_for_review');
 });
+
+
+test('signing scope, principals and evidence references enforce 256 UTF-16 code units', () => {
+  const over = 'x'.repeat(257);
+  for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
+    assert.throws(() => assess({ [key]: over }), /256 UTF-16 code units/);
+  }
+  for (const key of ['signerId', 'identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
+    assert.throws(() => assess({ attestations: [attestation('a', { [key]: over })] }),
+      /256 UTF-16 code units/);
+  }
+  const supplementary = '\u{1F680}'.repeat(129);
+  assert.throws(() => assess({ attestations: [attestation('a', {
+    signatureEvidenceRef: supplementary,
+  })] }), /256 UTF-16 code units/);
+  assert.equal(assess({ attestations: [attestation('a', {
+    signatureEvidenceRef: 'x'.repeat(256),
+  })] }).status, 'evidence_ready_for_review');
+});
