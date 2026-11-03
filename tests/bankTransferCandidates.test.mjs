@@ -258,3 +258,15 @@ test('noncanonical Unicode source identifiers fail closed before transfer matchi
     assert.doesNotThrow(() => plan([valid], field === 'tenantId' ? composed : 'tenant-a'));
   }
 });
+
+
+test('Unicode line and paragraph separators cannot enter bank source identities', () => {
+  for (const separator of ['\\u2028', '\\u2029']) {
+    for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
+      const invalid = row('checking', 'out', -500, { [field]: 'segment' + separator + 'suffix' });
+      assert.throws(() => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
+        /Invalid authorized transfer scope|Invalid or unauthorized transfer source record/);
+    }
+  }
+  assert.equal(plan([row('checking', 'out', -500), row('savings', 'in', 500)]).candidates.length, 1);
+});
