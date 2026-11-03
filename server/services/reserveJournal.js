@@ -62,7 +62,7 @@ function plainEvents(events) {
 
 function identifier(value, label) {
   if (typeof value !== 'string' || !value || value.trim() !== value ||
-      /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/u.test(value) ||
+      /[\u0000-\u001f\u007f-\u009f\p{Default_Ignorable_Code_Point}]/u.test(value) ||
       /(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u.test(value) || value.normalize('NFC') !== value) {
     throw new TypeError(label + ' must be a canonical nonempty identifier');
   }
