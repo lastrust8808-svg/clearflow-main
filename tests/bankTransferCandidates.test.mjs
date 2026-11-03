@@ -333,3 +333,29 @@ test('transfer review never pairs cross-currency, same-account or cross-connecti
     assert.deepEqual(plan([credit, debit]), { candidates: [], ambiguous: [] });
   }
 });
+
+
+test('pending and removed duplicate provider IDs cannot masquerade as independent transfers', () => {
+  const debit = row('checking', 'provider-event-1', -875, {
+    providerReference: 'shared-ref',
+  });
+  const credit = row('savings', 'provider-event-2', 875, {
+    providerReference: 'shared-ref',
+  });
+  for (const status of ['pending', 'removed', 'superseded', 'posted']) {
+    const duplicate = row('reserve', 'provider-event-1', 875, {
+      status, providerReference: 'other-ref',
+    });
+    assert.throws(() => plan([debit, credit, duplicate]),
+      /Duplicate provider transaction identity across accounts/);
+    assert.throws(() => plan([duplicate, credit, debit]),
+      /Duplicate provider transaction identity across accounts/);
+  }
+  // An unrelated provider connection is a distinct transaction namespace.
+  const independent = row('reserve', 'provider-event-1', 875, {
+    connectionId: 'item-b', providerReference: 'other-ref',
+  });
+  const result = plan([debit, credit, independent]);
+  assert.equal(result.candidates.length, 1);
+  assert.deepEqual(result.ambiguous, []);
+});
