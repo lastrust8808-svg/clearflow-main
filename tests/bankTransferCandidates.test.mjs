@@ -273,7 +273,7 @@ test('Unicode line and paragraph separators cannot enter bank source identities'
 
 
 test('Unicode noncharacters cannot enter provider-scoped banking identities', () => {
-  for (const noncharacter of ['\\uFDD0', '\\uFDEF', '\\uFFFE', '\\uFFFF', '\\u{1FFFE}', '\\u{10FFFF}']) {
+  for (const noncharacter of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF].map((codePoint) => String.fromCodePoint(codePoint))) {
     for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
       const invalid = row('checking', 'out', -500, { [field]: 'id' + noncharacter });
       assert.throws(() => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
