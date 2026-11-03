@@ -31,7 +31,13 @@ function canonicalOrigin(value) {
   // make a private service an appropriate public QR destination. Runtime
   // deployment must additionally pin an approved origin and control DNS.
   const host = parsed.hostname.toLowerCase();
-  if (!host.includes('.') || host.startsWith('[') ||
+  // Reject noncanonical DNS labels even when the URL parser accepts them.
+  // Trailing dots, underscores and edge hyphens can cause origin-policy or
+  // certificate-name ambiguity at the public verification boundary.
+  const labels = host.split('.');
+  const validDnsLabels = labels.every(label =>
+    label.length >= 1 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
+  if (!validDnsLabels || !host.includes('.') || host.startsWith('[') ||
       /^\d+(?:\.\d+){3}$/.test(host) ||
       /\.(?:localhost|local|internal|test|invalid)$/.test(host)) {
     throw new TypeError('Public DNS HTTPS verification origin required');
