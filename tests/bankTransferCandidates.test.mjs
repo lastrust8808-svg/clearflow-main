@@ -248,8 +248,8 @@ test('provider transaction ID reuse across accounts fails closed before transfer
 
 
 test('noncanonical Unicode source identifiers fail closed before transfer matching', () => {
-  const decomposed = 'cafe\\u0301';
-  const composed = 'caf\\u00e9';
+  const decomposed = 'café';
+  const composed = 'café';
   for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
     const invalid = row('checking', 'out', -500, { [field]: decomposed });
     assert.throws(() => plan([invalid], field === 'tenantId' ? decomposed : 'tenant-a'),
