@@ -112,3 +112,28 @@ export function rejectFailedGoogleDriveRecovery(current) {
     authMessage: 'Google workspace recovery failed. Please retry Google sign-in.',
   };
 }
+
+/**
+ * Admit a completed Google profile lookup only while the matching UI flow is
+ * still waiting for Google. An OAuth response arriving after timeout, logout,
+ * or an independently completed sign-in cannot resurrect a rejected session.
+ *
+ * This does not establish attempt uniqueness when two OAuth popups overlap;
+ * the provider callback still needs an attempt-bound correlation token.
+ */
+export function admitVerifiedGoogleProfile(current, accessToken, user) {
+  if (!current || current.status !== 'pending-gsi') return current;
+  if (typeof accessToken !== 'string' || !accessToken.trim() ||
+      !user || typeof user.email !== 'string' || !user.email.trim()) {
+    return current;
+  }
+
+  return {
+    ...current,
+    token: current.token || 'google-oauth-token',
+    apiAccessToken: accessToken,
+    status: 'pending-drive-check',
+    gsiUser: { name: user.name, email: user.email },
+    appData: current.appData || { user, entities: [] },
+  };
+}
