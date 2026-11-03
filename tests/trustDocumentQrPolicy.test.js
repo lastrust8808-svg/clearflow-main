@@ -61,3 +61,14 @@ test('does not mutate URLs or return document metadata on token lookup', () => {
   assert.equal(digest.length, 64);
   assert.equal(digest, tokenHashSha256);
 });
+
+test('public QR links reject loopback, IP literals and internal-only DNS origins', () => {
+  for (const host of ['localhost', 'localhost.local', 'service.internal',
+    'service.test', 'service.invalid', '127.0.0.1', '10.0.0.8',
+    '[::1]', '[2001:db8::1]', 'intranet']) {
+    assert.throws(() => createTrustDocumentQrLink('https://' + host),
+      /Public DNS HTTPS verification origin required/);
+  }
+  assert.match(createTrustDocumentQrLink('https://verify.example.org').url,
+    /^https:\/\/verify\.example\.org\/verify\/document\//);
+});
