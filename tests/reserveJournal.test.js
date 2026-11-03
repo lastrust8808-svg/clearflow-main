@@ -208,3 +208,15 @@ test('reserve journal identifiers reject bidi override and isolate controls', ()
   }
   assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
 });
+
+
+test('reserve identifiers reject invisible formatting and zero-width spoofing', () => {
+  for (const codePoint of [0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF]) {
+    const invalid = 'asset-' + String.fromCodePoint(codePoint) + '1';
+    assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ evidenceRef: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => projectReserveJournal({ ...base, tenantId: invalid, events: [] }),
+      /canonical nonempty identifier/);
+  }
+  assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
+});
