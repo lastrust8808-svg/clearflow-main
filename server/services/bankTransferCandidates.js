@@ -19,7 +19,7 @@ const REQUIRED = ['tenantId', 'provider', 'connectionId', 'accountId', 'transact
 function validId(value) {
   return typeof value === 'string' && value.length > 0 &&
     value.length <= 256 && value === value.trim() && value === value.normalize('NFC') && value.isWellFormed() &&
-    !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}\u2028\u2029]/u.test(value);
 }
 
 function calendarDay(value) {
