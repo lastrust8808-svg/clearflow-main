@@ -231,6 +231,13 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   if (nextSnapshot.events.length <= previousSnapshot.events.length) {
     throw new Error('Reserve journal append requires at least one new event');
   }
+  // New events must occur after the authenticated valuation checkpoint.
+  // Otherwise an append could retroactively alter a previously finalized period.
+  for (const event of nextSnapshot.events.slice(previousSnapshot.events.length)) {
+    if (event.occurredAt <= previousSnapshot.asOfAt) {
+      throw new Error('Reserve journal append cannot backdate events before checkpoint');
+    }
+  }
   // Replaying valid event sets alone cannot detect a rewritten historical
   // prefix. Compare canonical event bytes so key insertion order is irrelevant.
   for (let i = 0; i < previousSnapshot.events.length; i++) {
