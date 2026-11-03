@@ -276,3 +276,15 @@ test('React OAuth hydration uses guarded admission and cannot mutate active Driv
   assert.doesNotMatch(hydrate, /userDataService\.setActiveUserEmail\(/);
   assert.doesNotMatch(hydrate, /status:\s*'pending-drive-check'/);
 });
+
+test('Drive catch-up never writes provisional or unauthenticated Google workspaces', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('!needsDriveCatchUpRef.current ||');
+  const end = source.indexOf('void userDataService', start);
+  assert.ok(start >= 0 && end > start, 'Drive catch-up effect must be bounded');
+  const effect = source.slice(start, end);
+  assert.match(effect, /state.status !== 'authenticated'/,
+    'only an admitted authenticated workspace may trigger the catch-up write');
+  assert.match(effect, /needsDriveCatchUpRef.current = false/,
+    'catch-up flag must be consumed before the asynchronous write');
+});
