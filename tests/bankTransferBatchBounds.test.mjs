@@ -41,3 +41,32 @@ test('transfer review rejects accessor array elements without invoking getter', 
   assert.throws(() => review(transactions), /Malformed transfer transaction batch/);
   assert.equal(called, false);
 });
+
+test('transfer review rejects sparse arrays and array proxies without invoking traps', () => {
+  const sparse = Array(2);
+  sparse[0] = transaction(0);
+  assert.throws(() => review(sparse), /Malformed transfer transaction batch/);
+
+  let trapCalled = false;
+  const proxy = new Proxy([transaction(0)], {
+    get() { trapCalled = true; throw new Error('proxy trap executed'); },
+    ownKeys() { trapCalled = true; throw new Error('proxy trap executed'); },
+  });
+  assert.throws(() => review(proxy), /Invalid authorized transfer scope or batch/);
+  assert.equal(trapCalled, false);
+});
+
+test('transfer review rejects accessor length-independent metadata and symbol properties', () => {
+  const symbolBatch = [transaction(0)];
+  symbolBatch[Symbol('hidden')] = 'untrusted';
+  assert.throws(() => review(symbolBatch), /Malformed transfer transaction batch/);
+
+  const accessorBatch = [transaction(0)];
+  let called = false;
+  Object.defineProperty(accessorBatch, 'metadata', {
+    enumerable: true, configurable: true,
+    get() { called = true; throw new Error('metadata getter executed'); },
+  });
+  assert.throws(() => review(accessorBatch), /Malformed transfer transaction batch/);
+  assert.equal(called, false);
+});
