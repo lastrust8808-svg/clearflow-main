@@ -256,3 +256,18 @@ test('reserve identifiers enforce a bounded length without truncation', () => {
       /canonical nonempty identifier/);
   }
 });
+
+
+test('reserve identities reject Unicode noncharacters across planes and roles', () => {
+  for (const cp of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+    const invalid = 'id-' + String.fromCodePoint(cp) + '-suffix';
+    for (const key of ['assetId', 'eventId', 'evidenceRef']) {
+      assert.throws(() => project([record({ [key]: invalid })]), /canonical nonempty identifier/);
+    }
+    for (const key of ['tenantId', 'entityId', 'trustId']) {
+      assert.throws(() => projectReserveJournal({ ...base, [key]: invalid, events: [] }),
+        /canonical nonempty identifier/);
+    }
+  }
+  assert.equal(project([record({ assetId: 'asset-𐐷' })]).activeAssetCount, 1);
+});
