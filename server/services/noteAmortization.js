@@ -59,7 +59,7 @@ function requiredString(value, field) {
   // Reject unpaired UTF-16 surrogates before downstream UTF-8 serialization
   // could silently replace distinct note identities with U+FFFD. Valid
   // supplementary Unicode scalar values (surrogate pairs) remain supported.
-  if (/[\uD800-\uDFFF]/u.test(value)) {
+  if ([...value].some(char => char.length === 1 && /[\uD800-\uDFFF]/u.test(char))) {
     throw new TypeError(`${field} must contain well-formed Unicode`);
   }
   // Reject decomposed Unicode aliases instead of silently normalizing trust
