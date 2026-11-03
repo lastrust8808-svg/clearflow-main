@@ -68,7 +68,121 @@ test('rejects trailing periods that alias another directory on Windows', () => {
 });
 
 test('rejects reserved Windows device names including names with extensions', () => {
-  for (const value of ['CON', 'con', 'con.txt', 'PRN', 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv', 'COM¹', 'com².txt', 'COM³', 'LPT¹', 'lpt².log', 'LPT³']) {
+  for (const value of ['CON', 'con', 'con.txt', 'CONIN, 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv', 'COM¹', 'com².txt', 'COM³', 'LPT¹', 'lpt².log', 'LPT³']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
+  }
+  for (const value of ['console', 'com10', 'lpt10', 'report.final', 'member@example.com']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value), value);
+  }
+});
+
+test('rejects overlong encoded segments before filesystem I/O, preserving valid boundary values', () => {
+  const maxAscii = 'a'.repeat(250);
+  assert.equal(sanitizeStorageSegment(maxAscii), maxAscii);
+  assert.equal(sanitizeStorageSegment(maxAscii).length + '.json'.length, 255);
+  for (const value of ['a'.repeat(251), 'é'.repeat(42), '🙂'.repeat(21)]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value.slice(0, 12));
+  }
+  assert.equal(sanitizeStorageSegment('é'.repeat(41)).length, 246);
+});
+
+test('rejects unpaired UTF-16 surrogates as invalid identifiers but preserves valid pairs', () => {
+  for (const value of ['\\uD800', '\\uDC00', 'member\\uD800', '\\uD800a']) {
+    const actual = value.replace(/\\u([0-9a-f]{4})/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+    assert.throws(() => sanitizeStorageSegment(actual), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('🙂'), '%F0%9F%99%82');
+});
+
+test('rejects non-NFC storage identifiers to prevent canonical identity aliases', () => {
+  const composed = '\u00e9quipe';
+  const decomposed = 'e\u0301quipe';
+  assert.notEqual(composed, decomposed);
+  assert.equal(decomposed.normalize('NFC'), composed);
+  assert.equal(sanitizeStorageSegment(composed), encodeURIComponent(composed));
+  assert.throws(() => sanitizeStorageSegment(decomposed), TypeError);
+  assert.throws(() => sanitizeStorageSegment('member-' + decomposed), TypeError);
+});
+
+test('rejects Unicode line and paragraph separators in storage identities', () => {
+  for (const value of ['member\u2028admin', 'member\u2029admin']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-admin'), 'member-admin');
+});
+
+test('rejects edge whitespace in storage identities while allowing internal spaces', () => {
+  for (const value of [' member', 'member ', '\tmember', 'member\n', '\u00a0member', 'member\u2003']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, JSON.stringify(value));
+  }
+  assert.equal(sanitizeStorageSegment('member account'), 'member%20account');
+});
+
+
+test('rejects Unicode noncharacters in account and document identifiers', () => {
+  for (const code of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+    assert.throws(() => sanitizeStorageSegment('member-' + String.fromCodePoint(code)), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-🙂'), 'member-%F0%9F%99%82');
+});
+, 'conin$.txt', 'CONOUT, 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv', 'COM¹', 'com².txt', 'COM³', 'LPT¹', 'lpt².log', 'LPT³']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
+  }
+  for (const value of ['console', 'com10', 'lpt10', 'report.final', 'member@example.com']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value), value);
+  }
+});
+
+test('rejects overlong encoded segments before filesystem I/O, preserving valid boundary values', () => {
+  const maxAscii = 'a'.repeat(250);
+  assert.equal(sanitizeStorageSegment(maxAscii), maxAscii);
+  assert.equal(sanitizeStorageSegment(maxAscii).length + '.json'.length, 255);
+  for (const value of ['a'.repeat(251), 'é'.repeat(42), '🙂'.repeat(21)]) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, value.slice(0, 12));
+  }
+  assert.equal(sanitizeStorageSegment('é'.repeat(41)).length, 246);
+});
+
+test('rejects unpaired UTF-16 surrogates as invalid identifiers but preserves valid pairs', () => {
+  for (const value of ['\\uD800', '\\uDC00', 'member\\uD800', '\\uD800a']) {
+    const actual = value.replace(/\\u([0-9a-f]{4})/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+    assert.throws(() => sanitizeStorageSegment(actual), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('🙂'), '%F0%9F%99%82');
+});
+
+test('rejects non-NFC storage identifiers to prevent canonical identity aliases', () => {
+  const composed = '\u00e9quipe';
+  const decomposed = 'e\u0301quipe';
+  assert.notEqual(composed, decomposed);
+  assert.equal(decomposed.normalize('NFC'), composed);
+  assert.equal(sanitizeStorageSegment(composed), encodeURIComponent(composed));
+  assert.throws(() => sanitizeStorageSegment(decomposed), TypeError);
+  assert.throws(() => sanitizeStorageSegment('member-' + decomposed), TypeError);
+});
+
+test('rejects Unicode line and paragraph separators in storage identities', () => {
+  for (const value of ['member\u2028admin', 'member\u2029admin']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-admin'), 'member-admin');
+});
+
+test('rejects edge whitespace in storage identities while allowing internal spaces', () => {
+  for (const value of [' member', 'member ', '\tmember', 'member\n', '\u00a0member', 'member\u2003']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, JSON.stringify(value));
+  }
+  assert.equal(sanitizeStorageSegment('member account'), 'member%20account');
+});
+
+
+test('rejects Unicode noncharacters in account and document identifiers', () => {
+  for (const code of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+    assert.throws(() => sanitizeStorageSegment('member-' + String.fromCodePoint(code)), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-🙂'), 'member-%F0%9F%99%82');
+});
+, 'conout$.json', 'PRN', 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv', 'COM¹', 'com².txt', 'COM³', 'LPT¹', 'lpt².log', 'LPT³']) {
     assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
   }
   for (const value of ['console', 'com10', 'lpt10', 'report.final', 'member@example.com']) {
