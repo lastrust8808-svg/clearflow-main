@@ -110,3 +110,10 @@ test('rejects Unicode line and paragraph separators in storage identities', () =
   }
   assert.equal(sanitizeStorageSegment('member-admin'), 'member-admin');
 });
+
+test('rejects edge whitespace in storage identities while allowing internal spaces', () => {
+  for (const value of [' member', 'member ', '\tmember', 'member\n', '\u00a0member', 'member\u2003']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, JSON.stringify(value));
+  }
+  assert.equal(sanitizeStorageSegment('member account'), 'member%20account');
+});
