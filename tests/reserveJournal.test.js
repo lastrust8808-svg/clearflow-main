@@ -231,3 +231,15 @@ test('reserve identifiers reject default-ignorable Unicode including variation s
   }
   assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
 });
+
+test('reserve identifiers reject Unicode whitespace in all identity positions', () => {
+  for (const codePoint of [0x0020, 0x00A0, 0x1680, 0x2003, 0x2028, 0x2029, 0x3000]) {
+    const invalid = 'asset-' + String.fromCodePoint(codePoint) + '1';
+    assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ eventId: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ evidenceRef: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => projectReserveJournal({ ...base, tenantId: invalid, events: [] }),
+      /canonical nonempty identifier/);
+  }
+  assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
+});
