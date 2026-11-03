@@ -670,3 +670,22 @@ test('Unicode whitespace and default-ignorable characters are rejected by the ac
   }
   assert.equal(project([event('issued', 1, { actorId: 'actor-𐐷' })]).status, 'issued');
 });
+
+test('private-note identifiers enforce 256 UTF-16 code-unit boundary across roles', () => {
+  const oversized = 'x'.repeat(257);
+  for (const key of Object.keys(scope)) {
+    assert.throws(() => projectPrivateNoteLifecycle({
+      ...scope, [key]: oversized,
+      asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+    }), /exceeds maximum identifier length/);
+  }
+  for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+    assert.throws(() => project([event('issued', 1, { [key]: oversized })]),
+      /exceeds maximum identifier length/);
+  }
+  const boundary = 'x'.repeat(254) + '🚀';
+  assert.equal(boundary.length, 256);
+  assert.equal(project([event('issued', 1, { actorId: boundary })]).status, 'issued');
+  assert.throws(() => project([event('issued', 1, { actorId: boundary + 'x' })]),
+    /exceeds maximum identifier length/);
+});
