@@ -481,13 +481,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     void userDataService
       .saveUserData(state.apiAccessToken, state.appData)
-      .then(() => {
+      .then(async () => {
         const googleDurableAccountId = buildGoogleDurableAccountId(state.appData?.user.email);
-        if (googleDurableAccountId && state.appData) {
-          void saveAccountAppData(googleDurableAccountId, state.appData).catch((error) => {
-            console.warn('Failed to mirror Google Drive catch-up to durable storage.', error);
-          });
+        if (!googleDurableAccountId || !state.appData) {
+          throw new Error('Google Drive catch-up requires a durable account identity and workspace.');
         }
+        await saveAccountAppData(googleDurableAccountId, state.appData);
         initialDataLoaded.current = true;
         setSavingStatus('saved');
         window.setTimeout(() => setSavingStatus('idle'), 2500);
