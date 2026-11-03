@@ -637,3 +637,19 @@ test('private-note ownership roles require distinct canonical IDs', () => {
   }
   assert.equal(project([event('issued', 1), event('presented', 2)]).status, 'presented');
 });
+
+test('private-note identities reject invisible Unicode and Unicode whitespace across roles', () => {
+  for (const codePoint of [0x200B, 0x202E, 0x2060, 0xFE0F, 0x00A0, 0x2028]) {
+    const invalid = 'id-' + String.fromCodePoint(codePoint) + 'x';
+    for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+      assert.throws(() => projectPrivateNoteLifecycle({
+        ...scope, [key]: invalid, asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+      }), /invisible formatting or whitespace/);
+    }
+    for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+      assert.throws(() => project([event('issued', 1, { [key]: invalid })]),
+        /invisible formatting or whitespace/);
+    }
+  }
+  assert.equal(project([event('issued', 1, { actorId: 'actor-🚀' })]).status, 'issued');
+});
