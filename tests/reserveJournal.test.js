@@ -220,3 +220,14 @@ test('reserve identifiers reject invisible formatting and zero-width spoofing', 
   }
   assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
 });
+
+
+test('reserve identifiers reject default-ignorable Unicode including variation selectors', () => {
+  for (const codePoint of [0x034F, 0x061C, 0x180E, 0x2061, 0x2064, 0xFE0F, 0xE0100]) {
+    const invalid = 'asset-' + String.fromCodePoint(codePoint) + '1';
+    assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ evidenceRef: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => projectReserveJournal({ ...base, tenantId: invalid, events: [] }), /canonical nonempty identifier/);
+  }
+  assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
+});
