@@ -359,3 +359,17 @@ test('pending and removed duplicate provider IDs cannot masquerade as independen
   assert.equal(result.candidates.length, 1);
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('transfer review rejects impossible century leap dates and accepts valid Gregorian century leap days', () => {
+  for (const postedDate of ['1900-02-29', '2100-02-29', '2028-02-30', '2028-04-31', '2028-13-01']) {
+    assert.throws(() => plan([row('checking', 'bad-date', -100, { postedDate })]),
+      /Invalid transfer posting date/);
+  }
+  const result = plan([
+    row('checking', 'century-debit', -100, { postedDate: '2000-02-29', providerReference: 'century-ref' }),
+    row('savings', 'century-credit', 100, { postedDate: '2000-03-01', providerReference: 'century-ref' }),
+  ]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].dayGap, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
