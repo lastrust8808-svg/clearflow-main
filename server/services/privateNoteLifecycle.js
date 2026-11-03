@@ -44,7 +44,7 @@ function requiredId(value, field) {
   }
   // Reject invisible Unicode identity spoofing and non-ASCII whitespace across
   // scope, actor, document and evidence references. Visible Unicode remains valid.
-  if (/\\p{White_Space}|\\p{Default_Ignorable_Code_Point}/u.test(value)) {
+  if (/\p{White_Space}|\p{Default_Ignorable_Code_Point}/u.test(value)) {
     throw new TypeError(field + ' must not contain invisible formatting or whitespace');
   }
   // A journal must not treat canonically equivalent Unicode spellings as
