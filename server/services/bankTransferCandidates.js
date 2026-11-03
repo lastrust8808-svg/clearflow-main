@@ -16,9 +16,20 @@ const FIELDS = new Set([
 const REQUIRED = ['tenantId', 'provider', 'connectionId', 'accountId', 'transactionId', 'amountCents',
   'currency', 'postedDate', 'status'];
 
+// Unicode noncharacters are not valid external banking identifiers; reject them
+// rather than allowing visually opaque provider/account identity collisions.
+function containsNoncharacter(value) {
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if ((code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe) return true;
+  }
+  return false;
+}
+
 function validId(value) {
   return typeof value === 'string' && value.length > 0 &&
     value.length <= 256 && value === value.trim() && value === value.normalize('NFC') && value.isWellFormed() &&
+    !containsNoncharacter(value) &&
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}\u2028\u2029]/u.test(value);
 }
 
