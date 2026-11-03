@@ -30,6 +30,12 @@ function canonicalOrigin(value) {
   // IP literals, or single-label/internal hostnames. HTTPS alone does not
   // make a private service an appropriate public QR destination. Runtime
   // deployment must additionally pin an approved origin and control DNS.
+  // Public verification must use the standard HTTPS endpoint. Custom ports
+  // can expose staging or administrative listeners and cannot be approved
+  // by hostname validation alone.
+  if (parsed.port !== '') {
+    throw new TypeError('Public DNS HTTPS verification origin required');
+  }
   const host = parsed.hostname.toLowerCase();
   // Reject noncanonical DNS labels even when the URL parser accepts them.
   // Trailing dots, underscores and edge hyphens can cause origin-policy or
