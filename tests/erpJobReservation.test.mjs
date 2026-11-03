@@ -204,6 +204,19 @@ test('reservation rejects lossy JSON payload values before any database write', 
   assert.equal(db.calls, 0);
 });
 
+test('reservation rejects empty accounting property names before database access', async () => {
+  const db = fakeDatabase();
+  for (const payload of [
+    { '': 100 },
+    { invoiceId: 'invoice-123', details: { '': 'recipient' } },
+    { lines: [{ '': 250 }] },
+  ]) {
+    await assert.rejects(reserve({ db, ...args, payload }),
+      /unsafe Unicode property name/);
+  }
+  assert.equal(db.calls, 0);
+});
+
 test('reservation rejects accessors without invoking them', async () => {
   const db = fakeDatabase();
   let invoked = 0;
