@@ -316,3 +316,14 @@ test('Google onboarding does not authenticate when Drive and local backup both f
   assert.doesNotMatch(failedBackup, /status:\s*'authenticated'/);
   assert.doesNotMatch(failedBackup, /clearStoredMembershipDraft\(/);
 });
+
+
+test('fresh Google profile cannot inherit a remembered tenant workspace', () => {
+  const remembered = Object.freeze({ ...pending('existing'), status: 'pending-gsi',
+    appData: { user: { id: 'old-principal' }, entities: [{ id: 'private-tenant' }] } });
+  const verified = { id: 'new-principal', email: 'new@example.test', name: 'New User' };
+  const next = admitVerifiedGoogleProfile(remembered, 'new-token', verified);
+  assert.equal(next.status, 'pending-drive-check');
+  assert.deepEqual(next.appData, { user: verified, entities: [] });
+  assert.equal(remembered.appData.entities[0].id, 'private-tenant');
+});
