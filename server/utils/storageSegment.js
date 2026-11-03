@@ -14,6 +14,7 @@ export function sanitizeStorageSegment(value) {
   if (
     typeof value !== 'string' ||
     !value.trim() ||
+    value !== value.normalize('NFC') ||
     value === '.' ||
     value === '..' ||
     /[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value) ||
