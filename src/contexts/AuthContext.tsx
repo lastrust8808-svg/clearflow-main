@@ -449,11 +449,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (state.localAccountId) {
       try {
         saveLocalAuthAppData(state.localAccountId, state.appData);
-        void saveAccountAppData(state.localAccountId, state.appData).catch((error) => {
-          console.warn('Failed to mirror local account data to durable storage.', error);
-        });
-        setSavingStatus('saved');
-        setTimeout(() => setSavingStatus('idle'), 2500);
+        void saveAccountAppData(state.localAccountId, state.appData)
+          .then(() => {
+            setSavingStatus('saved');
+            setTimeout(() => setSavingStatus('idle'), 2500);
+          })
+          .catch((error) => {
+            console.warn('Failed to mirror local account data to durable storage.', error);
+            setSavingStatus('error');
+          });
       } catch (err) {
         console.error('Failed to save local user data:', err);
         setSavingStatus('error');
