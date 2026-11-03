@@ -1498,12 +1498,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             })
             .catch((fallbackError) => {
               console.warn('Unable to complete Google onboarding fallback after Drive save error.', fallbackError);
+              // A failed Drive write and failed backup cannot establish a durable account.
+              // Preserve the draft for retry rather than reporting successful onboarding.
               setState((s) => ({
                 ...s,
-                appData: finalAppData,
-                status: 'authenticated',
+                appData: null,
+                token: null,
+                apiAccessToken: null,
+                localAccountId: null,
+                gsiUser: null,
+                pendingGoogleMode: null,
+                status: 'unauthenticated',
+                authMessage: 'Workspace setup could not be saved. Please sign in and retry.',
               }));
-              clearStoredMembershipDraft();
             });
         });
     } else if (state.token === 'mock-token') {
