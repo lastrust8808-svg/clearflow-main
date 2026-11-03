@@ -199,3 +199,12 @@ test('reserve journal identifiers accept valid supplementary Unicode but reject 
     assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
   }
 });
+
+
+test('reserve journal identifiers reject bidi override and isolate controls', () => {
+  for (const invalid of ['asset-\u202E1', 'asset-\u202A1', 'asset-\u20661', 'asset-\u20691']) {
+    assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ evidenceRef: invalid })]), /canonical nonempty identifier/);
+  }
+  assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
+});
