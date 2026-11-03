@@ -103,3 +103,10 @@ test('rejects non-NFC storage identifiers to prevent canonical identity aliases'
   assert.throws(() => sanitizeStorageSegment(decomposed), TypeError);
   assert.throws(() => sanitizeStorageSegment('member-' + decomposed), TypeError);
 });
+
+test('rejects Unicode line and paragraph separators in storage identities', () => {
+  for (const value of ['member\u2028admin', 'member\u2029admin']) {
+    assert.throws(() => sanitizeStorageSegment(value), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-admin'), 'member-admin');
+});
