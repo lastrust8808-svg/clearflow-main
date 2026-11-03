@@ -87,3 +87,13 @@ test('public QR origins reject noncanonical DNS labels without blocking valid pu
     assert.equal(digestTrustDocumentQrLink(link.url, 'https://' + host), link.tokenHashSha256);
   }
 });
+
+
+test('public QR origins reject nonstandard HTTPS listener ports', () => {
+  for (const port of ['8443', '3000', '8080', '65535']) {
+    assert.throws(() => createTrustDocumentQrLink('https://verify.example.org:' + port),
+      /Public DNS HTTPS verification origin required/);
+  }
+  const link = createTrustDocumentQrLink('https://verify.example.org');
+  assert.equal(digestTrustDocumentQrLink(link.url, 'https://verify.example.org'), link.tokenHashSha256);
+});
