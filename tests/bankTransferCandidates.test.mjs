@@ -316,3 +316,20 @@ test('transfer review uses inclusive three-day UTC calendar boundaries across le
     postedDate: '2027-02-29',
   })]), /Invalid transfer posting date/);
 });
+
+
+test('transfer review never pairs cross-currency, same-account or cross-connection records', () => {
+  const debit = row('checking', 'out-isolated', -1250, {
+    postedDate: '2028-02-29', providerReference: 'isolated-ref',
+  });
+  const cases = [
+    row('checking', 'same-account', 1250, { postedDate: '2028-02-29', providerReference: 'isolated-ref' }),
+    row('savings', 'other-currency', 1250, { postedDate: '2028-02-29', providerReference: 'isolated-ref', currency: 'EUR' }),
+    row('savings', 'other-connection', 1250, { postedDate: '2028-02-29', providerReference: 'isolated-ref', connectionId: 'item-b' }),
+    row('savings', 'other-provider', 1250, { postedDate: '2028-02-29', providerReference: 'isolated-ref', provider: 'mercury' }),
+  ];
+  for (const credit of cases) {
+    assert.deepEqual(plan([debit, credit]), { candidates: [], ambiguous: [] });
+    assert.deepEqual(plan([credit, debit]), { candidates: [], ambiguous: [] });
+  }
+});
