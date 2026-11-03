@@ -97,21 +97,21 @@ test('canonical SHA-256 journal fingerprint detects event changes without depend
 
 test('checkpointed append accepts only new events with an unchanged canonical history', () => {
   const previousSnapshot = { ...base, events: [record()] };
-  const checkpoint = projectReserveJournal(previousSnapshot).journalSha256;
+  const checkpoint = projectReserveJournal(previousSnapshot).checkpointSha256;
   const nextSnapshot = { ...base, events: [
     Object.fromEntries(Object.entries(record()).reverse()), remove(),
   ] };
   const result = verifyReserveJournalAppend(previousSnapshot, nextSnapshot, checkpoint);
   assert.equal(result.journalEventCount, 2);
   assert.equal(result.activeAssetCount, 0);
-  assert.notEqual(result.journalSha256, checkpoint);
+  assert.notEqual(result.checkpointSha256, checkpoint);
   assert.equal(Object.isFrozen(result), true);
 });
 
 test('checkpointed append rejects stale or malformed checkpoints and history rewrites', () => {
   const previous = { ...base, events: [record()] };
   const next = { ...base, events: [record(), remove()] };
-  const checkpoint = projectReserveJournal(previous).journalSha256;
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
   assert.throws(() => verifyReserveJournalAppend(previous, next, 'A'.repeat(64)),
     /lowercase SHA-256/);
   assert.throws(() => verifyReserveJournalAppend(previous, next, '0'.repeat(64)),
@@ -122,12 +122,12 @@ test('checkpointed append rejects stale or malformed checkpoints and history rew
   assert.throws(() => verifyReserveJournalAppend(previous, previous, checkpoint),
     /at least one new event/);
   assert.throws(() => verifyReserveJournalAppend(next, previous,
-    projectReserveJournal(next).journalSha256), /at least one new event/);
+    projectReserveJournal(next).checkpointSha256), /at least one new event/);
 });
 
 test('checkpointed append rejects scope changes, clock rollback and invalid new events', () => {
   const previous = { ...base, events: [record()] };
-  const checkpoint = projectReserveJournal(previous).journalSha256;
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
   const next = { ...base, events: [record(), remove()] };
   assert.throws(() => verifyReserveJournalAppend(previous, {
     ...next, asOfAt: '2026-11-01T20:00:00.000Z',
@@ -146,7 +146,7 @@ test('checkpointed append rejects scope changes, clock rollback and invalid new 
 
 test('checkpointed append refuses evidence freshness policy drift, even with otherwise valid replay', () => {
   const previous = { ...base, events: [record()] };
-  const checkpoint = projectReserveJournal(previous).journalSha256;
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
   const next = { ...base, events: [record(), remove()] };
   assert.equal(projectReserveJournal({ ...next, maxEvidenceAgeMs: 50_400_000 }).journalEventCount, 2);
   assert.throws(() => verifyReserveJournalAppend(previous, {
@@ -164,4 +164,29 @@ test('checkpointed append refuses evidence freshness policy drift, even with oth
   assert.equal(projectReserveJournal(staleUnderOldPolicy).activeAssetCount, 2);
   assert.throws(() => verifyReserveJournalAppend(previous, staleUnderOldPolicy, checkpoint),
     /cannot change evidence freshness policy/);
+});
+
+test('reserve checkpoint binds as-of time and freshness policy, unlike history-only digest', () => {
+  const previous = { ...base, events: [record()] };
+  const original = projectReserveJournal(previous);
+  const later = { ...previous, asOfAt: '2026-11-02T01:00:00.000Z' };
+  const wider = { ...previous, maxEvidenceAgeMs: 172_800_000 };
+  const reordered = { ...previous,
+    events: [Object.fromEntries(Object.entries(record()).reverse())] };
+  assert.match(original.checkpointSha256, /^[0-9a-f]{64}$/);
+  assert.equal(projectReserveJournal(reordered).checkpointSha256, original.checkpointSha256);
+  assert.equal(projectReserveJournal(later).journalSha256, original.journalSha256);
+  assert.equal(projectReserveJournal(wider).journalSha256, original.journalSha256);
+  assert.notEqual(projectReserveJournal(later).checkpointSha256, original.checkpointSha256);
+  assert.notEqual(projectReserveJournal(wider).checkpointSha256, original.checkpointSha256);
+
+  // A substituted predecessor snapshot cannot silently change the trusted
+  // evaluation time or policy, even when both sides of the append agree.
+  const next = { ...base, events: [record(), remove()] };
+  assert.throws(() => verifyReserveJournalAppend(later, {
+    ...next, asOfAt: '2026-11-02T02:00:00.000Z',
+  }, original.checkpointSha256), /checkpoint mismatch/);
+  assert.throws(() => verifyReserveJournalAppend(wider, {
+    ...next, maxEvidenceAgeMs: 172_800_000,
+  }, original.checkpointSha256), /checkpoint mismatch/);
 });
