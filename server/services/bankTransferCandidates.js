@@ -91,6 +91,10 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
   // Count posted + pending evidence before proposing any posted pair.
   const referenceCounts = new Map();
   const seen = new Set();
+  // Provider transaction IDs identify one source transaction within a
+  // connection, even when a malformed feed attributes it to two accounts.
+  // Never propose a transfer between two copies of the same provider event.
+  const seenProviderTransactions = new Set();
   for (let index = 0; index < transactions.length; index++) {
     const d = descriptors[String(index)];
     if (!d || !d.enumerable || !Object.hasOwn(d, 'value')) {
@@ -99,7 +103,12 @@ export function proposeBankTransferCandidates({ tenantId, transactions }) {
     const row = snapshotTransaction(d.value, tenantId);
     const key = identity(row);
     if (seen.has(key)) throw new Error('Duplicate transfer source identity.');
+    const providerTransactionKey = JSON.stringify([row.provider, row.connectionId, row.transactionId]);
+    if (seenProviderTransactions.has(providerTransactionKey)) {
+      throw new Error('Duplicate provider transaction identity across accounts.');
+    }
     seen.add(key);
+    seenProviderTransactions.add(providerTransactionKey);
     if ((row.status === 'posted' || row.status === 'pending') &&
         row.providerReference !== undefined) {
       const referenceKey = JSON.stringify([row.provider, row.connectionId, row.providerReference]);
