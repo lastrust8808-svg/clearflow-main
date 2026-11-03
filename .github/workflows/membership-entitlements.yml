@@ -11,6 +11,8 @@ on:
       - 'tests/membershipWebhookFixture.test.mjs'
       - 'tests/membershipAdmissionProjection.test.mjs'
       - 'src/domain/googleOnboardingTimeout.mjs'
+      - 'src/domain/googleAttemptAdmission.mjs'
+      - 'tests/googleAttemptAdmission.test.mjs'
       - 'src/contexts/AuthContext.tsx'
       - 'tests/googleOnboardingTimeout.test.mjs'
       - '.github/workflows/membership-entitlements.yml'
@@ -25,6 +27,6 @@ jobs:
         with:
           node-version: '22'
       - name: Check syntax
-        run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs && node --check src/domain/googleOnboardingTimeout.mjs
+        run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs && node --check src/domain/googleOnboardingTimeout.mjs && node --check src/domain/googleAttemptAdmission.mjs
       - name: Run deterministic entitlement tests
-        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs
+        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs tests/googleAttemptAdmission.test.mjs
