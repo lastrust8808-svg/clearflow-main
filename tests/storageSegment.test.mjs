@@ -68,7 +68,7 @@ test('rejects trailing periods that alias another directory on Windows', () => {
 });
 
 test('rejects reserved Windows device names including names with extensions', () => {
-  for (const value of ['CON', 'con', 'con.txt', 'PRN', 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv']) {
+  for (const value of ['CON', 'con', 'con.txt', 'PRN', 'AUX', 'NUL.json', 'COM1', 'com9.txt', 'LPT1', 'lpt9.csv', 'COM¹', 'com².txt', 'COM³', 'LPT¹', 'lpt².log', 'LPT³']) {
     assert.throws(() => sanitizeStorageSegment(value), TypeError, value);
   }
   for (const value of ['console', 'com10', 'lpt10', 'report.final', 'member@example.com']) {
