@@ -70,3 +70,33 @@ test('transfer review rejects accessor length-independent metadata and symbol pr
   assert.throws(() => review(accessorBatch), /Malformed transfer transaction batch/);
   assert.equal(called, false);
 });
+
+
+test('transfer review rejects hidden record fields and executable record metadata without evaluating accessors', () => {
+  const hidden = transaction(0);
+  Object.defineProperty(hidden, 'internalApproval', {
+    value: true, enumerable: false, configurable: true,
+  });
+  assert.throws(() => review([hidden]), /Invalid transfer source record/);
+
+  const symbolRecord = transaction(1);
+  symbolRecord[Symbol('approval')] = true;
+  assert.throws(() => review([symbolRecord]), /Invalid transfer source record/);
+
+  let getterCalls = 0;
+  const accessorRecord = transaction(2);
+  Object.defineProperty(accessorRecord, 'providerReference', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('untrusted provider getter executed'); },
+  });
+  assert.throws(() => review([accessorRecord]), /Invalid transfer source record/);
+  assert.equal(getterCalls, 0);
+
+  // Untrusted prototype-pollution keys must not be accepted as banking metadata.
+  const polluted = transaction(3);
+  Object.defineProperty(polluted, '__proto__', {
+    value: { approved: true }, enumerable: true, configurable: true,
+  });
+  assert.throws(() => review([polluted]), /Invalid transfer source record/);
+  assert.deepEqual(review([transaction(4)]), { candidates: [], ambiguous: [] });
+});
