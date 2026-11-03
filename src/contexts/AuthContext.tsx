@@ -468,8 +468,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       !state.apiAccessToken ||
       !state.appData ||
       !needsDriveCatchUpRef.current ||
-      state.status === 'pending-gsi' ||
-      state.status === 'pending-drive-check'
+      state.status !== 'authenticated'
     ) {
       return;
     }
