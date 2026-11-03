@@ -659,12 +659,12 @@ test('Unicode whitespace and default-ignorable characters are rejected by the ac
   for (const invisible of ['\u00a0', '\u200b', '\u202e', '\u2060', '\ufe0f']) {
     for (const key of Object.keys(scope)) {
       assert.throws(() => projectPrivateNoteLifecycle({
-        ...scope, [key]: scope[key] + invisible,
+        ...scope, [key]: scope[key] + invisible + '-suffix',
         asOfAt: '2026-11-01T00:00:00.000Z', events: [],
       }), /invisible formatting or whitespace/);
     }
     for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
-      assert.throws(() => project([event('issued', 1, { [key]: 'identifier' + invisible })]),
+      assert.throws(() => project([event('issued', 1, { [key]: 'identifier' + invisible + '-suffix' })]),
         /invisible formatting or whitespace/);
     }
   }
