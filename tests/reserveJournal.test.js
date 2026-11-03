@@ -195,7 +195,7 @@ test('reserve journal identifiers accept valid supplementary Unicode but reject 
   const emoji = '\u{1F512}';
   const valid = record({ assetId: 'asset-' + emoji });
   assert.equal(project([valid]).activeAssetCount, 1);
-  for (const invalid of ['asset-\\uD800', 'asset-\\uDC00', 'asset-\\uD800x']) {
+  for (const invalid of ['asset-\uD800', 'asset-\uDC00', 'asset-\uD800x']) {
     assert.throws(() => project([record({ assetId: invalid })]), /canonical nonempty identifier/);
   }
 });
