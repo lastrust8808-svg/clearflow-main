@@ -117,3 +117,11 @@ test('rejects edge whitespace in storage identities while allowing internal spac
   }
   assert.equal(sanitizeStorageSegment('member account'), 'member%20account');
 });
+
+
+test('rejects Unicode noncharacters in account and document identifiers', () => {
+  for (const code of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+    assert.throws(() => sanitizeStorageSegment('member-' + String.fromCodePoint(code)), TypeError);
+  }
+  assert.equal(sanitizeStorageSegment('member-🙂'), 'member-%F0%9F%99%82');
+});
