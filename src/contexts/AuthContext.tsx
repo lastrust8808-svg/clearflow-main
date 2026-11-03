@@ -3,7 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
-import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery } from '../domain/googleOnboardingTimeout.mjs';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery, admitVerifiedGoogleProfile } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -336,7 +336,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
-    userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
       name: profile.name || profile.email,
@@ -345,14 +344,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       primaryContactType: 'google',
     };
 
-    setState((current) => ({
-      ...current,
-      token: current.token || 'google-oauth-token',
-      apiAccessToken: accessToken,
-      status: 'pending-drive-check',
-      gsiUser: { name: provisionalUser.name, email: provisionalUser.email || '' },
-      appData: current.appData || { user: provisionalUser, entities: [] },
-    }));
+    // A late OAuth profile response must not reopen a timed-out, logged-out,
+    // or independently authenticated workspace. The Drive effect sets the
+    // active email only after the pending session has been admitted.
+    setState((current) =>
+      admitVerifiedGoogleProfile(current, accessToken, provisionalUser) as AuthState
+    );
   }, []);
 
   const exchangeGoogleAuthorizationCode = useCallback(async (code: string) => {
