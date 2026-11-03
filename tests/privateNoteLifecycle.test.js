@@ -689,3 +689,20 @@ test('private-note identifiers enforce 256 UTF-16 code-unit boundary across role
   assert.throws(() => project([event('issued', 1, { actorId: boundary + 'x' })]),
     /exceeds maximum identifier length/);
 });
+
+test('private-note identifiers reject reserved Unicode noncharacters across roles', () => {
+  for (const cp of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x1FFFF, 0x10FFFE, 0x10FFFF]) {
+    const invalid = 'id-' + String.fromCodePoint(cp) + '-suffix';
+    for (const key of Object.keys(scope)) {
+      assert.throws(() => projectPrivateNoteLifecycle({
+        ...scope, [key]: invalid,
+        asOfAt: '2026-11-01T00:00:00.000Z', events: [],
+      }), /Unicode noncharacters/);
+    }
+    for (const key of ['eventId', 'actorId', 'documentRef', 'evidenceRef']) {
+      assert.throws(() => project([event('issued', 1, { [key]: invalid })]),
+        /Unicode noncharacters/);
+    }
+  }
+  assert.equal(project([event('issued', 1, { actorId: 'actor-🚀' })]).status, 'issued');
+});
