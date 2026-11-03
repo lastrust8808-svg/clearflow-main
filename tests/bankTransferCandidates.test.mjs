@@ -245,3 +245,16 @@ test('provider transaction ID reuse across accounts fails closed before transfer
     row('savings', 'credit-id', 2500),
   ]).candidates.length, 1);
 });
+
+
+test('noncanonical Unicode source identifiers fail closed before transfer matching', () => {
+  const decomposed = 'cafe\\u0301';
+  const composed = 'caf\\u00e9';
+  for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
+    const invalid = row('checking', 'out', -500, { [field]: decomposed });
+    assert.throws(() => plan([invalid], field === 'tenantId' ? decomposed : 'tenant-a'),
+      /Invalid authorized transfer scope|Invalid or unauthorized transfer source record/);
+    const valid = row('checking', 'out', -500, { [field]: composed });
+    assert.doesNotThrow(() => plan([valid], field === 'tenantId' ? composed : 'tenant-a'));
+  }
+});
