@@ -28,7 +28,7 @@ function identifier(value, field) {
   }
   // Reserved Unicode noncharacters are not valid audit identifiers. Reject
   // both BMP and supplementary-plane noncharacters before persistence.
-  if (/[\\uFDD0-\\uFDEF\\uFFFE\\uFFFF]/u.test(value) ||
+  if (/[\uFDD0-\uFDEF\uFFFE\uFFFF]/u.test(value) ||
       [...value].some(char => {
         const point = char.codePointAt(0);
         return point > 0xFFFF && (point & 0xFFFE) === 0xFFFE;
