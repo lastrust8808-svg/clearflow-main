@@ -2177,3 +2177,19 @@ test('worker claim rejects noncanonical persisted actor and UUID receipts before
   assert.equal(receipt.status, 'processing');
   assert.equal('delivered' in receipt, false);
 });
+
+test('ERP reservation rejects multiline Unicode JSON field names before database access', async () => {
+  for (const separator of ['\u2028', '\u2029']) {
+    const db = fakeDatabase();
+    const payload = { invoiceId: 'invoice-123', ['amount' + separator + 'Cents']: 100 };
+    await assert.rejects(
+      reserve({ db, ...args, payload }),
+      /unsafe Unicode property name/,
+    );
+    assert.equal(db.calls, 0, 'unsafe financial field name must fail before persistence');
+  }
+  const db = fakeDatabase();
+  const accepted = await reserve({ db, ...args, payload: { amountCents: 100 } });
+  assert.equal(accepted.status, 'queued');
+  assert.equal(db.calls, 1);
+});
