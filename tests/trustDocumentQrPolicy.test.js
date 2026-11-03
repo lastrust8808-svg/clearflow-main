@@ -64,7 +64,8 @@ test('does not mutate URLs or return document metadata on token lookup', () => {
 
 test('public QR links reject loopback, IP literals and internal-only DNS origins', () => {
   for (const host of ['localhost', 'localhost.local', 'service.internal',
-    'service.test', 'service.invalid', 'service.local', 'service.localhost', '127.0.0.1', '10.0.0.8', '192.168.1.1', '172.16.0.1',
+    'service.test', 'service.invalid', 'service.example', 'service.onion',
+    'router.home.arpa', 'home.arpa', 'service.local', 'service.localhost', '127.0.0.1', '10.0.0.8', '192.168.1.1', '172.16.0.1',
     '[::1]', '[2001:db8::1]', 'intranet']) {
     assert.throws(() => createTrustDocumentQrLink('https://' + host),
       /Public DNS HTTPS verification origin required/);
