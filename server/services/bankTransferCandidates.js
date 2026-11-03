@@ -85,7 +85,24 @@ function identity(row) {
  * Returns unique, review-only candidate pairs and ambiguous source IDs.
  * Neither returned array is a posting instruction or a controller approval.
  */
-export function proposeBankTransferCandidates({ tenantId, transactions }) {
+export function proposeBankTransferCandidates(scope) {
+  // Never invoke an accessor while obtaining the trusted caller's review scope.
+  // Authorization must be established by the server, not by executable input.
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) ||
+      nodeTypes.isProxy(scope) ||
+      (Object.getPrototypeOf(scope) !== Object.prototype &&
+       Object.getPrototypeOf(scope) !== null)) {
+    throw new Error('Invalid authorized transfer scope or batch.');
+  }
+  const scopeDescriptors = Object.getOwnPropertyDescriptors(scope);
+  if (Reflect.ownKeys(scopeDescriptors).length !== 2 ||
+      !['tenantId', 'transactions'].every((key) =>
+        Object.hasOwn(scopeDescriptors, key) &&
+        scopeDescriptors[key].enumerable &&
+        Object.hasOwn(scopeDescriptors[key], 'value'))) {
+    throw new Error('Invalid authorized transfer scope or batch.');
+  }
+  const { tenantId, transactions } = scope;
   if (!validId(tenantId) || !Array.isArray(transactions) ||
       nodeTypes.isProxy(transactions) ||
       Object.getPrototypeOf(transactions) !== Array.prototype ||
