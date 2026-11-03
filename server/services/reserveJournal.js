@@ -180,8 +180,15 @@ export function projectReserveJournal(snapshot) {
     format: 'clearflow-reserve-journal-v1', ...scope, currency: snapshot.currency,
     events: snapshot.events.map(canonicalJournalEvent),
   })).digest('hex');
-  return Object.freeze({ ...capacity, journalSha256, journalEventCount: eventIds.size,
-    activeAssetCount: active.size, removedAssetCount });
+  // Unlike the history-only fingerprint, this checkpoint binds the evaluated
+  // as-of instant and evidence freshness policy. A caller must obtain the
+  // expected digest from separately authenticated durable storage.
+  const checkpointSha256 = createHash('sha256').update(JSON.stringify({
+    format: 'clearflow-reserve-checkpoint-v1', journalSha256,
+    asOfAt: snapshot.asOfAt, maxEvidenceAgeMs: snapshot.maxEvidenceAgeMs,
+  })).digest('hex');
+  return Object.freeze({ ...capacity, journalSha256, checkpointSha256,
+    journalEventCount: eventIds.size, activeAssetCount: active.size, removedAssetCount });
 }
 
 
@@ -190,6 +197,7 @@ export function projectReserveJournal(snapshot) {
  * predecessor checkpoint. This is a pure preflight gate: it neither persists
  * the new journal nor makes an untrusted checkpoint authoritative.
  *
+ * The expected digest binds the predecessor history, as-of instant and policy.
  * The caller must obtain expectedPreviousSha256 from trusted durable storage,
  * authorize both scopes, and atomically compare-and-swap the stored checkpoint
  * before committing any append. A caller-supplied digest alone is insufficient.
@@ -203,7 +211,7 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   // comparison. The previous snapshot must independently pass its own policy.
   const previous = projectReserveJournal(previousSnapshot);
   const next = projectReserveJournal(nextSnapshot);
-  if (previous.journalSha256 !== expectedPreviousSha256) {
+  if (previous.checkpointSha256 !== expectedPreviousSha256) {
     throw new Error('Reserve journal predecessor checkpoint mismatch');
   }
   for (const field of [...SCOPE_FIELDS, 'currency']) {
