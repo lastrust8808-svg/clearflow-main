@@ -373,3 +373,33 @@ test('transfer review rejects impossible century leap dates and accepts valid Gr
   assert.equal(result.candidates[0].dayGap, 1);
   assert.equal(result.candidates[0].status, 'review_required');
 });
+
+test('transfer review scope rejects executable accessors and proxies without evaluating them', () => {
+  let getterCalls = 0;
+  const debit = row('checking', 'scope-debit', -500);
+  const ordinary = { tenantId: 'tenant-a', transactions: [debit] };
+  for (const field of ['tenantId', 'transactions']) {
+    const scope = { ...ordinary };
+    Object.defineProperty(scope, field, {
+      enumerable: true,
+      get() { getterCalls++; throw new Error('scope getter executed'); },
+    });
+    assert.throws(() => proposeBankTransferCandidates(scope),
+      /Invalid authorized transfer scope or batch/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.throws(() => proposeBankTransferCandidates(new Proxy(ordinary, {
+    get() { throw new Error('proxy trap executed'); },
+  })), /Invalid authorized transfer scope or batch/);
+  for (const scope of [
+    Object.assign(Object.create(null), ordinary, { extra: true }),
+    { tenantId: 'tenant-a' },
+    [ordinary],
+    null,
+  ]) {
+    assert.throws(() => proposeBankTransferCandidates(scope),
+      /Invalid authorized transfer scope or batch/);
+  }
+  assert.deepEqual(proposeBankTransferCandidates(ordinary),
+    { candidates: [], ambiguous: [] });
+});
