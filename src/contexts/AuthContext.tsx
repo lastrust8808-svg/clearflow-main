@@ -414,9 +414,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await userDataService.saveUserData(token, data);
       const googleDurableAccountId = buildGoogleDurableAccountId(data.user.email);
       if (googleDurableAccountId) {
-        void saveAccountAppData(googleDurableAccountId, data).catch((error) => {
-          console.warn('Failed to mirror Google workspace to durable storage.', error);
-        });
+        // Do not report saved until the durable workspace mirror confirms.
+        await saveAccountAppData(googleDurableAccountId, data);
       }
       setSavingStatus('saved');
       setTimeout(() => setSavingStatus('idle'), 2500); // Show 'saved' for 2.5s
