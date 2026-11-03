@@ -243,3 +243,16 @@ test('reserve identifiers reject Unicode whitespace in all identity positions', 
   }
   assert.equal(project([record({ assetId: 'asset-🔒' })]).activeAssetCount, 1);
 });
+
+
+test('reserve identifiers enforce a bounded length without truncation', () => {
+  const maximum = 'a'.repeat(256);
+  assert.equal(project([record({ assetId: maximum })]).activeAssetCount, 1);
+  for (const oversized of ['a'.repeat(257), '🔒'.repeat(129)]) {
+    assert.throws(() => project([record({ assetId: oversized })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ eventId: oversized })]), /canonical nonempty identifier/);
+    assert.throws(() => project([record({ evidenceRef: oversized })]), /canonical nonempty identifier/);
+    assert.throws(() => projectReserveJournal({ ...base, tenantId: oversized, events: [] }),
+      /canonical nonempty identifier/);
+  }
+});
