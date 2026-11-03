@@ -34,3 +34,21 @@ test('Unicode line and paragraph separators cannot split audited ERP identities'
     assert.equal(queries, 0, 'invalid identities must be rejected before SQL');
   }
 });
+
+test('Unicode nonbreaking spaces cannot disguise financial JSON field names', async () => {
+  for (const separator of ['\u00a0', '\u2007', '\u202f']) {
+    let queries = 0;
+    const db = { async query() { queries++; throw new Error('unexpected database call'); } };
+    await assert.rejects(
+      reserveErpOperationJob({
+        db,
+        authenticatedScope: { tenantId: 'tenant-a', actorId: 'actor-a' },
+        operation: 'invoice_delivery',
+        idempotencyKey: 'unique-key-123',
+        payload: { ['amount' + separator + 'Cents']: 125 },
+      }),
+      /unsafe Unicode property name/,
+    );
+    assert.equal(queries, 0, 'confusable accounting keys must fail before SQL');
+  }
+});
