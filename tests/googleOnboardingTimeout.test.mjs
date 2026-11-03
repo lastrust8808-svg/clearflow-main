@@ -301,3 +301,18 @@ test('Google profile admission rejects malformed and noncanonical email identiti
     { email: 'valid.user@example.test', name: 'Test' });
   assert.equal(accepted.status, 'pending-drive-check');
 });
+
+
+test('Google onboarding does not authenticate when Drive and local backup both fail', () => {
+  const source = readFileSync(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf("console.warn('Unable to complete Google onboarding fallback after Drive save error.'");
+  const end = source.indexOf('\n            });', start);
+  assert.ok(start >= 0 && end > start, 'failed backup branch must be present');
+  const failedBackup = source.slice(start, end);
+  assert.match(failedBackup, /status:\s*'unauthenticated'/);
+  assert.match(failedBackup, /apiAccessToken:\s*null/);
+  assert.match(failedBackup, /appData:\s*null/);
+  assert.match(failedBackup, /authMessage:\s*'Workspace setup could not be saved/);
+  assert.doesNotMatch(failedBackup, /status:\s*'authenticated'/);
+  assert.doesNotMatch(failedBackup, /clearStoredMembershipDraft\(/);
+});
