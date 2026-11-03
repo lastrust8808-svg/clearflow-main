@@ -136,6 +136,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     apiAccessToken: accessToken,
     status: 'pending-drive-check',
     gsiUser: { name: user.name, email: user.email },
-    appData: current.appData || { user, entities: [] },
+    // A cached account snapshot is not evidence for this OAuth attempt.
+    appData: { user, entities: [] },
   };
 }
