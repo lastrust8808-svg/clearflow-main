@@ -93,3 +93,13 @@ test('rejects unpaired UTF-16 surrogates as invalid identifiers but preserves va
   }
   assert.equal(sanitizeStorageSegment('🙂'), '%F0%9F%99%82');
 });
+
+test('rejects non-NFC storage identifiers to prevent canonical identity aliases', () => {
+  const composed = '\u00e9quipe';
+  const decomposed = 'e\u0301quipe';
+  assert.notEqual(composed, decomposed);
+  assert.equal(decomposed.normalize('NFC'), composed);
+  assert.equal(sanitizeStorageSegment(composed), encodeURIComponent(composed));
+  assert.throws(() => sanitizeStorageSegment(decomposed), TypeError);
+  assert.throws(() => sanitizeStorageSegment('member-' + decomposed), TypeError);
+});
