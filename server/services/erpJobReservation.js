@@ -148,7 +148,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     for (const [key, descriptor] of Object.entries(descriptors)) {
       // JSON.stringify silently omits non-enumerable object properties.
       // Reject them rather than hashing/storing a different financial payload.
-      // Invisible controls and bidi formatting in JSON field names can
+      // Invisible controls, Unicode spacing and bidi formatting in JSON field names can
       // disguise financial keys (for example amountCents with a zero-width
       // character), bypassing the minor-unit type guard and misleading audits.
       // Free-text VALUES may still contain ordinary newlines; only object
@@ -156,7 +156,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       if (/\p{Cs}/u.test(key)) {
         throw new TypeError('ERP job payload contains malformed Unicode');
       }
-      if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(key) || key !== key.normalize('NFC')) {
+      if (/[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(key) || key !== key.normalize('NFC')) {
         // Canonically equivalent JSON keys must not be distinct accounting
         // fields or idempotency inputs (e.g. composed vs decomposed accents).
         // Keep legitimate NFC international labels available.
