@@ -66,6 +66,14 @@ function identifier(value, label) {
       /(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u.test(value) || value.normalize('NFC') !== value) {
     throw new TypeError(label + ' must be a canonical nonempty identifier');
   }
+  // Unicode noncharacters are not portable external identity values. Match
+  // private-note identifiers, including U+FFFE/U+FFFF on supplementary planes.
+  for (const scalar of value) {
+    const cp = scalar.codePointAt(0);
+    if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFF) >= 0xFFFE) {
+      throw new TypeError(label + ' must be a canonical nonempty identifier');
+    }
+  }
   return value;
 }
 
