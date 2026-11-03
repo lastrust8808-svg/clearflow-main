@@ -52,6 +52,14 @@ function requiredId(value, field) {
   if (/\p{White_Space}|\p{Default_Ignorable_Code_Point}/u.test(value)) {
     throw new TypeError(field + ' must not contain invisible formatting or whitespace');
   }
+  // Unicode noncharacters are reserved code points, not portable external IDs.
+  // Reject U+FDD0..FDEF and the final two code points of every Unicode plane.
+  for (const scalar of value) {
+    const cp = scalar.codePointAt(0);
+    if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFE) === 0xFFFE) {
+      throw new TypeError(field + ' must not contain Unicode noncharacters');
+    }
+  }
   // A journal must not treat canonically equivalent Unicode spellings as
   // independent actors, events, document versions or provenance records.
   // Reject aliases instead of silently changing externally persisted IDs.
