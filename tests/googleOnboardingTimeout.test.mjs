@@ -272,7 +272,7 @@ test('React OAuth hydration uses guarded admission and cannot mutate active Driv
   const end = source.indexOf('const exchangeGoogleAuthorizationCode = useCallback(', start);
   assert.ok(start >= 0 && end > start, 'Google hydration must be bounded');
   const hydrate = source.slice(start, end);
-  assert.match(hydrate, /admitVerifiedGoogleProfile\\(current, accessToken, provisionalUser\\)/);
-  assert.doesNotMatch(hydrate, /userDataService\\.setActiveUserEmail\\(/);
-  assert.doesNotMatch(hydrate, /status:\\s*'pending-drive-check'/);
+  assert.match(hydrate, /admitVerifiedGoogleProfile\(current, accessToken, provisionalUser\)/);
+  assert.doesNotMatch(hydrate, /userDataService\.setActiveUserEmail\(/);
+  assert.doesNotMatch(hydrate, /status:\s*'pending-drive-check'/);
 });
