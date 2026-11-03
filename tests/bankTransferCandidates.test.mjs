@@ -282,3 +282,20 @@ test('Unicode noncharacters cannot enter provider-scoped banking identities', ()
   }
   assert.equal(plan([row('checking', 'out', -500), row('savings', 'in', 500)]).candidates.length, 1);
 });
+
+
+test('transfer candidates reject unsafe, fractional and signed-zero cent amounts', () => {
+  for (const amountCents of [Number.MAX_SAFE_INTEGER + 1, Number.MIN_SAFE_INTEGER - 1,
+    0.5, -0.5, Number.POSITIVE_INFINITY, Number.NaN, -0, 0]) {
+    assert.throws(() => plan([row('checking', 'out', amountCents)]),
+      /Invalid or unauthorized transfer source record/);
+  }
+  const max = Number.MAX_SAFE_INTEGER;
+  const result = plan([
+    row('checking', 'out', -max),
+    row('savings', 'in', max),
+  ]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].amountCents, max);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
