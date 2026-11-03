@@ -26,6 +26,16 @@ function canonicalOrigin(value) {
       parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
     throw new TypeError('Canonical HTTPS verification origin required');
   }
+  // Published verification links must not target loopback, private-network
+  // IP literals, or single-label/internal hostnames. HTTPS alone does not
+  // make a private service an appropriate public QR destination. Runtime
+  // deployment must additionally pin an approved origin and control DNS.
+  const host = parsed.hostname.toLowerCase();
+  if (!host.includes('.') || host.startsWith('[') ||
+      /^\\d+(?:\\.\\d+){3}$/.test(host) ||
+      /\\.(?:localhost|local|internal|test|invalid)$/.test(host)) {
+    throw new TypeError('Public DNS HTTPS verification origin required');
+  }
   return value;
 }
 
