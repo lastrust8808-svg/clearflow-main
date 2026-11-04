@@ -959,12 +959,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       authMessage: null,
     }));
 
+    try {
       activeTokenClient.requestCode({
-        prompt:
-          mode === 'new'
-            ? 'consent select_account'
-            : '',
+        prompt: mode === 'new' ? 'consent select_account' : '',
       });
+    } catch (error) {
+      // A synchronous popup/SDK failure must never be reported as a successful
+      // authorization start. Do not advance any existing authenticated session.
+      console.error('Google authorization popup could not start:', error);
+      setState((current) =>
+        current.status === 'pending-gsi'
+          ? { ...current, status: 'unauthenticated', pendingGoogleMode: null,
+              authMessage: 'Google sign-in could not start. Please try again.' }
+          : current
+      );
+      return { success: false, error: 'Google sign-in could not start. Please try again.' };
+    }
 
     return { success: true };
   }, [ensureGoogleClients, isConfigured, tokenClient]);
