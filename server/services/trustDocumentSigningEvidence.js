@@ -37,8 +37,8 @@ function identifier(value, field) {
   }
   // Directional formatting controls can visually reorder signer and evidence
   // identifiers in review screens without changing their stored identity.
-  if (/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/u.test(value)) {
-    throw new TypeError(field + ' must not contain bidirectional formatting controls');
+  if (/\p{Default_Ignorable_Code_Point}/u.test(value)) {
+    throw new TypeError(field + ' must not contain invisible Unicode formatting controls');
   }
   // Bound every signing identity and evidence pointer before storage or hashing.
   // Count UTF-16 code units consistently with the trust ledger identifiers.
