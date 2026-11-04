@@ -339,3 +339,19 @@ test('same-account debit and credit cannot masquerade as an internal account tra
   assert.equal(result.candidates[0].status, 'review_required');
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('same reference and amount cannot pair across currencies or calendar windows', () => {
+  const debit = { ...transaction(170), accountId: 'checking', amountCents: -1250,
+    postedDate: '2026-10-30', providerReference: 'boundary-170' };
+  const foreignCurrency = { ...transaction(171), accountId: 'savings', amountCents: 1250,
+    currency: 'EUR', postedDate: '2026-10-31', providerReference: 'boundary-170' };
+  const lateCredit = { ...foreignCurrency, currency: 'USD', postedDate: '2026-11-03' };
+  assert.deepEqual(review([debit, foreignCurrency]), { candidates: [], ambiguous: [] });
+  assert.deepEqual(review([foreignCurrency, debit]), { candidates: [], ambiguous: [] });
+  assert.deepEqual(review([debit, lateCredit]), { candidates: [], ambiguous: [] });
+  const eligible = { ...lateCredit, postedDate: '2026-11-02' };
+  const result = review([debit, eligible]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].dayGap, 3);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
