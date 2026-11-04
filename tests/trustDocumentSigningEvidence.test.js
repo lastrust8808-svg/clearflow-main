@@ -830,11 +830,11 @@ test('signing audit identifiers reject bidirectional display controls', () => {
   for (const control of ['\u200E', '\u200F', '\u202A', '\u202E', '\u2066', '\u2069']) {
     for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
       assert.throws(() => assess({ [key]: 'id-' + control + 'suffix' }),
-        /bidirectional formatting controls/);
+        /invisible Unicode formatting controls/);
     }
     for (const key of ['signerId', 'identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
       assert.throws(() => assess({ attestations: [attestation('a', { [key]: 'ref-' + control + 'suffix' })] }),
-        /bidirectional formatting controls/);
+        /invisible Unicode formatting controls/);
     }
   }
   assert.equal(assess().status, 'evidence_ready_for_review');
