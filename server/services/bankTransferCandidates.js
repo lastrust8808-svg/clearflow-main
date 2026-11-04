@@ -27,7 +27,7 @@ function containsNoncharacter(value) {
 }
 
 function validId(value) {
-  return typeof value === 'string' && value.length > 0 &&
+  return typeof value === 'string' && value.trim().length > 0 &&
     value.length <= 256 && value === value.trim() && value === value.normalize('NFC') && value.isWellFormed() &&
     !containsNoncharacter(value) &&
     // Reject invisible or lookalike Unicode spacing in provider identity keys.
