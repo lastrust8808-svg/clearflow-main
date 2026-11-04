@@ -151,6 +151,15 @@ test('duplicate signers and reused evidence refs fail closed', () => {
     consentEvidenceRef: 'receipt-a',
   })] }), /Reused signing evidence/);
 });
+test('signing evidence references cannot impersonate scope or signer identities', () => {
+  for (const key of ['identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
+    for (const alias of [...Object.values(scope), 'a']) {
+      assert.throws(() => assess({ attestations: [attestation('a', { [key]: alias })] }),
+        /Signing evidence reference collides with scope or signer identity/);
+    }
+  }
+  assert.equal(assess().status, 'evidence_ready_for_review');
+});
 test('identity evidence is mandatory, unique, and distinct from consent and signature receipts', () => {
   assert.throws(() => assess({ attestations: [attestation('a', {
     identityEvidenceRef: undefined,
