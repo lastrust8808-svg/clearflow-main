@@ -2298,3 +2298,22 @@ test('ERP lease renewal rejects future-dated persisted receipts without fallback
     assert.equal(calls, 1, 'invalid renewal must not trigger fallback reads');
   }
 });
+
+test('ERP initial worker claim rejects an implausibly extended lease receipt', async () => {
+  const now = Date.now();
+  let calls = 0;
+  const db = { async query() {
+    calls++;
+    return { rows: [claimedRow({
+      created_at: new Date(now - 2000),
+      claimed_at: new Date(now - 1000),
+      updated_at: new Date(now),
+      lease_expires_at: new Date(now + 60 * 60 * 1000),
+    })] };
+  } };
+  await assert.rejects(claim({
+    db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    leaseSeconds: 60,
+  }), /invalid worker lease timestamp/);
+  assert.equal(calls, 1, 'implausible lease cannot trigger fallback queries');
+});
