@@ -438,3 +438,21 @@ test('fixture bounds HMAC secret size without rejecting valid keys', () => {
   assert.equal(verify(input({ secret: 'x'.repeat(4096) })), false);
   assert.equal(verify(input()), true);
 });
+
+
+test('signed fixture bounds JSON nesting before scoped event admission', () => {
+  const canonical = JSON.stringify(scopedPayload);
+  for (const depth of [64, 65, 256]) {
+    const rawBody = Buffer.from('['.repeat(depth) + canonical + ']'.repeat(depth));
+    const signed = scopedInput(scopedPayload, { rawBody, signatureHeader: sign(rawBody) });
+    assert.equal(verify(signed), true, 'valid signature remains independently verifiable');
+    assert.equal(verifyScoped(signed), null, 'nested arrays cannot become verified events');
+  }
+  // Nested unexpected claims inside an otherwise valid signed event also fail.
+  const rawBody = Buffer.from(JSON.stringify(scopedPayload).slice(0, -1) +
+    ',"extra":' + '['.repeat(65) + '0' + ']'.repeat(65) + '}');
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody, signatureHeader: sign(rawBody),
+  })), null);
+  assert.equal(verifyScoped(scopedInput(scopedPayload))?.verified, true);
+});
