@@ -120,6 +120,7 @@ export function proposeBankTransferCandidates(scope) {
   // reference can prove that the reference is not a unique transfer ID.
   // Count posted + pending evidence before proposing any posted pair.
   const referenceCounts = new Map();
+  const pendingReferences = new Set();
   const seen = new Set();
   // Provider transaction IDs identify one source transaction within a
   // connection, even when a malformed feed attributes it to two accounts.
@@ -143,6 +144,7 @@ export function proposeBankTransferCandidates(scope) {
         row.providerReference !== undefined) {
       const referenceKey = JSON.stringify([row.provider, row.connectionId, row.providerReference]);
       referenceCounts.set(referenceKey, (referenceCounts.get(referenceKey) ?? 0) + 1);
+      if (row.status === 'pending') pendingReferences.add(referenceKey);
       if (row.status === 'posted') rows.push(row);
     }
   }
@@ -151,7 +153,8 @@ export function proposeBankTransferCandidates(scope) {
   // connection-scoped reference make every posted source ambiguous. Removed
   // and superseded records do not count as current transfer evidence.
   const hasReferenceCollision = (row) =>
-    referenceCounts.get(JSON.stringify([row.provider, row.connectionId, row.providerReference])) > 2;
+    referenceCounts.get(JSON.stringify([row.provider, row.connectionId, row.providerReference])) > 2 ||
+    pendingReferences.has(JSON.stringify([row.provider, row.connectionId, row.providerReference]));
 
   const adjacency = new Map(rows.map((row) => [identity(row), []]));
   const byId = new Map(rows.map((row) => [identity(row), row]));
