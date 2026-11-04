@@ -68,3 +68,13 @@ test('invalid supplied delivery evidence is rejected before preparation chronolo
   assert.throws(() => assess({...base, preparedAt:futurePreparation, deliveryEvidenceRef:base.noticeId}), /reused/);
   assert.equal(assess({...base, preparedAt:futurePreparation}).reason, 'preparation_after_evaluation');
 });
+
+test('delivery evidence cannot impersonate any notice scope or preparation identity', () => {
+  for (const key of ['tenantId', 'trustId', 'noteId', 'noticeId', 'noticeVersionId', 'preparedEvidenceRef']) {
+    assert.throws(() => assess({ ...base, deliveryEvidenceRef: base[key] }), /reused/, key);
+  }
+  for (const invalid of ['', ' ', 'delivery ref', 'delivery/1', 42, true]) {
+    assert.throws(() => assess({ ...base, deliveryEvidenceRef: invalid }), /Invalid/, String(invalid));
+  }
+  assert.equal(assess({ ...base, deliveryEvidenceRef: 'delivery-2' }).status, 'evidence_ready_for_review');
+});
