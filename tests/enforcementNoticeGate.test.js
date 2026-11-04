@@ -61,3 +61,10 @@ test('partial delivery timestamps cannot bypass chronology checks', () => {
   assert.equal(assess({...base, deliveryEvidenceRef:undefined, preparedAt:'2026-11-03T10:30:00.000Z'}).reason, 'delivery_before_preparation');
   assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason, 'partial_delivery_evidence');
 });
+
+test('invalid supplied delivery evidence is rejected before preparation chronology classification', () => {
+  const futurePreparation = '2026-11-03T12:00:00.000Z';
+  assert.throws(() => assess({...base, preparedAt:futurePreparation, deliveredAt:'2026-02-30T10:00:00.000Z'}), /canonical/);
+  assert.throws(() => assess({...base, preparedAt:futurePreparation, deliveryEvidenceRef:base.noticeId}), /reused/);
+  assert.equal(assess({...base, preparedAt:futurePreparation}).reason, 'preparation_after_evaluation');
+});
