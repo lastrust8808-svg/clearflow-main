@@ -355,3 +355,21 @@ test('same reference and amount cannot pair across currencies or calendar window
   assert.equal(result.candidates[0].dayGap, 3);
   assert.equal(result.candidates[0].status, 'review_required');
 });
+
+
+test('provider identity cannot be replayed across removed, pending, and posted lifecycle rows', () => {
+  const posted = { ...transaction(180), accountId: 'checking', amountCents: -420,
+    providerReference: 'lifecycle-180' };
+  const removed = { ...posted, status: 'removed' };
+  const pending = { ...posted, status: 'pending' };
+  const credit = { ...transaction(181), accountId: 'savings', amountCents: 420,
+    providerReference: 'lifecycle-180' };
+  for (const stale of [removed, pending]) {
+    assert.throws(() => review([stale, posted, credit]), /Duplicate transfer source identity/);
+    assert.throws(() => review([credit, posted, stale]), /Duplicate transfer source identity/);
+  }
+  const canonical = review([posted, credit]);
+  assert.equal(canonical.candidates.length, 1);
+  assert.equal(canonical.candidates[0].status, 'review_required');
+  assert.deepEqual(canonical.ambiguous, []);
+});
