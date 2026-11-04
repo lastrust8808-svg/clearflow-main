@@ -324,3 +324,18 @@ test('identical transfer references in independent providers produce separate re
   assert.deepEqual(result.ambiguous, []);
   assert.deepEqual(review([...rows].reverse()), result);
 });
+
+test('same-account debit and credit cannot masquerade as an internal account transfer', () => {
+  const debit = { ...transaction(160), accountId: 'checking', amountCents: -900,
+    providerReference: 'same-account-160' };
+  const credit = { ...transaction(161), accountId: 'checking', amountCents: 900,
+    providerReference: 'same-account-160' };
+  assert.deepEqual(review([debit, credit]), { candidates: [], ambiguous: [] });
+  assert.deepEqual(review([credit, debit]), { candidates: [], ambiguous: [] });
+
+  const distinctAccountCredit = { ...credit, accountId: 'savings' };
+  const result = review([debit, distinctAccountCredit]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+});
