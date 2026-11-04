@@ -2317,3 +2317,28 @@ test('ERP initial worker claim rejects an implausibly extended lease receipt', a
   }), /invalid worker lease timestamp/);
   assert.equal(calls, 1, 'implausible lease cannot trigger fallback queries');
 });
+
+test('ERP recovery and reconciliation reject future-dated database receipts', async () => {
+  const { quarantineExpiredErpOperationJobsBatch: sweep } =
+    await import('../server/services/erpJobReservation.js');
+  const future = new Date(Date.now() + 60 * 60 * 1000);
+  for (const [name, run, error] of [
+    ['recovery', sweep, /invalid recovery timestamp/],
+    ['reconciliation', list, /invalid reconciliation timestamp/],
+  ]) {
+    for (const override of [
+      { created_at: future, updated_at: future },
+      { updated_at: future },
+    ]) {
+      let calls = 0;
+      const db = { async query() {
+        calls++;
+        return { rows: [quarantineRow(override)] };
+      } };
+      await assert.rejects(run({
+        db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+      }), error, name + ' must reject future persisted timestamps');
+      assert.equal(calls, 1, 'invalid receipt cannot trigger fallback reads');
+    }
+  }
+});
