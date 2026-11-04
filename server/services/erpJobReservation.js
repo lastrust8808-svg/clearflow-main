@@ -303,7 +303,9 @@ export async function reserveErpOperationJob({
     throw new Error('ERP job storage returned an invalid job record');
   }
   const createdAt = persistedUtcTimestamp(record.created_at);
-  if (createdAt === null) {
+  // A reservation timestamp far ahead of the API clock cannot establish that
+  // the database has already committed this job. Permit bounded clock skew.
+  if (createdAt === null || Date.parse(createdAt) > Date.now() + 5 * 60 * 1000) {
     throw new Error('ERP job storage returned an invalid creation timestamp');
   }
   return Object.freeze({
