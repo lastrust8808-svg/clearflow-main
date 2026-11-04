@@ -211,3 +211,19 @@ test('transfer review rejects executable tenant scope without evaluating accesso
     /Invalid authorized transfer scope or batch/);
   assert.equal(invoked, false);
 });
+
+
+test('pending evidence alone cannot create a transfer or silently hide reference collisions', () => {
+  const posted = { ...transaction(90), accountId: 'checking', amountCents: -900,
+    providerReference: 'pending-batch-90' };
+  const pendingA = { ...transaction(91), accountId: 'savings', amountCents: 900,
+    status: 'pending', providerReference: 'pending-batch-90' };
+  const pendingB = { ...transaction(92), accountId: 'reserve', amountCents: 900,
+    status: 'pending', providerReference: 'pending-batch-90' };
+  const result = review([posted, pendingA, pendingB]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [{ provider: 'plaid', connectionId: 'item-a',
+    accountId: 'checking', transactionId: 'tx-90', candidateCount: 0 }]);
+  assert.deepEqual(review([pendingB, posted, pendingA]), result);
+  assert.deepEqual(review([pendingA, pendingB]), { candidates: [], ambiguous: [] });
+});
