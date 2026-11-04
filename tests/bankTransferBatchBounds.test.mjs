@@ -417,3 +417,19 @@ test('foreign-tenant pending evidence cannot suppress authorized transfer review
   assert.equal(result.candidates[0].status, 'review_required');
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('one credit competing with two debits is never offered as an approved transfer', () => {
+  const debitA = { ...transaction(210), accountId: 'checking', amountCents: -350,
+    providerReference: 'many-to-one-210' };
+  const debitB = { ...transaction(211), accountId: 'payroll', amountCents: -350,
+    providerReference: 'many-to-one-210' };
+  const credit = { ...transaction(212), accountId: 'savings', amountCents: 350,
+    providerReference: 'many-to-one-210' };
+  const rows = [debitA, credit, debitB];
+  const result = review(rows);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous.map((row) => row.transactionId).sort(),
+    ['tx-210', 'tx-211', 'tx-212']);
+  assert.ok(result.ambiguous.every((row) => row.candidateCount >= 1));
+  assert.deepEqual(review([...rows].reverse()), result);
+});
