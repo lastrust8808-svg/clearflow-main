@@ -144,3 +144,13 @@ test('rejects Unicode noncharacters in account and document identifiers', () => 
   }
   assert.equal(sanitizeStorageSegment('member-🙂'), 'member-%F0%9F%99%82');
 });
+
+test('rejects non-ASCII Unicode spacing aliases inside storage identifiers', () => {
+  for (const code of [0x00a0, 0x1680, 0x2000, 0x2003, 0x200a, 0x202f, 0x205f, 0x3000]) {
+    const value = 'member' + String.fromCodePoint(code) + 'account';
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, 'U+' + code.toString(16));
+  }
+  for (const value of ['member account', '商店 一号', 'member-account']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
