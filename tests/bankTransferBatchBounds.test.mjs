@@ -136,3 +136,13 @@ test('read-only candidate output is deterministic under feed replay ordering', (
   assert.equal(first.candidates[0].status, 'review_required');
   assert.deepEqual(review([unrelated, credit, debit]), first);
 });
+
+
+test('provider transaction identity cannot be reused across accounts within one connection', () => {
+  const debit = { ...transaction(40), accountId: 'checking', amountCents: -250, providerReference: 'move-40' };
+  const forgedCredit = { ...transaction(40), accountId: 'savings', amountCents: 250, providerReference: 'move-40' };
+  assert.throws(() => review([debit, forgedCredit]), /Duplicate provider transaction identity across accounts/);
+  // A different connection may independently issue the same transaction ID.
+  const independent = { ...forgedCredit, connectionId: 'item-b' };
+  assert.deepEqual(review([debit, independent]), { candidates: [], ambiguous: [] });
+});
