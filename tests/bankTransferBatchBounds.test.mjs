@@ -161,3 +161,26 @@ test('shared batch reference with two debits and two credits never yields a tran
     ['tx-50', 'tx-51', 'tx-52', 'tx-53']);
   assert.deepEqual(review([...rows].reverse()), result);
 });
+
+
+test('transfer date window is inclusive at three UTC calendar days and excludes day four', () => {
+  const debit = { ...transaction(60), accountId: 'checking', amountCents: -700,
+    postedDate: '2026-10-29', providerReference: 'window-60' };
+  const dayThree = { ...transaction(61), accountId: 'savings', amountCents: 700,
+    postedDate: '2026-11-01', providerReference: 'window-60' };
+  const dayFour = { ...dayThree, postedDate: '2026-11-02' };
+  const inside = review([debit, dayThree]);
+  assert.equal(inside.candidates.length, 1);
+  assert.equal(inside.candidates[0].dayGap, 3);
+  assert.equal(inside.candidates[0].status, 'review_required');
+  assert.deepEqual(review([debit, dayFour]), { candidates: [], ambiguous: [] });
+});
+
+test('transfer review rejects impossible posting dates rather than normalizing them', () => {
+  for (const date of ['2026-02-29', '2026-04-31', '2026-13-01', '2026-00-01', '0000-01-01']) {
+    assert.throws(() => review([{ ...transaction(70), postedDate: date }]),
+      /Invalid transfer posting date/, date);
+  }
+  assert.deepEqual(review([{ ...transaction(71), postedDate: '2024-02-29' }]),
+    { candidates: [], ambiguous: [] });
+});
