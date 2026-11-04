@@ -193,3 +193,15 @@ test('note amortization rejects all pairwise aliases of tenant, entity, trust an
   assert.equal(valid.installments.length, terms.paymentCount);
   assert.equal(valid.installments.at(-1).remainingPrincipalMinor, 0);
 });
+
+
+test('amortization uses inspected descriptors without invoking Proxy get traps', () => {
+  let reads = 0;
+  const proxied = new Proxy({...terms}, {
+    get(_target, key) { reads++; throw new Error('untrusted term read: ' + String(key)); }
+  });
+  const result = buildFixedMonthlyNoteSchedule(proxied);
+  assert.equal(result.installments.length, terms.paymentCount);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(reads, 0);
+});
