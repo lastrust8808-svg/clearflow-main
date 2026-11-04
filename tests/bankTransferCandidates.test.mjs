@@ -420,3 +420,15 @@ test('non-ASCII spacing cannot create visually ambiguous provider identities', (
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].status, 'review_required');
 });
+
+
+test('rejects whitespace-only tenant and provider identity keys before review', () => {
+  for (const tenantId of [' ', '   ']) {
+    assert.throws(() => plan([], tenantId), /Invalid authorized transfer scope/);
+  }
+  for (const field of ['connectionId', 'accountId', 'transactionId', 'providerReference']) {
+    assert.throws(() => plan([row('checking', 'out', -500, { [field]: '   ' })]),
+      /Invalid or unauthorized transfer source record/);
+  }
+  assert.equal(plan([row('checking', 'out', -500, { providerReference: 'ref 1' })]).candidates.length, 0);
+});
