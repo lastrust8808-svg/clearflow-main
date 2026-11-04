@@ -119,3 +119,20 @@ test('removed provider-reference collision does not invalidate a current posted 
   assert.equal(result.candidates[0].status, 'review_required');
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('transfer review never pairs identical references across provider connections or providers', () => {
+  const debit = { ...transaction(10), accountId: 'checking', providerReference: 'batch-1' };
+  const otherConnection = { ...transaction(11), accountId: 'savings', connectionId: 'item-b', amountCents: 100, providerReference: 'batch-1' };
+  const otherProvider = { ...transaction(12), accountId: 'savings', provider: 'mercury', amountCents: 100, providerReference: 'batch-1' };
+  assert.deepEqual(review([debit, otherConnection, otherProvider]), { candidates: [], ambiguous: [] });
+});
+
+test('read-only candidate output is deterministic under feed replay ordering', () => {
+  const debit = { ...transaction(20), accountId: 'checking', amountCents: -500, providerReference: 'transfer-20' };
+  const credit = { ...transaction(21), accountId: 'savings', amountCents: 500, providerReference: 'transfer-20' };
+  const unrelated = { ...transaction(22), accountId: 'checking', providerReference: 'unrelated' };
+  const first = review([debit, credit, unrelated]);
+  assert.equal(first.candidates.length, 1);
+  assert.equal(first.candidates[0].status, 'review_required');
+  assert.deepEqual(review([unrelated, credit, debit]), first);
+});
