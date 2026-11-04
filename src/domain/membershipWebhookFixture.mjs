@@ -16,7 +16,11 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   if (!(typeof rawBody === 'string' || Buffer.isBuffer(rawBody))) {
     throw new TypeError('rawBody must be raw UTF-8 text or a Buffer');
   }
-  // Reject lossy UTF-16 encoding in fixture keys: different JavaScript secrets\n  // must not collapse to identical HMAC key bytes through replacement characters.\n  if (typeof secret === 'string' && hasUnpairedSurrogate(secret)) {\n    throw new TypeError('fixture secret must be valid Unicode');\n  }\n  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
+  // Reject lossy UTF-16 encoding in fixture keys: different JavaScript secrets 
+  // must not collapse to identical HMAC key bytes through replacement characters. 
+  if (typeof secret === 'string' && hasUnpairedSurrogate(secret)) { 
+    throw new TypeError('fixture secret must be valid Unicode');\n  } 
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
     throw new TypeError('fixture secret must contain at least 32 UTF-8 bytes');
   }
   if (!Number.isSafeInteger(nowSeconds) || nowSeconds < 0) {
