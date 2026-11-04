@@ -18,7 +18,10 @@ export function assessEnforcementNoticeEvidence(packet) {
   };
   const evaluatedAt = utc(packet.evaluatedAt, 'evaluatedAt');
   const preparedAt = Object.hasOwn(packet, 'preparedAt') ? utc(packet.preparedAt, 'preparedAt') : null;
-  // Explicit null is not an omitted field: reject ambiguous evidence claims.\n  if (Object.hasOwn(packet, 'deliveryEvidenceRef') && packet.deliveryEvidenceRef === null) throw new TypeError('Invalid null delivery evidence reference');\n  if (Object.hasOwn(packet, 'deliveredAt') && packet.deliveredAt === null) throw new TypeError('Invalid null delivery timestamp');\n  if (packet.deliveryEvidenceRef != null && (typeof packet.deliveryEvidenceRef !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(packet.deliveryEvidenceRef) || identifiers.includes(packet.deliveryEvidenceRef))) throw new TypeError('Invalid or reused delivery evidence reference');
+  // Explicit null is not an omitted field: reject ambiguous evidence claims.
+  if (Object.hasOwn(packet, 'deliveryEvidenceRef') && packet.deliveryEvidenceRef === null) throw new TypeError('Invalid null delivery evidence reference');
+  if (Object.hasOwn(packet, 'deliveredAt') && packet.deliveredAt === null) throw new TypeError('Invalid null delivery timestamp');
+  if (packet.deliveryEvidenceRef != null && (typeof packet.deliveryEvidenceRef !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(packet.deliveryEvidenceRef) || identifiers.includes(packet.deliveryEvidenceRef))) throw new TypeError('Invalid or reused delivery evidence reference');
   if (packet.deliveredAt != null) utc(packet.deliveredAt, 'deliveredAt');
   // Evaluate chronology for every supplied delivery timestamp, even when its
   // supporting reference is absent; partial claims must not mask contradictions.
