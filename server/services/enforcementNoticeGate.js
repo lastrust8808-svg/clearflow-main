@@ -19,12 +19,12 @@ export function assessEnforcementNoticeEvidence(packet) {
     return value;
   };
   const evaluatedAt = utc(ownValue('evaluatedAt'), 'evaluatedAt');
-  const preparedAt = Object.hasOwn(packet, 'preparedAt') ? utc(ownValue('preparedAt'), 'preparedAt') : null;
+  const preparedAt = Object.hasOwn(descriptors, 'preparedAt') ? utc(ownValue('preparedAt'), 'preparedAt') : null;
   // Explicit null is not an omitted field: reject ambiguous evidence claims.
-  if (Object.hasOwn(packet, 'deliveryEvidenceRef') && ownValue('deliveryEvidenceRef') === null) throw new TypeError('Invalid null delivery evidence reference');
-  if (Object.hasOwn(packet, 'deliveredAt') && ownValue('deliveredAt') === null) throw new TypeError('Invalid null delivery timestamp');
-  const deliveryEvidenceRef = Object.hasOwn(packet, 'deliveryEvidenceRef') ? ownValue('deliveryEvidenceRef') : undefined;
-  const suppliedDeliveredAt = Object.hasOwn(packet, 'deliveredAt') ? ownValue('deliveredAt') : undefined;
+  if (Object.hasOwn(descriptors, 'deliveryEvidenceRef') && ownValue('deliveryEvidenceRef') === null) throw new TypeError('Invalid null delivery evidence reference');
+  if (Object.hasOwn(descriptors, 'deliveredAt') && ownValue('deliveredAt') === null) throw new TypeError('Invalid null delivery timestamp');
+  const deliveryEvidenceRef = Object.hasOwn(descriptors, 'deliveryEvidenceRef') ? ownValue('deliveryEvidenceRef') : undefined;
+  const suppliedDeliveredAt = Object.hasOwn(descriptors, 'deliveredAt') ? ownValue('deliveredAt') : undefined;
   if (deliveryEvidenceRef != null && (typeof deliveryEvidenceRef !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(deliveryEvidenceRef) || identifiers.includes(deliveryEvidenceRef))) throw new TypeError('Invalid or reused delivery evidence reference');
   if (suppliedDeliveredAt != null) utc(suppliedDeliveredAt, 'deliveredAt');
   // Evaluate chronology for every supplied delivery timestamp, even when its
