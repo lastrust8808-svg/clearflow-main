@@ -373,3 +373,26 @@ test('provider identity cannot be replayed across removed, pending, and posted l
   assert.equal(canonical.candidates[0].status, 'review_required');
   assert.deepEqual(canonical.ambiguous, []);
 });
+
+test('retired lifecycle evidence cannot poison a posted transfer reference', () => {
+  const debit = { ...transaction(190), accountId: 'checking', amountCents: -950,
+    providerReference: 'retired-190' };
+  const credit = { ...transaction(191), accountId: 'savings', amountCents: 950,
+    providerReference: 'retired-190' };
+  const removed = { ...transaction(192), accountId: 'archive', status: 'removed',
+    providerReference: 'retired-190' };
+  const superseded = { ...transaction(193), accountId: 'old-savings', status: 'superseded',
+    providerReference: 'retired-190' };
+  const rows = [debit, removed, credit, superseded];
+  const result = review(rows);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+  assert.deepEqual(review([...rows].reverse()), result);
+  const pending = { ...transaction(194), accountId: 'archive-pending', status: 'pending',
+    providerReference: 'retired-190' };
+  const blocked = review([...rows, pending]);
+  assert.deepEqual(blocked.candidates, []);
+  assert.deepEqual(blocked.ambiguous.map((row) => row.transactionId).sort(),
+    ['tx-190', 'tx-191']);
+});
