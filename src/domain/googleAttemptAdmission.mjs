@@ -17,5 +17,10 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 
 export function admitGoogleAttemptResult(current, attemptId, reducer, expectedStatus = 'pending-gsi') {
   if (!isCurrentGoogleAttempt(current, attemptId, expectedStatus)) return current;
-  return reducer(current);
+  // A reducer must preserve the originating attempt identity. Refuse malformed
+  // or cross-attempt results rather than committing an ambiguous auth state.
+  const next = reducer(current);
+  if (!next || typeof next !== 'object' || Array.isArray(next) ||
+      next.googleAttemptId !== attemptId) return current;
+  return next;
 }
