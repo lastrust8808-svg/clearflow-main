@@ -403,3 +403,20 @@ test('transfer review scope rejects executable accessors and proxies without eva
   assert.deepEqual(proposeBankTransferCandidates(ordinary),
     { candidates: [], ambiguous: [] });
 });
+
+test('non-ASCII spacing cannot create visually ambiguous provider identities', () => {
+  for (const space of ['\u00a0', '\u1680', '\u2007', '\u202f', '\u205f', '\u3000']) {
+    for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
+      const invalid = row('checking', 'out', -500, { [field]: 'part' + space + 'two' });
+      assert.throws(() => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
+        /Invalid authorized transfer scope|Invalid or unauthorized transfer source record/);
+    }
+  }
+  // ASCII spaces within references remain valid, and do not authorize posting.
+  const result = plan([
+    row('checking', 'out', -500, { providerReference: 'reference with spaces' }),
+    row('savings', 'in', 500, { providerReference: 'reference with spaces' }),
+  ]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
