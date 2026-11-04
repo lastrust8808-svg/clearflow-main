@@ -2342,3 +2342,24 @@ test('ERP recovery and reconciliation reject future-dated database receipts', as
     }
   }
 });
+
+test('single-job quarantine rejects future-dated database receipts without fallback', async () => {
+  const { quarantineExpiredErpOperationJob: quarantine } =
+    await import('../server/services/erpJobReservation.js');
+  const future = new Date(Date.now() + 60 * 60 * 1000);
+  for (const override of [
+    { created_at: future, updated_at: future },
+    { updated_at: future },
+  ]) {
+    let calls = 0;
+    const db = { async query() {
+      calls++;
+      return { rows: [quarantineRow(override)] };
+    } };
+    await assert.rejects(quarantine({
+      db, authenticatedWorker: workerScope,
+      operation: 'invoice_delivery', jobId: claimedJobId,
+    }), /invalid quarantine timestamp/);
+    assert.equal(calls, 1, 'invalid quarantine cannot trigger fallback reads');
+  }
+});
