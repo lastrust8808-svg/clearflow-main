@@ -35,7 +35,12 @@ function identifier(value, field) {
       })) {
     throw new TypeError(field + ' must not contain Unicode noncharacters');
   }
-  // Bound every signing identity and evidence pointer before storage or hashing.\n  // Count UTF-16 code units consistently with the trust ledger identifiers.\n  if (value.length > 256) {\n    throw new RangeError(field + ' exceeds 256 UTF-16 code units');\n  }\n  if (value.normalize('NFC') !== value) {
+  // Bound every signing identity and evidence pointer before storage or hashing.
+  // Count UTF-16 code units consistently with the trust ledger identifiers.
+  if (value.length > 256) {
+    throw new RangeError(field + ' exceeds 256 UTF-16 code units');
+  }
+  if (value.normalize('NFC') !== value) {
     throw new TypeError(field + ' must use NFC-normalized Unicode');
   }
   return value;
