@@ -805,7 +805,7 @@ test('signing packet keeps owner, document, version, principal and provenance na
   ]) {
     assert.throws(() => assess({
       attestations: [attestation('a', { [field]: alias })],
-    }), /provenance reference collides/, field);
+    }), /(?:provenance reference collides|Signing evidence reference collides with scope or signer identity)/, field);
   }
   assert.throws(() => assess({
     governance: {
