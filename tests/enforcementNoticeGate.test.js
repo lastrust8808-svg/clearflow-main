@@ -107,3 +107,13 @@ test('inherited optional delivery evidence cannot fabricate a delivery claim', (
     else delete Object.prototype.deliveredAt;
   }
 });
+
+
+test('validated own data descriptors are used without triggering Proxy get traps', () => {
+  let reads = 0;
+  const packet = new Proxy({...base}, {
+    get(_target, key) { reads++; throw new Error('untrusted property read: ' + String(key)); }
+  });
+  assert.deepEqual(assess(packet), {status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
+  assert.equal(reads, 0);
+});
