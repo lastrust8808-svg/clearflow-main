@@ -2273,3 +2273,28 @@ test('ERP worker claim refuses future-dated database lease receipts before dispa
   );
   assert.equal(calls, 1, 'invalid claim must not trigger fallback reads');
 });
+
+
+test('ERP lease renewal rejects future-dated persisted receipts without fallback', async () => {
+  const { renewErpOperationJobLease: renew } =
+    await import('../server/services/erpJobReservation.js');
+  const now = Date.now();
+  const future = new Date(now + 60 * 60 * 1000);
+  const later = new Date(now + 60 * 60 * 1000 + 60000);
+  for (const overrides of [
+    { created_at: future, claimed_at: future, updated_at: future, lease_expires_at: later },
+    { created_at: new Date(now - 60000), claimed_at: new Date(now - 30000),
+      updated_at: future, lease_expires_at: later },
+  ]) {
+    let calls = 0;
+    const db = { async query() {
+      calls++;
+      return { rows: [claimedRow(overrides)] };
+    } };
+    await assert.rejects(renew({
+      db, authenticatedWorker: workerScope,
+      operation: 'invoice_delivery', jobId: claimedJobId,
+    }), /invalid lease renewal timestamp/);
+    assert.equal(calls, 1, 'invalid renewal must not trigger fallback reads');
+  }
+});
