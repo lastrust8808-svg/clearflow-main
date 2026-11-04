@@ -34,3 +34,9 @@ test('optional preparation timestamp enforces chronological delivery evidence', 
   assert.throws(() => assess({...base,preparedAt:'2026-02-30T09:00:00.000Z'}),/canonical/);
   assert.equal(assess(base).status,'evidence_ready_for_review');
 });
+
+test('partial delivery claims are incomplete rather than review-ready', () => {
+  assert.deepEqual(assess({...base,deliveryEvidenceRef:undefined}), {status:'incomplete',reason:'partial_delivery_evidence'});
+  assert.deepEqual(assess({...base,deliveredAt:undefined}), {status:'incomplete',reason:'partial_delivery_evidence'});
+  assert.equal(assess({...base,deliveryEvidenceRef:undefined,deliveredAt:undefined}).reason,'delivery_evidence_missing');
+});
