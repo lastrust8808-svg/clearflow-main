@@ -48,3 +48,10 @@ test('supplied partial delivery evidence must be well-formed even when incomplet
   assert.equal(assess({...base, deliveryEvidenceRef:'delivery-2', deliveredAt:undefined}).reason,'partial_delivery_evidence');
   assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason,'partial_delivery_evidence');
 });
+
+test('supplied preparation timestamp must be canonical, not null or undefined', () => {
+  for (const preparedAt of [null, undefined, '', 0, '2026-11-03']) {
+    assert.throws(() => assess({...base, preparedAt}), /canonical/);
+  }
+  assert.equal(assess(base).status, 'evidence_ready_for_review');
+});
