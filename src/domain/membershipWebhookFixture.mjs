@@ -97,8 +97,14 @@ function containsDuplicateObjectKeys(jsonText) {
       continue;
     }
     if (char === '"') quoteStart = i;
-    else if (char === '{') frames.push({ kind: 'object', expectKey: true, keys: new Set() });
-    else if (char === '[') frames.push({ kind: 'array' });
+    else if (char === '{' || char === '[') {
+      // Bound nesting before JSON.parse: deeply nested signed fixtures must
+      // not exhaust the test adapter's parser stack or admission budget.
+      if (frames.length >= 64) return true;
+      frames.push(char === '{'
+        ? { kind: 'object', expectKey: true, keys: new Set() }
+        : { kind: 'array' });
+    }
     else if (char === '}' || char === ']') frames.pop();
     else if (char === ',' && frames[frames.length - 1]?.kind === 'object') {
       frames[frames.length - 1].expectKey = true;
