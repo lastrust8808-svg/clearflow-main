@@ -388,3 +388,17 @@ test('signed webhook fixture refuses non-NFC scope and payment identities', () =
     ...scopedPayload, id: composed, invoiceId: composed, settlementId: composed,
   }))?.verified, true);
 });
+
+
+test('signed fixture bounds untrusted signature headers before admission', () => {
+  const valid = scopedInput(scopedPayload);
+  assert.equal(verifyScoped(valid)?.verified, true);
+  for (const header of [
+    't=' + '9'.repeat(100000) + ',v1=' + 'a'.repeat(64),
+    't=1,v1=' + 'a'.repeat(100000),
+    'x'.repeat(100000),
+  ]) {
+    assert.equal(verify({ ...input(), signatureHeader: header }), false);
+    assert.equal(verifyScoped({ ...valid, signatureHeader: header }), null);
+  }
+});
