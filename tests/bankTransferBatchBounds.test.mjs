@@ -305,3 +305,22 @@ test('pending reference collisions from another provider do not poison an author
   assert.deepEqual(result.ambiguous, []);
   assert.deepEqual(review([foreignPending, credit, debit]), result);
 });
+
+
+test('identical transfer references in independent providers produce separate review candidates', () => {
+  const plaidDebit = { ...transaction(150), accountId: 'checking', amountCents: -825,
+    providerReference: 'shared-provider-reference-150' };
+  const plaidCredit = { ...transaction(151), accountId: 'savings', amountCents: 825,
+    providerReference: 'shared-provider-reference-150' };
+  const mercuryDebit = { ...transaction(152), provider: 'mercury', connectionId: 'mercury-a',
+    accountId: 'operating', amountCents: -825, providerReference: 'shared-provider-reference-150' };
+  const mercuryCredit = { ...transaction(153), provider: 'mercury', connectionId: 'mercury-a',
+    accountId: 'reserve', amountCents: 825, providerReference: 'shared-provider-reference-150' };
+  const rows = [plaidDebit, mercuryCredit, plaidCredit, mercuryDebit];
+  const result = review(rows);
+  assert.equal(result.candidates.length, 2);
+  assert.deepEqual(result.candidates.map((candidate) => candidate.provider).sort(), ['mercury', 'plaid']);
+  assert.ok(result.candidates.every((candidate) => candidate.status === 'review_required'));
+  assert.deepEqual(result.ambiguous, []);
+  assert.deepEqual(review([...rows].reverse()), result);
+});
