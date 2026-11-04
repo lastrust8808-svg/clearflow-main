@@ -23,9 +23,11 @@ export function assessEnforcementNoticeEvidence(packet) {
   // Evaluate chronology for every supplied delivery timestamp, even when its
   // supporting reference is absent; partial claims must not mask contradictions.
   const deliveredAt = packet.deliveredAt;
-  if (deliveredAt != null && preparedAt && deliveredAt < preparedAt) return Object.freeze({status:'incomplete',reason:'delivery_before_preparation'});
-  if (deliveredAt != null && deliveredAt > evaluatedAt) return Object.freeze({status:'incomplete',reason:'delivery_after_evaluation'});
+  // An impossible preparation time takes precedence over relative delivery order;
+  // otherwise a future preparation can be misreported as early delivery.
   if (preparedAt && preparedAt > evaluatedAt) return Object.freeze({status:'incomplete',reason:'preparation_after_evaluation'});
+  if (deliveredAt != null && deliveredAt > evaluatedAt) return Object.freeze({status:'incomplete',reason:'delivery_after_evaluation'});
+  if (deliveredAt != null && preparedAt && deliveredAt < preparedAt) return Object.freeze({status:'incomplete',reason:'delivery_before_preparation'});
   if (packet.deliveryEvidenceRef == null && deliveredAt == null) return Object.freeze({status:'incomplete',reason:'delivery_evidence_missing'});
   if (packet.deliveryEvidenceRef == null || deliveredAt == null) return Object.freeze({status:'incomplete',reason:'partial_delivery_evidence'});
   return Object.freeze({status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
