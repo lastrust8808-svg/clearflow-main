@@ -38,3 +38,13 @@ test('Drive-stage results require matching attempt and expected status', () => {
   assert.equal(admitGoogleAttemptResult(current, 'attempt-A', advance, 'pending-drive-check'), current);
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance, 'pending-drive-check').token, 'verified-test-token');
 });
+
+
+test('malformed and cross-attempt reducer results fail closed', () => {
+  const current = pending('attempt-B');
+  for (const result of [null, undefined, false, [], { status: 'authenticated' },
+    { ...current, googleAttemptId: 'attempt-A', status: 'authenticated' }]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).googleAttemptId, 'attempt-B');
+});
