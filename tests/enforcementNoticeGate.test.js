@@ -40,3 +40,11 @@ test('partial delivery claims are incomplete rather than review-ready', () => {
   assert.deepEqual(assess({...base,deliveredAt:undefined}), {status:'incomplete',reason:'partial_delivery_evidence'});
   assert.equal(assess({...base,deliveryEvidenceRef:undefined,deliveredAt:undefined}).reason,'delivery_evidence_missing');
 });
+
+test('supplied partial delivery evidence must be well-formed even when incomplete', () => {
+  assert.throws(() => assess({...base, deliveryEvidenceRef:base.noticeId, deliveredAt:undefined}), /reused/);
+  assert.throws(() => assess({...base, deliveryEvidenceRef:'bad ref', deliveredAt:undefined}), /Invalid/);
+  assert.throws(() => assess({...base, deliveryEvidenceRef:undefined, deliveredAt:'2026-02-30T10:00:00.000Z'}), /canonical/);
+  assert.equal(assess({...base, deliveryEvidenceRef:'delivery-2', deliveredAt:undefined}).reason,'partial_delivery_evidence');
+  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason,'partial_delivery_evidence');
+});
