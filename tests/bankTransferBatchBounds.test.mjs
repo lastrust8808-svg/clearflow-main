@@ -100,3 +100,22 @@ test('transfer review rejects hidden record fields and executable record metadat
   assert.throws(() => review([polluted]), /Invalid transfer source record/);
   assert.deepEqual(review([transaction(4)]), { candidates: [], ambiguous: [] });
 });
+
+test('pending provider-reference collision prevents automatic transfer suggestion', () => {
+  const debit = { ...transaction(1), accountId: 'checking', amountCents: -100, providerReference: 'shared' };
+  const credit = { ...transaction(2), accountId: 'savings', amountCents: 100, providerReference: 'shared' };
+  const pending = { ...transaction(3), accountId: 'reserve', amountCents: 100, status: 'pending', providerReference: 'shared' };
+  const result = review([debit, credit, pending]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous.map((item) => item.transactionId).sort(), ['tx-1', 'tx-2']);
+});
+
+test('removed provider-reference collision does not invalidate a current posted pair', () => {
+  const debit = { ...transaction(1), accountId: 'checking', amountCents: -100, providerReference: 'shared' };
+  const credit = { ...transaction(2), accountId: 'savings', amountCents: 100, providerReference: 'shared' };
+  const removed = { ...transaction(3), accountId: 'reserve', amountCents: 100, status: 'removed', providerReference: 'shared' };
+  const result = review([debit, credit, removed]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+});
