@@ -205,3 +205,12 @@ test('amortization uses inspected descriptors without invoking Proxy get traps',
   assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
   assert.equal(reads, 0);
 });
+
+test('rejects default-ignorable Unicode in note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const invisible of ['\u200B', '\u200D', '\u2066', '\uFE0F']) {
+      assert.throws(() => schedule({ [key]: 'scope' + invisible + 'id' }), /default-ignorable Unicode/);
+    }
+  }
+  assert.equal(schedule({ noteId: 'scope-\u00e9' }).installments.length, 12);
+});
