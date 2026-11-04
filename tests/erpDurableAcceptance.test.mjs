@@ -76,6 +76,26 @@ try {
     assert.equal(response.body.success, false);
   });
 
+  await test('invisible Unicode whitespace cannot enter ERP accounting identifiers', async () => {
+    const hidden = ['\\u00a0', '\\u2007', '\\u2028', '\\u2029', '\\u3000'];
+    for (const character of hidden) {
+      for (const field of ['invoiceId', 'entityId', 'invoiceNumber']) {
+        const response = await invoke('POST', '/invoice-deliveries', {
+          ...invoice, [field]: 'a' + character + 'b',
+        });
+        assert.equal(response.statusCode, 400, field + ': ' + JSON.stringify(character));
+        assert.equal(response.body.success, false);
+        assert.equal(response.body.job, undefined);
+      }
+      const settlement = await invoke('POST', '/settlements/execute', {
+        entityId: 'entity' + character + 'test',
+        paymentId: 'pay-test', settlementId: 'settle-test', amount: 1,
+      });
+      assert.equal(settlement.statusCode, 400, JSON.stringify(character));
+      assert.equal(settlement.body.execution, undefined);
+    }
+  });
+
   await test('ops status explicitly declares invoice delivery/export unavailable', async () => {
     const response = await invoke('GET', '/ops-status');
     assert.equal(response.statusCode, 200);
