@@ -289,3 +289,19 @@ test('one pending reference collision marks posted evidence ambiguous without pr
   assert.deepEqual(review([pending, posted]), expected);
   assert.deepEqual(review([posted]), { candidates: [], ambiguous: [] });
 });
+
+test('pending reference collisions from another provider do not poison an authorized transfer pair', () => {
+  const debit = { ...transaction(140), accountId: 'checking', amountCents: -725,
+    providerReference: 'shared-cross-provider-140' };
+  const credit = { ...transaction(141), accountId: 'savings', amountCents: 725,
+    providerReference: 'shared-cross-provider-140' };
+  const foreignPending = { ...transaction(142), provider: 'mercury',
+    accountId: 'reserve', amountCents: 725, status: 'pending',
+    providerReference: 'shared-cross-provider-140' };
+  const result = review([debit, credit, foreignPending]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].provider, 'plaid');
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+  assert.deepEqual(review([foreignPending, credit, debit]), result);
+});
