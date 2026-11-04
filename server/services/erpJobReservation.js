@@ -429,7 +429,10 @@ export async function claimErpOperationJob({
   if ([claimedAt, leaseExpiresAt, createdAt, updatedAt].some(value => value === null) ||
       Date.parse(createdAt) > Date.parse(claimedAt) ||
       Date.parse(claimedAt) > Date.parse(updatedAt) ||
-      Date.parse(updatedAt) >= Date.parse(leaseExpiresAt)) {
+      Date.parse(updatedAt) >= Date.parse(leaseExpiresAt) ||
+      Date.parse(createdAt) > Date.now() + 5 * 60 * 1000 ||
+      Date.parse(claimedAt) > Date.now() + 5 * 60 * 1000 ||
+      Date.parse(updatedAt) > Date.now() + 5 * 60 * 1000) {
     throw new Error('ERP job storage returned an invalid worker lease timestamp');
   }
   return Object.freeze({
