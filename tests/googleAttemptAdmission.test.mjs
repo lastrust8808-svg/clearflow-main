@@ -48,3 +48,19 @@ test('malformed and cross-attempt reducer results fail closed', () => {
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).googleAttemptId, 'attempt-B');
 });
+
+
+test('throwing admission reducers cannot mutate or reject the current attempt', () => {
+  const current = pending('attempt-B');
+  const thrown = new Error('simulated asynchronous admission failure');
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => { throw thrown; }), current);
+  assert.equal(current.status, 'pending-gsi');
+  assert.equal(current.token, null);
+  // Stale callbacks never invoke the reducer at all.
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-A', () => {
+    called = true;
+    throw thrown;
+  }), current);
+  assert.equal(called, false);
+});
