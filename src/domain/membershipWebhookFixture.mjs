@@ -21,8 +21,9 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   if (typeof secret === 'string' && hasUnpairedSurrogate(secret)) { 
     throw new TypeError('fixture secret must be valid Unicode');
   } 
-  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
-    throw new TypeError('fixture secret must contain at least 32 UTF-8 bytes');
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32 ||
+      Buffer.byteLength(secret, 'utf8') > 4096) {
+    throw new TypeError('fixture secret must contain between 32 and 4096 UTF-8 bytes');
   }
   if (!Number.isSafeInteger(nowSeconds) || nowSeconds < 0) {
     throw new TypeError('nowSeconds must be a nonnegative integer');
