@@ -6,23 +6,25 @@ export function assessEnforcementNoticeEvidence(packet) {
   for (const key of Reflect.ownKeys(descriptors)) {
     if (typeof key !== 'string' || !fields.has(key) || !descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) throw new TypeError('Unsupported or accessor notice field');
   }
+  // Use inspected own data descriptors, never property reads that a Proxy can trap.
+  const ownValue = key => descriptors[key]?.value;
   const idFields = ['tenantId','trustId','noteId','noticeId','noticeVersionId','preparedEvidenceRef'];
   for (const key of idFields) {
-    if (typeof packet[key] !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(packet[key])) throw new TypeError('Invalid notice identifier: ' + key);
+    if (typeof ownValue(key) !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(ownValue(key))) throw new TypeError('Invalid notice identifier: ' + key);
   }
-  const identifiers = idFields.map(key => packet[key]);
+  const identifiers = idFields.map(key => ownValue(key));
   if (new Set(identifiers).size !== identifiers.length) throw new Error('Notice identifiers and preparation evidence must be distinct');
   const utc = (value, key) => {
     if (typeof value !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new TypeError('Invalid canonical UTC timestamp: ' + key);
     return value;
   };
-  const evaluatedAt = utc(packet.evaluatedAt, 'evaluatedAt');
-  const preparedAt = Object.hasOwn(packet, 'preparedAt') ? utc(packet.preparedAt, 'preparedAt') : null;
+  const evaluatedAt = utc(ownValue('evaluatedAt'), 'evaluatedAt');
+  const preparedAt = Object.hasOwn(packet, 'preparedAt') ? utc(ownValue('preparedAt'), 'preparedAt') : null;
   // Explicit null is not an omitted field: reject ambiguous evidence claims.
-  if (Object.hasOwn(packet, 'deliveryEvidenceRef') && packet.deliveryEvidenceRef === null) throw new TypeError('Invalid null delivery evidence reference');
-  if (Object.hasOwn(packet, 'deliveredAt') && packet.deliveredAt === null) throw new TypeError('Invalid null delivery timestamp');
-  const deliveryEvidenceRef = Object.hasOwn(packet, 'deliveryEvidenceRef') ? packet.deliveryEvidenceRef : undefined;
-  const suppliedDeliveredAt = Object.hasOwn(packet, 'deliveredAt') ? packet.deliveredAt : undefined;
+  if (Object.hasOwn(packet, 'deliveryEvidenceRef') && ownValue('deliveryEvidenceRef') === null) throw new TypeError('Invalid null delivery evidence reference');
+  if (Object.hasOwn(packet, 'deliveredAt') && ownValue('deliveredAt') === null) throw new TypeError('Invalid null delivery timestamp');
+  const deliveryEvidenceRef = Object.hasOwn(packet, 'deliveryEvidenceRef') ? ownValue('deliveryEvidenceRef') : undefined;
+  const suppliedDeliveredAt = Object.hasOwn(packet, 'deliveredAt') ? ownValue('deliveredAt') : undefined;
   if (deliveryEvidenceRef != null && (typeof deliveryEvidenceRef !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(deliveryEvidenceRef) || identifiers.includes(deliveryEvidenceRef))) throw new TypeError('Invalid or reused delivery evidence reference');
   if (suppliedDeliveredAt != null) utc(suppliedDeliveredAt, 'deliveredAt');
   // Evaluate chronology for every supplied delivery timestamp, even when its
