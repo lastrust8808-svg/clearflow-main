@@ -2249,3 +2249,27 @@ test('ERP status lookup rejects future-dated persisted timestamps without fallba
     assert.equal(calls, 1, 'invalid timestamp cannot trigger a fallback read');
   }
 });
+
+test('ERP worker claim refuses future-dated database lease receipts before dispatch', async () => {
+  const { claimErpOperationJob } = await import('../server/services/erpJobReservation.js');
+  const now = Date.now();
+  const created = new Date(now + 60 * 60 * 1000);
+  const claimed = new Date(now + 60 * 60 * 1000 + 1000);
+  const updated = new Date(now + 60 * 60 * 1000 + 2000);
+  const expires = new Date(now + 60 * 60 * 1000 + 60000);
+  let calls = 0;
+  const db = { async query() {
+    calls++;
+    return { rows: [claimedRow({
+      created_at: created, claimed_at: claimed,
+      updated_at: updated, lease_expires_at: expires,
+    })] };
+  } };
+  await assert.rejects(
+    claimErpOperationJob({
+      db, authenticatedWorker: workerScope, operation: 'invoice_delivery',
+    }),
+    /invalid worker lease timestamp/,
+  );
+  assert.equal(calls, 1, 'invalid claim must not trigger fallback reads');
+});
