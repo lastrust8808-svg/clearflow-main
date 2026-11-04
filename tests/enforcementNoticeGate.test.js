@@ -55,3 +55,9 @@ test('supplied preparation timestamp must be canonical, not null or undefined', 
   }
   assert.equal(assess(base).status, 'evidence_ready_for_review');
 });
+
+test('partial delivery timestamps cannot bypass chronology checks', () => {
+  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:'2026-11-04T00:00:00.000Z'}).reason, 'delivery_after_evaluation');
+  assert.equal(assess({...base, deliveryEvidenceRef:undefined, preparedAt:'2026-11-03T10:30:00.000Z'}).reason, 'delivery_before_preparation');
+  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason, 'partial_delivery_evidence');
+});
