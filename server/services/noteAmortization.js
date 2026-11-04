@@ -57,6 +57,11 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
+  // Invisible format characters (including zero-width and bidi controls) can
+  // make distinct scope identifiers appear identical in audit trails.
+  if (/\p{Default_Ignorable_Code_Point}/u.test(value)) {
+    throw new TypeError(`${field} must not contain default-ignorable Unicode characters`);
+  }
   // Reject unpaired UTF-16 surrogates before downstream UTF-8 serialization
   // could silently replace distinct note identities with U+FFFD. Valid
   // supplementary Unicode scalar values (surrogate pairs) remain supported.
