@@ -184,3 +184,30 @@ test('transfer review rejects impossible posting dates rather than normalizing t
   assert.deepEqual(review([{ ...transaction(71), postedDate: '2024-02-29' }]),
     { candidates: [], ambiguous: [] });
 });
+
+test('transfer review fails closed on cross-tenant rows even when references and amounts match', () => {
+  const debit = { ...transaction(80), accountId: 'checking', amountCents: -500,
+    providerReference: 'same-reference' };
+  const foreignCredit = { ...transaction(81), tenantId: 'tenant-b', accountId: 'savings',
+    amountCents: 500, providerReference: 'same-reference' };
+  assert.throws(() => review([debit, foreignCredit]),
+    /Invalid or unauthorized transfer source record/);
+  assert.throws(() => review([foreignCredit, debit]),
+    /Invalid or unauthorized transfer source record/);
+  const authorizedCredit = { ...foreignCredit, tenantId: 'tenant-a' };
+  const result = review([debit, authorizedCredit]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
+
+test('transfer review rejects executable tenant scope without evaluating accessors', () => {
+  let invoked = false;
+  const scope = { transactions: [transaction(82)] };
+  Object.defineProperty(scope, 'tenantId', {
+    enumerable: true,
+    get() { invoked = true; throw new Error('scope getter invoked'); },
+  });
+  assert.throws(() => proposeBankTransferCandidates(scope),
+    /Invalid authorized transfer scope or batch/);
+  assert.equal(invoked, false);
+});
