@@ -20,6 +20,8 @@ on:
       - 'server/services/trustDocumentSigningEvidence.js'
       - 'tests/trustDocumentQrRegistryPolicy.test.js'
       - 'tests/trustDocumentSigningEvidence.test.js'
+      - 'server/services/enforcementNoticeGate.js'
+      - 'tests/enforcementNoticeGate.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -40,6 +42,8 @@ on:
       - 'server/services/trustDocumentSigningEvidence.js'
       - 'tests/trustDocumentQrRegistryPolicy.test.js'
       - 'tests/trustDocumentSigningEvidence.test.js'
+      - 'server/services/enforcementNoticeGate.js'
+      - 'tests/enforcementNoticeGate.test.js'
 permissions:
   contents: read
 jobs:
@@ -59,4 +63,5 @@ jobs:
       - run: node --check server/services/trustDocumentQrPolicy.js
       - run: node --check server/services/trustDocumentQrRegistryPolicy.js
       - run: node --check server/services/trustDocumentSigningEvidence.js
-      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js
+      - run: node --check server/services/enforcementNoticeGate.js
+      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/enforcementNoticeGate.test.js
