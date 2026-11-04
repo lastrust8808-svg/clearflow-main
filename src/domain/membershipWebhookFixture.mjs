@@ -81,8 +81,9 @@ function containsDuplicateObjectKeys(jsonText) {
         const frame = frames[frames.length - 1];
         if (frame?.kind === 'object' && frame.expectKey) {
           const key = JSON.parse(jsonText.slice(quoteStart, i + 1));
-          if (frame.keys.has(key)) return true;
-          frame.keys.add(key);
+          const canonicalKey = key.normalize('NFC');
+          if (frame.keys.has(canonicalKey)) return true;
+          frame.keys.add(canonicalKey);
           frame.expectKey = false;
         }
         quoteStart = -1;
