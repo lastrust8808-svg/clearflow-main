@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { assessEnforcementNoticeEvidence as assess } from '../server/services/enforcementNoticeGate.js';
+const base = {tenantId:'tenant-1',trustId:'trust-1',noteId:'note-1',noticeId:'notice-1',noticeVersionId:'version-1',preparedEvidenceRef:'prepared-1',deliveryEvidenceRef:'delivery-1',deliveredAt:'2026-11-03T10:00:00.000Z',evaluatedAt:'2026-11-03T11:00:00.000Z'};
+test('delivery claim is review-only, not verified service', () => {
+  assert.deepEqual(assess(base), {status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
+  assert.equal(Object.hasOwn(assess(base),'serviceVerified'),false);
+  assert.ok(Object.isFrozen(assess(base)));
+});
+test('missing delivery evidence is incomplete', () => {
+  assert.equal(assess({...base,deliveryEvidenceRef:undefined,deliveredAt:undefined}).reason,'delivery_evidence_missing');
+});
+test('cross-role evidence replay is rejected', () => {
+  for (const ref of [base.preparedEvidenceRef,base.noteId,base.noticeId]) {
+    assert.throws(() => assess({...base,deliveryEvidenceRef:ref}),/reused/);
+  }
+});
+test('future and invalid delivery timestamps fail closed', () => {
+  assert.equal(assess({...base,deliveredAt:'2026-11-04T00:00:00.000Z'}).reason,'delivery_after_evaluation');
+  assert.throws(() => assess({...base,deliveredAt:'2026-02-30T10:00:00.000Z'}),/canonical/);
+});
+test('accessor-backed claims cannot execute getters', () => {
+  let calls=0;
+  const p={...base};
+  Object.defineProperty(p,'deliveryEvidenceRef',{enumerable:true,get(){calls++;throw Error('getter');}});
+  assert.throws(() => assess(p),/accessor/);
+  assert.equal(calls,0);
+});
