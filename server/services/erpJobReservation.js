@@ -702,6 +702,8 @@ export async function quarantineExpiredErpOperationJob({
     ? null : persistedUtcTimestamp(row.dispatch_started_at);
   if (createdAt === null || updatedAt === null ||
       Date.parse(updatedAt) < Date.parse(createdAt) ||
+      Date.parse(createdAt) > Date.now() + 300000 ||
+      Date.parse(updatedAt) > Date.now() + 300000 ||
       (row.dispatch_started_at !== null && dispatchStartedAt === null) ||
       (dispatchStartedAt !== null &&
        (Date.parse(dispatchStartedAt) < Date.parse(createdAt) ||
