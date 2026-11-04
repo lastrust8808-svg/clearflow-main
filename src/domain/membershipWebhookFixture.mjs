@@ -29,7 +29,7 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   // Reject such strings so distinct raw event identities cannot share the
   // same signed bytes after a lossy conversion. Valid pairs remain accepted.
   if (typeof rawBody === 'string' && hasUnpairedSurrogate(rawBody)) return false;
-  if (typeof signatureHeader !== 'string') return false;
+  // Bound untrusted header parsing before regex matching or HMAC work.\n  // A valid fixture header contains a short decimal timestamp and 64 hex bytes.\n  if (typeof signatureHeader !== 'string' || signatureHeader.length > 128) return false;
   const match = /^t=(0|[1-9]\d*),v1=([a-f0-9]{64})$/.exec(signatureHeader);
   if (!match) return false;
   const timestamp = Number(match[1]);
