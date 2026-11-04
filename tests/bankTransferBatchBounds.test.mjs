@@ -227,3 +227,22 @@ test('pending evidence alone cannot create a transfer or silently hide reference
   assert.deepEqual(review([pendingB, posted, pendingA]), result);
   assert.deepEqual(review([pendingA, pendingB]), { candidates: [], ambiguous: [] });
 });
+
+
+test('replayed provider transaction cannot appear as both pending and posted in one review batch', () => {
+  const pending = { ...transaction(100), status: 'pending', accountId: 'checking',
+    amountCents: -450, providerReference: 'transition-100' };
+  const posted = { ...pending, status: 'posted' };
+  const counterpart = { ...transaction(101), accountId: 'savings',
+    amountCents: 450, providerReference: 'transition-100' };
+  for (const batch of [
+    [pending, posted, counterpart],
+    [counterpart, posted, pending],
+  ]) {
+    assert.throws(() => review(batch), /Duplicate transfer source identity/);
+  }
+  // A caller must canonicalize pending-to-posted updates before transfer review.
+  const clean = review([posted, counterpart]);
+  assert.equal(clean.candidates.length, 1);
+  assert.equal(clean.candidates[0].status, 'review_required');
+});
