@@ -424,8 +424,8 @@ test('signed fixture rejects NFC-equivalent duplicate JSON keys before projectio
 test('fixture HMAC rejects secrets with lossy Unicode encoding', () => {
   const valid = input();
   for (const secretValue of [
-    'x'.repeat(32) + '\\uD800',
-    'x'.repeat(32) + '\\uDC00',
+    'x'.repeat(32) + '\uD800',
+    'x'.repeat(32) + '\uDC00',
   ]) {
     assert.throws(() => verify({ ...valid, secret: secretValue }), /valid Unicode/);
   }
