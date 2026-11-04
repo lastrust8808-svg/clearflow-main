@@ -28,7 +28,7 @@ export function sanitizeStorageSegment(value) {
     containsUnicodeNoncharacter(value) ||
     value === '.' ||
     value === '..' ||
-    /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u.test(value) ||
+    /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/u.test(value) ||
     value.endsWith('.') ||
     /^(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(value)
   ) {
