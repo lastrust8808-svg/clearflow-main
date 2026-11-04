@@ -19,7 +19,8 @@ export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secre
   // Reject lossy UTF-16 encoding in fixture keys: different JavaScript secrets 
   // must not collapse to identical HMAC key bytes through replacement characters. 
   if (typeof secret === 'string' && hasUnpairedSurrogate(secret)) { 
-    throw new TypeError('fixture secret must be valid Unicode');\n  } 
+    throw new TypeError('fixture secret must be valid Unicode');
+  } 
   if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
     throw new TypeError('fixture secret must contain at least 32 UTF-8 bytes');
   }
