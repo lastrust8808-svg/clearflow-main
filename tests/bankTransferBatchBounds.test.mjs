@@ -275,3 +275,17 @@ test('pending collision evidence in same connection blocks posted pair across cu
   assert.deepEqual(result.ambiguous.map((row) => row.transactionId).sort(),
     ['tx-120', 'tx-121']);
 });
+
+test('one pending reference collision marks posted evidence ambiguous without proposing a transfer', () => {
+  const posted = { ...transaction(130), accountId: 'checking',
+    providerReference: 'transition-130' };
+  const pending = { ...transaction(131), accountId: 'savings',
+    amountCents: 100, status: 'pending', providerReference: 'transition-130' };
+  const expected = { candidates: [], ambiguous: [{
+    provider: 'plaid', connectionId: 'item-a', accountId: 'checking',
+    transactionId: 'tx-130', candidateCount: 0,
+  }] };
+  assert.deepEqual(review([posted, pending]), expected);
+  assert.deepEqual(review([pending, posted]), expected);
+  assert.deepEqual(review([posted]), { candidates: [], ambiguous: [] });
+});
