@@ -26,3 +26,11 @@ test('accessor-backed claims cannot execute getters', () => {
   assert.throws(() => assess(p),/accessor/);
   assert.equal(calls,0);
 });
+
+test('optional preparation timestamp enforces chronological delivery evidence', () => {
+  assert.equal(assess({...base,preparedAt:'2026-11-03T09:00:00.000Z'}).status,'evidence_ready_for_review');
+  assert.equal(assess({...base,preparedAt:'2026-11-03T10:30:00.000Z'}).reason,'delivery_before_preparation');
+  assert.equal(assess({...base,preparedAt:'2026-11-03T12:00:00.000Z'}).reason,'preparation_after_evaluation');
+  assert.throws(() => assess({...base,preparedAt:'2026-02-30T09:00:00.000Z'}),/canonical/);
+  assert.equal(assess(base).status,'evidence_ready_for_review');
+});
