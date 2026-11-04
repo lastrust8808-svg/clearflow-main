@@ -431,3 +431,10 @@ test('fixture HMAC rejects secrets with lossy Unicode encoding', () => {
   }
   assert.equal(verify({ ...valid, secret }), true);
 });
+
+
+test('fixture bounds HMAC secret size without rejecting valid keys', () => {
+  assert.throws(() => verify(input({ secret: 'x'.repeat(4097) })), /secret/);
+  assert.equal(verify(input({ secret: 'x'.repeat(4096) })), false);
+  assert.equal(verify(input()), true);
+});
