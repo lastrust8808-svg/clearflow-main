@@ -77,7 +77,7 @@ try {
   });
 
   await test('invisible Unicode whitespace cannot enter ERP accounting identifiers', async () => {
-    const hidden = ['\\u00a0', '\\u2007', '\\u2028', '\\u2029', '\\u3000'];
+    const hidden = ['\u00a0', '\u2007', '\u2028', '\u2029', '\u3000'];
     for (const character of hidden) {
       for (const field of ['invoiceId', 'entityId', 'invoiceNumber']) {
         const response = await invoke('POST', '/invoice-deliveries', {
