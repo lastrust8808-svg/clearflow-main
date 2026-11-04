@@ -35,7 +35,12 @@ function identifier(value, field) {
       })) {
     throw new TypeError(field + ' must not contain Unicode noncharacters');
   }
-  // Directional formatting controls can visually reorder signer and evidence\n  // identifiers in review screens without changing their stored identity.\n  if (/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/u.test(value)) {\n    throw new TypeError(field + ' must not contain bidirectional formatting controls');\n  }\n  // Bound every signing identity and evidence pointer before storage or hashing.
+  // Directional formatting controls can visually reorder signer and evidence
+  // identifiers in review screens without changing their stored identity.
+  if (/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/u.test(value)) {
+    throw new TypeError(field + ' must not contain bidirectional formatting controls');
+  }
+  // Bound every signing identity and evidence pointer before storage or hashing.
   // Count UTF-16 code units consistently with the trust ledger identifiers.
   if (value.length > 256) {
     throw new RangeError(field + ' exceeds 256 UTF-16 code units');
