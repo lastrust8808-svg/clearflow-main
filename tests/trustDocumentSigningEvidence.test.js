@@ -839,3 +839,18 @@ test('signing audit identifiers reject bidirectional display controls', () => {
   }
   assert.equal(assess().status, 'evidence_ready_for_review');
 });
+
+test('signing audit identifiers reject invisible default-ignorable Unicode', () => {
+  const invisible = ['\u200B', '\u200C', '\u200D', '\u2060', '\uFE0F', '\u00AD'];
+  for (const character of invisible) {
+    assert.throws(() => assess({ tenantId: 'tenant' + character + '-a' }),
+      /invisible Unicode formatting controls/);
+    assert.throws(() => assess({ attestations: [
+      attestation('a', { signerId: 'signer' + character + '-a' }),
+    ] }), /invisible Unicode formatting controls/);
+    assert.throws(() => assess({ attestations: [
+      attestation('a', { signatureEvidenceRef: 'receipt' + character + '-a' }),
+    ] }), /invisible Unicode formatting controls/);
+  }
+  assert.equal(assess().status, 'evidence_ready_for_review');
+});
