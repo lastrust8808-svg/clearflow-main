@@ -146,3 +146,18 @@ test('provider transaction identity cannot be reused across accounts within one 
   const independent = { ...forgedCredit, connectionId: 'item-b' };
   assert.deepEqual(review([debit, independent]), { candidates: [], ambiguous: [] });
 });
+
+
+test('shared batch reference with two debits and two credits never yields a transfer candidate', () => {
+  const rows = [
+    { ...transaction(50), accountId: 'checking', amountCents: -300, providerReference: 'batch-50' },
+    { ...transaction(51), accountId: 'payroll', amountCents: -300, providerReference: 'batch-50' },
+    { ...transaction(52), accountId: 'savings', amountCents: 300, providerReference: 'batch-50' },
+    { ...transaction(53), accountId: 'reserve', amountCents: 300, providerReference: 'batch-50' },
+  ];
+  const result = review(rows);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous.map((row) => row.transactionId).sort(),
+    ['tx-50', 'tx-51', 'tx-52', 'tx-53']);
+  assert.deepEqual(review([...rows].reverse()), result);
+});
