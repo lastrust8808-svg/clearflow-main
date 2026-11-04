@@ -19,7 +19,14 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   if (!isCurrentGoogleAttempt(current, attemptId, expectedStatus)) return current;
   // A reducer must preserve the originating attempt identity. Refuse malformed
   // or cross-attempt results rather than committing an ambiguous auth state.
-  const next = reducer(current);
+  // A failed asynchronous admission reducer must not crash the callback path
+  // or replace the active attempt with a partial authentication result.
+  let next;
+  try {
+    next = reducer(current);
+  } catch {
+    return current;
+  }
   if (!next || typeof next !== 'object' || Array.isArray(next) ||
       next.googleAttemptId !== attemptId) return current;
   return next;
