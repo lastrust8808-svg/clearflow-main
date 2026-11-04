@@ -430,6 +430,10 @@ export async function claimErpOperationJob({
       Date.parse(createdAt) > Date.parse(claimedAt) ||
       Date.parse(claimedAt) > Date.parse(updatedAt) ||
       Date.parse(updatedAt) >= Date.parse(leaseExpiresAt) ||
+      // An initial claim cannot grant an arbitrarily long lease. The SQL
+      // statement grants only leaseSeconds; allow bounded clock skew in
+      // database receipts, never a multi-hour fabricated worker fence.
+      Date.parse(leaseExpiresAt) > Date.parse(claimedAt) + leaseSeconds * 1000 + 5 * 60 * 1000 ||
       Date.parse(createdAt) > Date.now() + 5 * 60 * 1000 ||
       Date.parse(claimedAt) > Date.now() + 5 * 60 * 1000 ||
       Date.parse(updatedAt) > Date.now() + 5 * 60 * 1000) {
