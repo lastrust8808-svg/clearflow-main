@@ -348,7 +348,9 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
   const createdAt = persistedUtcTimestamp(record.created_at);
   const updatedAt = persistedUtcTimestamp(record.updated_at);
   if (createdAt === null || updatedAt === null ||
-      Date.parse(updatedAt) < Date.parse(createdAt)) {
+      Date.parse(updatedAt) < Date.parse(createdAt) ||
+      Date.parse(createdAt) > Date.now() + 5 * 60 * 1000 ||
+      Date.parse(updatedAt) > Date.now() + 5 * 60 * 1000) {
     throw new Error('ERP job storage returned an invalid status timestamp');
   }
   return Object.freeze({
