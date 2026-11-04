@@ -402,3 +402,20 @@ test('signed fixture bounds untrusted signature headers before admission', () =>
     assert.equal(verifyScoped({ ...valid, signatureHeader: header }), null);
   }
 });
+
+test('signed fixture rejects NFC-equivalent duplicate JSON keys before projection', () => {
+  // The raw bytes are correctly signed; canonical-equivalent keys must still
+  // fail admission rather than silently selecting the final JSON.parse value.
+  const canonical = JSON.stringify(scopedPayload);
+  const duplicate = canonical.slice(0, -1) +
+    ',"caf\\u00e9":"first","cafe\\u0301":"second"}';
+  const body = Buffer.from(duplicate, 'utf8');
+  const candidate = scopedInput(scopedPayload, {
+    rawBody: body,
+    signatureHeader: sign(body),
+  });
+  assert.equal(verify(candidate), true, 'cryptographic verification alone succeeds');
+  assert.equal(verifyScoped(candidate), null, 'canonical duplicate must not be admitted');
+  assert.equal(verifyScoped(scopedInput(scopedPayload))?.verified, true,
+    'ordinary canonical signed events remain supported');
+});
