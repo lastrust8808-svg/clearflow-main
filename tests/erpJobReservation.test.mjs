@@ -43,6 +43,23 @@ test('proposed schema uses a tenant+operation+idempotency unique constraint', ()
   assert.match(sql, /actor_id\s+text\s+NOT NULL/i);
 });
 
+
+test('future-dated database reservation cannot be acknowledged as durable', async () => {
+  const db = fakeDatabase();
+  const original = db.query.bind(db);
+  db.query = async (sql, params) => {
+    const result = await original(sql, params);
+    if (/INSERT INTO erp_operation_jobs/.test(sql)) {
+      return { rows: result.rows.map(row => ({
+        ...row, created_at: new Date(Date.now() + 60 * 60 * 1000),
+      })) };
+    }
+    return result;
+  };
+  await assert.rejects(reserve({ db, ...args }), /invalid creation timestamp/);
+  assert.equal(db.calls, 1, 'future receipt must not trigger a fallback lookup');
+});
+
 test('first reservation is recorded, identical replay returns the original job', async () => {
   const db = fakeDatabase();
   const first = await reserve({ db, ...args });
