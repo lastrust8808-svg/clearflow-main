@@ -64,3 +64,17 @@ test('throwing admission reducers cannot mutate or reject the current attempt', 
   }), current);
   assert.equal(called, false);
 });
+
+test('async reducers and statusless results cannot be admitted as authenticated sessions', () => {
+  const current = pending('attempt-B');
+  for (const result of [
+    Promise.resolve({ ...current, status: 'authenticated' }),
+    { ...current, status: undefined },
+    { ...current, status: '' },
+    { ...current, status: 123 },
+  ]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(current.status, 'pending-gsi');
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
