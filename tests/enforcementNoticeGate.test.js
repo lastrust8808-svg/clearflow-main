@@ -117,3 +117,16 @@ test('validated own data descriptors are used without triggering Proxy get traps
   assert.deepEqual(assess(packet), {status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
   assert.equal(reads, 0);
 });
+
+test('optional notice field presence is resolved from a single descriptor snapshot', () => {
+  const counts = new Map();
+  const packet = new Proxy({...base}, {
+    getOwnPropertyDescriptor(target, key) {
+      counts.set(key, (counts.get(key) || 0) + 1);
+      if (counts.get(key) > 1) throw new Error('repeated descriptor lookup: ' + String(key));
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    }
+  });
+  assert.equal(assess(packet).status, 'evidence_ready_for_review');
+  for (const count of counts.values()) assert.equal(count, 1);
+});
