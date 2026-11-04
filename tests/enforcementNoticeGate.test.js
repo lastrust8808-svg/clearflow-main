@@ -78,3 +78,11 @@ test('delivery evidence cannot impersonate any notice scope or preparation ident
   }
   assert.equal(assess({ ...base, deliveryEvidenceRef: 'delivery-2' }).status, 'evidence_ready_for_review');
 });
+
+
+test('explicit null delivery claims are rejected, not treated as omitted evidence', () => {
+  assert.throws(() => assess({...base, deliveryEvidenceRef:null}), /null delivery evidence/);
+  assert.throws(() => assess({...base, deliveredAt:null}), /null delivery timestamp/);
+  assert.throws(() => assess({...base, deliveryEvidenceRef:null, deliveredAt:undefined}), /null delivery evidence/);
+  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:undefined}).reason, 'delivery_evidence_missing');
+});
