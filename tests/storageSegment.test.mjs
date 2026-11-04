@@ -154,3 +154,22 @@ test('rejects non-ASCII Unicode spacing aliases inside storage identifiers', () 
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+
+test('percent-encoded path spellings cannot alias distinct account identifiers', () => {
+  const identifiers = [
+    'tenant/a', 'tenant%2Fa', 'tenant%252Fa',
+    'tenant\\\\a', 'tenant%5Ca',
+    'tenant:a', 'tenant%3Aa',
+    'tenant?x', 'tenant%3Fx',
+    'tenant#x', 'tenant%23x',
+    'tenant space', 'tenant%20space',
+    'équipe', '%C3%A9quipe',
+  ];
+  const encoded = identifiers.map(sanitizeStorageSegment);
+  assert.equal(new Set(encoded).size, identifiers.length);
+  for (const segment of encoded) {
+    assert.equal(path.dirname(path.resolve(root, segment)), root);
+    assert.ok(!segment.includes('/') && !segment.includes('\\\\'));
+  }
+});
