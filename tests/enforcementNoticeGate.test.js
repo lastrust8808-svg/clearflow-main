@@ -86,3 +86,24 @@ test('explicit null delivery claims are rejected, not treated as omitted evidenc
   assert.throws(() => assess({...base, deliveryEvidenceRef:null, deliveredAt:undefined}), /null delivery evidence/);
   assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:undefined}).reason, 'delivery_evidence_missing');
 });
+
+
+test('inherited optional delivery evidence cannot fabricate a delivery claim', () => {
+  const packet = {...base};
+  delete packet.deliveryEvidenceRef;
+  delete packet.deliveredAt;
+  const originalRef = Object.getOwnPropertyDescriptor(Object.prototype, 'deliveryEvidenceRef');
+  const originalAt = Object.getOwnPropertyDescriptor(Object.prototype, 'deliveredAt');
+  let reads = 0;
+  try {
+    Object.defineProperty(Object.prototype, 'deliveryEvidenceRef', { configurable:true, get() { reads++; throw Error('inherited ref getter'); } });
+    Object.defineProperty(Object.prototype, 'deliveredAt', { configurable:true, get() { reads++; throw Error('inherited time getter'); } });
+    assert.equal(assess(packet).reason, 'delivery_evidence_missing');
+    assert.equal(reads, 0);
+  } finally {
+    if (originalRef) Object.defineProperty(Object.prototype, 'deliveryEvidenceRef', originalRef);
+    else delete Object.prototype.deliveryEvidenceRef;
+    if (originalAt) Object.defineProperty(Object.prototype, 'deliveredAt', originalAt);
+    else delete Object.prototype.deliveredAt;
+  }
+});
