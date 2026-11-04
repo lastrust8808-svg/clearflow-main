@@ -2223,3 +2223,29 @@ test('ERP reservation rejects multiline Unicode JSON field names before database
   assert.equal(accepted.status, 'queued');
   assert.equal(db.calls, 1);
 });
+
+test('ERP status lookup rejects future-dated persisted timestamps without fallback', async () => {
+  const { readErpOperationJobStatus: read } =
+    await import('../server/services/erpJobReservation.js');
+  const jobId = '123e4567-e89b-42d3-a456-000000000001';
+  const now = new Date();
+  const future = new Date(now.getTime() + 60 * 60 * 1000);
+  for (const [created_at, updated_at] of [
+    [future, future],
+    [now, future],
+  ]) {
+    let calls = 0;
+    const db = { async query() {
+      calls++;
+      return { rows: [{
+        id: jobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+        operation: 'invoice_delivery', status: 'queued',
+        created_at, updated_at,
+      }] };
+    } };
+    await assert.rejects(read({
+      db, authenticatedScope: scope, jobId,
+    }), /invalid status timestamp/);
+    assert.equal(calls, 1, 'invalid timestamp cannot trigger a fallback read');
+  }
+});
