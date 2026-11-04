@@ -396,3 +396,24 @@ test('retired lifecycle evidence cannot poison a posted transfer reference', () 
   assert.deepEqual(blocked.ambiguous.map((row) => row.transactionId).sort(),
     ['tx-190', 'tx-191']);
 });
+
+
+test('foreign-tenant pending evidence cannot suppress authorized transfer review', () => {
+  const debit = { ...transaction(200), accountId: 'checking', amountCents: -125,
+    providerReference: 'tenant-pending-200' };
+  const credit = { ...transaction(201), accountId: 'savings', amountCents: 125,
+    providerReference: 'tenant-pending-200' };
+  const foreignPending = { ...transaction(202), tenantId: 'tenant-b',
+    accountId: 'reserve', amountCents: 125, status: 'pending',
+    providerReference: 'tenant-pending-200' };
+  for (const rows of [
+    [debit, credit, foreignPending],
+    [foreignPending, credit, debit],
+  ]) {
+    assert.throws(() => review(rows), /Invalid or unauthorized transfer source record/);
+  }
+  const result = review([debit, credit]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+});
