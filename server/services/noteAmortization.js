@@ -43,6 +43,7 @@ function requirePlainNoteTerms(terms) {
       throw new TypeError('Note terms.' + key + ' must be an own data field');
     }
   }
+  return Object.fromEntries([...TERMS_FIELDS].map(key => [key, descriptors[key].value]));
 }
 
 
@@ -119,7 +120,7 @@ function monthlyDueDate(first, offset) {
  * firstDueDate:string}} terms
  */
 export function buildFixedMonthlyNoteSchedule(terms) {
-  requirePlainNoteTerms(terms);
+  terms = requirePlainNoteTerms(terms);
   const tenantId = requiredString(terms.tenantId, 'tenantId');
   const entityId = requiredString(terms.entityId, 'entityId');
   const trustId = requiredString(terms.trustId, 'trustId');
