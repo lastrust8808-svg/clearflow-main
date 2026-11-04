@@ -246,3 +246,32 @@ test('replayed provider transaction cannot appear as both pending and posted in 
   assert.equal(clean.candidates.length, 1);
   assert.equal(clean.candidates[0].status, 'review_required');
 });
+
+
+test('pending collision evidence is scoped to its own provider connection', () => {
+  const debit = { ...transaction(110), accountId: 'checking', amountCents: -600,
+    providerReference: 'shared-110' };
+  const credit = { ...transaction(111), accountId: 'savings', amountCents: 600,
+    providerReference: 'shared-110' };
+  const unrelatedPending = { ...transaction(112), connectionId: 'item-b',
+    accountId: 'reserve', amountCents: 600, status: 'pending',
+    providerReference: 'shared-110' };
+  const result = review([debit, credit, unrelatedPending]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+  assert.deepEqual(review([unrelatedPending, credit, debit]), result);
+});
+
+test('pending collision evidence in same connection blocks posted pair across currencies', () => {
+  const debit = { ...transaction(120), accountId: 'checking', amountCents: -600,
+    providerReference: 'shared-120' };
+  const credit = { ...transaction(121), accountId: 'savings', amountCents: 600,
+    providerReference: 'shared-120' };
+  const pending = { ...transaction(122), accountId: 'reserve', amountCents: 600,
+    currency: 'EUR', status: 'pending', providerReference: 'shared-120' };
+  const result = review([debit, credit, pending]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous.map((row) => row.transactionId).sort(),
+    ['tx-120', 'tx-121']);
+});
