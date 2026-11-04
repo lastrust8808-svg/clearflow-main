@@ -20,6 +20,7 @@ export function assessEnforcementNoticeEvidence(packet) {
   const preparedAt = packet.preparedAt == null ? null : utc(packet.preparedAt, 'preparedAt');
   if (preparedAt && preparedAt > evaluatedAt) return Object.freeze({status:'incomplete',reason:'preparation_after_evaluation'});
   if (packet.deliveryEvidenceRef == null && packet.deliveredAt == null) return Object.freeze({status:'incomplete',reason:'delivery_evidence_missing'});
+  if (packet.deliveryEvidenceRef == null || packet.deliveredAt == null) return Object.freeze({status:'incomplete',reason:'partial_delivery_evidence'});
   if (typeof packet.deliveryEvidenceRef !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(packet.deliveryEvidenceRef) || identifiers.includes(packet.deliveryEvidenceRef)) throw new TypeError('Invalid or reused delivery evidence reference');
   const deliveredAt = utc(packet.deliveredAt, 'deliveredAt');
   if (preparedAt && deliveredAt < preparedAt) return Object.freeze({status:'incomplete',reason:'delivery_before_preparation'});
