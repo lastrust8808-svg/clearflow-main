@@ -119,6 +119,25 @@ test('rejects edge whitespace in storage identities while allowing internal spac
 });
 
 
+test('rejects noncharacters at every Unicode plane boundary without blocking adjacent scalar values', () => {
+  for (let plane = 0; plane <= 16; plane += 1) {
+    const end = (plane << 16) + 0xFFFF;
+    for (const code of [end - 1, end]) {
+      assert.throws(
+        () => sanitizeStorageSegment('tenant-' + String.fromCodePoint(code)),
+        TypeError,
+        'plane ' + plane + ', U+' + code.toString(16),
+      );
+    }
+  }
+  for (const code of [0xFDCF, 0xFDD0 - 1, 0xFDF0, 0x1FFFD, 0x10FFFD]) {
+    assert.equal(
+      sanitizeStorageSegment('tenant-' + String.fromCodePoint(code)),
+      encodeURIComponent('tenant-' + String.fromCodePoint(code)),
+    );
+  }
+});
+
 test('rejects Unicode noncharacters in account and document identifiers', () => {
   for (const code of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
     assert.throws(() => sanitizeStorageSegment('member-' + String.fromCodePoint(code)), TypeError);
