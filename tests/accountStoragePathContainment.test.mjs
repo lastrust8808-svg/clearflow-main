@@ -1504,3 +1504,26 @@ test('symlinked document directories cannot redirect reads or writes across tena
     await fs.rm(victimPath, { recursive: true, force: true });
   }
 });
+
+
+test('symlinked account roots cannot alias another tenant app-data vault', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `root-symlink-victim-${randomUUID()}`;
+  const aliasId = `root-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountAppData(victimId, { amountMinor: 1250 });
+    const before = await loadAccountAppData(victimId);
+    await fs.symlink(victimPath, aliasPath, 'dir');
+    await assert.rejects(loadAccountAppData(aliasId), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountAppData(aliasId, { amountMinor: 9999 }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountAppData(victimId), before);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
