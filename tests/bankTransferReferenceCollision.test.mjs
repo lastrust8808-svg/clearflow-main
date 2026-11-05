@@ -156,3 +156,23 @@ test('pending reference reuse in another provider does not block a posted pair',
   assert.equal(baseline.candidates.length, 1);
   assert.deepEqual(review([pending, debit, credit]), baseline);
 });
+
+test('provider transaction identity reuse across lifecycle states fails closed', () => {
+  const posted = row('checking', 'same-event', -1250);
+  const historical = {
+    ...row('archived', 'same-event', 1250),
+    status: 'removed',
+  };
+  assert.throws(() => review([posted, historical]), /Duplicate provider transaction identity/);
+  assert.throws(() => review([historical, posted]), /Duplicate provider transaction identity/);
+});
+
+test('pending and posted copies of one provider event cannot create a transfer candidate', () => {
+  const posted = row('checking', 'event-reused', -1250);
+  const pending = {
+    ...row('savings', 'event-reused', 1250),
+    status: 'pending',
+  };
+  assert.throws(() => review([posted, pending]), /Duplicate provider transaction identity/);
+  assert.throws(() => review([pending, posted]), /Duplicate provider transaction identity/);
+});
