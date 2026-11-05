@@ -57,15 +57,15 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
-  // Embedded Unicode whitespace can make audit identifiers appear split or
-  // equivalent after display-layer whitespace folding. Keep ownership keys atomic.
-  if (/\p{White_Space}/u.test(value)) {
-    throw new TypeError(`${field} must not contain Unicode whitespace`);
-  }
   // Unicode line and paragraph separators can split an audit identifier into
   // multiple displayed records without being ASCII control characters.
   if (/[\u2028\u2029]/u.test(value)) {
     throw new TypeError(`${field} must not contain Unicode line separators`);
+  }
+  // Embedded Unicode whitespace can make audit identifiers appear split or
+  // equivalent after display-layer whitespace folding. Keep ownership keys atomic.
+  if (/\p{White_Space}/u.test(value)) {
+    throw new TypeError(`${field} must not contain Unicode whitespace`);
   }
   // Invisible format characters (including zero-width and bidi controls) can
   // make distinct scope identifiers appear identical in audit trails.
