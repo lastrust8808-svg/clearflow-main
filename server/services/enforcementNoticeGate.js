@@ -7,7 +7,7 @@ export function assessEnforcementNoticeEvidence(packet) {
     if (typeof key !== 'string' || !fields.has(key) || !descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value')) throw new TypeError('Unsupported or accessor notice field');
   }
   // Use inspected own data descriptors, never property reads that a Proxy can trap.
-  const ownValue = key => descriptors[key]?.value;
+  const ownValue = key => Object.hasOwn(descriptors, key) ? descriptors[key].value : undefined;
   const idFields = ['tenantId','trustId','noteId','noticeId','noticeVersionId','preparedEvidenceRef'];
   for (const key of idFields) {
     if (typeof ownValue(key) !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(ownValue(key))) throw new TypeError('Invalid notice identifier: ' + key);
