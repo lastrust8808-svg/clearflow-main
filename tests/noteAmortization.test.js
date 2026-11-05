@@ -234,3 +234,12 @@ test('rejects Unicode line and paragraph separators in note ownership identifier
     assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
   }
 });
+
+test('rejects embedded Unicode whitespace in private-note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const whitespace of [' ', '\u00A0', '\u2003', '\u3000']) {
+      assert.throws(() => schedule({ [key]: 'scope' + whitespace + 'id' }), /Unicode whitespace/);
+    }
+    assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
+  }
+});
