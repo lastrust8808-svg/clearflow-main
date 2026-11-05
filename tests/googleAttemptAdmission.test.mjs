@@ -158,3 +158,28 @@ test('inherited and accessor-backed OAuth identity results fail closed', () => {
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('inherited and accessor-backed active OAuth identities cannot admit callbacks', () => {
+  const inheritedId = Object.create({ googleAttemptId: 'attempt-B' });
+  inheritedId.status = 'pending-gsi';
+  const inheritedStatus = Object.create({ status: 'pending-gsi' });
+  inheritedStatus.googleAttemptId = 'attempt-B';
+  const accessorId = { status: 'pending-gsi' };
+  Object.defineProperty(accessorId, 'googleAttemptId', {
+    enumerable: true, get() { return 'attempt-B'; },
+  });
+  const accessorStatus = { googleAttemptId: 'attempt-B' };
+  Object.defineProperty(accessorStatus, 'status', {
+    enumerable: true, get() { return 'pending-gsi'; },
+  });
+  for (const current of [inheritedId, inheritedStatus, accessorId, accessorStatus]) {
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
