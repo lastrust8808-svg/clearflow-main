@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assessEnforcementNoticeEvidence as assess } from '../server/services/enforcementNoticeGate.js';
-const base = {tenantId:'tenant-1',trustId:'trust-1',noteId:'note-1',noticeId:'notice-1',noticeVersionId:'version-1',preparedEvidenceRef:'prepared-1',deliveryEvidenceRef:'delivery-1',deliveredAt:'2026-11-03T10:00:00.000Z',evaluatedAt:'2026-11-03T11:00:00.000Z'};
+const base = {tenantId:'tenant-1',trustId:'trust-1',noteId:'note-1',noticeId:'notice-1',noticeVersionId:'version-1',preparedEvidenceRef:'prepared-1',preparedAt:'2026-11-03T09:00:00.000Z',deliveryEvidenceRef:'delivery-1',deliveredAt:'2026-11-03T10:00:00.000Z',evaluatedAt:'2026-11-03T11:00:00.000Z'};
+test('missing preparation chronology cannot be review-ready', () => {
+  const packet = {...base};
+  delete packet.preparedAt;
+  assert.deepEqual(assess(packet), {status:'incomplete',reason:'preparation_timestamp_missing'});
+  assert.equal(assess({...base,preparedAt:'2026-11-03T09:00:00.000Z'}).status,'evidence_ready_for_review');
+});
 test('delivery claim is review-only, not verified service', () => {
   assert.deepEqual(assess(base), {status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
   assert.equal(Object.hasOwn(assess(base),'serviceVerified'),false);
