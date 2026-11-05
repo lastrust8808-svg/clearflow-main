@@ -27,9 +27,15 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   } catch {
     return current;
   }
-  if (!next || typeof next !== 'object' || Array.isArray(next) ||
-      typeof next.then === 'function' ||
-      typeof next.status !== 'string' || !next.status ||
-      next.googleAttemptId !== attemptId) return current;
+  // Accessors on untrusted reducer results can throw during validation.
+  // Keep admission fail-closed even when a property getter is hostile.
+  try {
+    if (!next || typeof next !== 'object' || Array.isArray(next) ||
+        typeof next.then === 'function' ||
+        typeof next.status !== 'string' || !next.status ||
+        next.googleAttemptId !== attemptId) return current;
+  } catch {
+    return current;
+  }
   return next;
 }
