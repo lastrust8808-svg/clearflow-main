@@ -5,14 +5,20 @@
  * newer UI attempt after a retry, cancellation or timeout.
  */
 export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pending-gsi') {
-  return Boolean(
-    current &&
-    current.status === expectedStatus &&
-    typeof attemptId === 'string' &&
-    attemptId.length > 0 &&
-    typeof current.googleAttemptId === 'string' &&
-    current.googleAttemptId === attemptId
-  );
+  // A malformed or proxied state can throw while its fields are read.
+  // Never let that exception advance or crash an OAuth callback.
+  try {
+    return Boolean(
+      current &&
+      current.status === expectedStatus &&
+      typeof attemptId === 'string' &&
+      attemptId.length > 0 &&
+      typeof current.googleAttemptId === 'string' &&
+      current.googleAttemptId === attemptId
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function admitGoogleAttemptResult(current, attemptId, reducer, expectedStatus = 'pending-gsi') {
