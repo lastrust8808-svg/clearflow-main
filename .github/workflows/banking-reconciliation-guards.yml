@@ -19,6 +19,7 @@ on:
       - 'tests/bankTransferBatchBounds.test.mjs'
       - 'tests/bankTransferCalendarBoundary.test.mjs'
       - 'tests/bankTransferReferenceCollision.test.mjs'
+      - 'tests/bankTransferIdentityUnicode.test.mjs'
       - 'server/services/bankTransferCandidates.js'
       - '.github/workflows/banking-reconciliation-guards.yml'
   push:
@@ -41,6 +42,7 @@ on:
       - 'tests/bankTransferBatchBounds.test.mjs'
       - 'tests/bankTransferCalendarBoundary.test.mjs'
       - 'tests/bankTransferReferenceCollision.test.mjs'
+      - 'tests/bankTransferIdentityUnicode.test.mjs'
       - 'server/services/bankTransferCandidates.js'
       - '.github/workflows/banking-reconciliation-guards.yml'
 
@@ -61,7 +63,7 @@ jobs:
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
           node --check server/services/bankFeedPostgresStore.js
           node --check server/services/bankTransferCandidates.js
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs tests/bankTransferCandidates.test.mjs tests/bankTransferBatchLimit.test.mjs tests/bankTransferBatchBounds.test.mjs tests/bankTransferCalendarBoundary.test.mjs tests/bankTransferReferenceCollision.test.mjs
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs tests/bankTransferCandidates.test.mjs tests/bankTransferBatchLimit.test.mjs tests/bankTransferBatchBounds.test.mjs tests/bankTransferCalendarBoundary.test.mjs tests/bankTransferReferenceCollision.test.mjs tests/bankTransferIdentityUnicode.test.mjs
 
   banking-postgres-schema:
     runs-on: ubuntu-latest
