@@ -169,3 +169,25 @@ test('hidden delivery and preparation claims cannot evade evidence validation', 
   assert.throws(() => assess(packet), /Unsupported or accessor/);
   assert.equal(reads, 0);
 });
+
+test('required scope and evaluation fields cannot be inherited or accessor-backed', () => {
+  for (const field of ['tenantId', 'trustId', 'noteId', 'noticeId', 'noticeVersionId', 'preparedEvidenceRef', 'evaluatedAt']) {
+    let reads = 0;
+    const accessor = {...base};
+    Object.defineProperty(accessor, field, {enumerable:true, configurable:true, get() { reads++; throw Error('untrusted getter'); }});
+    assert.throws(() => assess(accessor), /Unsupported or accessor/, field);
+    assert.equal(reads, 0, field);
+
+    const inherited = {...base};
+    delete inherited[field];
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    try {
+      Object.defineProperty(Object.prototype, field, {configurable:true, get() { reads++; throw Error('inherited getter'); }});
+      assert.throws(() => assess(inherited), /Invalid notice identifier|Invalid canonical UTC timestamp/, field);
+      assert.equal(reads, 0, field);
+    } finally {
+      if (original) Object.defineProperty(Object.prototype, field, original);
+      else delete Object.prototype[field];
+    }
+  }
+});
