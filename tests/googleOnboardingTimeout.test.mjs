@@ -332,7 +332,7 @@ test('fresh Google profile cannot inherit a remembered tenant workspace', () => 
 test('Google profile admission rejects throwing identity getters without crashing', () => {
   const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
   const valid = { email: 'verified@example.test', name: 'Verified' };
-  for (const field of ['email']) {
+  for (const field of ['email', 'name']) {
     const hostile = { ...valid };
     Object.defineProperty(hostile, field, { get() { throw new Error('invalid profile'); } });
      assert.doesNotThrow(() => admitVerifiedGoogleProfile(waiting, 'token', hostile));
