@@ -78,3 +78,15 @@ test('async reducers and statusless results cannot be admitted as authenticated 
   assert.equal(current.status, 'pending-gsi');
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('throwing result accessors fail closed without crashing OAuth callbacks', () => {
+  const current = pending('attempt-B');
+  for (const key of ['then', 'status', 'googleAttemptId']) {
+    const hostile = { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    Object.defineProperty(hostile, key, {
+      get() { throw new Error('simulated hostile ' + key + ' getter'); },
+    });
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
