@@ -14,7 +14,7 @@ test('delivery claim is review-only, not verified service', () => {
   assert.ok(Object.isFrozen(assess(base)));
 });
 test('missing delivery evidence is incomplete', () => {
-  assert.equal(assess({...base,deliveryEvidenceRef:undefined,deliveredAt:undefined}).reason,'delivery_evidence_missing');
+  assert.equal(assess((({deliveryEvidenceRef,deliveredAt,...rest})=>rest)(base)).reason,'delivery_evidence_missing');
 });
 test('cross-role evidence replay is rejected', () => {
   for (const ref of [base.preparedEvidenceRef,base.noteId,base.noticeId]) {
@@ -42,17 +42,17 @@ test('optional preparation timestamp enforces chronological delivery evidence', 
 });
 
 test('partial delivery claims are incomplete rather than review-ready', () => {
-  assert.deepEqual(assess({...base,deliveryEvidenceRef:undefined}), {status:'incomplete',reason:'partial_delivery_evidence'});
-  assert.deepEqual(assess({...base,deliveredAt:undefined}), {status:'incomplete',reason:'partial_delivery_evidence'});
-  assert.equal(assess({...base,deliveryEvidenceRef:undefined,deliveredAt:undefined}).reason,'delivery_evidence_missing');
+  assert.deepEqual(assess((({deliveryEvidenceRef,...rest})=>rest)(base)), {status:'incomplete',reason:'partial_delivery_evidence'});
+  assert.deepEqual(assess((({deliveredAt,...rest})=>rest)(base)), {status:'incomplete',reason:'partial_delivery_evidence'});
+  assert.equal(assess((({deliveryEvidenceRef,deliveredAt,...rest})=>rest)(base)).reason,'delivery_evidence_missing');
 });
 
 test('supplied partial delivery evidence must be well-formed even when incomplete', () => {
   assert.throws(() => assess({...base, deliveryEvidenceRef:base.noticeId, deliveredAt:undefined}), /reused/);
   assert.throws(() => assess({...base, deliveryEvidenceRef:'bad ref', deliveredAt:undefined}), /Invalid/);
-  assert.throws(() => assess({...base, deliveryEvidenceRef:undefined, deliveredAt:'2026-02-30T10:00:00.000Z'}), /canonical/);
-  assert.equal(assess({...base, deliveryEvidenceRef:'delivery-2', deliveredAt:undefined}).reason,'partial_delivery_evidence');
-  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason,'partial_delivery_evidence');
+  assert.throws(() => assess({...(({deliveryEvidenceRef,...rest})=>rest)(base), deliveredAt:'2026-02-30T10:00:00.000Z'}), /canonical/);
+  assert.equal(assess({...(({deliveredAt,...rest})=>rest)(base), deliveryEvidenceRef:'delivery-2'}).reason,'partial_delivery_evidence');
+  assert.equal(assess((({deliveryEvidenceRef,...rest})=>rest)(base)).reason,'partial_delivery_evidence');
 });
 
 test('supplied preparation timestamp must be canonical, not null or undefined', () => {
@@ -63,9 +63,9 @@ test('supplied preparation timestamp must be canonical, not null or undefined', 
 });
 
 test('partial delivery timestamps cannot bypass chronology checks', () => {
-  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:'2026-11-04T00:00:00.000Z'}).reason, 'delivery_after_evaluation');
-  assert.equal(assess({...base, deliveryEvidenceRef:undefined, preparedAt:'2026-11-03T10:30:00.000Z'}).reason, 'delivery_before_preparation');
-  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:base.deliveredAt}).reason, 'partial_delivery_evidence');
+  assert.equal(assess({...(({deliveryEvidenceRef,...rest})=>rest)(base), deliveredAt:'2026-11-04T00:00:00.000Z'}).reason, 'delivery_after_evaluation');
+  assert.equal(assess({...(({deliveryEvidenceRef,...rest})=>rest)(base), preparedAt:'2026-11-03T10:30:00.000Z'}).reason, 'delivery_before_preparation');
+  assert.equal(assess((({deliveryEvidenceRef,...rest})=>rest)(base)).reason, 'partial_delivery_evidence');
 });
 
 test('invalid supplied delivery evidence is rejected before preparation chronology classification', () => {
@@ -89,8 +89,8 @@ test('delivery evidence cannot impersonate any notice scope or preparation ident
 test('explicit null delivery claims are rejected, not treated as omitted evidence', () => {
   assert.throws(() => assess({...base, deliveryEvidenceRef:null}), /null delivery evidence/);
   assert.throws(() => assess({...base, deliveredAt:null}), /null delivery timestamp/);
-  assert.throws(() => assess({...base, deliveryEvidenceRef:null, deliveredAt:undefined}), /null delivery evidence/);
-  assert.equal(assess({...base, deliveryEvidenceRef:undefined, deliveredAt:undefined}).reason, 'delivery_evidence_missing');
+  assert.throws(() => assess({...base, deliveryEvidenceRef:null}), /null delivery evidence/);
+  assert.equal(assess((({deliveryEvidenceRef,deliveredAt,...rest})=>rest)(base)).reason, 'delivery_evidence_missing');
 });
 
 
@@ -135,4 +135,12 @@ test('optional notice field presence is resolved from a single descriptor snapsh
   });
   assert.equal(assess(packet).status, 'evidence_ready_for_review');
   for (const count of counts.values()) assert.equal(count, 1);
+});
+
+
+test('explicit undefined delivery claims fail closed rather than masquerade as omission', () => {
+  assert.throws(() => assess({...base, deliveryEvidenceRef:undefined}), /Undefined delivery evidence/);
+  assert.throws(() => assess({...base, deliveredAt:undefined}), /Undefined delivery timestamp/);
+  const {deliveryEvidenceRef, deliveredAt, ...withoutDelivery} = base;
+  assert.equal(assess(withoutDelivery).reason, 'delivery_evidence_missing');
 });
