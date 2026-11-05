@@ -14,13 +14,13 @@ const review = (record) => proposeBankTransferCandidates({
 
 test('noncanonical Unicode provider identities fail closed', () => {
   for (const field of ['connectionId', 'accountId', 'transactionId', 'providerReference']) {
-    assert.throws(() => review({ ...base, [field]: 'Cafe\\u0301' }),
+    assert.throws(() => review({ ...base, [field]: 'Cafe\u0301' }),
       /Invalid or unauthorized transfer source record/, field);
   }
 });
 
 test('invisible and noncharacter provider identities fail closed', () => {
-  for (const value of ['a\\u200bb', 'a\\u00a0b', 'a\\ufdd0b', 'a\\u{10ffff}b']) {
+  for (const value of ['a\u200bb', 'a\u00a0b', 'a\ufdd0b', 'a\u{10ffff}b']) {
     assert.throws(() => review({ ...base, providerReference: value }),
       /Invalid or unauthorized transfer source record/);
   }
