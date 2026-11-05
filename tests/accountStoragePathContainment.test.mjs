@@ -1455,3 +1455,27 @@ test('symlinked transaction-proof vault directories cannot redirect reads or wri
     await fs.rm(victimPath, { recursive: true, force: true });
   }
 });
+
+test('symlinked extraction directories cannot redirect reads or writes across tenants', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `extraction-symlink-victim-${randomUUID()}`;
+  const aliasId = `extraction-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountExtractionRecord(victimId, 'receipt-1', { amountMinor: 1250 });
+    const before = await loadAccountExtractionRecord(victimId, 'receipt-1');
+    await fs.mkdir(aliasPath);
+    await fs.symlink(path.join(victimPath, 'extractions'),
+      path.join(aliasPath, 'extractions'), 'dir');
+    await assert.rejects(loadAccountExtractionRecord(aliasId, 'receipt-1'), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountExtractionRecord(aliasId, 'receipt-1', { amountMinor: 9999 }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountExtractionRecord(victimId, 'receipt-1'), before);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
