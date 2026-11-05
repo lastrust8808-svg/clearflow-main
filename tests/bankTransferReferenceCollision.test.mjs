@@ -107,3 +107,26 @@ test('two independent providers with matching reference and amounts cannot form 
   assert.deepEqual(result.candidates, []);
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('removed and superseded reference history cannot poison current posted transfer evidence', () => {
+  const debit = row('checking', 'current-debit', -1250);
+  const credit = row('savings', 'current-credit', 1250);
+  const removed = { ...row('old-checking', 'old-removed', -1250), status: 'removed' };
+  const superseded = { ...row('old-savings', 'old-superseded', 1250), status: 'superseded' };
+  const baseline = review([debit, credit]);
+  const result = review([removed, debit, superseded, credit]);
+  assert.deepEqual(result, baseline);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.deepEqual(result.ambiguous, []);
+});
+
+test('pending evidence sharing a provider reference never creates a candidate on its own', () => {
+  const debit = row('checking', 'current-debit', -1250);
+  const pendingCredit = { ...row('savings', 'pending-credit', 1250), status: 'pending' };
+  const result = review([debit, pendingCredit]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [{ provider: 'plaid',
+    connectionId: 'connection-reference-collision', accountId: 'checking',
+    transactionId: 'current-debit', candidateCount: 0 }]);
+});
