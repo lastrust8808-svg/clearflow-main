@@ -264,3 +264,17 @@ test('month-end note schedules preserve calendar dates across 400-year leap cycl
   assert.equal(schedule({ firstDueDate: '2400-02-29', paymentCount: 1 }).installments[0].dueDate,
     '2400-02-29');
 });
+
+
+test('monthly due dates remain canonical at the supported calendar boundaries', () => {
+  const lower = schedule({ firstDueDate: '1900-01-31', paymentCount: 3 });
+  assert.deepEqual(lower.installments.map(row => row.dueDate),
+    ['1900-01-31', '1900-02-28', '1900-03-31']);
+  const upper = schedule({ firstDueDate: '9949-12-31', paymentCount: 600,
+    principalMinor: 1_200_000, annualRateBps: 0 });
+  assert.equal(upper.installments[0].dueDate, '9949-12-31');
+  assert.equal(upper.installments.at(-1).dueDate, '9999-11-30');
+  assert.equal(upper.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.throws(() => schedule({ firstDueDate: '1899-12-31' }), /Invalid firstDueDate/);
+  assert.throws(() => schedule({ firstDueDate: '9950-01-01' }), /Invalid firstDueDate/);
+});
