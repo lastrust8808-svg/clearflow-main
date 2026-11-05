@@ -35,6 +35,8 @@ async function invoke(method, path, body = {}, params = {}) {
   const response = {
     statusCode: 200,
     body: null,
+    headers: {},
+    set(name, value) { this.headers[name.toLowerCase()] = value; return this; },
     status(code) { this.statusCode = code; return this; },
     json(value) { this.body = value; return this; },
   };
@@ -52,6 +54,7 @@ try {
     assert.equal(response.body.success, false);
     assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
     assert.equal(response.body.operation, 'invoice_delivery');
+    assert.equal(response.headers['cache-control'], 'no-store');
     assert.match(response.body.error, /No job was queued and no message was sent/);
     assert.equal(response.body.job, undefined);
   });
@@ -61,6 +64,7 @@ try {
     assert.equal(response.statusCode, 503);
     assert.equal(response.body.success, false);
     assert.equal(response.body.operation, 'invoice_export');
+    assert.equal(response.headers['cache-control'], 'no-store');
     assert.equal(response.body.job, undefined);
   });
 
