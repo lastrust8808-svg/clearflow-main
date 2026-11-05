@@ -278,3 +278,15 @@ test('monthly due dates remain canonical at the supported calendar boundaries', 
   assert.throws(() => schedule({ firstDueDate: '1899-12-31' }), /Invalid firstDueDate/);
   assert.throws(() => schedule({ firstDueDate: '9950-01-01' }), /Invalid firstDueDate/);
 });
+
+
+test('leap-day due dates retain the original 29th anchor through a full annual cycle', () => {
+  const result = schedule({ firstDueDate: '2028-02-29', paymentCount: 13,
+    principalMinor: 130_000, annualRateBps: 0 });
+  assert.equal(result.installments[0].dueDate, '2028-02-29');
+  assert.equal(result.installments[1].dueDate, '2028-03-29');
+  assert.equal(result.installments[11].dueDate, '2029-01-29');
+  assert.equal(result.installments[12].dueDate, '2029-02-28');
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), 130_000);
+});
