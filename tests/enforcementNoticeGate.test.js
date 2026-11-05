@@ -144,3 +144,14 @@ test('explicit undefined delivery claims fail closed rather than masquerade as o
   const {deliveryEvidenceRef, deliveredAt, ...withoutDelivery} = base;
   assert.equal(assess(withoutDelivery).reason, 'delivery_evidence_missing');
 });
+
+
+test('unrecognized metadata and symbol keys cannot be smuggled into review evidence', () => {
+  assert.throws(() => assess({...base, serviceVerified:true}), /Unsupported or accessor/);
+  const hidden = {...base};
+  Object.defineProperty(hidden, 'serviceVerified', {value:true, enumerable:false});
+  assert.throws(() => assess(hidden), /Unsupported or accessor/);
+  const symbolic = {...base, [Symbol('serviceVerified')]:true};
+  assert.throws(() => assess(symbolic), /Unsupported or accessor/);
+  assert.equal(assess(base).status, 'evidence_ready_for_review');
+});
