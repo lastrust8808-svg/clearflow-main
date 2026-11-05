@@ -191,3 +191,25 @@ test('required scope and evaluation fields cannot be inherited or accessor-backe
     }
   }
 });
+
+test('scope identifiers cannot alias each other or the preparation evidence', () => {
+  for (const field of ['trustId', 'noteId', 'noticeId', 'noticeVersionId', 'preparedEvidenceRef']) {
+    assert.throws(() => assess({...base, [field]:base.tenantId}), /distinct/, field);
+  }
+  assert.throws(() => assess({...base, preparedEvidenceRef:base.noticeVersionId}), /distinct/);
+});
+
+test('evaluation time requires exact canonical UTC and valid calendar date', () => {
+  for (const evaluatedAt of [
+    '2026-11-03T11:00:00Z',
+    '2026-11-03T11:00:00.000+00:00',
+    '2026-11-03T11:00:00.000z',
+    '2026-02-30T11:00:00.000Z',
+    'not-a-date',
+    null,
+    undefined
+  ]) {
+    assert.throws(() => assess({...base, evaluatedAt}), /canonical UTC timestamp/, String(evaluatedAt));
+  }
+  assert.equal(assess(base).status, 'evidence_ready_for_review');
+});
