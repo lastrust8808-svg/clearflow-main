@@ -21,6 +21,8 @@ export function assessEnforcementNoticeEvidence(packet) {
   const evaluatedAt = utc(ownValue('evaluatedAt'), 'evaluatedAt');
   const preparedAt = Object.hasOwn(descriptors, 'preparedAt') ? utc(ownValue('preparedAt'), 'preparedAt') : null;
   // Explicit null is not an omitted field: reject ambiguous evidence claims.
+  if (Object.hasOwn(descriptors, 'deliveryEvidenceRef') && ownValue('deliveryEvidenceRef') === undefined) throw new TypeError('Undefined delivery evidence reference must be omitted');
+  if (Object.hasOwn(descriptors, 'deliveredAt') && ownValue('deliveredAt') === undefined) throw new TypeError('Undefined delivery timestamp must be omitted');
   if (Object.hasOwn(descriptors, 'deliveryEvidenceRef') && ownValue('deliveryEvidenceRef') === null) throw new TypeError('Invalid null delivery evidence reference');
   if (Object.hasOwn(descriptors, 'deliveredAt') && ownValue('deliveredAt') === null) throw new TypeError('Invalid null delivery timestamp');
   const deliveryEvidenceRef = Object.hasOwn(descriptors, 'deliveryEvidenceRef') ? ownValue('deliveryEvidenceRef') : undefined;
