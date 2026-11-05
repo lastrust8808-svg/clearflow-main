@@ -130,6 +130,29 @@ test('symlinked Plaid vault directories cannot redirect reads or writes across t
   }
 });
 
+test('symlinked remittance vault directories cannot redirect reads or writes across tenants', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `remittance-symlink-victim-${randomUUID()}`;
+  const aliasId = `remittance-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountRemittanceVault(victimId, 'vendor-1', { amount: 1250, memo: 'victim-only' });
+    const victimBefore = await loadAccountRemittanceVault(victimId, 'vendor-1');
+    await fs.mkdir(aliasPath);
+    await fs.symlink(path.join(victimPath, 'remittance'), path.join(aliasPath, 'remittance'), 'dir');
+    await assert.rejects(loadAccountRemittanceVault(aliasId, 'vendor-1'), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountRemittanceVault(aliasId, 'vendor-1', { amount: 9999, memo: 'attacker' }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountRemittanceVault(victimId, 'vendor-1'), victimBefore);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
 test('symlinked JSON records are not followed during account reads', async () => {
   const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
   const victimId = `record-victim-${randomUUID()}`;
