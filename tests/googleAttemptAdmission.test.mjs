@@ -107,3 +107,17 @@ test('throwing current-state accessors fail closed before invoking reducers', ()
   }
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('blank-only OAuth attempt identities never admit a callback', () => {
+  for (const id of [' ', '\t', '\n', '\u00a0', '\u2003']) {
+    const current = pending(id);
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
