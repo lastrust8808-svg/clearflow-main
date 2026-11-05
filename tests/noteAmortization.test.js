@@ -290,3 +290,15 @@ test('leap-day due dates retain the original 29th anchor through a full annual c
   assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
   assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), 130_000);
 });
+
+
+test('one-period maximum-rate projection preserves exact minor-unit reconciliation', () => {
+  const result = schedule({ principalMinor: 120_000, annualRateBps: 100_000, paymentCount: 1 });
+  assert.equal(result.installments.length, 1);
+  assert.equal(result.installments[0].interestMinor, 100_000);
+  assert.equal(result.installments[0].principalMinor, 120_000);
+  assert.equal(result.installments[0].paymentMinor, 220_000);
+  assert.equal(result.totalInterestMinor, 100_000);
+  assert.equal(result.totalRepaymentMinor, 220_000);
+  assert.equal(result.installments[0].remainingPrincipalMinor, 0);
+});
