@@ -17,7 +17,10 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
       if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false;
       fields[key] = descriptor.value;
     }
+    // Admission is only valid during an in-flight Google authentication stage.
+    // A caller-supplied status must never reopen a completed or logged-out session.
     return Boolean(
+      (expectedStatus === 'pending-gsi' || expectedStatus === 'pending-drive-check') &&
       fields.status === expectedStatus &&
       typeof attemptId === 'string' &&
       attemptId.trim().length > 0 &&
