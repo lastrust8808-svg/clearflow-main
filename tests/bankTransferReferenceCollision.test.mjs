@@ -66,3 +66,25 @@ test('a pending reference collision blocks review even if it cannot match by amo
   assert.deepEqual(result.candidates, []);
   assert.deepEqual(result.ambiguous.map((entry) => entry.transactionId), ['debit', 'credit']);
 });
+
+test('identical provider transaction IDs on different connections remain isolated', () => {
+  const debit = row('checking', 'shared-provider-id', -1250);
+  const credit = row('savings', 'credit', 1250);
+  const secondConnection = {
+    ...row('external', 'shared-provider-id', 900),
+    connectionId: 'independent-connection',
+  };
+  const first = review([debit, credit, secondConnection]);
+  const reordered = review([secondConnection, credit, debit]);
+  assert.deepEqual(first, reordered);
+  assert.equal(first.candidates.length, 1);
+  assert.equal(first.candidates[0].status, 'review_required');
+  assert.deepEqual(first.ambiguous, []);
+});
+
+test('same provider transaction ID reused across accounts within a connection fails closed', () => {
+  const debit = row('checking', 'duplicated-provider-id', -1250);
+  const credit = row('savings', 'duplicated-provider-id', 1250);
+  assert.throws(() => review([debit, credit]), /Duplicate provider transaction identity/);
+  assert.throws(() => review([credit, debit]), /Duplicate provider transaction identity/);
+});
