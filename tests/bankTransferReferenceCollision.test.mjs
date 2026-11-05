@@ -88,3 +88,22 @@ test('same provider transaction ID reused across accounts within a connection fa
   assert.throws(() => review([debit, credit]), /Duplicate provider transaction identity/);
   assert.throws(() => review([credit, debit]), /Duplicate provider transaction identity/);
 });
+
+test('same-account opposite entries cannot be mistaken for an internal transfer', () => {
+  const debit = row('checking', 'debit-same-account', -1250);
+  const credit = row('checking', 'credit-same-account', 1250);
+  const result = review([debit, credit]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, []);
+});
+
+test('two independent providers with matching reference and amounts cannot form a transfer', () => {
+  const debit = row('checking', 'plaid-debit', -1250);
+  const credit = {
+    ...row('savings', 'mercury-credit', 1250),
+    provider: 'mercury',
+  };
+  const result = review([credit, debit]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, []);
+});
