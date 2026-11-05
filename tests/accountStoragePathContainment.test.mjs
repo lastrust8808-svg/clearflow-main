@@ -107,6 +107,30 @@ test('symlinked document subdirectories cannot cross account storage boundaries'
   }
 });
 
+test('symlinked Plaid vault directories cannot redirect reads or writes across tenants', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `plaid-symlink-victim-${randomUUID()}`;
+  const aliasId = `plaid-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountPlaidVault(victimId, { connections: [{ id: 'victim-only' }] });
+    await fs.mkdir(aliasPath);
+    await fs.symlink(path.join(victimPath, 'plaid'), path.join(aliasPath, 'plaid'), 'dir');
+    await assert.rejects(loadAccountPlaidVault(aliasId), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountPlaidVault(aliasId, { connections: [{ id: 'attacker' }] }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountPlaidVault(victimId), {
+      connections: [{ id: 'victim-only' }],
+    });
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
+
 test('symlinked JSON records are not followed during account reads', async () => {
   const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
   const victimId = `record-victim-${randomUUID()}`;
