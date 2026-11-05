@@ -62,6 +62,14 @@ function requiredString(value, field) {
   if (/\p{Default_Ignorable_Code_Point}/u.test(value)) {
     throw new TypeError(`${field} must not contain default-ignorable Unicode characters`);
   }
+  // Unicode noncharacters are not stable identifiers for interchange or audit.
+  // Reject the reserved FDD0–FDEF block and plane-ending FFFE/FFFF scalars.
+  if (/[\uFDD0-\uFDEF]/u.test(value) || [...value].some(char => {
+    const codepoint = char.codePointAt(0);
+    return (codepoint & 0xFFFE) === 0xFFFE;
+  })) {
+    throw new TypeError(`${field} must not contain Unicode noncharacters`);
+  }
   // Reject unpaired UTF-16 surrogates before downstream UTF-8 serialization
   // could silently replace distinct note identities with U+FFFD. Valid
   // supplementary Unicode scalar values (surrogate pairs) remain supported.
