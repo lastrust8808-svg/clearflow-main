@@ -234,3 +234,19 @@ test('caller-supplied expected status cannot reopen a completed OAuth session', 
     'attempt-B', 'pending-drive-check'
   ), true);
 });
+
+
+test('OAuth admission never executes then accessors on reducer results', () => {
+  const current = pending('attempt-B');
+  let getterCalls = 0;
+  const hostile = { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  Object.defineProperty(hostile, 'then', { get() { getterCalls++; return undefined; } });
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  assert.equal(getterCalls, 0);
+  const inherited = Object.create({ get then() { getterCalls++; return undefined; } });
+  inherited.status = 'authenticated';
+  inherited.googleAttemptId = 'attempt-B';
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => inherited), current);
+  assert.equal(getterCalls, 0);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
