@@ -5,6 +5,9 @@ const router = express.Router();
 // Fail closed until a durable, tenant-authorized job store and delivery audit exist.
 // In particular, never send SMTP before a job has been durably accepted.
 function rejectNonDurableJob(res, operation) {
+  // Never allow a proxy or browser to replay an unavailable response after
+  // durable processing becomes available, or misrepresent current readiness.
+  res.set('Cache-Control', 'no-store');
   return res.status(503).json({
     success: false,
     code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
