@@ -432,3 +432,16 @@ test('rejects whitespace-only tenant and provider identity keys before review', 
   }
   assert.equal(plan([row('checking', 'out', -500, { providerReference: 'ref 1' })]).candidates.length, 0);
 });
+
+
+test('provider transaction replay under the same account cannot certify a transfer', () => {
+  const debit = row('checking', 'replayed-id', -900);
+  const credit = row('savings', 'distinct-credit', 900);
+  for (const status of ['posted', 'pending', 'removed', 'superseded']) {
+    const replay = row('checking', 'replayed-id', -900, { status });
+    assert.throws(() => plan([debit, credit, replay]), /Duplicate transfer source identity/);
+    assert.throws(() => plan([replay, credit, debit]), /Duplicate transfer source identity/);
+  }
+  // Replay rejection must not prevent independent, uniquely identified events.
+  assert.equal(plan([debit, credit]).candidates.length, 1);
+});
