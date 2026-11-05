@@ -124,6 +124,7 @@ export function rejectFailedGoogleDriveRecovery(current) {
 export function admitVerifiedGoogleProfile(current, accessToken, user) {
   // OAuth profile objects may be malformed proxies or contain throwing getters.
   // Treat inspection failures as unverified rather than crashing admission.
+  let verifiedName;
   try {
     if (!current || current.status !== 'pending-gsi') return current;
     if (typeof accessToken !== 'string' || !accessToken.trim() ||
@@ -132,6 +133,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       user.email !== user.email.normalize('NFC')) {
       return current;
     }
+    verifiedName = user.name;
   } catch {
     return current;
   }
@@ -141,7 +143,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     token: current.token || 'google-oauth-token',
     apiAccessToken: accessToken,
     status: 'pending-drive-check',
-    gsiUser: { name: user.name, email: user.email },
+    gsiUser: { name: verifiedName, email: user.email },
     // A cached account snapshot is not evidence for this OAuth attempt.
     appData: { user, entities: [] },
   };
