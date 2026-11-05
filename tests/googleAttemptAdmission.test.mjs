@@ -121,3 +121,18 @@ test('blank-only OAuth attempt identities never admit a callback', () => {
   }
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('invisible control and formatting characters cannot identify an OAuth attempt', () => {
+  for (const id of ['attempt-\u200bB', 'attempt-\u202eB', 'attempt-\u0000B', 'attempt-\u2028B', 'attempt-\ud800B']) {
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
