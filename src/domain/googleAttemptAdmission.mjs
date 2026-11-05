@@ -48,8 +48,18 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   // Accessors on untrusted reducer results can throw during validation.
   // Keep admission fail-closed even when a property getter is hostile.
   try {
-    if (!next || typeof next !== 'object' || Array.isArray(next) ||
-        typeof next.then === 'function') return current;
+    if (!next || typeof next !== 'object' || Array.isArray(next)) return current;
+    // Inspect thenability without invoking a potentially side-effecting getter.
+    // Promise instances inherit a callable `then` from their prototype.
+    let candidate = next;
+    while (candidate !== null) {
+      const thenDescriptor = Object.getOwnPropertyDescriptor(candidate, 'then');
+      if (thenDescriptor) {
+        if (!Object.hasOwn(thenDescriptor, 'value') || typeof thenDescriptor.value === 'function') return current;
+        break;
+      }
+      candidate = Object.getPrototypeOf(candidate);
+    }
     // Read identity from own data descriptors, not potentially hostile Proxy
     // get traps that can disagree with the identity actually stored on state.
     const fields = {};
