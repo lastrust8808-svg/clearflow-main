@@ -214,3 +214,13 @@ test('rejects default-ignorable Unicode in note ownership identifiers', () => {
   }
   assert.equal(schedule({ noteId: 'scope-\u00e9' }).installments.length, 12);
 });
+
+test('rejects Unicode noncharacters in private-note scope identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const cp of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+      assert.throws(() => schedule({ [key]: 'scope-' + String.fromCodePoint(cp) }), /Unicode noncharacters/);
+    }
+    assert.equal(schedule({ [key]: 'scope-' + String.fromCodePoint(0x1F4DC) })[key],
+      'scope-' + String.fromCodePoint(0x1F4DC));
+  }
+});
