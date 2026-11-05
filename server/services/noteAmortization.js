@@ -57,7 +57,7 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
-  // Invisible format characters (including zero-width and bidi controls) can
+  // Unicode line and paragraph separators can split an audit identifier into\n  // multiple displayed records without being ASCII control characters.\n  if (/[\\u2028\\u2029]/u.test(value)) {\n    throw new TypeError(`${field} must not contain Unicode line separators`);\n  }\n  // Invisible format characters (including zero-width and bidi controls) can
   // make distinct scope identifiers appear identical in audit trails.
   if (/\p{Default_Ignorable_Code_Point}/u.test(value)) {
     throw new TypeError(`${field} must not contain default-ignorable Unicode characters`);
