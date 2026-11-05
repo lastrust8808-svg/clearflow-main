@@ -90,3 +90,20 @@ test('throwing result accessors fail closed without crashing OAuth callbacks', (
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('throwing current-state accessors fail closed before invoking reducers', () => {
+  for (const key of ['status', 'googleAttemptId']) {
+    const hostile = { status: 'pending-gsi', googleAttemptId: 'attempt-B' };
+    Object.defineProperty(hostile, key, {
+      get() { throw new Error('simulated hostile current ' + key + ' getter'); },
+    });
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(hostile, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(hostile, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), hostile);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
