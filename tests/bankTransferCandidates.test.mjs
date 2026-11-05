@@ -464,3 +464,28 @@ test('transaction batches reject hidden, symbol-keyed and accessor entries witho
   assert.equal(getterCalls, 0);
   assert.deepEqual(plan([valid]), { candidates: [], ambiguous: [] });
 });
+
+
+test('transfer source records reject inherited, hidden and symbol-keyed financial evidence', () => {
+  let getterCalls = 0;
+  const ordinary = row('checking', 'safe-debit', -500);
+  const inherited = Object.assign(Object.create({ providerReference: 'hidden-reference' }), ordinary);
+  delete inherited.providerReference;
+  const hidden = { ...ordinary };
+  Object.defineProperty(hidden, 'unreviewedAmount', { value: 999999 });
+  const symbolic = { ...ordinary, [Symbol('unreviewed')]: 999999 };
+  const getter = { ...ordinary };
+  Object.defineProperty(getter, 'providerReference', {
+    enumerable: true,
+    get() { getterCalls++; throw new Error('source getter executed'); },
+  });
+  for (const source of [inherited, hidden, symbolic, getter]) {
+    assert.throws(() => plan([source]), /Invalid transfer source record/);
+  }
+  assert.equal(getterCalls, 0);
+  const frozen = Object.freeze({ ...ordinary });
+  const nullPrototype = Object.assign(Object.create(null), row('savings', 'safe-credit', 500));
+  const result = plan(Object.freeze([frozen, nullPrototype]));
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
