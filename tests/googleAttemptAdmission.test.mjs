@@ -216,3 +216,21 @@ test('OAuth identity reads use own descriptors rather than contradictory Proxy g
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', () => spoofedResult).status, 'pending-gsi');
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('caller-supplied expected status cannot reopen a completed OAuth session', () => {
+  for (const status of ['authenticated', 'unauthenticated', 'pending-profile-setup']) {
+    const current = Object.freeze({ status, googleAttemptId: 'attempt-B' });
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B', status), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...current, status: 'authenticated' };
+    }, status), current);
+    assert.equal(called, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+  assert.equal(isCurrentGoogleAttempt(
+    { status: 'pending-drive-check', googleAttemptId: 'attempt-B' },
+    'attempt-B', 'pending-drive-check'
+  ), true);
+});
