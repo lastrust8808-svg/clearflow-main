@@ -41,3 +41,28 @@ test('reference collisions are scoped to provider connection', () => {
   assert.equal(result.candidates.length, 1);
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('identical reference text from a different provider cannot poison a Plaid pair', () => {
+  const debit = row('checking', 'debit', -1250);
+  const credit = row('savings', 'credit', 1250);
+  const mercury = {
+    ...row('external', 'mercury-record', 700),
+    provider: 'mercury',
+  };
+  const result = review([mercury, debit, credit]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].provider, 'plaid');
+  assert.deepEqual(result.ambiguous, []);
+});
+
+test('a pending reference collision blocks review even if it cannot match by amount or date', () => {
+  const debit = row('checking', 'debit', -1250);
+  const credit = row('savings', 'credit', 1250);
+  const pending = {
+    ...row('other', 'pending-other', 700, 'EUR', '2026-11-20'),
+    status: 'pending',
+  };
+  const result = review([pending, credit, debit]);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous.map((entry) => entry.transactionId), ['debit', 'credit']);
+});
