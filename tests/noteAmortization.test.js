@@ -224,3 +224,13 @@ test('rejects Unicode noncharacters in private-note scope identifiers', () => {
       'scope-' + String.fromCodePoint(0x1F4DC));
   }
 });
+
+
+test('rejects Unicode line and paragraph separators in note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const separator of ['\u2028', '\u2029']) {
+      assert.throws(() => schedule({ [key]: 'scope' + separator + 'id' }), /Unicode line separators/);
+    }
+    assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
+  }
+});
