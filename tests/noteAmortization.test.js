@@ -243,3 +243,13 @@ test('rejects embedded Unicode whitespace in private-note ownership identifiers'
     assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
   }
 });
+
+
+test('monthly due dates handle Gregorian century boundaries without drift', () => {
+  const nonLeapCentury = schedule({ firstDueDate: '2100-01-31', paymentCount: 3 });
+  assert.deepEqual(nonLeapCentury.installments.map(row => row.dueDate),
+    ['2100-01-31', '2100-02-28', '2100-03-31']);
+  const leapCentury = schedule({ firstDueDate: '2000-01-31', paymentCount: 3 });
+  assert.deepEqual(leapCentury.installments.map(row => row.dueDate),
+    ['2000-01-31', '2000-02-29', '2000-03-31']);
+});
