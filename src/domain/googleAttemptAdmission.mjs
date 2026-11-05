@@ -11,17 +11,19 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
     // The active attempt must also have explicit own data fields; inherited
     // values and getters cannot establish which callback owns this state.
     if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+    const fields = {};
     for (const key of ['status', 'googleAttemptId']) {
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
       if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false;
+      fields[key] = descriptor.value;
     }
     return Boolean(
-      current.status === expectedStatus &&
+      fields.status === expectedStatus &&
       typeof attemptId === 'string' &&
       attemptId.trim().length > 0 &&
       !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(attemptId) &&
-      typeof current.googleAttemptId === 'string' &&
-      current.googleAttemptId === attemptId
+      typeof fields.googleAttemptId === 'string' &&
+      fields.googleAttemptId === attemptId
     );
   } catch {
     return false;
@@ -44,15 +46,17 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   // Keep admission fail-closed even when a property getter is hostile.
   try {
     if (!next || typeof next !== 'object' || Array.isArray(next) ||
-        typeof next.then === 'function' ||
-        typeof next.status !== 'string' || !next.status ||
-        next.googleAttemptId !== attemptId) return current;
-    // Auth identity and status must be explicit own data fields. Inherited
-    // properties or accessors can masquerade as a completed OAuth callback.
+        typeof next.then === 'function') return current;
+    // Read identity from own data descriptors, not potentially hostile Proxy
+    // get traps that can disagree with the identity actually stored on state.
+    const fields = {};
     for (const key of ['status', 'googleAttemptId']) {
       const field = Object.getOwnPropertyDescriptor(next, key);
       if (!field || !Object.hasOwn(field, 'value')) return current;
+      fields[key] = field.value;
     }
+    if (typeof fields.status !== 'string' || !fields.status ||
+        fields.googleAttemptId !== attemptId) return current;
   } catch {
     return current;
   }
