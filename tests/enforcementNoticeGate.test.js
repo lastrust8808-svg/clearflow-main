@@ -155,3 +155,17 @@ test('unrecognized metadata and symbol keys cannot be smuggled into review evide
   assert.throws(() => assess(symbolic), /Unsupported or accessor/);
   assert.equal(assess(base).status, 'evidence_ready_for_review');
 });
+
+
+test('hidden delivery and preparation claims cannot evade evidence validation', () => {
+  for (const field of ['preparedAt', 'deliveryEvidenceRef', 'deliveredAt']) {
+    const packet = {...base};
+    Object.defineProperty(packet, field, {value:base[field], enumerable:false, configurable:true});
+    assert.throws(() => assess(packet), /Unsupported or accessor/, field);
+  }
+  const packet = {...base};
+  let reads = 0;
+  Object.defineProperty(packet, 'preparedAt', {enumerable:true, get() { reads++; throw Error('unsafe preparation getter'); }});
+  assert.throws(() => assess(packet), /Unsupported or accessor/);
+  assert.equal(reads, 0);
+});
