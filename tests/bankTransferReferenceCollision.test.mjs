@@ -130,3 +130,29 @@ test('pending evidence sharing a provider reference never creates a candidate on
     connectionId: 'connection-reference-collision', accountId: 'checking',
     transactionId: 'current-debit', candidateCount: 0 }]);
 });
+
+test('pending reference reuse in another connection does not block a posted pair', () => {
+  const debit = row('checking', 'posted-debit', -1250);
+  const credit = row('savings', 'posted-credit', 1250);
+  const pending = {
+    ...row('external', 'pending-external', 700),
+    connectionId: 'separate-connection',
+    status: 'pending',
+  };
+  const baseline = review([debit, credit]);
+  assert.equal(baseline.candidates.length, 1);
+  assert.deepEqual(review([pending, debit, credit]), baseline);
+});
+
+test('pending reference reuse in another provider does not block a posted pair', () => {
+  const debit = row('checking', 'posted-debit', -1250);
+  const credit = row('savings', 'posted-credit', 1250);
+  const pending = {
+    ...row('external', 'pending-mercury', 700),
+    provider: 'mercury',
+    status: 'pending',
+  };
+  const baseline = review([debit, credit]);
+  assert.equal(baseline.candidates.length, 1);
+  assert.deepEqual(review([pending, debit, credit]), baseline);
+});
