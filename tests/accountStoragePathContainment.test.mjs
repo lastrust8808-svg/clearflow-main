@@ -1430,3 +1430,28 @@ test('inherited JSON serializers cannot rewrite tenant evidence before or after 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('symlinked transaction-proof vault directories cannot redirect reads or writes across tenants', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `proof-symlink-victim-${randomUUID()}`;
+  const aliasId = `proof-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountTransactionProofVault(victimId, { chains: [{ id: 'private-chain' }] });
+    const before = await loadAccountTransactionProofVault(victimId);
+    await fs.mkdir(aliasPath);
+    await fs.symlink(path.join(victimPath, 'transaction-proof-chains'),
+      path.join(aliasPath, 'transaction-proof-chains'), 'dir');
+    await assert.rejects(loadAccountTransactionProofVault(aliasId), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountTransactionProofVault(aliasId, { chains: [{ id: 'injected-chain' }] }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountTransactionProofVault(victimId), before);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
