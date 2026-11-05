@@ -41,6 +41,12 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
         typeof next.then === 'function' ||
         typeof next.status !== 'string' || !next.status ||
         next.googleAttemptId !== attemptId) return current;
+    // Auth identity and status must be explicit own data fields. Inherited
+    // properties or accessors can masquerade as a completed OAuth callback.
+    for (const key of ['status', 'googleAttemptId']) {
+      const field = Object.getOwnPropertyDescriptor(next, key);
+      if (!field || !Object.hasOwn(field, 'value')) return current;
+    }
   } catch {
     return current;
   }
