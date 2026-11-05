@@ -327,3 +327,22 @@ test('fresh Google profile cannot inherit a remembered tenant workspace', () => 
   assert.deepEqual(next.appData, { user: verified, entities: [] });
   assert.equal(remembered.appData.entities[0].id, 'private-tenant');
 });
+
+
+test('Google profile admission rejects throwing identity getters without crashing', () => {
+  const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
+  const valid = { email: 'verified@example.test', name: 'Verified' };
+  for (const field of ['email']) {
+    const hostile = { ...valid };
+    Object.defineProperty(hostile, field, { get() { throw new Error('invalid profile'); } });
+     assert.doesNotThrow(() => admitVerifiedGoogleProfile(waiting, 'token', hostile));
+  }
+  const badState = Object.defineProperty({}, 'status', {
+    get() { throw new Error('invalid state'); },
+  });
+  assert.equal(admitVerifiedGoogleProfile(badState, 'token', valid), badState);
+  const badEmail = Object.defineProperty({}, 'email', {
+    get() { throw new Error('invalid email'); },
+  });
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'token', badEmail), waiting);
+});
