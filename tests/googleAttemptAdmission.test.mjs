@@ -183,3 +183,36 @@ test('inherited and accessor-backed active OAuth identities cannot admit callbac
   }
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('OAuth identity reads use own descriptors rather than contradictory Proxy get traps', () => {
+  const current = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-B' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-A';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), true);
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-A'), false);
+
+  const spoofedCurrent = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-A' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-B';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(spoofedCurrent, 'attempt-B', () => {
+    called = true;
+    return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  }), spoofedCurrent);
+  assert.equal(called, false);
+
+  const spoofedResult = new Proxy({ status: 'authenticated', googleAttemptId: 'attempt-A' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-B';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', () => spoofedResult).status, 'pending-gsi');
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
