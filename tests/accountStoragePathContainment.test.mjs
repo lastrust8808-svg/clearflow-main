@@ -1479,3 +1479,28 @@ test('symlinked extraction directories cannot redirect reads or writes across te
     await fs.rm(victimPath, { recursive: true, force: true });
   }
 });
+
+
+test('symlinked document directories cannot redirect reads or writes across tenants', async () => {
+  const root = path.resolve(process.cwd(), 'server', 'storage-data', 'accounts');
+  const victimId = `document-symlink-victim-${randomUUID()}`;
+  const aliasId = `document-symlink-alias-${randomUUID()}`;
+  const victimPath = path.join(root, victimId);
+  const aliasPath = path.join(root, aliasId);
+  try {
+    await saveAccountDocumentFile(victimId, 'invoice-1', { amountMinor: 1250 });
+    const before = await loadAccountDocumentFile(victimId, 'invoice-1');
+    await fs.mkdir(aliasPath);
+    await fs.symlink(path.join(victimPath, 'files'),
+      path.join(aliasPath, 'files'), 'dir');
+    await assert.rejects(loadAccountDocumentFile(aliasId, 'invoice-1'), /Unsafe storage directory path/);
+    await assert.rejects(
+      saveAccountDocumentFile(aliasId, 'invoice-1', { amountMinor: 9999 }),
+      /Unsafe storage directory path/
+    );
+    assert.deepEqual(await loadAccountDocumentFile(victimId, 'invoice-1'), before);
+  } finally {
+    await fs.rm(aliasPath, { recursive: true, force: true });
+    await fs.rm(victimPath, { recursive: true, force: true });
+  }
+});
