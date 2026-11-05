@@ -36,6 +36,9 @@ export function assessEnforcementNoticeEvidence(packet) {
   if (deliveredAt != null && deliveredAt > evaluatedAt) return Object.freeze({status:'incomplete',reason:'delivery_after_evaluation'});
   if (deliveredAt != null && preparedAt && deliveredAt < preparedAt) return Object.freeze({status:'incomplete',reason:'delivery_before_preparation'});
   if (deliveryEvidenceRef == null && deliveredAt == null) return Object.freeze({status:'incomplete',reason:'delivery_evidence_missing'});
+  // Without a preparation timestamp, the claimed delivery cannot be checked
+  // against preparation chronology. Never mark it ready for human review.
+  if (preparedAt == null) return Object.freeze({status:'incomplete',reason:'preparation_timestamp_missing'});
   if (deliveryEvidenceRef == null || deliveredAt == null) return Object.freeze({status:'incomplete',reason:'partial_delivery_evidence'});
   return Object.freeze({status:'evidence_ready_for_review',reason:'unverified_delivery_claim'});
 }
