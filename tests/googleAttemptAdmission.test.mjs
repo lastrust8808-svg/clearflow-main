@@ -136,3 +136,25 @@ test('invisible control and formatting characters cannot identify an OAuth attem
   }
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('inherited and accessor-backed OAuth identity results fail closed', () => {
+  const current = pending('attempt-B');
+  const inherited = Object.create({ googleAttemptId: 'attempt-B' });
+  inherited.status = 'authenticated';
+  const inheritedStatus = Object.create({ status: 'authenticated' });
+  inheritedStatus.googleAttemptId = 'attempt-B';
+  const accessor = { status: 'authenticated' };
+  Object.defineProperty(accessor, 'googleAttemptId', {
+    enumerable: true,
+    get() { return 'attempt-B'; },
+  });
+  const accessorStatus = { googleAttemptId: 'attempt-B' };
+  Object.defineProperty(accessorStatus, 'status', {
+    enumerable: true,
+    get() { return 'authenticated'; },
+  });
+  for (const result of [inherited, inheritedStatus, accessor, accessorStatus]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
