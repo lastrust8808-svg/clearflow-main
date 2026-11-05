@@ -253,3 +253,14 @@ test('monthly due dates handle Gregorian century boundaries without drift', () =
   assert.deepEqual(leapCentury.installments.map(row => row.dueDate),
     ['2000-01-31', '2000-02-29', '2000-03-31']);
 });
+
+
+test('month-end note schedules preserve calendar dates across 400-year leap cycle', () => {
+  const leap400 = schedule({ firstDueDate: '2400-01-31', paymentCount: 3 });
+  assert.deepEqual(leap400.installments.map(row => row.dueDate),
+    ['2400-01-31', '2400-02-29', '2400-03-31']);
+  assert.throws(() => schedule({ firstDueDate: '2100-02-29' }), /Invalid firstDueDate/);
+  assert.throws(() => schedule({ firstDueDate: '2400-02-30' }), /Invalid firstDueDate/);
+  assert.equal(schedule({ firstDueDate: '2400-02-29', paymentCount: 1 }).installments[0].dueDate,
+    '2400-02-29');
+});
