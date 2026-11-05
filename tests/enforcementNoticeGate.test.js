@@ -48,8 +48,8 @@ test('partial delivery claims are incomplete rather than review-ready', () => {
 });
 
 test('supplied partial delivery evidence must be well-formed even when incomplete', () => {
-  assert.throws(() => assess({...base, deliveryEvidenceRef:base.noticeId, deliveredAt:undefined}), /reused/);
-  assert.throws(() => assess({...base, deliveryEvidenceRef:'bad ref', deliveredAt:undefined}), /Invalid/);
+  assert.throws(() => assess({...(({deliveredAt,...rest})=>rest)(base), deliveryEvidenceRef:base.noticeId}), /reused/);
+  assert.throws(() => assess({...(({deliveredAt,...rest})=>rest)(base), deliveryEvidenceRef:'bad ref'}), /Invalid/);
   assert.throws(() => assess({...(({deliveryEvidenceRef,...rest})=>rest)(base), deliveredAt:'2026-02-30T10:00:00.000Z'}), /canonical/);
   assert.equal(assess({...(({deliveredAt,...rest})=>rest)(base), deliveryEvidenceRef:'delivery-2'}).reason,'partial_delivery_evidence');
   assert.equal(assess((({deliveryEvidenceRef,...rest})=>rest)(base)).reason,'partial_delivery_evidence');
