@@ -12,7 +12,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
       current &&
       current.status === expectedStatus &&
       typeof attemptId === 'string' &&
-      attemptId.length > 0 &&
+      attemptId.trim().length > 0 &&
       typeof current.googleAttemptId === 'string' &&
       current.googleAttemptId === attemptId
     );
