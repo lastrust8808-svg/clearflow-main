@@ -8,8 +8,14 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
   // A malformed or proxied state can throw while its fields are read.
   // Never let that exception advance or crash an OAuth callback.
   try {
+    // The active attempt must also have explicit own data fields; inherited
+    // values and getters cannot establish which callback owns this state.
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+    for (const key of ['status', 'googleAttemptId']) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, key);
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false;
+    }
     return Boolean(
-      current &&
       current.status === expectedStatus &&
       typeof attemptId === 'string' &&
       attemptId.trim().length > 0 &&
