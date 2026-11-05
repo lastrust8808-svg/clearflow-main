@@ -445,3 +445,22 @@ test('provider transaction replay under the same account cannot certify a transf
   // Replay rejection must not prevent independent, uniquely identified events.
   assert.equal(plan([debit, credit]).candidates.length, 1);
 });
+
+test('transaction batches reject hidden, symbol-keyed and accessor entries without invoking getters', () => {
+  const valid = row('checking', 'ordinary', -500);
+  let getterCalls = 0;
+  const hidden = [valid];
+  Object.defineProperty(hidden, '0', { value: valid, enumerable: false });
+  const symbolKeyed = [valid];
+  symbolKeyed[Symbol('unexpected-evidence')] = valid;
+  const accessor = [valid];
+  Object.defineProperty(accessor, '0', {
+    enumerable: true, configurable: true,
+    get() { getterCalls++; throw new Error('transaction getter executed'); },
+  });
+  for (const batch of [hidden, symbolKeyed, accessor]) {
+    assert.throws(() => plan(batch), /Malformed transfer transaction batch/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.deepEqual(plan([valid]), { candidates: [], ambiguous: [] });
+});
