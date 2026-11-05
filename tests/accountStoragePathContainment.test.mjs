@@ -115,6 +115,7 @@ test('symlinked Plaid vault directories cannot redirect reads or writes across t
   const aliasPath = path.join(root, aliasId);
   try {
     await saveAccountPlaidVault(victimId, { connections: [{ id: 'victim-only' }] });
+    const victimBefore = await loadAccountPlaidVault(victimId);
     await fs.mkdir(aliasPath);
     await fs.symlink(path.join(victimPath, 'plaid'), path.join(aliasPath, 'plaid'), 'dir');
     await assert.rejects(loadAccountPlaidVault(aliasId), /Unsafe storage directory path/);
@@ -122,9 +123,7 @@ test('symlinked Plaid vault directories cannot redirect reads or writes across t
       saveAccountPlaidVault(aliasId, { connections: [{ id: 'attacker' }] }),
       /Unsafe storage directory path/
     );
-    assert.deepEqual(await loadAccountPlaidVault(victimId), {
-      connections: [{ id: 'victim-only' }],
-    });
+    assert.deepEqual(await loadAccountPlaidVault(victimId), victimBefore);
   } finally {
     await fs.rm(aliasPath, { recursive: true, force: true });
     await fs.rm(victimPath, { recursive: true, force: true });
