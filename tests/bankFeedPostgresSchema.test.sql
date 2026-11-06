@@ -242,4 +242,33 @@ BEGIN
   END;
 END $test$;
 
+-- Reject malformed feed payloads and out-of-range cursor evidence at the DB boundary.
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-array', '[]'::jsonb);
+    RAISE EXCEPTION 'Non-object feed payload was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET cursor = repeat('x', 4097)
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Oversized checkpoint cursor was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF EXISTS (SELECT 1 FROM public.clearflow_bank_feed_entries
+             WHERE transaction_id = 'tx-array') THEN
+    RAISE EXCEPTION 'Rejected malformed payload persisted';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+                 WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+                   AND connection_id = 'shared-item' AND cursor = 'cursor-1') THEN
+    RAISE EXCEPTION 'Rejected oversized cursor modified checkpoint';
+  END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
