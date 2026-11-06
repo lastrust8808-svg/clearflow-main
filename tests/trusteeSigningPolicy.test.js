@@ -437,3 +437,19 @@ test('governance event absence rejects explicit null/undefined and orphan proven
     'no_active_accepted_trustees');
   assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
 });
+
+test('governance identities reject invisible, noncharacter and oversized audit keys', () => {
+  for (const invalid of ['a\u200b', 'a\u202e', 'a\uFDD0', 'a\uFFFF',
+    'a\u{1FFFE}', 'a'.repeat(257)]) {
+    const value = invalid.replace('\\\u200b', '\u200b');
+    assert.throws(() => evaluate({ tenantId: value }), /tenantId/);
+    assert.throws(() => evaluate({
+      appointments: [appointment(value)], signerIds: [value],
+    }), /appointment.trusteeId/);
+    assert.throws(() => evaluate({ signerIds: [value] }), /signerIds item/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: value })],
+    }), /appointment.acceptanceEvidenceRef/);
+  }
+  assert.equal(evaluate({ appointments: [appointment('😀')], signerIds: ['😀'] }).eligible, true);
+});
