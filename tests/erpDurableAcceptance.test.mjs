@@ -343,6 +343,31 @@ try {
       assert.equal(acceptedShape.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
     }
   });
+  await test('all durable-store rejections are non-cacheable and never claim queued work', async () => {
+    const cases = [
+      ['POST', '/invoice-deliveries', invoice, {}],
+      ['POST', '/invoice-exports', invoice, {}],
+      ['POST', '/settlements/execute', {
+        entityId: 'entity-test', paymentId: 'payment-test',
+        settlementId: 'settlement-test', amount: 12.34,
+      }, {}],
+      ['POST', '/reconciliations/:reconciliationId/statement-import', {
+        bankAccountId: 'bank-test', statementEndingBalance: 12.34,
+      }, { reconciliationId: 'recon-test' }],
+      ['POST', '/reconciliations/:reconciliationId/close', {},
+        { reconciliationId: 'recon-test' }],
+    ];
+    for (const [method, path, body, params] of cases) {
+      const response = await invoke(method, path, body, params);
+      assert.equal(response.statusCode, 503, path);
+      assert.equal(response.headers['cache-control'], 'no-store', path);
+      assert.equal(response.body.success, false, path);
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED', path);
+      for (const key of ['job', 'importJob', 'closeJob', 'execution']) {
+        assert.equal(response.body[key], undefined, path + ': ' + key);
+      }
+    }
+  });
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
