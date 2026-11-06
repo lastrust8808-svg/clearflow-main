@@ -249,9 +249,13 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   }
   // Replaying valid event sets alone cannot detect a rewritten historical
   // prefix. Compare canonical event bytes so key insertion order is irrelevant.
-  for (let i = 0; i < previousSnapshot.events.length; i++) {
-    if (JSON.stringify(canonicalJournalEvent(previousSnapshot.events[i])) !==
-        JSON.stringify(canonicalJournalEvent(nextSnapshot.events[i]))) {
+  // Compare the same descriptor-backed event slots used by replay. Indexed
+  // Proxy reads may otherwise substitute a different historical prefix.
+  const previousEvents = plainEvents(previousSnapshot.events);
+  const nextEvents = plainEvents(nextSnapshot.events);
+  for (let i = 0; i < previousEvents.length; i++) {
+    if (JSON.stringify(canonicalJournalEvent(previousEvents[i])) !==
+        JSON.stringify(canonicalJournalEvent(nextEvents[i]))) {
       throw new Error('Reserve journal append cannot rewrite historical events');
     }
   }
