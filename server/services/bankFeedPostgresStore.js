@@ -116,7 +116,7 @@ function parseRevision(value) {
 function validCursor(value) {
   return value === null ||
     (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
-      value === value.trim() && value.isWellFormed() &&
+      value === value.trim() && value.isWellFormed() && !containsUnicodeNoncharacter(value) &&
       !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
 }
 
