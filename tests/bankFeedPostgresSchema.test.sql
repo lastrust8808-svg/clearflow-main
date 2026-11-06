@@ -218,6 +218,21 @@ BEGIN
     RAISE EXCEPTION 'Orphan banking entry was accepted';
   EXCEPTION WHEN foreign_key_violation THEN NULL;
   END;
+  -- A known connection in another tenant or provider is not authorization.
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-b', 'mercury', 'shared-item', 'acct-b', 'tx-cross-provider', '{}'::jsonb);
+    RAISE EXCEPTION 'Cross-provider connection impersonation was accepted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-c', 'plaid', 'shared-item', 'acct-a', 'tx-cross-tenant', '{}'::jsonb);
+    RAISE EXCEPTION 'Cross-tenant connection impersonation was accepted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
   BEGIN
     INSERT INTO public.clearflow_bank_feed_checkpoints
       (tenant_id, provider, connection_id, revision)
