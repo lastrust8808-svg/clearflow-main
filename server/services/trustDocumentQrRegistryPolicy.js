@@ -12,8 +12,9 @@ import { assertPlainTrustDocumentVersions, verifyTrustDocumentBytes } from './tr
  * execution, and it must never be used as a public HTTP response directly.
  */
 function id(value, field) {
-  if (typeof value !== 'string' || !value || value.trim() !== value ||
-      /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
+  if (typeof value !== 'string' || !value || value.length > 256 || value.trim() !== value ||
+      /[\u0000-\u001f\u007f-\u009f\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFDD0-\uFDEF\uFFFE\uFFFF]/u.test(value) ||
+      /[\u{1FFFE}\u{1FFFF}\u{2FFFE}\u{2FFFF}\u{3FFFE}\u{3FFFF}\u{4FFFE}\u{4FFFF}\u{5FFFE}\u{5FFFF}\u{6FFFE}\u{6FFFF}\u{7FFFE}\u{7FFFF}\u{8FFFE}\u{8FFFF}\u{9FFFE}\u{9FFFF}\u{AFFFE}\u{AFFFF}\u{BFFFE}\u{BFFFF}\u{CFFFE}\u{CFFFF}\u{DFFFE}\u{DFFFF}\u{EFFFE}\u{EFFFF}\u{FFFFE}\u{FFFFF}\u{10FFFE}\u{10FFFF}]/u.test(value)) {
     throw new TypeError(field + ' must be a nonempty unpadded identifier without control characters');
   }
   // Reject malformed UTF-16 before a lossy UTF-8 encoding can collapse
