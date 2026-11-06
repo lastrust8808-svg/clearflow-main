@@ -279,3 +279,20 @@ test('oversized OAuth attempt identities cannot advance authentication', () => {
   }
   assert.equal(isCurrentGoogleAttempt(pending('a'.repeat(128)), 'a'.repeat(128)), true);
 });
+
+
+test('non-NFC OAuth attempt identifiers cannot alias canonical attempt state', () => {
+  const decomposed = 'cafe\u0301-attempt';
+  const composed = decomposed.normalize('NFC');
+  assert.notEqual(decomposed, composed);
+  let called = false;
+  const current = pending(decomposed);
+  assert.equal(isCurrentGoogleAttempt(current, decomposed), false);
+  assert.equal(admitGoogleAttemptResult(current, decomposed, () => {
+    called = true;
+    return { status: 'authenticated', googleAttemptId: decomposed };
+  }), current);
+  assert.equal(called, false);
+  assert.equal(isCurrentGoogleAttempt(pending(composed), composed), true);
+  assert.equal(admitGoogleAttemptResult(pending(composed), composed, advance).status, 'pending-drive-check');
+});
