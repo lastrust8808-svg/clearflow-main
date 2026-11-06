@@ -14,7 +14,7 @@ import { createHash, randomBytes } from 'node:crypto';
 const ROUTE = '/verify/document/';
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
-function canonicalOrigin(value) {
+export function validatePublicQrOrigin(value) {
   if (typeof value !== 'string' || value.length > 253) {
     throw new TypeError('Canonical HTTPS verification origin required');
   }
@@ -73,7 +73,7 @@ function tokenDigest(bytes) {
  * before publishing the URL. The token cannot be reconstructed from the hash.
  */
 export function createTrustDocumentQrLink(origin) {
-  const base = canonicalOrigin(origin);
+  const base = validatePublicQrOrigin(origin);
   const token = randomBytes(32).toString('base64url');
   return Object.freeze({
     url: `${base}${ROUTE}${token}`,
@@ -87,7 +87,7 @@ export function createTrustDocumentQrLink(origin) {
  * URL as authentication, authorization, or evidence of legal execution.
  */
 export function digestTrustDocumentQrLink(url, origin) {
-  const base = canonicalOrigin(origin);
+  const base = validatePublicQrOrigin(origin);
   if (typeof url !== 'string' || url.length > 2048) {
     throw new TypeError('Canonical QR verification URL required');
   }
