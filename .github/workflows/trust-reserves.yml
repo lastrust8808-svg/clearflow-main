@@ -15,7 +15,11 @@ on:
       - 'server/services/trustDocumentVersionPolicy.js'
       - 'tests/trustDocumentVersionPolicy.test.js'
       - 'server/services/trustDocumentQrPolicy.js'
+      - 'server/services/trustDocumentQrApprovedOrigin.js'
       - 'tests/trustDocumentQrPolicy.test.js'
+      - 'tests/trustDocumentQrApprovedOrigin.test.js'
+      - 'tests/trustQrRegistryIdentifierHardening.test.js'
+      - 'tests/trustSigningNoncharacters.test.js'
       - 'server/services/trustDocumentQrRegistryPolicy.js'
       - 'server/services/trustDocumentSigningEvidence.js'
       - 'tests/trustDocumentQrRegistryPolicy.test.js'
@@ -37,7 +41,11 @@ on:
       - 'server/services/trustDocumentVersionPolicy.js'
       - 'tests/trustDocumentVersionPolicy.test.js'
       - 'server/services/trustDocumentQrPolicy.js'
+      - 'server/services/trustDocumentQrApprovedOrigin.js'
       - 'tests/trustDocumentQrPolicy.test.js'
+      - 'tests/trustDocumentQrApprovedOrigin.test.js'
+      - 'tests/trustQrRegistryIdentifierHardening.test.js'
+      - 'tests/trustSigningNoncharacters.test.js'
       - 'server/services/trustDocumentQrRegistryPolicy.js'
       - 'server/services/trustDocumentSigningEvidence.js'
       - 'tests/trustDocumentQrRegistryPolicy.test.js'
@@ -60,8 +68,9 @@ jobs:
       - run: node --check server/services/trusteeSigningPolicy.js
       - run: node --check server/services/privateNoteLifecycle.js
       - run: node --check server/services/trustDocumentVersionPolicy.js
+      - run: node --check server/services/trustDocumentQrApprovedOrigin.js
       - run: node --check server/services/trustDocumentQrPolicy.js
       - run: node --check server/services/trustDocumentQrRegistryPolicy.js
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
-      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/enforcementNoticeGate.test.js
+      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/noteAmortization.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/enforcementNoticeGate.test.js
