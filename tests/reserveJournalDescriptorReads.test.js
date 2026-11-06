@@ -5,7 +5,7 @@ import { projectReserveJournal, verifyReserveJournalAppend } from '../server/ser
 const scope = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a' };
 const event = { ...scope, eventId: 'event-a', type: 'asset_recorded',
   occurredAt: '2026-11-01T12:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-a',
-  currency: 'USD', kind: 'cash', sourceType: 'bank_balance', amountMinor: 10000 };
+  currency: 'USD', kind: 'cash', sourceType: 'bank_balance', amountMinor: 10000, restrictedMinor: 0, pledgedMinor: 0 };
 const snapshot = events => ({ ...scope, currency: 'USD',
   asOfAt: '2026-11-02T00:00:00.000Z', maxEvidenceAgeMs: 86_400_000, events });
 
