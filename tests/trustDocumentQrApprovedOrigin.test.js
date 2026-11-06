@@ -73,3 +73,17 @@ test('QR origin authorization ignores overridden array membership methods', () =
     /Unapproved QR verification origin/,
   );
 });
+
+
+test('approved QR origin configuration rejects malformed unused destinations', () => {
+  for (const invalid of [
+    'http://unsafe.example.org',
+    'https://localhost',
+    'https://admin.internal',
+    'https://verify.example.org:8443',
+    'https://verify.example.org/path',
+  ]) {
+    assert.throws(() => requireApprovedQrOrigin(origin, [origin, invalid]), /origin required/);
+  }
+  assert.equal(requireApprovedQrOrigin(origin, [origin, 'https://second.example.org']), origin);
+});
