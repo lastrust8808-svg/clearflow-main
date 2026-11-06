@@ -293,3 +293,25 @@ test('reserve replay and fingerprint ignore a poisoned inherited array iterator'
     Object.defineProperty(Array.prototype, Symbol.iterator, original);
   }
 });
+
+
+test('reserve replay and fingerprint use validated indexed descriptors, not Proxy reads', () => {
+  const original = [record(), remove()];
+  const expected = project(original);
+  let indexedReads = 0;
+  const adversarial = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === '0' || key === '1') {
+        indexedReads++;
+        return key === '0' ? remove() : record();
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const actual = project(adversarial);
+  assert.equal(indexedReads, 0);
+  assert.equal(actual.journalEventCount, expected.journalEventCount);
+  assert.equal(actual.removedAssetCount, expected.removedAssetCount);
+  assert.equal(actual.journalSha256, expected.journalSha256);
+  assert.equal(actual.checkpointSha256, expected.checkpointSha256);
+});
