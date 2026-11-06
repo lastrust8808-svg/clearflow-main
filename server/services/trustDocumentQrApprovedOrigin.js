@@ -17,7 +17,11 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
       }).every(Boolean)) {
     throw new TypeError('Approved QR verification origin required');
   }
-  // A malformed unused entry must not silently survive trusted configuration.\n  for (let index = 0; index < approvedOrigins.length; index++) {\n    validatePublicQrOrigin(approvedOrigins[index]);\n  }\n  // Exact comparison intentionally refuses wildcard, suffix, case-folded,
+  // A malformed unused entry must not silently survive trusted configuration.
+  for (let index = 0; index < approvedOrigins.length; index++) {
+    validatePublicQrOrigin(approvedOrigins[index]);
+  }
+  // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
   if (!Array.prototype.includes.call(approvedOrigins, origin)) {
     throw new TypeError('Unapproved QR verification origin');
