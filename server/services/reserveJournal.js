@@ -259,8 +259,17 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   const previousEvents = plainEvents(previousSnapshot.events);
   const nextEvents = plainEvents(nextSnapshot.events);
   for (let i = 0; i < previousEvents.length; i++) {
-    if (JSON.stringify(canonicalJournalEvent(previousEvents[i])) !==
-        JSON.stringify(canonicalJournalEvent(nextEvents[i]))) {
+    // Replay validates descriptor-backed values; prefix comparison must use
+    // those same values rather than invoking adversarial Proxy get traps.
+    const stableEvent = raw => {
+      const descriptors = plainRecord(raw, RECORDED_FIELDS, COMMON_FIELDS,
+        'Reserve journal event');
+      const values = Object.fromEntries(Object.entries(descriptors).map(
+        ([key, descriptor]) => [key, descriptor.value]));
+      return canonicalJournalEvent(values);
+    };
+    if (JSON.stringify(stableEvent(previousEvents[i])) !==
+        JSON.stringify(stableEvent(nextEvents[i]))) {
       throw new Error('Reserve journal append cannot rewrite historical events');
     }
   }
