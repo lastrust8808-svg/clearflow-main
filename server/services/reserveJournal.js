@@ -117,7 +117,9 @@ export function projectReserveJournal(snapshot) {
   const evidenceRefs = new Set();
   let previousAt = null;
   let removedAssetCount = 0;
-  for (const event of snapshot.events) {
+  // Read validated dense slots directly; do not trust a mutable Array iterator.
+  for (let eventIndex = 0; eventIndex < snapshot.events.length; eventIndex++) {
+    const event = snapshot.events[eventIndex];
     const header = plainRecord(event, new Set([...RECORDED_FIELDS, ...REMOVED_FIELDS]),
       COMMON_FIELDS, 'Reserve journal event');
     const type = header.type.value;
@@ -184,9 +186,13 @@ export function projectReserveJournal(snapshot) {
   // Fingerprint the validated journal history, not the as-of valuation policy.
   // Store/compare this against an independently authenticated checkpoint;
   // hashing attacker-controlled data alone does not establish append-only storage.
+  const canonicalEvents = [];
+  for (let eventIndex = 0; eventIndex < snapshot.events.length; eventIndex++) {
+    canonicalEvents.push(canonicalJournalEvent(snapshot.events[eventIndex]));
+  }
   const journalSha256 = createHash('sha256').update(JSON.stringify({
     format: 'clearflow-reserve-journal-v1', ...scope, currency: snapshot.currency,
-    events: snapshot.events.map(canonicalJournalEvent),
+    events: canonicalEvents,
   })).digest('hex');
   // Unlike the history-only fingerprint, this checkpoint binds the evaluated
   // as-of instant and evidence freshness policy. A caller must obtain the
