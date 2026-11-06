@@ -45,7 +45,7 @@ function canonicalOrigin(value) {
     label.length >= 1 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
   if (!validDnsLabels || !host.includes('.') || host.startsWith('[') ||
       /^\d+(?:\.\d+){3}$/.test(host) ||
-      /\.(?:localhost|local|internal|test|invalid|example|onion|alt|lan|home|corp|intranet|localdomain|docker|container)$/.test(host) ||
+      /\.(?:localhost|local|internal|test|invalid|example|onion|alt|lan|home|corp|intranet|localdomain|docker|container|svc)$/.test(host) ||
       /(?:^|\.)arpa$/.test(host)) {
     throw new TypeError('Public DNS HTTPS verification origin required');
   }
