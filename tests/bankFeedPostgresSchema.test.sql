@@ -173,6 +173,40 @@ BEGIN
   IF affected <> 0 THEN RAISE EXCEPTION 'Stale Mercury cursor CAS succeeded'; END IF;
 END $test$;
 
+-- Account ID is also part of the entry identity: two accounts with the same
+-- provider transaction ID must persist independently, including after replay.
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
+        '{"amountCents":4700,"account":"other"}'::jsonb);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
+        '{"amountCents":4700,"replayed":true}'::jsonb)
+ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
+DO UPDATE SET payload = EXCLUDED.payload;
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2 THEN
+    RAISE EXCEPTION 'Account-scoped transaction identities collided or duplicated';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+      AND payload->>'amountCents' = '1200'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-other'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+      AND payload->>'amountCents' = '4700'
+  ) THEN RAISE EXCEPTION 'Account-scoped replay overwrote other account evidence'; END IF;
+END $test$;
+
 -- The composite FK blocks orphaned or forged connection identities.
 DO $test$
 BEGIN
