@@ -55,3 +55,21 @@ test('QR origin allowlist rejects sparse and accessor-backed entries without eva
   assert.equal(getterCalls, 0);
   assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
 });
+
+test('QR origin authorization ignores overridden array membership methods', () => {
+  const malicious = [origin];
+  Object.defineProperty(malicious, 'includes', { value: () => true });
+  assert.throws(
+    () => requireApprovedQrOrigin('https://attacker.example.org', malicious),
+    /Unapproved QR verification origin/,
+  );
+  assert.equal(requireApprovedQrOrigin(origin, malicious), origin);
+  const inherited = [origin];
+  Object.setPrototypeOf(inherited, Object.assign(Object.create(Array.prototype), {
+    includes: () => true,
+  }));
+  assert.throws(
+    () => requireApprovedQrOrigin('https://attacker.example.org', inherited),
+    /Unapproved QR verification origin/,
+  );
+});
