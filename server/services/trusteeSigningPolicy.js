@@ -103,6 +103,22 @@ function id(value, field) {
   // Reject canonically equivalent aliases rather than letting distinct
   // spellings represent the same trustee, signer or governance evidence.
   // This is an identity-integrity guard, not authentication of authority.
+  // Align governance identifiers with signature-evidence identifiers: invisible
+  // formatting characters, Unicode noncharacters and unbounded keys can
+  // create visually indistinguishable or unsafe audit identities.
+  if (/\p{Default_Ignorable_Code_Point}/u.test(value)) {
+    throw new TypeError(`${field} must not contain invisible Unicode formatting controls`);
+  }
+  if (/[\uFDD0-\uFDEF\uFFFE\uFFFF]/u.test(value) ||
+      [...value].some(char => {
+        const point = char.codePointAt(0);
+        return point > 0xFFFF && (point & 0xFFFE) === 0xFFFE;
+      })) {
+    throw new TypeError(`${field} must not contain Unicode noncharacters`);
+  }
+  if (value.length > 256) {
+    throw new RangeError(`${field} exceeds 256 UTF-16 code units`);
+  }
   if (value.normalize('NFC') !== value) {
     throw new TypeError(`${field} must use NFC-normalized Unicode`);
   }
