@@ -125,10 +125,20 @@ try {
   await test('ops status explicitly declares invoice delivery/export unavailable', async () => {
     const response = await invoke('GET', '/ops-status');
     assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['cache-control'], 'no-store');
     assert.equal(response.body.capabilities.invoiceDeliveries.available, false);
     assert.equal(response.body.capabilities.invoiceExports.available, false);
     assert.equal(response.body.counts.invoiceDeliveries, null);
     assert.equal(response.body.counts.invoiceExports, null);
+  });
+
+  await test('settlement capability probe is non-cacheable and cannot advertise executable payment methods', async () => {
+    const response = await invoke('GET', '/settlements/execution-capabilities');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.body.capabilities.executionMode, 'disabled');
+    assert.equal(response.body.capabilities.settlementExecutionAvailable, false);
+    assert.deepEqual(response.body.capabilities.supportedMethods, []);
   });
 
   await test('disabled ERP operations never fabricate empty queue counts', async () => {
