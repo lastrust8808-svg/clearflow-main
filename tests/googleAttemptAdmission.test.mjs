@@ -264,3 +264,18 @@ test('embedded Unicode spaces cannot identify an OAuth attempt', () => {
   }
   assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
 });
+
+
+test('oversized OAuth attempt identities cannot advance authentication', () => {
+  for (const id of ['a'.repeat(129), 'a'.repeat(4096)]) {
+    const current = pending(id);
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('a'.repeat(128)), 'a'.repeat(128)), true);
+});
