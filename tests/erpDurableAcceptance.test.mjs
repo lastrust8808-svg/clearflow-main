@@ -100,6 +100,28 @@ try {
     }
   });
 
+  await test('embedded ASCII spaces cannot alias ERP operation identifiers', async () => {
+    for (const field of ['invoiceId', 'entityId', 'invoiceNumber']) {
+      for (const route of ['/invoice-deliveries', '/invoice-exports']) {
+        const response = await invoke('POST', route, {
+          ...invoice, [field]: 'part one',
+        });
+        assert.equal(response.statusCode, 400, route + ': ' + field);
+        assert.equal(response.body.success, false);
+        assert.equal(response.body.job, undefined);
+      }
+    }
+    const settlement = await invoke('POST', '/settlements/execute', {
+      entityId: 'entity test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 1,
+    });
+    assert.equal(settlement.statusCode, 400);
+    assert.equal(settlement.body.execution, undefined);
+    const close = await invoke('POST', '/reconciliations/:reconciliationId/close',
+      {}, { reconciliationId: 'recon test' });
+    assert.equal(close.statusCode, 400);
+    assert.equal(close.body.closeJob, undefined);
+  });
+
   await test('ops status explicitly declares invoice delivery/export unavailable', async () => {
     const response = await invoke('GET', '/ops-status');
     assert.equal(response.statusCode, 200);
