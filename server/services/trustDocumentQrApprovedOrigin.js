@@ -10,24 +10,30 @@ import { createTrustDocumentQrLink, digestTrustDocumentQrLink, validatePublicQrO
 
 export function requireApprovedQrOrigin(origin, approvedOrigins) {
   if (typeof origin !== 'string' || !Array.isArray(approvedOrigins) ||
-      approvedOrigins.length === 0 || approvedOrigins.length > 128 ||
-      !Array.from({ length: approvedOrigins.length }, (_, index) => {
-        const descriptor = Object.getOwnPropertyDescriptor(approvedOrigins, String(index));
-        return descriptor && Object.hasOwn(descriptor, 'value') && typeof descriptor.value === 'string';
-      }).every(Boolean)) {
+      approvedOrigins.length === 0 || approvedOrigins.length > 128) {
     throw new TypeError('Approved QR verification origin required');
   }
-  // A malformed unused entry must not silently survive trusted configuration.
+  // Snapshot descriptor values once. A Proxy can return a safe descriptor but
+  // a different value from indexed reads; never authorize the latter.
+  const entries = [];
   for (let index = 0; index < approvedOrigins.length; index++) {
-    validatePublicQrOrigin(approvedOrigins[index]);
+    const descriptor = Object.getOwnPropertyDescriptor(approvedOrigins, String(index));
+    if (!descriptor || !Object.hasOwn(descriptor, 'value') || typeof descriptor.value !== 'string') {
+      throw new TypeError('Approved QR verification origin required');
+    }
+    entries.push(descriptor.value);
+  }
+  // A malformed unused entry must not silently survive trusted configuration.
+  for (let index = 0; index < entries.length; index++) {
+    validatePublicQrOrigin(entries[index]);
   }
   // Duplicate entries obscure configuration reviews and can conceal accidental
   // copy/paste errors; require one explicit approval per canonical origin.
   // Iterate by validated numeric indices: a caller-supplied Symbol.iterator
   // must not hide duplicate configuration entries from the review gate.
   const seenOrigins = new Set();
-  for (let index = 0; index < approvedOrigins.length; index++) {
-    const approved = approvedOrigins[index];
+  for (let index = 0; index < entries.length; index++) {
+    const approved = entries[index];
     if (seenOrigins.has(approved)) {
       throw new TypeError('Duplicate approved QR verification origin');
     }
@@ -35,7 +41,7 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
-  if (!Array.prototype.includes.call(approvedOrigins, origin)) {
+  if (!Array.prototype.includes.call(entries, origin)) {
     throw new TypeError('Unapproved QR verification origin');
   }
   return origin;
