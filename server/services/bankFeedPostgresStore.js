@@ -322,6 +322,7 @@ function transactionQueries(client) {
       // payload agrees with its database composite key and the authorized
       // scope before the replay planner can use any historical evidence.
       const allowed = new Set(authorized.allowedAccountIds);
+      const seenPersistedKeys = new Set();
       return snapshotBankingQueryRows(result).map((untrustedRow) => {
         const row = snapshotPersistedEntryRow(untrustedRow);
         const entry = row.payload;
@@ -342,6 +343,13 @@ function transactionQueries(client) {
             entry.transactionId !== row.transaction_id) {
           throw new Error('Persisted banking entry identity does not match its scoped database key.');
         }
+        // SQL composite keys are unique. Duplicate rows from a faulty adapter
+        // or corrupted read must never be accepted as independent evidence.
+        const persistedKey = JSON.stringify([row.account_id, row.transaction_id]);
+        if (seenPersistedKeys.has(persistedKey)) {
+          throw new Error('Duplicate persisted banking entry identity in authorized scope.');
+        }
+        seenPersistedKeys.add(persistedKey);
         // Database JSONB normally enforces valid Unicode, but the guard above
         // also rejects malformed adapter fixtures before replay or checkpoint updates.
         if (Buffer.byteLength(JSON.stringify(entry), 'utf8') > MAX_ENTRY_JSON_BYTES) {
