@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  requireApprovedQrOrigin,
+  createApprovedTrustDocumentQrLink,
+  digestApprovedTrustDocumentQrLink,
+} from '../server/services/trustDocumentQrApprovedOrigin.js';
+
+const origin = 'https://verify.example.org';
+const allowlist = Object.freeze([origin]);
+
+test('approved QR origin issues and resolves an opaque token without metadata', () => {
+  const link = createApprovedTrustDocumentQrLink(origin, allowlist);
+  assert.equal(digestApprovedTrustDocumentQrLink(link.url, origin, allowlist), link.tokenHashSha256);
+  assert.deepEqual(Object.keys(link), ['url', 'tokenHashSha256']);
+});
+
+test('untrusted and absent allowlists fail closed for issuance and lookup', () => {
+  const link = createApprovedTrustDocumentQrLink(origin, allowlist);
+  for (const config of [undefined, null, [], {}, origin, [null], [origin, 3]]) {
+    assert.throws(() => createApprovedTrustDocumentQrLink(origin, config), /Approved QR verification origin/);
+    assert.throws(() => digestApprovedTrustDocumentQrLink(link.url, origin, config), /Approved QR verification origin/);
+  }
+});
+
+test('origin authorization uses exact allowlist membership, never suffix matching', () => {
+  const link = createApprovedTrustDocumentQrLink(origin, allowlist);
+  for (const candidate of [
+    'https://evilverify.example.org',
+    'https://verify.example.org.evil.net',
+    'https://VERIFY.example.org',
+    'https://verify.example.org/',
+    'https://verify.example.org:8443',
+    'http://verify.example.org',
+  ]) {
+    assert.throws(() => requireApprovedQrOrigin(candidate, allowlist), /Unapproved QR verification origin/);
+    assert.throws(() => createApprovedTrustDocumentQrLink(candidate, allowlist), /Unapproved QR verification origin/);
+    assert.throws(() => digestApprovedTrustDocumentQrLink(link.url, candidate, allowlist), /Unapproved QR verification origin/);
+  }
+});
