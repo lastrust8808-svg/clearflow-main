@@ -421,7 +421,7 @@ function transactionQueries(client) {
         });
       }
       for (const entry of prepared) {
-        await client.query(
+        const insertResult = await client.query(
           `INSERT INTO ${ENTRIES}
              (tenant_id, provider, connection_id, account_id, transaction_id, payload)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -429,6 +429,18 @@ function transactionQueries(client) {
            DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
           [...requestedScope, entry.accountId, entry.transactionId, entry.serialized],
         );
+        // Every upsert must affect exactly one row. A zero-row or malformed
+        // adapter response must never allow a checkpoint to acknowledge
+        // financial evidence that was not actually persisted.
+        if (!insertResult || typeof insertResult !== 'object' ||
+            nodeTypes.isProxy(insertResult)) {
+          throw new Error('Invalid banking entry upsert result.');
+        }
+        const affected = Object.getOwnPropertyDescriptor(insertResult, 'rowCount');
+        if (!affected || !Object.hasOwn(affected, 'value') ||
+            affected.value !== 1) {
+          throw new Error('Invalid banking entry upsert result.');
+        }
       }
     },
     async compareAndSwapCheckpoint(scope, previous, next) {
