@@ -70,7 +70,7 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
       if (!field || !Object.hasOwn(field, 'value')) return current;
       fields[key] = field.value;
     }
-    if (typeof fields.status !== 'string' || !fields.status ||
+    if (!['unauthenticated', 'pending-gsi', 'pending-drive-check', 'pending-profile-setup', 'pending-verification', 'authenticated'].includes(fields.status) ||
         fields.googleAttemptId !== attemptId) return current;
   } catch {
     return current;
