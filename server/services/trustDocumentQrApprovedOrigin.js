@@ -10,7 +10,11 @@ import { createTrustDocumentQrLink, digestTrustDocumentQrLink } from './trustDoc
 
 export function requireApprovedQrOrigin(origin, approvedOrigins) {
   if (typeof origin !== 'string' || !Array.isArray(approvedOrigins) ||
-      approvedOrigins.length === 0 || !approvedOrigins.every(x => typeof x === 'string')) {
+      approvedOrigins.length === 0 || approvedOrigins.length > 128 ||
+      !Array.from({ length: approvedOrigins.length }, (_, index) => {
+        const descriptor = Object.getOwnPropertyDescriptor(approvedOrigins, String(index));
+        return descriptor && Object.hasOwn(descriptor, 'value') && typeof descriptor.value === 'string';
+      }).every(Boolean)) {
     throw new TypeError('Approved QR verification origin required');
   }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
