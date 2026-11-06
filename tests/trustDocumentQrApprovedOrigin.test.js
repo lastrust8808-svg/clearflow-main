@@ -38,3 +38,20 @@ test('origin authorization uses exact allowlist membership, never suffix matchin
     assert.throws(() => digestApprovedTrustDocumentQrLink(link.url, candidate, allowlist), /Unapproved QR verification origin/);
   }
 });
+
+test('QR origin allowlist rejects sparse and accessor-backed entries without evaluating getters', () => {
+  const sparse = new Array(1);
+  const accessor = [];
+  let getterCalls = 0;
+  Object.defineProperty(accessor, '0', {
+    enumerable: true,
+    get() { getterCalls++; return origin; },
+  });
+  const inherited = new Array(1);
+  Object.setPrototypeOf(inherited, Object.assign(Object.create(Array.prototype), { 0: origin }));
+  for (const config of [sparse, accessor, inherited, Array(129).fill(origin)]) {
+    assert.throws(() => requireApprovedQrOrigin(origin, config), /Approved QR verification origin/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
+});
