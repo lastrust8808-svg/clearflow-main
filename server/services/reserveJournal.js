@@ -58,6 +58,8 @@ function plainEvents(events) {
     count++;
   }
   if (count !== length) throw new TypeError('Reserve journal must not contain holes');
+  // Snapshot validated descriptor values once; never re-read mutable indices.
+  return Array.from({ length }, (_, index) => descriptors[String(index)].value);
 }
 
 function identifier(value, label) {
@@ -110,7 +112,7 @@ export function projectReserveJournal(snapshot) {
   const base = { ...scope, currency: snapshot.currency, asOfAt: snapshot.asOfAt,
     maxEvidenceAgeMs: snapshot.maxEvidenceAgeMs };
   calculateReserveCapacity({ ...base, entries: [] });
-  plainEvents(snapshot.events);
+  const journalEvents = plainEvents(snapshot.events);
   const active = new Map();
   const historicalAssets = new Set();
   const eventIds = new Set();
@@ -118,8 +120,8 @@ export function projectReserveJournal(snapshot) {
   let previousAt = null;
   let removedAssetCount = 0;
   // Read validated dense slots directly; do not trust a mutable Array iterator.
-  for (let eventIndex = 0; eventIndex < snapshot.events.length; eventIndex++) {
-    const event = snapshot.events[eventIndex];
+  for (let eventIndex = 0; eventIndex < journalEvents.length; eventIndex++) {
+    const event = journalEvents[eventIndex];
     const header = plainRecord(event, new Set([...RECORDED_FIELDS, ...REMOVED_FIELDS]),
       COMMON_FIELDS, 'Reserve journal event');
     const type = header.type.value;
@@ -187,8 +189,8 @@ export function projectReserveJournal(snapshot) {
   // Store/compare this against an independently authenticated checkpoint;
   // hashing attacker-controlled data alone does not establish append-only storage.
   const canonicalEvents = [];
-  for (let eventIndex = 0; eventIndex < snapshot.events.length; eventIndex++) {
-    canonicalEvents.push(canonicalJournalEvent(snapshot.events[eventIndex]));
+  for (let eventIndex = 0; eventIndex < journalEvents.length; eventIndex++) {
+    canonicalEvents.push(canonicalJournalEvent(journalEvents[eventIndex]));
   }
   const journalSha256 = createHash('sha256').update(JSON.stringify({
     format: 'clearflow-reserve-journal-v1', ...scope, currency: snapshot.currency,
