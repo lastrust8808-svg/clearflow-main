@@ -112,6 +112,37 @@ BEGIN
   IF affected <> 0 THEN RAISE EXCEPTION 'Stale cursor CAS succeeded'; END IF;
 END $test$;
 
+-- Provider namespace is part of the composite key: identical connection/account/
+-- transaction identifiers from Plaid and Mercury must never overwrite each other.
+INSERT INTO public.clearflow_bank_feed_checkpoints
+  (tenant_id, provider, connection_id, cursor, revision)
+VALUES ('tenant-a', 'mercury', 'shared-item', NULL, 0);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-1',
+        '{"amountCents":9900,"source":"mercury"}'::jsonb);
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+      WHERE tenant_id = 'tenant-a' AND connection_id = 'shared-item'
+        AND account_id = 'acct-a' AND transaction_id = 'tx-1') <> 2 THEN
+    RAISE EXCEPTION 'Provider identities collided';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'source' = 'mercury'
+  ) THEN
+    RAISE EXCEPTION 'Provider-scoped evidence was overwritten';
+  END IF;
+END $test$;
+
 -- The composite FK blocks orphaned or forged connection identities.
 DO $test$
 BEGIN
@@ -132,4 +163,4 @@ BEGIN
   END;
 END $test$;
 
-SELECT 'PASS: migration idempotence, rollback, replay identity, tenant key isolation, cursor CAS and constraints' AS result;
+SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, cursor CAS and constraints' AS result;
