@@ -30,6 +30,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'server/services/reserveJournal.js'
+      - 'tests/reserveJournal.test.js'
       - 'server/services/reserveCapacity.js'
       - 'tests/reserveCapacity.test.js'
       - 'server/services/noteAmortization.js'
