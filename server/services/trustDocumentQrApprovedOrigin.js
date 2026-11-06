@@ -21,6 +21,11 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   for (let index = 0; index < approvedOrigins.length; index++) {
     validatePublicQrOrigin(approvedOrigins[index]);
   }
+  // Duplicate entries obscure configuration reviews and can conceal accidental
+  // copy/paste errors; require one explicit approval per canonical origin.
+  if (new Set(approvedOrigins).size !== approvedOrigins.length) {
+    throw new TypeError('Duplicate approved QR verification origin');
+  }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
   if (!Array.prototype.includes.call(approvedOrigins, origin)) {
