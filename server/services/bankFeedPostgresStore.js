@@ -323,6 +323,7 @@ function transactionQueries(client) {
       // scope before the replay planner can use any historical evidence.
       const allowed = new Set(authorized.allowedAccountIds);
       const seenPersistedKeys = new Set();
+      let totalPersistedJsonBytes = 0;
       return snapshotBankingQueryRows(result).map((untrustedRow) => {
         const row = snapshotPersistedEntryRow(untrustedRow);
         const entry = row.payload;
@@ -352,8 +353,13 @@ function transactionQueries(client) {
         seenPersistedKeys.add(persistedKey);
         // Database JSONB normally enforces valid Unicode, but the guard above
         // also rejects malformed adapter fixtures before replay or checkpoint updates.
-        if (Buffer.byteLength(JSON.stringify(entry), 'utf8') > MAX_ENTRY_JSON_BYTES) {
+        const entryBytes = Buffer.byteLength(JSON.stringify(entry), 'utf8');
+        if (entryBytes > MAX_ENTRY_JSON_BYTES) {
           throw new Error('Oversized persisted banking entry evidence.');
+        }
+        totalPersistedJsonBytes += entryBytes;
+        if (totalPersistedJsonBytes > MAX_BATCH_JSON_BYTES) {
+          throw new Error('Oversized persisted banking entry batch evidence.');
         }
         return entry;
       });
