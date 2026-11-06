@@ -296,3 +296,14 @@ test('non-NFC OAuth attempt identifiers cannot alias canonical attempt state', (
   assert.equal(isCurrentGoogleAttempt(pending(composed), composed), true);
   assert.equal(admitGoogleAttemptResult(pending(composed), composed, advance).status, 'pending-drive-check');
 });
+
+
+test('unknown OAuth reducer statuses fail closed without changing the active attempt', () => {
+  const current = pending('attempt-B');
+  for (const status of ['verified', 'pending-payment', 'AUTHENTICATED', ' ', 'pending-gsi-extra']) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status,
+    })), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
