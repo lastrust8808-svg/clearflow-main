@@ -307,3 +307,21 @@ test('unknown OAuth reducer statuses fail closed without changing the active att
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('non-plain OAuth reducer state objects fail closed', () => {
+  const current = pending('attempt-B');
+  class ForgedAuthState {
+    constructor() {
+      this.status = 'authenticated';
+      this.googleAttemptId = 'attempt-B';
+    }
+  }
+  const dateState = new Date();
+  dateState.status = 'authenticated';
+  dateState.googleAttemptId = 'attempt-B';
+  for (const state of [new ForgedAuthState(), dateState]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => state), current);
+  }
+  const plain = admitGoogleAttemptResult(current, 'attempt-B', advance);
+  assert.equal(plain.status, 'pending-drive-check');
+});
