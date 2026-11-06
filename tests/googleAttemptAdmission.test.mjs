@@ -352,3 +352,20 @@ test('non-plain active OAuth state cannot authorize callback admission', () => {
   assert.equal(isCurrentGoogleAttempt(plain, 'attempt-B'), true);
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('admission reducers cannot mutate active OAuth state before validation', () => {
+  const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', token: null };
+  const rejected = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    snapshot.token = 'unverified-token';
+    return { ...snapshot, status: 'unknown-status' };
+  });
+  assert.equal(rejected, current);
+  assert.equal(current.token, null);
+  assert.equal(current.status, 'pending-gsi');
+
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check',
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(current.status, 'pending-gsi');
+});
