@@ -23,7 +23,7 @@ function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
     Boolean(value.trim()) && value === value.trim() &&
     value === value.normalize('NFC') &&
-    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value.replaceAll(' ', ''));
+    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
 }
 
 // Settlement amounts must survive exact-cent conversion before any future
