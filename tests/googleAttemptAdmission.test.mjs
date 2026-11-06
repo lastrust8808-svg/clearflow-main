@@ -250,3 +250,17 @@ test('OAuth admission never executes then accessors on reducer results', () => {
   assert.equal(getterCalls, 0);
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('embedded Unicode spaces cannot identify an OAuth attempt', () => {
+  for (const id of ['attempt B', 'attempt\u00a0B', 'attempt\u2003B', 'attempt\u3000B']) {
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+});
