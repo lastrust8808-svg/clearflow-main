@@ -19,6 +19,12 @@ function rejectNonDurableJob(res, operation) {
 // Every ERP operation identifier must be an explicit, canonical identity.
 // A truthy object, padded ID or invisible Unicode alias must not be treated
 // as a valid future durable-job request or tenant/accounting audit key.
+// Invalid financial-operation requests must not be cached by intermediaries.
+function rejectInvalidErpPayload(res, error, code) {
+  res.set('Cache-Control', 'no-store');
+  return res.status(400).json({ success: false, ...(code ? { code } : {}), error });
+}
+
 function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
     Boolean(value.trim()) && value === value.trim() &&
@@ -38,7 +44,7 @@ function validSettlementAmount(value) {
 router.post('/invoice-deliveries', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
-    return res.status(400).json({ success: false, error: 'Missing invoice delivery payload.' });
+    return rejectInvalidErpPayload(res, 'Missing invoice delivery payload.');
   }
   return rejectNonDurableJob(res, 'invoice_delivery');
 });
@@ -46,7 +52,7 @@ router.post('/invoice-deliveries', (req, res) => {
 router.post('/invoice-exports', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
-    return res.status(400).json({ success: false, error: 'Missing invoice export payload.' });
+    return rejectInvalidErpPayload(res, 'Missing invoice export payload.');
   }
   return rejectNonDurableJob(res, 'invoice_export');
 });
@@ -56,7 +62,7 @@ router.post('/invoice-exports', (req, res) => {
 router.post('/settlements/execute', (req, res) => {
   const { entityId, paymentId, settlementId, amount } = req.body || {};
   if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
-    return res.status(400).json({ success: false, error: 'Missing settlement execution payload.' });
+    return rejectInvalidErpPayload(res, 'Missing settlement execution payload.');
   }
   return rejectNonDurableJob(res, 'settlement_execution');
 });
@@ -97,7 +103,7 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
   const { bankAccountId, statementEndingBalance } = req.body || {};
 
   if (![reconciliationId, bankAccountId].every(validErpIdentifier)) {
-    return res.status(400).json({ success: false, error: 'Missing statement import payload.' });
+    return rejectInvalidErpPayload(res, 'Missing statement import payload.');
   }
   // Independently enforce the same exact-cent contract as the ERP client.
   // JSON numbers may be fractional, overflowed or rounded before reaching
@@ -109,11 +115,7 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
       Object.is(statementEndingBalance, -0) ||
       !Number.isSafeInteger(cents) ||
       cents / 100 !== statementEndingBalance) {
-    return res.status(400).json({
-      success: false,
-      code: 'ERP_INVALID_STATEMENT_BALANCE',
-      error: 'Statement ending balance must be a finite exact-cent amount.',
-    });
+    return rejectInvalidErpPayload(res, 'Statement ending balance must be a finite exact-cent amount.', 'ERP_INVALID_STATEMENT_BALANCE');
   }
 
   // Import acceptance must persist the statement and evidence transactionally.
@@ -127,7 +129,7 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
   if (!validErpIdentifier(reconciliationId)) {
-    return res.status(400).json({ success: false, error: 'Missing reconciliation id.' });
+    return rejectInvalidErpPayload(res, 'Missing reconciliation id.');
   }
   return rejectNonDurableJob(res, 'reconciliation_close');
 });
