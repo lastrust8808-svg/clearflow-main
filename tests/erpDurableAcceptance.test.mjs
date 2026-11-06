@@ -319,7 +319,7 @@ try {
   await test('ERP HTTP routes reject ambiguous accounting identities before durable-job admission', async () => {
     const invalid = [null, 0, true, {}, [], '', ' ', ' padded', 'padded ',
       'line\nbreak', 'zero\u200bwidth', 'bidi\u202ealias',
-      'cafe\u0301', '\ud800', 'x'.repeat(256)];
+      'cafe\u0301', 'embedded space', '\ud800', 'x'.repeat(256)];
     const requests = [
       { method: 'POST', path: '/invoice-deliveries',
         body: { ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid' },
@@ -352,13 +352,13 @@ try {
           assert.equal(response.body.closeJob, undefined);
         }
       }
-      // Legitimate internal spaces and composed international identifiers
-      // remain valid, but cannot queue or execute without durable persistence.
+      // Composed international identifiers without embedded spaces remain valid,
+      // but cannot queue or execute without durable persistence.
       const body = { ...request.body };
       const params = { ...request.params };
       for (const field of request.fields) {
-        if (field === 'reconciliationId') params[field] = 'recon-2026 Q4';
-        else body[field] = 'caf\u00e9 2026';
+        if (field === 'reconciliationId') params[field] = 'recon-2026-Q4';
+        else body[field] = 'caf\u00e9-2026';
       }
       const acceptedShape = await invoke(request.method, request.path, body, params);
       assert.equal(acceptedShape.statusCode, 503, request.path);
