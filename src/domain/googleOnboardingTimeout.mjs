@@ -128,7 +128,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
   let verifiedEmail;
   try {
     if (!current || current.status !== 'pending-gsi') return current;
-    if (typeof accessToken !== 'string' || !accessToken.trim() ||
+    if (typeof accessToken !== 'string' || !accessToken.trim() || /\s/u.test(accessToken) ||
       !user || typeof user.email !== 'string' ||
       !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(user.email) ||
       user.email !== user.email.normalize('NFC')) {
