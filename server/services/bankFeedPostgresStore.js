@@ -283,7 +283,12 @@ function transactionQueries(client) {
         requestedScope,
       );
       const rows = snapshotBankingQueryRows(result);
-      if (rows.length !== 1) return null;
+      if (rows.length === 0) return null;
+      // A scoped checkpoint is unique. Multiple rows indicate corrupted SQL
+      // evidence, never an absent checkpoint eligible for replay.
+      if (rows.length !== 1) {
+        throw new Error('Multiple persisted banking checkpoints for authorized scope.');
+      }
       const row = snapshotPersistedCheckpointRow(rows[0]);
       // Verify database-returned identity independently of the WHERE clause.
       // A faulty adapter, corrupted fixture or unexpected row must never be
