@@ -279,7 +279,10 @@ test('reserve replay and fingerprint ignore a poisoned inherited array iterator'
   try {
     Object.defineProperty(Array.prototype, Symbol.iterator, {
       configurable: true, writable: true,
-      value: function* () { /* An attacker-controlled iterator conceals all events. */ },
+      value: function* () {
+        if (this === events) return; // Conceal only the journal's events.
+        yield* original.value.call(this);
+      },
     });
     const actual = project(events);
     assert.equal(actual.journalEventCount, 2);
