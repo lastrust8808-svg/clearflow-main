@@ -112,3 +112,18 @@ test('duplicate QR origin detection does not trust an overridden array iterator'
   });
   assert.equal(requireApprovedQrOrigin(origin, distinct), origin);
 });
+
+
+test('QR allowlist authorization uses validated descriptors, not proxy index reads', () => {
+  let indexedReads = 0;
+  const disguised = new Proxy([origin], {
+    get(target, key, receiver) {
+      if (key === '0') { indexedReads++; return 'https://attacker.example.org'; }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(requireApprovedQrOrigin(origin, disguised), origin);
+  assert.throws(() => requireApprovedQrOrigin('https://attacker.example.org', disguised),
+    /Unapproved QR verification origin/);
+  assert.equal(indexedReads, 0);
+});
