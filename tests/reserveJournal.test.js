@@ -271,3 +271,22 @@ test('reserve identities reject Unicode noncharacters across planes and roles', 
   }
   assert.equal(project([record({ assetId: 'asset-𐐷' })]).activeAssetCount, 1);
 });
+
+test('reserve replay and fingerprint ignore a poisoned inherited array iterator', () => {
+  const events = [record(), remove()];
+  const expected = project(events);
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
+  try {
+    Object.defineProperty(Array.prototype, Symbol.iterator, {
+      configurable: true, writable: true,
+      value: function* () { /* An attacker-controlled iterator conceals all events. */ },
+    });
+    const actual = project(events);
+    assert.equal(actual.journalEventCount, 2);
+    assert.equal(actual.removedAssetCount, 1);
+    assert.equal(actual.journalSha256, expected.journalSha256);
+    assert.equal(actual.checkpointSha256, expected.checkpointSha256);
+  } finally {
+    Object.defineProperty(Array.prototype, Symbol.iterator, original);
+  }
+});
