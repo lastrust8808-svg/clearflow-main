@@ -87,3 +87,11 @@ test('approved QR origin configuration rejects malformed unused destinations', (
   }
   assert.equal(requireApprovedQrOrigin(origin, [origin, 'https://second.example.org']), origin);
 });
+
+test('approved QR origin configuration rejects duplicate entries', () => {
+  assert.throws(
+    () => requireApprovedQrOrigin(origin, [origin, origin]),
+    /Duplicate approved QR verification origin/,
+  );
+  assert.equal(requireApprovedQrOrigin(origin, [origin, 'https://second.example.org']), origin);
+});
