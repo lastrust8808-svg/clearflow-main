@@ -480,7 +480,16 @@ function transactionQueries(client) {
          RETURNING revision`,
         [...requestedScope, following.cursor, following.revision, prior.cursor, prior.revision],
       );
-      return result.rowCount === 1;
+      // Never treat a malformed SQL result as successful checkpoint CAS.
+      if (!result || typeof result !== 'object' || nodeTypes.isProxy(result)) {
+        throw new Error('Invalid banking checkpoint update result.');
+      }
+      const count = Object.getOwnPropertyDescriptor(result, 'rowCount');
+      if (!count || !Object.hasOwn(count, 'value') ||
+          !Number.isSafeInteger(count.value) || count.value < 0 || count.value > 1) {
+        throw new Error('Invalid banking checkpoint update result.');
+      }
+      return count.value === 1;
     },
   };
 }
