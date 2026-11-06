@@ -17,10 +17,18 @@ const MAX_BATCH_JSON_BYTES = 16 * 1024 * 1024;
 // This adapter can be called without the atomic page planner. Treat even
 // server-supplied scopes as untrusted input before issuing scoped SQL; truthy
 // numbers, whitespace aliases and invisible control characters are not IDs.
+function containsUnicodeNoncharacter(value) {
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if ((code >= 0xFDD0 && code <= 0xFDEF) || (code & 0xFFFE) === 0xFFFE) return true;
+  }
+  return false;
+}
+
 function validScopeId(value) {
   return typeof value === 'string' &&
     value.length > 0 && value.length <= 256 &&
-    value === value.trim() && value.isWellFormed() &&
+    value === value.trim() && value.isWellFormed() && !containsUnicodeNoncharacter(value) &&
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
