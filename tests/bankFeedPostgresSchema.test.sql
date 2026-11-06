@@ -143,6 +143,36 @@ BEGIN
   END IF;
 END $test$;
 
+-- Provider-scoped cursor advancement must not mutate the other provider's cursor.
+DO $test$
+DECLARE affected INTEGER;
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+    SET cursor = 'mercury-cursor-1', revision = 1
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item'
+      AND cursor IS NOT DISTINCT FROM NULL AND revision = 0;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'Mercury cursor CAS failed'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Mercury cursor update modified Plaid checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor IS NULL AND revision = 0
+  ) THEN RAISE EXCEPTION 'Mercury cursor update modified another tenant'; END IF;
+  UPDATE public.clearflow_bank_feed_checkpoints
+    SET cursor = 'mercury-stale', revision = 1
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item'
+      AND cursor IS NOT DISTINCT FROM NULL AND revision = 0;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 0 THEN RAISE EXCEPTION 'Stale Mercury cursor CAS succeeded'; END IF;
+END $test$;
+
 -- The composite FK blocks orphaned or forged connection identities.
 DO $test$
 BEGIN
@@ -163,4 +193,4 @@ BEGIN
   END;
 END $test$;
 
-SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, cursor CAS and constraints' AS result;
+SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
