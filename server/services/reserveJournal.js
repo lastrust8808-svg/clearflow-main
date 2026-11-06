@@ -121,9 +121,14 @@ export function projectReserveJournal(snapshot) {
   let removedAssetCount = 0;
   // Read validated dense slots directly; do not trust a mutable Array iterator.
   for (let eventIndex = 0; eventIndex < journalEvents.length; eventIndex++) {
-    const event = journalEvents[eventIndex];
-    const header = plainRecord(event, new Set([...RECORDED_FIELDS, ...REMOVED_FIELDS]),
+    const rawEvent = journalEvents[eventIndex];
+    const header = plainRecord(rawEvent, new Set([...RECORDED_FIELDS, ...REMOVED_FIELDS]),
       COMMON_FIELDS, 'Reserve journal event');
+    // Snapshot descriptor values once: Proxy get traps must not change the
+    // validated event during reserve replay or digest construction.
+    const event = Object.fromEntries(Object.entries(header).map(([key, descriptor]) =>
+      [key, descriptor.value]));
+    journalEvents[eventIndex] = event;
     const type = header.type.value;
     if (type !== 'asset_recorded' && type !== 'asset_removed') {
       throw new TypeError('Unsupported reserve journal event type');
