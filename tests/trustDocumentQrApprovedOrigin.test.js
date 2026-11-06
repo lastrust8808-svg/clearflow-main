@@ -95,3 +95,20 @@ test('approved QR origin configuration rejects duplicate entries', () => {
   );
   assert.equal(requireApprovedQrOrigin(origin, [origin, 'https://second.example.org']), origin);
 });
+
+
+test('duplicate QR origin detection does not trust an overridden array iterator', () => {
+  const malicious = [origin, origin];
+  let iteratorCalls = 0;
+  Object.defineProperty(malicious, Symbol.iterator, {
+    value: function* () { iteratorCalls++; yield 'https://other.example.org'; },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, malicious),
+    /Duplicate approved QR verification origin/);
+  assert.equal(iteratorCalls, 0);
+  const distinct = [origin, 'https://second.example.org'];
+  Object.defineProperty(distinct, Symbol.iterator, {
+    value: () => { throw new Error('iterator must not execute'); },
+  });
+  assert.equal(requireApprovedQrOrigin(origin, distinct), origin);
+});
