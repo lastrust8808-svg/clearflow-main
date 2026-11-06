@@ -325,3 +325,30 @@ test('non-plain OAuth reducer state objects fail closed', () => {
   const plain = admitGoogleAttemptResult(current, 'attempt-B', advance);
   assert.equal(plain.status, 'pending-drive-check');
 });
+
+
+test('non-plain active OAuth state cannot authorize callback admission', () => {
+  class ForgedPendingState {
+    constructor() {
+      this.status = 'pending-gsi';
+      this.googleAttemptId = 'attempt-B';
+    }
+  }
+  const dateState = new Date('2026-11-06T00:00:00Z');
+  dateState.status = 'pending-gsi';
+  dateState.googleAttemptId = 'attempt-B';
+  for (const current of [new ForgedPendingState(), dateState]) {
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(called, false);
+  }
+  const plain = Object.create(null);
+  plain.status = 'pending-gsi';
+  plain.googleAttemptId = 'attempt-B';
+  assert.equal(isCurrentGoogleAttempt(plain, 'attempt-B'), true);
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
