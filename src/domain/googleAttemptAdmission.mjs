@@ -24,6 +24,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
       fields.status === expectedStatus &&
       typeof attemptId === 'string' &&
       attemptId.trim().length > 0 &&
+      attemptId.length <= 128 &&
       !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(attemptId) &&
       typeof fields.googleAttemptId === 'string' &&
       fields.googleAttemptId === attemptId
