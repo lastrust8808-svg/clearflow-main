@@ -68,6 +68,28 @@ try {
     assert.equal(response.body.job, undefined);
   });
 
+  await test('invalid ERP financial requests cannot be cached or claim accepted work', async () => {
+    const cases = [
+      ['POST', '/invoice-deliveries', { invoiceId: 'inv-test' }, {}],
+      ['POST', '/invoice-exports', { entityId: 'entity-test' }, {}],
+      ['POST', '/settlements/execute', { entityId: 'entity-test' }, {}],
+      ['POST', '/reconciliations/:reconciliationId/statement-import',
+        { bankAccountId: 'bank-test', statementEndingBalance: 1.001 },
+        { reconciliationId: 'recon-test' }],
+      ['POST', '/reconciliations/:reconciliationId/close', {},
+        { reconciliationId: 'bad id' }],
+    ];
+    for (const [method, path, body, params] of cases) {
+      const response = await invoke(method, path, body, params);
+      assert.equal(response.statusCode, 400, path);
+      assert.equal(response.headers['cache-control'], 'no-store', path);
+      assert.equal(response.body.success, false, path);
+      for (const key of ['job', 'importJob', 'closeJob', 'execution']) {
+        assert.equal(response.body[key], undefined, path + ': ' + key);
+      }
+    }
+  });
+
   await test('missing delivery fields remain a 400 validation error', async () => {
     const response = await invoke('POST', '/invoice-deliveries', { invoiceId: 'inv-test' });
     assert.equal(response.statusCode, 400);
