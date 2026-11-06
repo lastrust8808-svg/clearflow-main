@@ -315,3 +315,25 @@ test('reserve replay and fingerprint use validated indexed descriptors, not Prox
   assert.equal(actual.journalSha256, expected.journalSha256);
   assert.equal(actual.checkpointSha256, expected.checkpointSha256);
 });
+
+test('append prefix comparison ignores adversarial indexed Proxy reads', () => {
+  const previousEvents = [record()];
+  const nextEvents = [record(), remove()];
+  const previous = { ...base, events: previousEvents };
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  let reads = 0;
+  const adversarial = new Proxy(nextEvents, {
+    get(target, key, receiver) {
+      if (key === '0') {
+        reads++;
+        return record({ amountMinor: 1 });
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = verifyReserveJournalAppend(previous,
+    { ...base, events: adversarial }, checkpoint);
+  assert.equal(reads, 0);
+  assert.equal(result.journalEventCount, 2);
+  assert.equal(result.activeAssetCount, 0);
+});
