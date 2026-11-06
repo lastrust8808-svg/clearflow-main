@@ -51,6 +51,10 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   // Keep admission fail-closed even when a property getter is hostile.
   try {
     if (!next || typeof next !== 'object' || Array.isArray(next)) return current;
+    // Authentication state must be a plain record, not a Date, class instance,
+    // or other object carrying hidden state or inherited behavior.
+    const prototype = Object.getPrototypeOf(next);
+    if (prototype !== Object.prototype && prototype !== null) return current;
     // Inspect thenability without invoking a potentially side-effecting getter.
     // Promise instances inherit a callable `then` from their prototype.
     let candidate = next;
