@@ -11,6 +11,10 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
     // The active attempt must also have explicit own data fields; inherited
     // values and getters cannot establish which callback owns this state.
     if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+    // Active authentication state must be an ordinary record. A class or Date
+    // with forged own identity fields cannot establish a pending OAuth attempt.
+    const prototype = Object.getPrototypeOf(current);
+    if (prototype !== Object.prototype && prototype !== null) return false;
     const fields = {};
     for (const key of ['status', 'googleAttemptId']) {
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
