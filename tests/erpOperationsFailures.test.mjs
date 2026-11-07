@@ -117,7 +117,7 @@ try {
       globalThis.fetch = async () => ({
         ok: false, status: 503, json: async () => ({
           success: false, code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
-          operation: names[index], error: 'No job was queued and no message was sent.',
+          operation: names[index], error: 'This operation is unavailable until authenticated durable job storage is implemented. No job was queued and no message was sent.',
         }),
       });
       await assert.rejects(operations[index](payloads[index]),
@@ -138,6 +138,8 @@ try {
       { ...validFailure, job: { id: 'maybe-accepted' } },
       { ...validFailure, importJob: {} },
       { ...validFailure, closeJob: {} },
+      { ...validFailure, error: 'No job was queued and no message was sent.' },
+      { ...validFailure, error: 'This operation is unavailable until authenticated durable job storage is implemented. No job was queued and no message was sent.', receiptId: 'untrusted' },
     ]) {
       globalThis.fetch = async () => ({
         ok: false, status: 503, json: async () => failure,
