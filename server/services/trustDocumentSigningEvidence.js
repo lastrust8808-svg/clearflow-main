@@ -351,8 +351,15 @@ export function assessTrustDocumentSigningPacket(packet) {
   // iterator can execute before we snapshot the admitted indexed descriptors.
   const suppliedVersions = admittedRegistry.versions;
   if (!Array.isArray(suppliedVersions) ||
-      Object.getPrototypeOf(suppliedVersions) !== Array.prototype ||
-      suppliedVersions.length > 10_000) {
+      Object.getPrototypeOf(suppliedVersions) !== Array.prototype) {
+    throw new TypeError('Signing document versions must be a bounded plain array');
+  }
+  // A Proxy get trap can forge a short length. Read the non-configurable
+  // own array descriptor before enumerating or allocating version snapshots.
+  const suppliedLengthDescriptor = Object.getOwnPropertyDescriptor(suppliedVersions, 'length');
+  if (!suppliedLengthDescriptor || !Object.hasOwn(suppliedLengthDescriptor, 'value') ||
+      !Number.isSafeInteger(suppliedLengthDescriptor.value) ||
+      suppliedLengthDescriptor.value < 0 || suppliedLengthDescriptor.value > 10_000) {
     throw new TypeError('Signing document versions must be a bounded plain array');
   }
   // Capture the admitted array slots and version data descriptors once. The
@@ -360,8 +367,8 @@ export function assessTrustDocumentSigningPacket(packet) {
   // even when the caller supplies a Proxy with mutable indexed reads.
   const versionDescriptors = Object.getOwnPropertyDescriptors(admittedRegistry.versions);
   const versionLength = versionDescriptors.length?.value;
-  if (!Number.isSafeInteger(versionLength) || versionLength < 0 ||
-      versionLength > 10_000 ||
+  if (!Number.isSafeInteger(versionLength) || versionLength !== suppliedLengthDescriptor.value ||
+      versionLength < 0 || versionLength > 10_000 ||
       Reflect.ownKeys(versionDescriptors).length !== versionLength + 1) {
     throw new TypeError('Signing document versions must not contain holes or non-index properties');
   }
