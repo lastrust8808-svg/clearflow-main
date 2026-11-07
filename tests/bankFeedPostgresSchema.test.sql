@@ -745,18 +745,19 @@ BEGIN
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
        AND connection_id = 'shared-item';
     RAISE EXCEPTION 'Referenced checkpoint provider was re-keyed';
-  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  EXCEPTION WHEN foreign_key_violation OR unique_violation THEN NULL;
   END;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_checkpoints
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
        AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
   ) THEN RAISE EXCEPTION 'Rejected provider re-key altered checkpoint'; END IF;
-  IF EXISTS (
+  -- A Mercury checkpoint already exists for this tenant/connection. Preserve it.
+  IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_checkpoints
      WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
-       AND connection_id = 'shared-item'
-  ) THEN RAISE EXCEPTION 'Rejected provider re-key created another provider checkpoint'; END IF;
+       AND connection_id = 'shared-item' AND cursor IS NULL AND revision = 0
+  ) THEN RAISE EXCEPTION 'Rejected provider re-key altered existing Mercury checkpoint'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_entries
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
