@@ -62,6 +62,19 @@ try {
       assert.deepEqual(await operations[i](payloads[i]), accepted[i]);
     });
   }
+  await test('all financial operation requests bypass cached acknowledgements', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      let request;
+      globalThis.fetch = async (url, options) => {
+        request = { url, options };
+        return { ok: true, json: async () => accepted[index] };
+      };
+      await operations[index](payloads[index]);
+      assert.equal(request.options.method, 'POST');
+      assert.equal(request.options.cache, 'no-store');
+      assert.equal(request.options.headers['Cache-Control'], 'no-store');
+    }
+  });
   await test('explicit durable-store 503 confirms no ERP job was accepted', async () => {
     const names = ['invoice_delivery', 'invoice_export', 'statement_import', 'reconciliation_close'];
     for (let index = 0; index < operations.length; index++) {
