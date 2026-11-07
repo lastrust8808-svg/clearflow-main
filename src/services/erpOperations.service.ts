@@ -218,7 +218,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
           failure.operation === expectedOperation[label] &&
           !Object.hasOwn(failure, 'job') &&
           !Object.hasOwn(failure, 'importJob') &&
-          !Object.hasOwn(failure, 'closeJob')) {
+          !Object.hasOwn(failure, 'closeJob') &&
+          // A durable-store refusal must match the exact fail-closed route
+          // contract. Unexpected receipt/approval fields make the outcome
+          // ambiguous rather than proving that nothing was committed.
+          Object.keys(failure).length === 4 &&
+          typeof failure.error === 'string' &&
+          failure.error === 'This operation is unavailable until authenticated durable job storage is implemented. No job was queued and no message was sent.') {
         throw new Error(`${label} is unavailable: durable job storage is not enabled. No operation was queued or completed.`);
       }
     }
