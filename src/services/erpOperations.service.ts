@@ -230,8 +230,11 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   // A partial/multi-status HTTP success is not a complete financial-operation
   // acknowledgement, even if a proxy includes a plausible receipt body.
   // Only ordinary full-response success codes can cross the accounting UI boundary.
-  if (response.status === 206 || response.status === 207) {
-    throw new Error(`${label} returned an incomplete server acknowledgement (HTTP ${response.status}). Verify operation status before retrying.`);
+  if (![200, 201, 202].includes(response.status)) {
+    // 203 is proxy-transformed, 204/205 have no receipt body, and 206/207,
+    // 208/226 cannot establish an unmodified, complete operation receipt.
+    // Even a custom fetch adapter's plausible JSON must not override status.
+    throw new Error(`${label} returned an unverified server acknowledgement (HTTP ${response.status}). Verify operation status before retrying.`);
   }
   let result: unknown;
   try {
