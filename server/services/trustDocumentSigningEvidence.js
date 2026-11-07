@@ -337,13 +337,28 @@ export function assessTrustDocumentSigningPacket(packet) {
   // Fail closed on the complete historical version list before any loop
   // reads trust ownership, revocation status or timestamps. The core verifier
   // runs later and cannot protect these earlier reads on its own.
-  assertPlainTrustDocumentVersions(admittedRegistry.versions);
+  assertPlainTrustDocumentVersions(stableRegistry.versions);
+  // Capture the admitted array slots and version data descriptors once. The
+  // historical review and downstream byte verifier must see the same records,
+  // even when the caller supplies a Proxy with mutable indexed reads.
+  const versionDescriptors = Object.getOwnPropertyDescriptors(stableRegistry.versions);
+  const stableVersions = Array.from(
+    { length: versionDescriptors.length.value },
+    (_, i) => {
+      const record = versionDescriptors[String(i)].value;
+      const fields = Object.getOwnPropertyDescriptors(record);
+      return Object.freeze(Object.fromEntries(
+        Object.entries(fields).map(([key, descriptor]) => [key, descriptor.value])
+      ));
+    }
+  );
+  const stableRegistry = Object.freeze({ ...admittedRegistry, versions: Object.freeze(stableVersions) });
   // A tenant may own multiple trusts. A matching tenant/entity/document ID
   // does not authorize substituting a version registered for another trust.
   // Require trust ownership on the registry AND every historical version.
   // Legacy records lacking this provenance intentionally fail closed.
-  if (Array.isArray(admittedRegistry.versions)) {
-    for (const version of admittedRegistry.versions) {
+  if (Array.isArray(stableRegistry.versions)) {
+    for (const version of stableRegistry.versions) {
       if (!version || typeof version !== 'object' || Array.isArray(version) ||
           version.trustId !== scope.trustId) {
         throw new Error('Signing document version trustId scope mismatch');
@@ -355,7 +370,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // revocation cannot be applied retroactively. The caller must authenticate
   // these timestamps against an append-only registry; this is only a
   // structural chronology check over supplied records.
-  for (const version of admittedRegistry.versions ?? []) {
+  for (const version of stableRegistry.versions ?? []) {
     if (version.status !== 'revoked' || version.versionId === scope.versionId) continue;
     const registeredAt = timestamp(version.registeredAt, 'version.registeredAt');
     const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
@@ -363,7 +378,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       return result('incomplete', 'historical_revocation_chronology_invalid');
     }
   }
-  const versionStatus = verifyTrustDocumentBytes(admittedRegistry, {
+  const versionStatus = verifyTrustDocumentBytes(stableRegistry, {
     versionId: scope.versionId, content: packet.content,
   });
   if (versionStatus.status !== 'valid') {
@@ -418,7 +433,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       provenanceRefs.add(ref);
     }
   }
-  for (const version of admittedRegistry.versions) {
+  for (const version of stableRegistry.versions) {
     const ref = identifier(version.evidenceRef, 'version.evidenceRef');
     if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
     provenanceRefs.add(ref);
