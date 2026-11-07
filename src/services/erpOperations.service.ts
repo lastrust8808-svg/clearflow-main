@@ -219,7 +219,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     // A 5xx, timeout, conflict, Too Early (425), or throttled response may follow a committed operation.
     // Only an explicit non-transient client rejection can be treated as
     // rejected rather than indeterminate.
-    if (response.status >= 500 || response.status === 408 || response.status === 409 || response.status === 425 || response.status === 429) {
+    // A 3xx response (including an opaque/manual redirect) cannot prove the
+    // original endpoint did not accept the write. Never classify it as a safe
+    // rejection even if a custom fetch adapter exposes the redirect response.
+    if ((response.status >= 300 && response.status < 400) || response.status === 0 || response.status >= 500 || response.status === 408 || response.status === 409 || response.status === 425 || response.status === 429) {
       throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
     }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
