@@ -706,3 +706,17 @@ test('private-note identifiers reject reserved Unicode noncharacters across role
   }
   assert.equal(project([event('issued', 1, { actorId: 'actor-🚀' })]).status, 'issued');
 });
+
+test('snapshot projection uses admitted descriptors rather than mutable Proxy reads', () => {
+  let reads = 0;
+  const snapshot = new Proxy({
+    ...scope, asOfAt: '2026-11-01T00:00:00.000Z', events: [event('issued', 1)]
+  }, {
+    get(_target, key) {
+      reads++;
+      throw new Error('untrusted snapshot read: ' + String(key));
+    }
+  });
+  assert.equal(projectPrivateNoteLifecycle(snapshot).status, 'issued');
+  assert.equal(reads, 0);
+});
