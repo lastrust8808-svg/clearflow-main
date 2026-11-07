@@ -899,3 +899,20 @@ test('signing receipt field reads use admitted data descriptors, not Proxy get s
   assert.equal(result.signerCount, 1);
   assert.equal(reads, 0, 'validated receipt fields must never be reread through Proxy get');
 });
+
+
+test('signing packet uses validated descriptors instead of Proxy field reads', () => {
+  const original = packet();
+  let reads = 0;
+  const malicious = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'trustId') {
+        reads++;
+        return 'forged-trust';
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(assessTrustDocumentSigningPacket(malicious).status, 'evidence_ready_for_review');
+  assert.equal(reads, 0);
+});
