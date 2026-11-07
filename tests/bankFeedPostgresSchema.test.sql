@@ -459,4 +459,36 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Transaction identity length must be bounded independently of account identity.
+-- Check the accepted boundary and rejection without leaving synthetic entries.
+BEGIN;
+DO $test$
+BEGIN
+  INSERT INTO public.clearflow_bank_feed_entries
+    (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+  VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a',
+          repeat('t', 256), '{}'::jsonb);
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = repeat('t', 256)
+  ) THEN RAISE EXCEPTION 'Maximum-length transaction identity was not stored'; END IF;
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a',
+            repeat('t', 257), '{}'::jsonb);
+    RAISE EXCEPTION 'Oversized transaction identity was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = repeat('t', 257)
+  ) THEN RAISE EXCEPTION 'Rejected oversized transaction identity persisted'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
