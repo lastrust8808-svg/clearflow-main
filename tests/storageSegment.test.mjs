@@ -185,3 +185,14 @@ test('all ASCII and C1 control code points fail closed as storage identities', (
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+test('rejects the complete U+FDD0–U+FDEF noncharacter range', () => {
+  for (let code = 0xFDD0; code <= 0xFDEF; code += 1) {
+    const value = 'tenant-' + String.fromCodePoint(code);
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, 'U+' + code.toString(16));
+  }
+  for (const code of [0xFDCF, 0xFDF0]) {
+    const value = 'tenant-' + String.fromCodePoint(code);
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
