@@ -1007,3 +1007,22 @@ test('signing historical version array ignores forged Proxy index and iterator r
   assert.equal(result.status, 'evidence_ready_for_review');
   assert.equal(reads, 0, 'historical version array must use admitted index descriptors');
 });
+
+
+test('signing receipt list bound ignores forged Proxy length reads', () => {
+  const original = [attestation('a')];
+  let reads = 0;
+  const receipts = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'length') {
+        reads++;
+        return 0;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = assess({ attestations: receipts });
+  assert.equal(result.status, 'evidence_ready_for_review');
+  assert.equal(result.signerCount, 1);
+  assert.equal(reads, 0, 'receipt length must be read from its own descriptor');
+});
