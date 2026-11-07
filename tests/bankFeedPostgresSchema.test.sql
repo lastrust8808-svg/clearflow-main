@@ -510,4 +510,23 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected negative revision changed checkpoint'; END IF;
 END $test$;
 
+-- Empty checkpoint cursors are not valid resume tokens. A rejected cursor
+-- update must preserve both the committed revision and cursor atomically.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET cursor = '', revision = revision + 1
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Empty checkpoint cursor was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected empty cursor changed checkpoint revision or token'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
