@@ -614,4 +614,36 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Whitespace rejection altered committed evidence'; END IF;
 END $test$;
 
+-- Tenant and connection scope must reject whitespace at the checkpoint boundary,
+-- before any feed entries can be associated with an invalid scope.
+DO $test$
+DECLARE bad TEXT;
+BEGIN
+  FOREACH bad IN ARRAY ARRAY[' ', chr(9), chr(10), 'tenant padded', 'tenant' || chr(9) || 'a'] LOOP
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_checkpoints
+        (tenant_id, provider, connection_id, cursor)
+      VALUES (bad, 'plaid', 'scope-invalid-tenant', 'invalid');
+      RAISE EXCEPTION 'Whitespace-bearing tenant checkpoint accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_checkpoints
+        (tenant_id, provider, connection_id, cursor)
+      VALUES ('tenant-a', 'plaid', bad, 'invalid');
+      RAISE EXCEPTION 'Whitespace-bearing connection checkpoint accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE connection_id = 'scope-invalid-tenant'
+  ) THEN RAISE EXCEPTION 'Rejected tenant checkpoint persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected scope checkpoint altered durable cursor'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
