@@ -194,6 +194,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   if (response.redirected === true) {
     throw new Error(`${label} outcome unknown: redirected financial response. Verify operation status before retrying.`);
   }
+  // Opaque fetch results hide the actual HTTP status and response origin.
+  // Custom adapters may expose an apparently successful status alongside an
+  // opaque response type; neither is evidence of a committed ERP operation.
+  if (response.type === 'opaque' || response.type === 'opaqueredirect') {
+    throw new Error(`${label} outcome unknown: opaque financial response. Verify operation status before retrying.`);
+  }
   if (!response.ok) {
     // The ERP backend explicitly fails closed with this exact 503 contract
     // BEFORE accepting a job. Distinguish that confirmed no-op from a generic
