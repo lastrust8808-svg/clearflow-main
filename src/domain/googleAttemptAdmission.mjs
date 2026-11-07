@@ -93,6 +93,10 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
       const descriptor = Object.getOwnPropertyDescriptor(next, key);
       if (!descriptor || !Object.hasOwn(descriptor, 'value')) return current;
     }
+    // Validate nested reducer output without invoking getters or accepting
+    // mutable class instances. This traversal is cycle-safe and does not
+    // change the returned state object's identity.
+    snapshotAdmissionState(next);
     // Inspect thenability without invoking a potentially side-effecting getter.
     // Promise instances inherit a callable `then` from their prototype.
     let candidate = next;
