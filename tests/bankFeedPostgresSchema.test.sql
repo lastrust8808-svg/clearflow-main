@@ -554,4 +554,30 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected empty account identity altered existing evidence'; END IF;
 END $test$;
 
+
+-- Empty provider transaction IDs must never be persisted as deduplication keys.
+-- The rejection must not affect previously committed transaction evidence.
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', '', '{}'::jsonb);
+    RAISE EXCEPTION 'Empty transaction identifier was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = ''
+  ) THEN RAISE EXCEPTION 'Rejected empty transaction identity persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected empty transaction identity altered existing evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
