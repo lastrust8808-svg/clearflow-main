@@ -271,4 +271,33 @@ BEGIN
   END IF;
 END $test$;
 
+-- A cursor exactly at the documented 4096-character boundary is valid.
+-- Exercise the constraint without retaining synthetic checkpoint state.
+BEGIN;
+DO $test$
+DECLARE affected INTEGER;
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+    SET cursor = repeat('x', 4096), revision = revision + 1
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'Maximum-length cursor CAS failed'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item'
+      AND length(cursor) = 4096 AND revision = 2
+  ) THEN RAISE EXCEPTION 'Maximum-length cursor was not stored'; END IF;
+END $test$;
+ROLLBACK;
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Boundary-test rollback changed committed cursor'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
