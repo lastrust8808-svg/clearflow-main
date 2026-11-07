@@ -44,7 +44,9 @@ try {
       await assert.rejects(operations[i](payloads[i]), /outcome unknown \(HTTP 503\).*Verify operation status before retrying/);
     });
     await test(`ERP operation ${i + 1} distinguishes transient from explicit client rejection`, async () => {
-      for (const status of [408, 409, 425, 429, 502, 504]) {
+      // Some custom fetch adapters expose redirect/opaque responses instead
+      // of throwing despite redirect: 'error'. Neither proves a rejected write.
+      for (const status of [0, 301, 302, 303, 307, 308, 408, 409, 425, 429, 502, 504]) {
         globalThis.fetch = async () => ({ ok: false, status });
         await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
       }
