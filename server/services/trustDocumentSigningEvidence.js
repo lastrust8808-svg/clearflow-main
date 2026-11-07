@@ -193,6 +193,11 @@ function requirePlainSigningGovernance(governance) {
       throw new TypeError('Signing governance missing own field: ' + key);
     }
   }
+  // Return the admitted values rather than rereading a potentially adversarial
+  // Proxy when checking scope or constructing policy input.
+  const snapshot = Object.create(null);
+  for (const key of SIGNING_GOVERNANCE_FIELDS) snapshot[key] = descriptors[key].value;
+  return Object.freeze(snapshot);
 }
 
 /**
@@ -230,9 +235,9 @@ export function assessTrustDocumentSigningPacket(packet) {
       packet.content.byteLength === 0) {
     throw new TypeError('Nonempty finalized document bytes required');
   }
-  requirePlainSigningGovernance(packet.governance);
+  const governance = requirePlainSigningGovernance(packet.governance);
   for (const key of ['tenantId', 'entityId', 'trustId']) {
-    if (packet.governance[key] !== scope[key]) {
+    if (governance[key] !== scope[key]) {
       throw new Error('Signing governance ' + key + ' scope mismatch');
     }
   }
@@ -302,7 +307,7 @@ export function assessTrustDocumentSigningPacket(packet) {
     // Check appointment eligibility at the individual signing date, without
     // treating a single signature as satisfaction of a joint signing policy.
     const atSigning = evaluateTrusteeSigningPolicy({
-      ...packet.governance, mode: 'independent',
+      ...governance, mode: 'independent',
       asOfDate: signedAt.slice(0, 10), signerIds: [signerId],
     });
     if (!atSigning.eligible) return result('incomplete', 'signer_ineligible_at_signing');
@@ -394,7 +399,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // document are involved. References remain unverified until authenticated
   // storage and evidence-provider integration.
   const provenanceRefs = new Set(evidenceRefs);
-  for (const appointment of packet.governance.appointments) {
+  for (const appointment of governance.appointments) {
     if (appointment.acceptedOn != null) {
       const ref = identifier(appointment.acceptanceEvidenceRef, 'appointment.acceptanceEvidenceRef');
       if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
@@ -425,7 +430,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // masquerade as an owner, signer, document or version identifier. Check the
   // full collected set so later receipts cannot alias earlier identities.
   const identityRefs = new Set([...Object.values(scope), ...signers]);
-  for (const appointment of packet.governance.appointments) {
+  for (const appointment of governance.appointments) {
     identityRefs.add(identifier(appointment.trusteeId, 'appointment.trusteeId'));
   }
   for (const evidenceRef of provenanceRefs) {
@@ -436,7 +441,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // The actual independent/joint governance rule is applied to the COMPLETE
   // signer set, not to any single event.
   const atReview = evaluateTrusteeSigningPolicy({
-    ...packet.governance, asOfDate: evaluatedAt.slice(0, 10),
+    ...governance, asOfDate: evaluatedAt.slice(0, 10),
     signerIds: [...signers],
   });
   return atReview.eligible
