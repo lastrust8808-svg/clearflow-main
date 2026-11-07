@@ -44,7 +44,7 @@ try {
       await assert.rejects(operations[i](payloads[i]), /outcome unknown \(HTTP 503\).*Verify operation status before retrying/);
     });
     await test(`ERP operation ${i + 1} distinguishes transient from explicit client rejection`, async () => {
-      for (const status of [408, 409, 429, 502, 504]) {
+      for (const status of [408, 409, 425, 429, 502, 504]) {
         globalThis.fetch = async () => ({ ok: false, status });
         await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
       }
