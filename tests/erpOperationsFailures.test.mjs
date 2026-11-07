@@ -72,7 +72,18 @@ try {
       await operations[index](payloads[index]);
       assert.equal(request.options.method, 'POST');
       assert.equal(request.options.cache, 'no-store');
+      assert.equal(request.options.redirect, 'error', 'financial POSTs must never follow redirects');
       assert.equal(request.options.headers['Cache-Control'], 'no-store');
+    }
+  });
+  await test('redirect failures remain indeterminate and never imply a rejected financial write', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async (_url, options) => {
+        assert.equal(options.redirect, 'error');
+        throw new TypeError('redirect mode is set to error');
+      };
+      await assert.rejects(operations[index](payloads[index]),
+        /outcome unknown: no server confirmation was received.*Verify operation status before retrying/);
     }
   });
   await test('explicit durable-store 503 confirms no ERP job was accepted', async () => {
