@@ -98,6 +98,20 @@ try {
         /outcome unknown: redirected financial response.*Verify operation status before retrying/);
     }
   });
+  await test('opaque fetch responses never confirm financial operations', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      for (const type of ['opaque', 'opaqueredirect']) {
+        // Deliberately inconsistent adapter: a plausible success body and
+        // HTTP 200 must not override an opaque response classification.
+        globalThis.fetch = async () => ({
+          ok: true, status: 200, type, redirected: false,
+          json: async () => accepted[index],
+        });
+        await assert.rejects(operations[index](payloads[index]),
+          /outcome unknown: opaque financial response.*Verify operation status before retrying/);
+      }
+    }
+  });
   await test('only complete untransformed HTTP success can confirm a financial operation', async () => {
     for (let index = 0; index < operations.length; index++) {
       for (const status of [203, 204, 205, 206, 207, 208, 226]) {
