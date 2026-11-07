@@ -47,7 +47,9 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   // or replace the active attempt with a partial authentication result.
   let next;
   try {
-    // Pass a frozen snapshot so a reducer cannot mutate the active attempt\n    // before its returned state has passed admission validation.\n    next = reducer(Object.freeze({ ...current }));
+    // Pass a frozen snapshot so a reducer cannot mutate the active attempt
+    // before its returned state has passed admission validation.
+    next = reducer(Object.freeze({ ...current }));
   } catch {
     return current;
   }
