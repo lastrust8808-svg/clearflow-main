@@ -133,8 +133,9 @@ export function projectPrivateNoteLifecycle(snapshot) {
     throw new TypeError('Private note snapshot must be a plain data record');
   }
   const snapshotFields = new Set(['tenantId', 'entityId', 'trustId', 'noteId', 'asOfAt', 'events']);
-  for (const key of Reflect.ownKeys(snapshot)) {
-    const descriptor = Object.getOwnPropertyDescriptor(snapshot, key);
+  const snapshotDescriptors = Object.getOwnPropertyDescriptors(snapshot);
+  for (const key of Reflect.ownKeys(snapshotDescriptors)) {
+    const descriptor = snapshotDescriptors[key];
     if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
       throw new TypeError('Private note snapshot fields must be enumerable data properties');
     }
@@ -143,10 +144,10 @@ export function projectPrivateNoteLifecycle(snapshot) {
     }
   }
   const scope = {
-    tenantId: requiredId(snapshot.tenantId, 'tenantId'),
-    entityId: requiredId(snapshot.entityId, 'entityId'),
-    trustId: requiredId(snapshot.trustId, 'trustId'),
-    noteId: requiredId(snapshot.noteId, 'noteId'),
+    tenantId: requiredId(snapshotDescriptors.tenantId?.value, 'tenantId'),
+    entityId: requiredId(snapshotDescriptors.entityId?.value, 'entityId'),
+    trustId: requiredId(snapshotDescriptors.trustId?.value, 'trustId'),
+    noteId: requiredId(snapshotDescriptors.noteId?.value, 'noteId'),
   };
   // Each scope role must have its own canonical identity. Reusing a tenant ID
   // as a trust, entity or note ID makes audit/provenance namespace ownership
@@ -154,10 +155,10 @@ export function projectPrivateNoteLifecycle(snapshot) {
   if (new Set(Object.values(scope)).size !== 4) {
     throw new Error('Private note tenant, entity, trust and note scope identifiers must be distinct');
   }
-  requirePlainEventHistory(snapshot.events);
+  requirePlainEventHistory(snapshotDescriptors.events?.value);
   // Snapshot time is supplied by the caller; runtime integration must use a
   // trusted server-side clock, not an untrusted request parameter.
-  const asOfAt = utcInstant(snapshot.asOfAt, 'asOfAt');
+  const asOfAt = utcInstant(snapshotDescriptors.asOfAt?.value, 'asOfAt');
   const seen = new Set();
   // Actor identifiers name principals, not independent event/document/evidence
   // receipts. Reject role collisions anywhere in the supplied journal history.
@@ -177,7 +178,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   // Reusing a pointer for a different action must fail closed; verification
   // of the referenced record remains the caller's responsibility.
   const lifecycleEvidenceRefs = new Set();
-  for (const event of snapshot.events) {
+  for (const event of snapshotDescriptors.events.value) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
     }
