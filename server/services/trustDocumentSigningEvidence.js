@@ -337,7 +337,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // Fail closed on the complete historical version list before any loop
   // reads trust ownership, revocation status or timestamps. The core verifier
   // runs later and cannot protect these earlier reads on its own.
-  assertPlainTrustDocumentVersions(stableRegistry.versions);
+  assertPlainTrustDocumentVersions(admittedRegistry.versions);
   // Capture the admitted array slots and version data descriptors once. The
   // historical review and downstream byte verifier must see the same records,
   // even when the caller supplies a Proxy with mutable indexed reads.
