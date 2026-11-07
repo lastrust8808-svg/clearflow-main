@@ -160,6 +160,9 @@ function requirePlainSigningPacket(packet) {
       throw new TypeError('Signing packet missing own field: ' + key);
     }
   }
+  const snapshot = Object.create(null);
+  for (const key of SIGNING_PACKET_FIELDS) snapshot[key] = descriptors[key].value;
+  return Object.freeze(snapshot);
 }
 
 // Governance is later spread into a policy snapshot. An accessor on the
@@ -204,7 +207,7 @@ function requirePlainSigningGovernance(governance) {
  *   reason:string,signerCount:number}} Frozen internal decision.
  */
 export function assessTrustDocumentSigningPacket(packet) {
-  requirePlainSigningPacket(packet);
+  packet = requirePlainSigningPacket(packet);
   const scope = {};
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId', 'versionId']) {
     scope[key] = identifier(packet[key], key);
