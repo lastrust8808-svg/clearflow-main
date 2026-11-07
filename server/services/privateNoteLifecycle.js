@@ -111,6 +111,7 @@ function requirePlainEventHistory(events) {
     indexed++;
   }
   if (indexed !== length) throw new TypeError('Private note events must not contain holes');
+  return Array.from({ length }, (_, index) => descriptors[String(index)].value);
 }
 
 /**
@@ -155,7 +156,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   if (new Set(Object.values(scope)).size !== 4) {
     throw new Error('Private note tenant, entity, trust and note scope identifiers must be distinct');
   }
-  requirePlainEventHistory(snapshotDescriptors.events?.value);
+  const admittedEvents = requirePlainEventHistory(snapshotDescriptors.events?.value);
   // Snapshot time is supplied by the caller; runtime integration must use a
   // trusted server-side clock, not an untrusted request parameter.
   const asOfAt = utcInstant(snapshotDescriptors.asOfAt?.value, 'asOfAt');
@@ -178,7 +179,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
   // Reusing a pointer for a different action must fail closed; verification
   // of the referenced record remains the caller's responsibility.
   const lifecycleEvidenceRefs = new Set();
-  for (const event of snapshotDescriptors.events.value) {
+  for (const event of admittedEvents) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) {
       throw new TypeError('Invalid private note event');
     }
@@ -210,14 +211,14 @@ export function projectPrivateNoteLifecycle(snapshot) {
         throw new TypeError('Missing own private note lifecycle event field: ' + key);
       }
     }
-    const eventId = requiredId(event.eventId, 'eventId');
+    const eventId = requiredId(descriptors.eventId.value, 'eventId');
     if (seen.has(eventId)) throw new Error('Duplicate private note event ID');
     seen.add(eventId);
     for (const [key, value] of Object.entries(scope)) {
-      if (event[key] !== value) throw new Error('Private note event ' + key + ' scope mismatch');
+      if (descriptors[key].value !== value) throw new Error('Private note event ' + key + ' scope mismatch');
     }
-    actorIds.add(requiredId(event.actorId, 'actorId'));
-    const occurredAt = utcInstant(event.occurredAt, 'occurredAt');
+    actorIds.add(requiredId(descriptors.actorId.value, 'actorId'));
+    const occurredAt = utcInstant(descriptors.occurredAt.value, 'occurredAt');
     if (occurredAt > asOfAt) {
       throw new Error('Private note event occurs after snapshot as-of timestamp');
     }
@@ -232,27 +233,27 @@ export function projectPrivateNoteLifecycle(snapshot) {
     }
     const next = Object.hasOwn(NEXT[status], eventType) ? NEXT[status][eventType] : null;
     if (next === null) throw new Error('Invalid private note lifecycle transition');
-    if (event.type === 'issued') {
-      issuedDocumentRef = requiredId(event.documentRef, 'documentRef');
+    if (descriptors.type.value === 'issued') {
+      issuedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
       documentRefs.add(issuedDocumentRef);
       // An issuance without a provenance reference must not become an issued state.
       // The caller must independently verify this evidence before accepting it.
-      issuedEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+      issuedEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
     }
-    if (event.type === 'presented') {
-      const presentedDocumentRef = requiredId(event.documentRef, 'documentRef');
+    if (descriptors.type.value === 'presented') {
+      const presentedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
       if (presentedDocumentRef !== issuedDocumentRef) {
         throw new Error('Presented document must match the issued note document');
       }
       // Evidence of signing/issuance cannot also serve as evidence that the
       // instrument was subsequently presented. Authenticity remains a caller duty.
-      const presentmentEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+      const presentmentEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
       if (presentmentEvidenceRef === issuedEvidenceRef) {
         throw new Error('Presentment evidence must be distinct from issuance evidence');
       }
     }
-    if (event.type === 'notice_prepared') {
-      const noticeDocumentRef = requiredId(event.documentRef, 'documentRef');
+    if (descriptors.type.value === 'notice_prepared') {
+      const noticeDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
       if (noticeDocumentRef === issuedDocumentRef || noticeDocumentRefs.has(noticeDocumentRef)) {
         throw new Error('Notice draft document reference must be distinct and unique');
       }
@@ -277,7 +278,7 @@ export function projectPrivateNoteLifecycle(snapshot) {
       // A new or revised draft must have its own preparation record; a reused
       // pointer would make two different draft versions appear to share one
       // provenance event. This does not authenticate the evidence itself.
-      const noticeEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+      const noticeEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
       if (noticeEvidenceRefs.has(noticeEvidenceRef)) {
         throw new Error('Notice draft preparation evidence reference must be unique');
       }
@@ -286,18 +287,18 @@ export function projectPrivateNoteLifecycle(snapshot) {
       noticeEvidenceRefs.add(noticeEvidenceRef);
       latestNoticeDocumentRef = noticeDocumentRef;
     }
-    if (event.type === 'disputed') {
+    if (descriptors.type.value === 'disputed') {
       // A dispute must identify a document already registered in this note's
       // timeline. The disputed target may be the issued instrument or an
       // existing notice draft, but never an unrelated or future document.
       // This is reference integrity only, not evidence of actual delivery.
-      const disputedDocumentRef = requiredId(event.documentRef, 'documentRef');
+      const disputedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
       if (disputedDocumentRef !== issuedDocumentRef && !noticeDocumentRefs.has(disputedDocumentRef)) {
         throw new Error('Dispute must reference the issued note or a previously prepared notice draft');
       }
-      requiredId(event.evidenceRef, 'evidenceRef');
+      requiredId(descriptors.evidenceRef.value, 'evidenceRef');
     }
-    const lifecycleEvidenceRef = requiredId(event.evidenceRef, 'evidenceRef');
+    const lifecycleEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
     if (lifecycleEvidenceRefs.has(lifecycleEvidenceRef)) {
       throw new Error('Private note lifecycle evidence reference must be unique across events');
     }
