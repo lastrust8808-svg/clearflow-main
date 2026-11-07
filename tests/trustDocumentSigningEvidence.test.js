@@ -935,3 +935,19 @@ test('signing governance uses admitted descriptors rather than Proxy identity re
   assert.equal(assess({ governance: adversarial }).status, 'evidence_ready_for_review');
   assert.equal(reads, 0, 'governance properties must not be reread after descriptor admission');
 });
+
+test('signing registry scope is read from admitted descriptors, not Proxy property reads', () => {
+  const original = packet().versionRegistry;
+  let propertyReads = 0;
+  const adversarial = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'trustId' || key === 'versions') {
+        propertyReads++;
+        return key === 'trustId' ? 'forged-trust' : [];
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(assess({ versionRegistry: adversarial }).status, 'evidence_ready_for_review');
+  assert.equal(propertyReads, 0);
+});
