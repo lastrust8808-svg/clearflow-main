@@ -88,6 +88,19 @@ try {
         /outcome unknown: no server confirmation was received.*Verify operation status before retrying/);
     }
   });
+  await test('partial and multi-status HTTP success cannot confirm a financial operation', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      for (const status of [206, 207]) {
+        globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
+        await assert.rejects(operations[index](payloads[index]),
+          /incomplete server acknowledgement.*Verify operation status before retrying/);
+      }
+      for (const status of [200, 201, 202]) {
+        globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
+        assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
+      }
+    }
+  });
   await test('explicit durable-store 503 confirms no ERP job was accepted', async () => {
     const names = ['invoice_delivery', 'invoice_export', 'statement_import', 'reconciliation_close'];
     for (let index = 0; index < operations.length; index++) {
