@@ -341,7 +341,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // Capture the admitted array slots and version data descriptors once. The
   // historical review and downstream byte verifier must see the same records,
   // even when the caller supplies a Proxy with mutable indexed reads.
-  const versionDescriptors = Object.getOwnPropertyDescriptors(stableRegistry.versions);
+  const versionDescriptors = Object.getOwnPropertyDescriptors(admittedRegistry.versions);
   const stableVersions = Array.from(
     { length: versionDescriptors.length.value },
     (_, i) => {
@@ -388,7 +388,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // alone could be backdated to make a draft signature appear valid. Bind it
   // to the immutable, matching version record and its registration chronology.
   // Older records without this provenance cannot be evidence-ready.
-  const currentVersion = admittedRegistry.versions.find(v => v.versionId === scope.versionId);
+  const currentVersion = stableRegistry.versions.find(v => v.versionId === scope.versionId);
   if (!currentVersion || typeof currentVersion.finalizedAt !== 'string') {
     return result('incomplete', 'document_finalization_provenance_missing');
   }
