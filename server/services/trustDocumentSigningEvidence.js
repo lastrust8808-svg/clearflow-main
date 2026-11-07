@@ -372,6 +372,11 @@ export function assessTrustDocumentSigningPacket(packet) {
         throw new TypeError('Signing document versions require plain records');
       }
       const fields = Object.getOwnPropertyDescriptors(record);
+      // Symbol-named claims cannot survive the string-key snapshot. Reject
+      // them explicitly rather than silently dropping unreviewed metadata.
+      if (Reflect.ownKeys(fields).some(key => typeof key === 'symbol')) {
+        throw new TypeError('Signing document versions require enumerable own data properties');
+      }
       for (const descriptor of Reflect.ownKeys(fields).map(key => fields[key])) {
         if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
           throw new TypeError('Signing document versions require enumerable own data properties');
