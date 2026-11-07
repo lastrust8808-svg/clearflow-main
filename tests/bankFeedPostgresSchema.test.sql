@@ -648,6 +648,8 @@ END $test$;
 
 -- Entry tenant and connection identifiers must be checked independently of checkpoint rows.
 -- A malformed scope must never create an entry or change valid committed evidence.
+-- Either the identifier CHECK or the checkpoint foreign key may reject the insert;
+-- both enforce fail-closed persistence, and PostgreSQL can report the FK first.
 DO $test$
 DECLARE bad TEXT;
 BEGIN
@@ -657,14 +659,14 @@ BEGIN
         (tenant_id, provider, connection_id, account_id, transaction_id, payload)
       VALUES (bad, 'plaid', 'shared-item', 'acct-a', 'tx-invalid-tenant', '{}'::jsonb);
       RAISE EXCEPTION 'Whitespace-bearing entry tenant accepted';
-    EXCEPTION WHEN check_violation THEN NULL;
+    EXCEPTION WHEN check_violation OR foreign_key_violation THEN NULL;
     END;
     BEGIN
       INSERT INTO public.clearflow_bank_feed_entries
         (tenant_id, provider, connection_id, account_id, transaction_id, payload)
       VALUES ('tenant-a', 'plaid', bad, 'acct-a', 'tx-invalid-connection', '{}'::jsonb);
       RAISE EXCEPTION 'Whitespace-bearing entry connection accepted';
-    EXCEPTION WHEN check_violation THEN NULL;
+    EXCEPTION WHEN check_violation OR foreign_key_violation THEN NULL;
     END;
   END LOOP;
   IF EXISTS (
