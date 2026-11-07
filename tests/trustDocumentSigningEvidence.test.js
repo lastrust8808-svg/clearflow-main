@@ -951,3 +951,22 @@ test('signing registry scope is read from admitted descriptors, not Proxy proper
   assert.equal(assess({ versionRegistry: adversarial }).status, 'evidence_ready_for_review');
   assert.equal(propertyReads, 0);
 });
+
+test('signing historical version fields use descriptor snapshots rather than forged Proxy reads', () => {
+  const original = packet().versionRegistry;
+  let reads = 0;
+  const adversarialVersion = new Proxy(original.versions[0], {
+    get(target, key, receiver) {
+      if (key === 'trustId' || key === 'status' || key === 'sha256') {
+        reads++;
+        return key === 'trustId' ? 'forged-trust' : key === 'status' ? 'revoked' : '0'.repeat(64);
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = assess({
+    versionRegistry: { ...original, versions: [adversarialVersion] },
+  });
+  assert.equal(result.status, 'evidence_ready_for_review');
+  assert.equal(reads, 0, 'historical version fields must be read from admitted descriptors');
+});
