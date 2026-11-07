@@ -580,4 +580,38 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected empty transaction identity altered existing evidence'; END IF;
 END $test$;
 
+-- Persisted feed identities must reject whitespace even if application validation is bypassed.
+-- Rejected inserts must not mutate existing committed checkpoint or transaction evidence.
+DO $test$
+DECLARE bad TEXT;
+BEGIN
+  FOREACH bad IN ARRAY ARRAY[' ', E'\\t', E'\\n', ' padded', 'pad ded'] LOOP
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_entries
+        (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+      VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', bad, '{}'::jsonb);
+      RAISE EXCEPTION 'Whitespace-bearing transaction identifier accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_entries
+        (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+      VALUES ('tenant-a', 'plaid', 'shared-item', bad, 'tx-invalid-account', '{}'::jsonb);
+      RAISE EXCEPTION 'Whitespace-bearing account identifier accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND transaction_id = 'tx-invalid-account'
+  ) THEN RAISE EXCEPTION 'Rejected whitespace account persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Whitespace rejection altered committed evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
