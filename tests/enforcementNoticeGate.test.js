@@ -213,3 +213,14 @@ test('evaluation time requires exact canonical UTC and valid calendar date', () 
   }
   assert.equal(assess(base).status, 'evidence_ready_for_review');
 });
+
+
+test('all notice scope and evidence identities are pairwise distinct', () => {
+  const fields = ['tenantId', 'trustId', 'noteId', 'noticeId', 'noticeVersionId', 'preparedEvidenceRef', 'deliveryEvidenceRef'];
+  for (let i = 0; i < fields.length; i++) {
+    for (let j = i + 1; j < fields.length; j++) {
+      const packet = {...base, [fields[j]]:base[fields[i]]};
+      assert.throws(() => assess(packet), /distinct|reused/, `${fields[j]} aliases ${fields[i]}`);
+    }
+  }
+});
