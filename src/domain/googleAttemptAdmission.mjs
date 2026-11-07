@@ -1,3 +1,5 @@
+import { types as nodeTypes } from 'node:util';
+
 /**
  * A callback may advance only the OAuth attempt that initiated it.
  * These guards do not validate Google tokens or replace provider-side state
@@ -10,7 +12,8 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
   try {
     // The active attempt must also have explicit own data fields; inherited
     // values and getters cannot establish which callback owns this state.
-    if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+    if (!current || typeof current !== 'object' || Array.isArray(current) ||
+        nodeTypes.isProxy(current)) return false;
     // Active authentication state must be an ordinary record. A class or Date
     // with forged own identity fields cannot establish a pending OAuth attempt.
     const prototype = Object.getPrototypeOf(current);
@@ -43,6 +46,8 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
 function snapshotAdmissionState(value, seen = new WeakMap()) {
   if (!value || typeof value !== 'object') return value;
+  // Proxy traps can impersonate plain records and run code during cloning.
+  if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
   if (seen.has(value)) return seen.get(value);
   const proto = Object.getPrototypeOf(value);
   if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
@@ -81,7 +86,8 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   // Accessors on untrusted reducer results can throw during validation.
   // Keep admission fail-closed even when a property getter is hostile.
   try {
-    if (!next || typeof next !== 'object' || Array.isArray(next)) return current;
+    if (!next || typeof next !== 'object' || Array.isArray(next) ||
+        nodeTypes.isProxy(next)) return current;
     // Authentication state must be a plain record, not a Date, class instance,
     // or other object carrying hidden state or inherited behavior.
     const prototype = Object.getPrototypeOf(next);
