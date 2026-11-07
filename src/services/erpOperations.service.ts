@@ -188,6 +188,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     // duplicate invoice delivery, statement imports or accounting closure.
     throw new Error(`${label} outcome unknown: no server confirmation was received. Verify operation status before retrying.`);
   }
+  // A custom fetch adapter or service worker may follow a redirect despite
+  // redirect: 'error'. A final HTTP 200 is not evidence that the original
+  // financial endpoint accepted the operation; require status reconciliation.
+  if (response.redirected === true) {
+    throw new Error(`${label} outcome unknown: redirected financial response. Verify operation status before retrying.`);
+  }
   if (!response.ok) {
     // The ERP backend explicitly fails closed with this exact 503 contract
     // BEFORE accepting a job. Distinguish that confirmed no-op from a generic
