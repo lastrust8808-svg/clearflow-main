@@ -88,6 +88,16 @@ try {
         /outcome unknown: no server confirmation was received.*Verify operation status before retrying/);
     }
   });
+  await test('followed redirects cannot confirm financial writes even with a valid receipt', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async () => ({
+        ok: true, status: 200, redirected: true,
+        json: async () => accepted[index],
+      });
+      await assert.rejects(operations[index](payloads[index]),
+        /outcome unknown: redirected financial response.*Verify operation status before retrying/);
+    }
+  });
   await test('only complete untransformed HTTP success can confirm a financial operation', async () => {
     for (let index = 0; index < operations.length; index++) {
       for (const status of [203, 204, 205, 206, 207, 208, 226]) {
