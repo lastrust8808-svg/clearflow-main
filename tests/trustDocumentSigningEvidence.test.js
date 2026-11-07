@@ -863,3 +863,20 @@ test('signing audit identifiers reject invisible default-ignorable Unicode', () 
   }
   assert.equal(assess().status, 'evidence_ready_for_review');
 });
+
+
+test('signing evidence uses descriptor snapshot despite adversarial array iteration and reads', () => {
+  const valid = attestation('a');
+  const tampered = attestation('a', { explicitConsent: false });
+  const target = [valid];
+  const adversarial = new Proxy(target, {
+    get(object, key, receiver) {
+      if (key === Symbol.iterator) {
+        return function* () { yield tampered; };
+      }
+      if (key === '0') return tampered;
+      return Reflect.get(object, key, receiver);
+    },
+  });
+  assert.equal(assess({ attestations: adversarial }).status, 'evidence_ready_for_review');
+});
