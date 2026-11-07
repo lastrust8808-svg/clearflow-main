@@ -124,6 +124,11 @@ function requirePlainAttestationRecord(attestation) {
       throw new TypeError('Signature attestation fields must be enumerable own data properties');
     }
   }
+  // Consume the admitted data descriptors, not a second round of potentially
+  // adversarial Proxy property reads. Preserve only the validated receipt fields.
+  const snapshot = Object.create(null);
+  for (const key of Object.keys(descriptors)) snapshot[key] = descriptors[key].value;
+  return Object.freeze(snapshot);
 }
 
 // The packet envelope itself must be inert before any scope or document
@@ -228,8 +233,8 @@ export function assessTrustDocumentSigningPacket(packet) {
       throw new Error('Signing governance ' + key + ' scope mismatch');
     }
   }
-  const attestations = requirePlainAttestationList(packet.attestations);
-  for (const attestation of attestations) requirePlainAttestationRecord(attestation);
+  const attestations = requirePlainAttestationList(packet.attestations)
+    .map(requirePlainAttestationRecord);
   const documentHash = createHash('sha256').update(packet.content).digest();
   const signers = new Set();
   const evidenceRefs = new Set();
