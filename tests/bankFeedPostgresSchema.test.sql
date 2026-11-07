@@ -305,7 +305,7 @@ BEGIN
   END;
   BEGIN
     UPDATE public.clearflow_bank_feed_checkpoints
-      SET provider = 'mercury'
+      SET provider = 'mercury', connection_id = 'scope-moved-item'
       WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
         AND connection_id = 'shared-item';
     RAISE EXCEPTION 'Referenced connection was moved to another provider';
