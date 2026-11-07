@@ -176,6 +176,9 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       // Financial acknowledgements must come from the network, never a cached
       // success from a service worker or intermediary after a failed retry.
       cache: 'no-store',
+      // Never replay a financial POST to a redirected destination. A redirect
+      // may conceal a changed tenant/API endpoint or an uncertain first write.
+      redirect: 'error',
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
       body: JSON.stringify(payload),
     });
