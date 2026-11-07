@@ -173,7 +173,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   try {
     response = await fetch(`${ERP_API_BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Financial acknowledgements must come from the network, never a cached
+      // success from a service worker or intermediary after a failed retry.
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
       body: JSON.stringify(payload),
     });
   } catch {
