@@ -529,4 +529,29 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected empty cursor changed checkpoint revision or token'; END IF;
 END $test$;
 
+-- Empty account identifiers must not create an unmatchable feed entry.
+-- Rejection must leave existing transaction evidence untouched.
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'shared-item', '',
+            'tx-empty-account', '{}'::jsonb);
+    RAISE EXCEPTION 'Empty account identifier was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND transaction_id = 'tx-empty-account'
+  ) THEN RAISE EXCEPTION 'Rejected empty account identity persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected empty account identity altered existing evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
