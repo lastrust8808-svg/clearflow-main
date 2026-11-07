@@ -291,6 +291,39 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected identity reassignment changed checkpoint'; END IF;
 END $test$;
 
+-- A referenced connection cannot be moved to another tenant or provider.
+-- Neither update may silently re-scope persisted entries or cursor evidence.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET tenant_id = 'tenant-c'
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Referenced connection was moved to another tenant';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET provider = 'mercury'
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Referenced connection was moved to another provider';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+  ) THEN RAISE EXCEPTION 'Rejected scope reassignment lost transaction evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected scope reassignment changed checkpoint'; END IF;
+END $test$;
+
 -- Reject malformed feed payloads and out-of-range cursor evidence at the DB boundary.
 DO $test$
 BEGIN
