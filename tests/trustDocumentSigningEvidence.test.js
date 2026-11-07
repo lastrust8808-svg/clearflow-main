@@ -674,9 +674,9 @@ test('signing preflights every receipt record without executing later receipt ge
 
 test('signing rejects unsupported receipt claims and custom prototypes; frozen plain receipts remain valid', () => {
   const unknown = { ...attestation('a'), paymentReceived: true };
-  assert.throws(() => assess({ attestations: [unknown] }), /require enumerable own data properties/);
+  assert.throws(() => assess({ attestations: [unknown] }), /unsupported fields/);
   const symbol = { ...attestation('a'), [Symbol('settled')]: true };
-  assert.throws(() => assess({ attestations: [symbol] }), /require enumerable own data properties/);
+  assert.throws(() => assess({ attestations: [symbol] }), /unsupported fields/);
   const inherited = attestation('a');
   Object.setPrototypeOf(inherited, { paymentAuthorized: true });
   assert.throws(() => assess({ attestations: [inherited] }), /plain record/);
