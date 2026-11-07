@@ -681,4 +681,28 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected entry scope altered committed evidence'; END IF;
 END $test$;
 
+-- A checkpoint containing committed feed evidence must not be deleted.
+-- The composite FK is the last-resort guard against losing the replay anchor.
+DO $test$
+BEGIN
+  BEGIN
+    DELETE FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Checkpoint with persisted entries was deleted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Restricted deletion altered durable checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Restricted deletion altered transaction evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
