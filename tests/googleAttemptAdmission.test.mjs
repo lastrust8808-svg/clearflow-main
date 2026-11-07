@@ -369,3 +369,40 @@ test('admission reducers cannot mutate active OAuth state before validation', ()
   assert.equal(accepted.status, 'pending-drive-check');
   assert.equal(current.status, 'pending-gsi');
 });
+
+
+test('nested OAuth admission snapshots cannot mutate live workspace or profile data', () => {
+  const current = {
+    status: 'pending-gsi', googleAttemptId: 'attempt-B',
+    profile: { name: 'Original', preferences: { theme: 'light' } },
+    workspaces: [{ id: 'owner', enabled: false }],
+  };
+  const rejected = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    assert.throws(() => { snapshot.profile.preferences.theme = 'dark'; }, TypeError);
+    assert.throws(() => { snapshot.workspaces[0].enabled = true; }, TypeError);
+    return { ...snapshot, status: 'invalid-status' };
+  });
+  assert.equal(rejected, current);
+  assert.equal(current.profile.preferences.theme, 'light');
+  assert.equal(current.workspaces[0].enabled, false);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check',
+    profile: { ...snapshot.profile, name: 'Verified' },
+  }));
+  assert.equal(accepted.profile.name, 'Verified');
+  assert.equal(current.profile.name, 'Original');
+});
+
+test('accessor-backed nested OAuth state fails closed without executing getters', () => {
+  let getterCalls = 0;
+  const profile = {};
+  Object.defineProperty(profile, 'name', { enumerable: true, get() { getterCalls++; return 'spoofed'; } });
+  const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', profile };
+  let reducerCalled = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    reducerCalled = true;
+    return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  }), current);
+  assert.equal(reducerCalled, false);
+  assert.equal(getterCalls, 0);
+});
