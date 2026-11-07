@@ -880,3 +880,22 @@ test('signing evidence uses descriptor snapshot despite adversarial array iterat
   });
   assert.equal(assess({ attestations: adversarial }).status, 'evidence_ready_for_review');
 });
+
+
+test('signing receipt field reads use admitted data descriptors, not Proxy get substitutions', () => {
+  const original = attestation('a');
+  let reads = 0;
+  const adversarial = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'signerId') {
+        reads++;
+        return 'impostor';
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = assess({ attestations: [adversarial] });
+  assert.equal(result.status, 'evidence_ready_for_review');
+  assert.equal(result.signerCount, 1);
+  assert.equal(reads, 0, 'validated receipt fields must never be reread through Proxy get');
+});
