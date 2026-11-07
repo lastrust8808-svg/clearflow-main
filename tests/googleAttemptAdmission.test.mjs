@@ -438,3 +438,22 @@ test('unsupported mutable nested OAuth values fail closed before reducer executi
     assert.equal(invoked, false);
   }
 });
+
+test('OAuth reducer results with non-identity accessors fail closed before downstream reads', () => {
+  const current = pending('attempt-B');
+  for (const key of ['profile', 'workspaces', Symbol('hidden')]) {
+    let getterCalls = 0;
+    const result = { ...current, status: 'authenticated' };
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      get() { getterCalls++; throw new Error('hostile OAuth result getter'); },
+    });
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+    assert.equal(getterCalls, 0);
+  }
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', profile: { name: 'Verified' },
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.profile.name, 'Verified');
+});
