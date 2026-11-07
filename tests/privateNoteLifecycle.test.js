@@ -720,3 +720,32 @@ test('snapshot projection uses admitted descriptors rather than mutable Proxy re
   assert.equal(projectPrivateNoteLifecycle(snapshot).status, 'issued');
   assert.equal(reads, 0);
 });
+
+
+test('private note projection uses admitted descriptor values, not proxy indexed reads', () => {
+  const issued = event('issued', 1);
+  const events = new Proxy([issued], {
+    get(target, key, receiver) {
+      if (key === '0') return event('issued', 1, { actorId: 'forged-actor' });
+      if (key === Symbol.iterator) return function* () { yield event('issued', 1, { actorId: 'forged-actor' }); };
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(project(events).status, 'issued');
+});
+
+test('private note event fields use admitted descriptors rather than mutable proxy reads', () => {
+  const issued = new Proxy(event('issued', 1), {
+    get(target, key, receiver) {
+      if (key === 'actorId') return 'forged-actor';
+      if (key === 'documentRef') return 'forged-document';
+      if (key === 'evidenceRef') return 'forged-evidence';
+      if (key === 'type') return 'presented';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.deepEqual(project([issued]), {
+    status: 'issued', eventCount: 1, lastEventId: 'event-1',
+    lastEventAt: '2026-10-01T12:00:00.000Z',
+  });
+});
