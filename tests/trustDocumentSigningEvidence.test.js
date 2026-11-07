@@ -988,3 +988,22 @@ test('signing packet finalized bytes and evaluation timestamp use admitted descr
   assert.equal(assessTrustDocumentSigningPacket(adversarial).status, 'evidence_ready_for_review');
   assert.equal(reads, 0, 'finalized bytes and chronology must not be reread through Proxy get');
 });
+
+
+test('signing historical version array ignores forged Proxy index and iterator reads', () => {
+  const original = packet().versionRegistry;
+  const forged = { ...original.versions[0], trustId: 'forged-trust' };
+  let reads = 0;
+  const versions = new Proxy([...original.versions], {
+    get(target, key, receiver) {
+      if (key === '0' || key === Symbol.iterator) {
+        reads++;
+        return key === '0' ? forged : function* () { yield forged; };
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = assess({ versionRegistry: { ...original, versions } });
+  assert.equal(result.status, 'evidence_ready_for_review');
+  assert.equal(reads, 0, 'historical version array must use admitted index descriptors');
+});
