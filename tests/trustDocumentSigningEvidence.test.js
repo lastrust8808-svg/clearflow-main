@@ -1026,3 +1026,31 @@ test('signing receipt list bound ignores forged Proxy length reads', () => {
   assert.equal(result.signerCount, 1);
   assert.equal(reads, 0, 'receipt length must be read from its own descriptor');
 });
+
+test('historical version list cannot forge its length through Proxy indexed reads', () => {
+  const original = packet();
+  const versions = original.versionRegistry.versions;
+  let lengthReads = 0;
+  const forged = new Proxy(versions, {
+    get(target, key, receiver) {
+      if (key === 'length') {
+        lengthReads++;
+        return 0;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(assess({
+    versionRegistry: { ...original.versionRegistry, versions: forged },
+  }).status, 'evidence_ready_for_review');
+  assert.equal(lengthReads, 0);
+  const oversized = new Proxy(new Array(10_001), {
+    get(target, key, receiver) {
+      if (key === 'length') throw new Error('untrusted length read');
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(() => assess({
+    versionRegistry: { ...original.versionRegistry, versions: oversized },
+  }), /bounded plain array/);
+});
