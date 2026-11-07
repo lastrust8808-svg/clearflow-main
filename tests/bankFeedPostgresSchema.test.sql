@@ -646,4 +646,37 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected scope checkpoint altered durable cursor'; END IF;
 END $test$;
 
+-- Entry tenant and connection identifiers must be checked independently of checkpoint rows.
+-- A malformed scope must never create an entry or change valid committed evidence.
+DO $test$
+DECLARE bad TEXT;
+BEGIN
+  FOREACH bad IN ARRAY ARRAY[' ', chr(9), chr(10), 'tenant padded', 'tenant' || chr(9) || 'a'] LOOP
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_entries
+        (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+      VALUES (bad, 'plaid', 'shared-item', 'acct-a', 'tx-invalid-tenant', '{}'::jsonb);
+      RAISE EXCEPTION 'Whitespace-bearing entry tenant accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+    BEGIN
+      INSERT INTO public.clearflow_bank_feed_entries
+        (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+      VALUES ('tenant-a', 'plaid', bad, 'acct-a', 'tx-invalid-connection', '{}'::jsonb);
+      RAISE EXCEPTION 'Whitespace-bearing entry connection accepted';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE transaction_id IN ('tx-invalid-tenant', 'tx-invalid-connection')
+  ) THEN RAISE EXCEPTION 'Rejected entry scope persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected entry scope altered committed evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
