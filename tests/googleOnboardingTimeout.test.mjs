@@ -350,7 +350,7 @@ test('Google profile admission rejects throwing identity getters without crashin
 test('Google profile admission rejects access tokens containing whitespace', () => {
   const current = Object.freeze(pending('existing'));
   const user = { name: 'Test User', email: 'test@example.test' };
-  for (const token of [' token', 'token ', 'tok en', 'tok\nen', 'tok\ten', 'tok\ren']) {
+  for (const token of [' token', 'token ', 'tok en', 'tok\nen', 'tok\ten', 'tok\ren', 'tok\u200ben', 'tok\u0000en', 'tok\u2060en']) {
     assert.equal(admitVerifiedGoogleProfile(current, token, user), current, JSON.stringify(token));
   }
   const admitted = admitVerifiedGoogleProfile(current, 'valid-token', user);
