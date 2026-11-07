@@ -76,11 +76,21 @@ function requirePlainAttestationList(attestations) {
   }
   // Bound untrusted receipt snapshots before allocating per-element descriptors.
   // Larger authenticated histories need pagination/checkpoints, never truncation.
-  if (attestations.length > 10_000) {
+  // Read the non-configurable array length data descriptor, never a Proxy get
+  // trap that could forge a smaller bound before descriptor enumeration.
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(attestations, 'length');
+  if (!lengthDescriptor || !Object.hasOwn(lengthDescriptor, 'value') ||
+      !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+    throw new TypeError('Signature attestations require an own array length descriptor');
+  }
+  if (lengthDescriptor.value > 10_000) {
     throw new RangeError('Signature attestations exceed the 10000-record review limit');
   }
   const descriptors = Object.getOwnPropertyDescriptors(attestations);
   const length = descriptors.length.value;
+  if (length !== lengthDescriptor.value) {
+    throw new TypeError('Signature attestation length changed during validation');
+  }
   let count = 0;
   for (const key of Reflect.ownKeys(descriptors)) {
     if (key === 'length') continue;
