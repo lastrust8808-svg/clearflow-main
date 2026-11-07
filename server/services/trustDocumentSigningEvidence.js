@@ -353,7 +353,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   if (!Number.isSafeInteger(versionLength) || versionLength < 0 ||
       versionLength > 10_000 ||
       Reflect.ownKeys(versionDescriptors).length !== versionLength + 1) {
-    throw new TypeError('Signing document versions must contain only dense array indices');
+    throw new TypeError('Signing document versions must not contain holes or non-index properties');
   }
   for (let i = 0; i < versionLength; i++) {
     const descriptor = versionDescriptors[String(i)];
@@ -365,7 +365,18 @@ export function assessTrustDocumentSigningPacket(packet) {
     { length: versionLength },
     (_, i) => {
       const record = versionDescriptors[String(i)].value;
+      // Validate the original descriptor shape before copying values: a
+      // getter-backed trustId must never become an undefined data property.
+      if (!record || typeof record !== 'object' || Array.isArray(record) ||
+          Object.getPrototypeOf(record) !== Object.prototype) {
+        throw new TypeError('Signing document versions require plain records');
+      }
       const fields = Object.getOwnPropertyDescriptors(record);
+      for (const descriptor of Reflect.ownKeys(fields).map(key => fields[key])) {
+        if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+          throw new TypeError('Signing document versions require enumerable own data properties');
+        }
+      }
       return Object.freeze(Object.fromEntries(
         Object.entries(fields).map(([key, descriptor]) => [key, descriptor.value])
       ));
