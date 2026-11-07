@@ -242,6 +242,30 @@ BEGIN
   END;
 END $test$;
 
+-- Connection removal must fail closed while committed financial evidence exists.
+-- ON DELETE RESTRICT prevents an accidental cascade that erases transactions.
+DO $test$
+BEGIN
+  BEGIN
+    DELETE FROM public.clearflow_bank_feed_checkpoints
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Connection with persisted entries was deleted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected connection deletion lost transaction evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected connection deletion lost checkpoint evidence'; END IF;
+END $test$;
+
 -- Reject malformed feed payloads and out-of-range cursor evidence at the DB boundary.
 DO $test$
 BEGIN
