@@ -491,4 +491,23 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- A previously valid checkpoint must reject a negative revision update atomically.
+-- The cursor must not advance when the revision violates the DB constraint.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET revision = -1, cursor = 'invalid-negative-revision'
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Negative checkpoint revision update was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND revision = 1 AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Rejected negative revision changed checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
