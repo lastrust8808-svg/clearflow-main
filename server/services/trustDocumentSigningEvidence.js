@@ -94,6 +94,9 @@ function requirePlainAttestationList(attestations) {
     count++;
   }
   if (count !== length) throw new TypeError('Signature attestations must not contain holes');
+  // Snapshot validated data descriptors; never consult a caller-controlled iterator
+  // or indexed Proxy read after structural admission.
+  return Array.from({ length }, (_, i) => descriptors[String(i)].value);
 }
 
 // Signature receipts are evidence claims, not executable application objects.
@@ -225,8 +228,8 @@ export function assessTrustDocumentSigningPacket(packet) {
       throw new Error('Signing governance ' + key + ' scope mismatch');
     }
   }
-  requirePlainAttestationList(packet.attestations);
-  for (const attestation of packet.attestations) requirePlainAttestationRecord(attestation);
+  const attestations = requirePlainAttestationList(packet.attestations);
+  for (const attestation of attestations) requirePlainAttestationRecord(attestation);
   const documentHash = createHash('sha256').update(packet.content).digest();
   const signers = new Set();
   const evidenceRefs = new Set();
@@ -234,7 +237,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   let earliestConsentAt = null;
   const result = (status, reason) => Object.freeze({ status, reason, signerCount: signers.size });
 
-  for (const attestation of packet.attestations) {
+  for (const attestation of attestations) {
     if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
       throw new TypeError('Invalid signature attestation');
     }
@@ -369,7 +372,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // recorded against an unregistered version. The first attestation is the
   // earliest because signing timestamps are validated in strict order above.
   // Registration and signature timestamps must come from trusted storage.
-  if (packet.attestations[0].signedAt < registeredAt) {
+  if (attestations[0].signedAt < registeredAt) {
     return result('incomplete', 'document_registered_after_signature');
   }
   // A later registration must not retroactively validate consent collected
