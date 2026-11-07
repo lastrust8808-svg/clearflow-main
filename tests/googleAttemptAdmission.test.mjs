@@ -457,3 +457,24 @@ test('OAuth reducer results with non-identity accessors fail closed before downs
   assert.equal(accepted.status, 'pending-drive-check');
   assert.equal(accepted.profile.name, 'Verified');
 });
+
+test('nested OAuth reducer result accessors and mutable instances fail closed', () => {
+  const current = pending('attempt-B');
+  for (const nested of [new Date(), new Map(), new Set(), new Uint8Array([1])]) {
+    const result = { ...current, status: 'authenticated', profile: { nested } };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  let getterCalls = 0;
+  const profile = {};
+  Object.defineProperty(profile, 'name', {
+    enumerable: true,
+    get() { getterCalls++; throw new Error('hostile nested getter'); },
+  });
+  const result = { ...current, status: 'authenticated', profile };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  assert.equal(getterCalls, 0);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', profile: { name: 'Verified' },
+  }));
+  assert.equal(accepted.profile.name, 'Verified');
+});
