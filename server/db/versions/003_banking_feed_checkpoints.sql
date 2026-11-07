@@ -20,8 +20,8 @@ BEGIN
       CHECK (revision >= 0 AND revision <= 9007199254740991),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (tenant_id, provider, connection_id),
-    CHECK (length(tenant_id) BETWEEN 1 AND 256),
-    CHECK (length(connection_id) BETWEEN 1 AND 256),
+    CHECK (length(tenant_id) BETWEEN 1 AND 256 AND tenant_id !~ '[[:space:]]'),
+    CHECK (length(connection_id) BETWEEN 1 AND 256 AND connection_id !~ '[[:space:]]'),
     CHECK (cursor IS NULL OR length(cursor) BETWEEN 1 AND 4096)
   );
 
@@ -37,8 +37,8 @@ BEGIN
     FOREIGN KEY (tenant_id, provider, connection_id)
       REFERENCES public.clearflow_bank_feed_checkpoints
       (tenant_id, provider, connection_id) ON DELETE RESTRICT,
-    CHECK (length(account_id) BETWEEN 1 AND 256),
-    CHECK (length(transaction_id) BETWEEN 1 AND 256)
+    CHECK (length(account_id) BETWEEN 1 AND 256 AND account_id !~ '[[:space:]]'),
+    CHECK (length(transaction_id) BETWEEN 1 AND 256 AND transaction_id !~ '[[:space:]]')
   );
 
   CREATE INDEX clearflow_bank_feed_entries_scope_idx
