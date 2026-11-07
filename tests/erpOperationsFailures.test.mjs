@@ -88,12 +88,12 @@ try {
         /outcome unknown: no server confirmation was received.*Verify operation status before retrying/);
     }
   });
-  await test('partial and multi-status HTTP success cannot confirm a financial operation', async () => {
+  await test('only complete untransformed HTTP success can confirm a financial operation', async () => {
     for (let index = 0; index < operations.length; index++) {
-      for (const status of [206, 207]) {
+      for (const status of [203, 204, 205, 206, 207, 208, 226]) {
         globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
         await assert.rejects(operations[index](payloads[index]),
-          /incomplete server acknowledgement.*Verify operation status before retrying/);
+          /unverified server acknowledgement.*Verify operation status before retrying/);
       }
       for (const status of [200, 201, 202]) {
         globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
