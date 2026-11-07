@@ -585,7 +585,7 @@ END $test$;
 DO $test$
 DECLARE bad TEXT;
 BEGIN
-  FOREACH bad IN ARRAY ARRAY[' ', E'\\t', E'\\n', ' padded', 'pad ded'] LOOP
+  FOREACH bad IN ARRAY ARRAY[' ', chr(9), chr(10), ' padded', 'pad ded'] LOOP
     BEGIN
       INSERT INTO public.clearflow_bank_feed_entries
         (tenant_id, provider, connection_id, account_id, transaction_id, payload)
