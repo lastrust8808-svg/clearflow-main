@@ -916,3 +916,22 @@ test('signing packet uses validated descriptors instead of Proxy field reads', (
   assert.equal(assessTrustDocumentSigningPacket(malicious).status, 'evidence_ready_for_review');
   assert.equal(reads, 0);
 });
+
+
+test('signing governance uses admitted descriptors rather than Proxy identity reads', () => {
+  const original = packet().governance;
+  let reads = 0;
+  const adversarial = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'trustId' || key === 'appointments' || key === 'mode') {
+        reads++;
+        if (key === 'trustId') return 'forged-trust';
+        if (key === 'appointments') return [];
+        return 'joint';
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(assess({ governance: adversarial }).status, 'evidence_ready_for_review');
+  assert.equal(reads, 0, 'governance properties must not be reread after descriptor admission');
+});
