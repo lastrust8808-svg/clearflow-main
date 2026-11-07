@@ -196,3 +196,17 @@ test('rejects the complete U+FDD0–U+FDEF noncharacter range', () => {
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+
+test('encoded punctuation obeys the filesystem basename limit at exact boundaries', () => {
+  // A percent-encoded slash consumes three filename bytes, not one.
+  const atLimit = 'a'.repeat(247) + '/';
+  assert.equal(sanitizeStorageSegment(atLimit).length, 250);
+  assert.equal(sanitizeStorageSegment(atLimit), 'a'.repeat(247) + '%2F');
+  assert.throws(() => sanitizeStorageSegment('a'.repeat(248) + '/'), TypeError);
+
+  // Multibyte scalar values are counted after UTF-8 percent encoding.
+  const unicodeAtLimit = 'a'.repeat(238) + '🙂';
+  assert.equal(sanitizeStorageSegment(unicodeAtLimit).length, 250);
+  assert.throws(() => sanitizeStorageSegment('a'.repeat(239) + '🙂'), TypeError);
+});
