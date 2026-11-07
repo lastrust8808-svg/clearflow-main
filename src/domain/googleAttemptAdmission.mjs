@@ -39,6 +39,31 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
   }
 }
 
+// Clone ordinary nested records before invoking an untrusted admission reducer.
+// A shallow spread leaves nested profile/workspace objects aliased to live state.
+function snapshotAdmissionState(value, seen = new WeakMap()) {
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  const proto = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+    throw new TypeError('Unsupported mutable admission state');
+  }
+  const copy = Array.isArray(value) ? [] : Object.create(proto);
+  seen.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    if (Array.isArray(value) && key === 'length') continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Accessor-backed admission state');
+    }
+    Object.defineProperty(copy, key, {
+      ...descriptor,
+      value: snapshotAdmissionState(descriptor.value, seen),
+    });
+  }
+  return Object.freeze(copy);
+}
+
 export function admitGoogleAttemptResult(current, attemptId, reducer, expectedStatus = 'pending-gsi') {
   if (!isCurrentGoogleAttempt(current, attemptId, expectedStatus)) return current;
   // A reducer must preserve the originating attempt identity. Refuse malformed
@@ -49,7 +74,7 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
   try {
     // Pass a frozen snapshot so a reducer cannot mutate the active attempt
     // before its returned state has passed admission validation.
-    next = reducer(Object.freeze({ ...current }));
+    next = reducer(snapshotAdmissionState(current));
   } catch {
     return current;
   }
