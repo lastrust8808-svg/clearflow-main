@@ -213,10 +213,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         throw new Error(`${label} is unavailable: durable job storage is not enabled. No operation was queued or completed.`);
       }
     }
-    // A 5xx, timeout or throttled response may follow a committed operation.
+    // A 5xx, timeout, conflict (including duplicate idempotency keys), or throttled response may follow a committed operation.
     // Only an explicit non-transient client rejection can be treated as
     // rejected rather than indeterminate.
-    if (response.status >= 500 || response.status === 408 || response.status === 429) {
+    if (response.status >= 500 || response.status === 408 || response.status === 409 || response.status === 429) {
       throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
     }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
