@@ -266,6 +266,31 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected connection deletion lost checkpoint evidence'; END IF;
 END $test$;
 
+-- Connection identity cannot be reassigned while financial evidence references it.
+-- Updating a parent composite key must fail rather than orphan existing entries.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET connection_id = 'renamed-item'
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Referenced connection identity was reassigned';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected identity reassignment lost transaction evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected identity reassignment changed checkpoint'; END IF;
+END $test$;
+
 -- Reject malformed feed payloads and out-of-range cursor evidence at the DB boundary.
 DO $test$
 BEGIN
