@@ -322,21 +322,28 @@ export function assessTrustDocumentSigningPacket(packet) {
     throw new TypeError('Immutable document version registry required');
   }
   assertPlainTrustDocumentRegistry(versionRegistry);
+  // Read the admitted registry descriptors once. A Proxy may return a
+  // different ownership scope or version list on subsequent property reads.
+  const registryDescriptors = Object.getOwnPropertyDescriptors(versionRegistry);
+  const admittedRegistry = Object.freeze(Object.fromEntries(
+    ['tenantId', 'entityId', 'trustId', 'documentId', 'versions']
+      .map(key => [key, registryDescriptors[key].value])
+  ));
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
-    if (versionRegistry[key] !== scope[key]) {
+    if (admittedRegistry[key] !== scope[key]) {
       throw new Error('Signing document version registry ' + key + ' scope mismatch');
     }
   }
   // Fail closed on the complete historical version list before any loop
   // reads trust ownership, revocation status or timestamps. The core verifier
   // runs later and cannot protect these earlier reads on its own.
-  assertPlainTrustDocumentVersions(versionRegistry.versions);
+  assertPlainTrustDocumentVersions(admittedRegistry.versions);
   // A tenant may own multiple trusts. A matching tenant/entity/document ID
   // does not authorize substituting a version registered for another trust.
   // Require trust ownership on the registry AND every historical version.
   // Legacy records lacking this provenance intentionally fail closed.
-  if (Array.isArray(versionRegistry.versions)) {
-    for (const version of versionRegistry.versions) {
+  if (Array.isArray(admittedRegistry.versions)) {
+    for (const version of admittedRegistry.versions) {
       if (!version || typeof version !== 'object' || Array.isArray(version) ||
           version.trustId !== scope.trustId) {
         throw new Error('Signing document version trustId scope mismatch');
@@ -348,7 +355,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // revocation cannot be applied retroactively. The caller must authenticate
   // these timestamps against an append-only registry; this is only a
   // structural chronology check over supplied records.
-  for (const version of versionRegistry.versions ?? []) {
+  for (const version of admittedRegistry.versions ?? []) {
     if (version.status !== 'revoked' || version.versionId === scope.versionId) continue;
     const registeredAt = timestamp(version.registeredAt, 'version.registeredAt');
     const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
@@ -356,7 +363,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       return result('incomplete', 'historical_revocation_chronology_invalid');
     }
   }
-  const versionStatus = verifyTrustDocumentBytes(versionRegistry, {
+  const versionStatus = verifyTrustDocumentBytes(admittedRegistry, {
     versionId: scope.versionId, content: packet.content,
   });
   if (versionStatus.status !== 'valid') {
@@ -366,7 +373,7 @@ export function assessTrustDocumentSigningPacket(packet) {
   // alone could be backdated to make a draft signature appear valid. Bind it
   // to the immutable, matching version record and its registration chronology.
   // Older records without this provenance cannot be evidence-ready.
-  const currentVersion = versionRegistry.versions.find(v => v.versionId === scope.versionId);
+  const currentVersion = admittedRegistry.versions.find(v => v.versionId === scope.versionId);
   if (!currentVersion || typeof currentVersion.finalizedAt !== 'string') {
     return result('incomplete', 'document_finalization_provenance_missing');
   }
@@ -411,7 +418,7 @@ export function assessTrustDocumentSigningPacket(packet) {
       provenanceRefs.add(ref);
     }
   }
-  for (const version of versionRegistry.versions) {
+  for (const version of admittedRegistry.versions) {
     const ref = identifier(version.evidenceRef, 'version.evidenceRef');
     if (provenanceRefs.has(ref)) throw new Error('Reused cross-role signing provenance reference');
     provenanceRefs.add(ref);
