@@ -401,4 +401,32 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected revision overflow modified durable checkpoint'; END IF;
 END $test$;
 
+-- Maximum JavaScript-safe checkpoint revision remains valid and rolls back cleanly.
+BEGIN;
+DO $test$
+DECLARE affected INTEGER;
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+    SET revision = 9007199254740991, cursor = 'max-safe-revision'
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND revision = 1 AND cursor = 'cursor-1';
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'Maximum-safe revision update failed'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND revision = 9007199254740991
+      AND cursor = 'max-safe-revision'
+  ) THEN RAISE EXCEPTION 'Maximum-safe revision was not persisted'; END IF;
+END $test$;
+ROLLBACK;
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND revision = 1 AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Maximum-safe revision rollback altered checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
