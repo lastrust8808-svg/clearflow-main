@@ -249,7 +249,7 @@ test('attestation list rejects sparse, accessor-backed and extended arrays witho
   assert.equal(getterCalls, 0);
   const hidden = [attestation('a')];
   Object.defineProperty(hidden, 'injectedClaim', { value: 'signed', enumerable: false });
-  assert.throws(() => assess({ attestations: hidden }), /must not contain holes or non-index properties/);
+  assert.throws(() => assess({ attestations: hidden }), /only array indices/);
   const symbol = [attestation('a')];
   symbol[Symbol('injectedClaim')] = 'signed';
   assert.throws(() => assess({ attestations: symbol }), /only array indices/);
@@ -619,7 +619,7 @@ test('signing preflights the entire version list before reading historical field
   const hidden = [valid];
   Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
   assert.throws(() => assess({ versionRegistry: registryWith(hidden) }),
-    /only array indices/);
+    /must not contain holes or non-index properties/);
   const inherited = [valid];
   Object.setPrototypeOf(inherited, Object.create(Array.prototype));
   assert.throws(() => assess({ versionRegistry: registryWith(inherited) }),
