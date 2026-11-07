@@ -173,3 +173,15 @@ test('percent-encoded path spellings cannot alias distinct account identifiers',
     assert.ok(!segment.includes('/') && !segment.includes('\\\\'));
   }
 });
+
+
+test('all ASCII and C1 control code points fail closed as storage identities', () => {
+  for (let code = 0; code <= 0x9f; code += 1) {
+    if (code > 0x1f && code < 0x7f) continue;
+    const value = 'tenant-' + String.fromCodePoint(code) + '-account';
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, 'U+' + code.toString(16));
+  }
+  for (const value of ['tenant-account', 'tenant account', 'tenant_123']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
