@@ -970,3 +970,21 @@ test('signing historical version fields use descriptor snapshots rather than for
   assert.equal(result.status, 'evidence_ready_for_review');
   assert.equal(reads, 0, 'historical version fields must be read from admitted descriptors');
 });
+
+
+test('signing packet finalized bytes and evaluation timestamp use admitted descriptors', () => {
+  const original = packet();
+  let reads = 0;
+  const adversarial = new Proxy(original, {
+    get(target, key, receiver) {
+      if (key === 'content' || key === 'finalizedAt' || key === 'evaluatedAt') {
+        reads++;
+        if (key === 'content') return Buffer.from('forged-finalized-document');
+        return '2099-01-01T00:00:00.000Z';
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(assessTrustDocumentSigningPacket(adversarial).status, 'evidence_ready_for_review');
+  assert.equal(reads, 0, 'finalized bytes and chronology must not be reread through Proxy get');
+});
