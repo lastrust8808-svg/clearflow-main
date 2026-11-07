@@ -227,6 +227,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
   }
+  // A partial/multi-status HTTP success is not a complete financial-operation
+  // acknowledgement, even if a proxy includes a plausible receipt body.
+  // Only ordinary full-response success codes can cross the accounting UI boundary.
+  if (response.status === 206 || response.status === 207) {
+    throw new Error(`${label} returned an incomplete server acknowledgement (HTTP ${response.status}). Verify operation status before retrying.`);
+  }
   let result: unknown;
   try {
     result = await response.json();
