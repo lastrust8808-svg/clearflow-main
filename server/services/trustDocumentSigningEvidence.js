@@ -337,13 +337,32 @@ export function assessTrustDocumentSigningPacket(packet) {
   // Fail closed on the complete historical version list before any loop
   // reads trust ownership, revocation status or timestamps. The core verifier
   // runs later and cannot protect these earlier reads on its own.
-  assertPlainTrustDocumentVersions(admittedRegistry.versions);
+  // Do not invoke the generic validator on a caller-controlled Proxy: its
+  // iterator can execute before we snapshot the admitted indexed descriptors.
+  const suppliedVersions = admittedRegistry.versions;
+  if (!Array.isArray(suppliedVersions) ||
+      Object.getPrototypeOf(suppliedVersions) !== Array.prototype ||
+      suppliedVersions.length > 10_000) {
+    throw new TypeError('Signing document versions must be a bounded plain array');
+  }
   // Capture the admitted array slots and version data descriptors once. The
   // historical review and downstream byte verifier must see the same records,
   // even when the caller supplies a Proxy with mutable indexed reads.
   const versionDescriptors = Object.getOwnPropertyDescriptors(admittedRegistry.versions);
+  const versionLength = versionDescriptors.length?.value;
+  if (!Number.isSafeInteger(versionLength) || versionLength < 0 ||
+      versionLength > 10_000 ||
+      Reflect.ownKeys(versionDescriptors).length !== versionLength + 1) {
+    throw new TypeError('Signing document versions must contain only dense array indices');
+  }
+  for (let i = 0; i < versionLength; i++) {
+    const descriptor = versionDescriptors[String(i)];
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Signing document versions require enumerable data elements');
+    }
+  }
   const stableVersions = Array.from(
-    { length: versionDescriptors.length.value },
+    { length: versionLength },
     (_, i) => {
       const record = versionDescriptors[String(i)].value;
       const fields = Object.getOwnPropertyDescriptors(record);
@@ -352,6 +371,8 @@ export function assessTrustDocumentSigningPacket(packet) {
       ));
     }
   );
+  // Validate the immutable snapshot, never the original indexed Proxy reads.
+  assertPlainTrustDocumentVersions(stableVersions);
   const stableRegistry = Object.freeze({ ...admittedRegistry, versions: Object.freeze(stableVersions) });
   // A tenant may own multiple trusts. A matching tenant/entity/document ID
   // does not authorize substituting a version registered for another trust.
