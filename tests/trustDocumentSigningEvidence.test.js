@@ -957,9 +957,9 @@ test('signing historical version fields use descriptor snapshots rather than for
   let reads = 0;
   const adversarialVersion = new Proxy(original.versions[0], {
     get(target, key, receiver) {
-      if (key === 'trustId' || key === 'status' || key === 'sha256') {
+      if (key === 'trustId' || key === 'status' || key === 'sha256' || key === 'evidenceRef') {
         reads++;
-        return key === 'trustId' ? 'forged-trust' : key === 'status' ? 'revoked' : '0'.repeat(64);
+        return key === 'trustId' ? 'forged-trust' : key === 'status' ? 'revoked' : key === 'evidenceRef' ? 'forged-evidence' : '0'.repeat(64);
       }
       return Reflect.get(target, key, receiver);
     },
