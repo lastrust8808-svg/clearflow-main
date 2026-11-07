@@ -478,3 +478,35 @@ test('nested OAuth reducer result accessors and mutable instances fail closed', 
   }));
   assert.equal(accepted.profile.name, 'Verified');
 });
+
+test('proxy-backed OAuth state and reducer results fail closed without invoking traps', () => {
+  const current = pending('attempt-B');
+  let trapCalls = 0;
+  const hostile = new Proxy({ ...current }, {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    getOwnPropertyDescriptor() { trapCalls++; return undefined; },
+    ownKeys() { trapCalls++; return []; },
+    get() { trapCalls++; return 'spoofed'; },
+  });
+  let reducerCalled = false;
+  assert.equal(isCurrentGoogleAttempt(hostile, 'attempt-B'), false);
+  assert.equal(admitGoogleAttemptResult(hostile, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...current, status: 'authenticated' };
+  }), hostile);
+  assert.equal(reducerCalled, false);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  assert.equal(trapCalls, 0);
+
+  const nested = new Proxy({ workspaceId: 'owner' }, {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    ownKeys() { trapCalls++; return ['workspaceId']; },
+  });
+  const withNested = { ...current, workspace: nested };
+  assert.equal(admitGoogleAttemptResult(withNested, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...current, status: 'authenticated' };
+  }), withNested);
+  assert.equal(reducerCalled, false);
+  assert.equal(trapCalls, 0);
+});
