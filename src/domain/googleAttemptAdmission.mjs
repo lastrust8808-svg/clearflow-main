@@ -86,6 +86,13 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
     // or other object carrying hidden state or inherited behavior.
     const prototype = Object.getPrototypeOf(next);
     if (prototype !== Object.prototype && prototype !== null) return current;
+    // Reject accessor-backed result fields before React or downstream consumers
+    // read them. A valid identity descriptor alone cannot make a hostile
+    // profile/workspace getter safe to commit into authentication state.
+    for (const key of Reflect.ownKeys(next)) {
+      const descriptor = Object.getOwnPropertyDescriptor(next, key);
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) return current;
+    }
     // Inspect thenability without invoking a potentially side-effecting getter.
     // Promise instances inherit a callable `then` from their prototype.
     let candidate = next;
