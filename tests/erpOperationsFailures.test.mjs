@@ -56,11 +56,11 @@ try {
       }
     });
     await test(`ERP operation ${i + 1} rejects unconfirmed response`, async () => {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true }) });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ success: true }) });
       await assert.rejects(operations[i](payloads[i]), /not confirmed/);
     });
     await test(`ERP operation ${i + 1} accepts confirmed response`, async () => {
-      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[i] });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[i] });
       assert.deepEqual(await operations[i](payloads[i]), accepted[i]);
     });
   }
@@ -69,7 +69,7 @@ try {
       let request;
       globalThis.fetch = async (url, options) => {
         request = { url, options };
-        return { ok: true, json: async () => accepted[index] };
+        return { ok: true, status: 200, json: async () => accepted[index] };
       };
       await operations[index](payloads[index]);
       assert.equal(request.options.method, 'POST');
@@ -156,8 +156,7 @@ try {
       const fields = ['queuedAt', 'persistedAt', ...(completion ? [completion] : [])];
       for (const field of fields) {
         globalThis.fetch = async () => ({
-          ok: true,
-          json: async () => ({ success: true, [key]: { ...valid, [field]: future } }),
+          ok: true, status: 200, json: async () => ({ success: true, [key]: { ...valid, [field]: future } }),
         });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/, `${index}: ${field}`);
       }
@@ -180,18 +179,18 @@ try {
     assert.equal(requests, 0, 'invalid accounting amounts must never reach the server');
     // Negative overdrafts and ordinary cent-denominated balances remain valid.
     for (const balance of [-23.45, 0, 0.07, 0.29, 0.57, 100.25]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[2] });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[2] });
       assert.deepEqual(await api.importReconciliationStatement({
         ...payloads[2], statementEndingBalance: balance,
       }), accepted[2]);
     }
   });
   await test('malformed JSON does not become success', async () => {
-    globalThis.fetch = async () => ({ ok: true, json: async () => { throw new SyntaxError('bad JSON'); } });
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
   });
   await test('mismatched operation cannot be accepted', async () => {
-    globalThis.fetch = async () => ({ ok: true, json: async () => accepted[1] });
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[1] });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
   });
   await test('invoice delivery and export acknowledgements must match invoice ID, entity and invoice number', async () => {
@@ -202,7 +201,7 @@ try {
         { invoiceNumber: undefined }, { invoiceNumber: 'INV-OTHER' },
         { invoiceId: 1 }, { entityId: 1 }, { invoiceNumber: 1 },
       ]) {
-        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
           success: true, job: { ...accepted[index].job, ...changes },
         }) });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/);
@@ -211,7 +210,7 @@ try {
   });
   await test('invoice number cannot be substituted even with matching invoice and entity IDs', async () => {
     for (const index of [0, 1]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[index] });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[index] });
       await assert.rejects(operations[index]({ ...payloads[index], invoiceNumber: 'INV-CHANGED' }), /not confirmed/);
     }
   });
@@ -221,7 +220,7 @@ try {
       { bankAccountId: undefined }, { bankAccountId: 'bank-other' },
       { reconciliationId: 1 }, { bankAccountId: 1 },
     ]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, importJob: { ...accepted[2].importJob, ...changes },
       }) });
       await assert.rejects(api.importReconciliationStatement(payloads[2]), /not confirmed/);
@@ -229,7 +228,7 @@ try {
   });
   await test('reconciliation-close receipt must match requested reconciliation', async () => {
     for (const reconciliationId of [undefined, 'rec-other', 1]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, closeJob: { ...accepted[3].closeJob, reconciliationId },
       }) });
       await assert.rejects(api.closeReconciliationJob(payloads[3]), /not confirmed/);
@@ -237,7 +236,7 @@ try {
   });
   await test('a valid identity-bound receipt remains accepted for each ERP operation', async () => {
     for (let index = 0; index < operations.length; index++) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[index] });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[index] });
       assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
     }
   });
@@ -252,7 +251,7 @@ try {
     for (let index = 0; index < operations.length; index++) {
       const key = index < 2 ? 'job' : index === 2 ? 'importJob' : 'closeJob';
       for (const id of invalidIds) {
-        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
           success: true, [key]: { ...accepted[index][key], id },
         }) });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/,
@@ -262,7 +261,7 @@ try {
   });
   await test('manual fallback is not a confirmed invoice delivery or export', async () => {
     for (const [index, operation] of [[0, 'send'], [1, 'export']]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true,
         job: { id: 'fallback-job', operation, status: 'fallback_required',
           queuedAt: '2026-10-29T00:00:00Z', fallbackReason: 'SMTP unavailable' },
@@ -274,7 +273,7 @@ try {
     for (const metadata of [{}, { sentAt: '2026-10-29T00:01:00Z' },
       { sentAt: ' ', deliveryChannel: 'smtp' },
       { sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'manual' }]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true,
         job: { id: '123e4567-e89b-42d3-a456-426614174004', operation: 'send', status: 'sent',
           queuedAt: '2026-10-29T00:00:00Z', persistence: 'durable',
@@ -288,28 +287,28 @@ try {
       status: 'sent', queuedAt: '2026-10-29T00:00:00Z',
       persistence: 'durable', persistedAt: '2026-10-29T00:00:01Z',
       sentAt: '2026-10-29T00:01:00Z', deliveryChannel: 'smtp', deliveryReceiptId: 'smtp-msg-1', recipientEmail: 'alice@example.invalid' } };
-    globalThis.fetch = async () => ({ ok: true, json: async () => confirmation });
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => confirmation });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), confirmation);
   });
   await test('completed delivery requires an actual transport receipt identifier', async () => {
     const valid = accepted[0].job;
     for (const deliveryReceiptId of [undefined, null, '', '  ', 42, 'x'.repeat(256),
       'provider\nreceipt', 'provider\u200breceipt', '\u200b', 'provider\u0000receipt']) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, job: { ...valid, deliveryReceiptId },
       }) });
       await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
     }
     // A nonempty provider receipt ID is required in addition to matching
     // invoice/entity/recipient, durable persistence and sent timestamp.
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
       success: true, job: { ...valid, deliveryReceiptId: 'provider-receipt-42' },
     }) });
     assert.equal((await api.queueInvoiceDelivery(payloads[0])).job.deliveryReceiptId, 'provider-receipt-42');
   });
 
   await test('export cannot claim sent-delivery status', async () => {
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
       success: true, job: { id: 'export-sent', operation: 'export', status: 'sent',
         queuedAt: '2026-10-29T00:00:00Z', sentAt: '2026-10-29T00:01:00Z',
         deliveryChannel: 'smtp' },
@@ -328,7 +327,7 @@ try {
         { persistedAt: '2026-10-27T23:59:59Z' },
         { queuedAt: 'not-a-date' },
       ]) {
-        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
           success: true, job: { ...valid, ...changes },
         }) });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/);
@@ -346,7 +345,7 @@ try {
       { importedAt: '2026-10-28T00:00:00Z' },
       { status: 'queued' },
     ]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, importJob: { ...valid, ...changes },
       }) });
       await assert.rejects(api.importReconciliationStatement(payloads[2]), /not confirmed/);
@@ -363,7 +362,7 @@ try {
       { closedAt: '2026-10-28T00:00:00Z' },
       { status: 'queued' },
     ]) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, closeJob: { ...valid, ...changes },
       }) });
       await assert.rejects(api.closeReconciliationJob(payloads[3]), /not confirmed/);
@@ -387,19 +386,19 @@ try {
         { completionPersistedAt: '2026-10-28T00:00:01Z' },
         { completionPersistedAt: '2099-01-01T00:00:00Z' },
       ]) {
-        globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
           success: true, [key]: { ...job, ...changes },
         }) });
         await assert.rejects(operations[index](payloads[index]), /not confirmed/,
           `operation ${index + 1} accepted invalid completion evidence ${JSON.stringify(changes)}`);
       }
-      globalThis.fetch = async () => ({ ok: true, json: async () => accepted[index] });
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[index] });
       assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
     }
   });
   await test('sent acknowledgement must occur after durable acceptance', async () => {
     for (const sentAt of ['not-a-date', '2026-10-28T23:59:59Z', '2026-02-30T00:00:02Z']) {
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, job: {
           id: '123e4567-e89b-42d3-a456-426614174004', operation: 'send', status: 'sent',
           queuedAt: '2026-10-29T00:00:00Z',
@@ -426,7 +425,7 @@ try {
     ...payloads[0], deliveryMethod: 'internal_user', internalDeliveryTarget: 'member-a',
   };
   const replyWith = (job) => {
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ success: true, job }) });
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ success: true, job }) });
   };
 
   await test('delivery without a declared channel cannot be reported as sent', async () => {
