@@ -249,7 +249,7 @@ test('attestation list rejects sparse, accessor-backed and extended arrays witho
   assert.equal(getterCalls, 0);
   const hidden = [attestation('a')];
   Object.defineProperty(hidden, 'injectedClaim', { value: 'signed', enumerable: false });
-  assert.throws(() => assess({ attestations: hidden }), /only array indices/);
+  assert.throws(() => assess({ attestations: hidden }), /must not contain holes or non-index properties/);
   const symbol = [attestation('a')];
   symbol[Symbol('injectedClaim')] = 'signed';
   assert.throws(() => assess({ attestations: symbol }), /only array indices/);
@@ -647,10 +647,10 @@ test('signing rejects accessor-backed and hidden historical version records with
   const hidden = { ...valid };
   Object.defineProperty(hidden, 'settledMinor', { value: 100, enumerable: false });
   assert.throws(() => assess({ versionRegistry: registryWith(hidden) }),
-    /unsupported fields/);
+    /require enumerable own data properties/);
   const symbol = { ...valid, [Symbol('paymentAuthorized')]: true };
   assert.throws(() => assess({ versionRegistry: registryWith(symbol) }),
-    /unsupported fields/);
+    /require enumerable own data properties/);
 });
 
 test('signing preflights every receipt record without executing later receipt getters', () => {
@@ -674,9 +674,9 @@ test('signing preflights every receipt record without executing later receipt ge
 
 test('signing rejects unsupported receipt claims and custom prototypes; frozen plain receipts remain valid', () => {
   const unknown = { ...attestation('a'), paymentReceived: true };
-  assert.throws(() => assess({ attestations: [unknown] }), /unsupported fields/);
+  assert.throws(() => assess({ attestations: [unknown] }), /require enumerable own data properties/);
   const symbol = { ...attestation('a'), [Symbol('settled')]: true };
-  assert.throws(() => assess({ attestations: [symbol] }), /unsupported fields/);
+  assert.throws(() => assess({ attestations: [symbol] }), /require enumerable own data properties/);
   const inherited = attestation('a');
   Object.setPrototypeOf(inherited, { paymentAuthorized: true });
   assert.throws(() => assess({ attestations: [inherited] }), /plain record/);
