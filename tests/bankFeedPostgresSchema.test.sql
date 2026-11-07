@@ -382,4 +382,23 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Boundary-test rollback changed committed cursor'; END IF;
 END $test$;
 
+-- JavaScript-safe checkpoint revisions must not overflow the database contract.
+-- A rejected revision update must leave the last durable cursor untouched.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+      SET revision = 9007199254740992, cursor = 'overflow-cursor'
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Out-of-range checkpoint revision was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND revision = 1 AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Rejected revision overflow modified durable checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
