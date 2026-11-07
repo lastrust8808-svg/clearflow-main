@@ -1,0 +1,454 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { evaluateTrusteeSigningPolicy } from '../server/services/trusteeSigningPolicy.js';
+
+const appointment = (trusteeId, overrides = {}) => ({
+  trusteeId, tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
+  effectiveOn: '2025-01-01', acceptedOn: '2025-01-02',
+  acceptanceEvidenceRef: 'acceptance-' + trusteeId,
+  ...(overrides.revokedOn != null && !Object.hasOwn(overrides, 'revocationEvidenceRef')
+    ? { revocationEvidenceRef: 'revocation-' + trusteeId } : {}),
+  ...overrides,
+});
+const unaccepted = (trusteeId) => {
+  const record = appointment(trusteeId);
+  delete record.acceptedOn;
+  delete record.acceptanceEvidenceRef;
+  return record;
+};
+const snapshot = (overrides = {}) => ({
+  tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a',
+  asOfDate: '2026-10-28', mode: 'independent',
+  appointments: [appointment('a'), appointment('b')], signerIds: ['a'], ...overrides,
+});
+const evaluate = (overrides = {}) => evaluateTrusteeSigningPolicy(snapshot(overrides));
+
+test('one accepted active trustee satisfies independent signing policy', () => {
+  assert.deepEqual(evaluate(), {
+    eligible: true, reason: 'eligible_under_supplied_policy',
+    activeTrusteeCount: 2, signerCount: 1,
+  });
+});
+test('independent mode rejects zero and multiple signers', () => {
+  assert.equal(evaluate({ signerIds: [] }).eligible, false);
+  assert.equal(evaluate({ signerIds: ['a', 'b'] }).reason, 'independent_requires_one_active_signer');
+});
+test('joint mode requires all currently active accepted trustees', () => {
+  assert.equal(evaluate({ mode: 'joint' }).reason, 'joint_requires_all_active_signers');
+  assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
+});
+test('unaccepted or future-effective appointment is not active', () => {
+  const appointments = [unaccepted('a'),
+    appointment('b', { effectiveOn: '2027-01-01' })];
+  assert.equal(evaluate({ appointments }).reason, 'no_active_accepted_trustees');
+});
+test('orphan acceptance and revocation pointers cannot claim trustee governance events', () => {
+  assert.throws(() => evaluate({
+    appointments: [{ ...unaccepted('a'), acceptanceEvidenceRef: 'orphan-acceptance' }],
+  }), /Unaccepted trustee appointment cannot claim acceptance evidence/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { revocationEvidenceRef: 'revocation-a' })],
+  }), /Unrevoked trustee appointment cannot claim revocation evidence/);
+  assert.equal(evaluate({
+    appointments: [unaccepted('a')],
+  }).reason, 'no_active_accepted_trustees');
+  assert.equal(evaluate({
+    appointments: [appointment('a')], signerIds: ['a'],
+  }).eligible, true);
+});
+test('acceptance after evaluation date does not confer eligibility', () => {
+  assert.equal(evaluate({ appointments: [appointment('a', { acceptedOn: '2026-10-29' })] }).eligible, false);
+});
+test('revocation date is exclusive and removes signer eligibility', () => {
+  const appointments = [appointment('a', { revokedOn: '2026-10-28' }), appointment('b')];
+  assert.equal(evaluate({ appointments }).reason, 'signer_not_active');
+  assert.equal(evaluate({ appointments, signerIds: ['b'] }).eligible, true);
+});
+test('acceptance after revocation is rejected as contradictory governance evidence', () => {
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptedOn: '2026-10-29', revokedOn: '2026-10-28' })],
+  }), /acceptance must precede revocation/);
+});
+
+test('same-day acceptance and exclusive revocation cannot confer authority', () => {
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptedOn: '2026-10-28', revokedOn: '2026-10-28' })],
+  }), /acceptance must precede revocation/);
+  // Prospective acceptance of a future-effective appointment is not forbidden.
+  assert.equal(evaluate({
+    appointments: [appointment('a', { effectiveOn: '2026-10-01', acceptedOn: '2026-09-30', revokedOn: '2026-10-29' })],
+  }).eligible, true);
+});
+
+test('future successor does not silently become a joint signer', () => {
+  const appointments = [appointment('a'), appointment('successor', { effectiveOn: '2027-01-01' })];
+  assert.equal(evaluate({ mode: 'joint', appointments }).eligible, true);
+});
+test('cross-tenant/entity/trust appointment is rejected rather than counted', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => evaluate({ appointments: [appointment('a', { [key]: 'other' })] }), /mismatch/);
+  }
+});
+test('duplicate trustee appointments and signer IDs fail closed', () => {
+  assert.throws(() => evaluate({ appointments: [appointment('a'), appointment('a')] }), /Duplicate trustee/);
+  assert.throws(() => evaluate({ signerIds: ['a', 'a'] }), /Duplicate signer/);
+});
+test('unknown signers cannot satisfy a policy', () => {
+  assert.equal(evaluate({ signerIds: ['unknown'] }).reason, 'signer_not_active');
+});
+test('rejects malformed dates, contradictory appointments and unsupported quorum', () => {
+  assert.throws(() => evaluate({ asOfDate: '2026-02-30' }), /valid calendar/);
+  assert.throws(() => evaluate({ appointments: [appointment('a', { revokedOn: '2024-01-01' })] }), /Revocation precedes/);
+  assert.throws(() => evaluate({ mode: 'quorum' }), /Unsupported/);
+});
+test('does not mutate inputs and freezes assessment result', () => {
+  const input = snapshot();
+  const before = structuredClone(input);
+  const result = evaluateTrusteeSigningPolicy(input);
+  assert.deepEqual(input, before);
+  assert.ok(Object.isFrozen(result));
+  assert.equal(Object.hasOwn(result, 'signatureVerified'), false);
+});
+
+test('rejects control characters in governance scope identifiers before evaluating signers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+      assert.throws(() => evaluate({ [key]: 'valid' + control }), /control characters/);
+    }
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('rejects control characters in appointment and signer IDs', () => {
+  for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a' + control)],
+      signerIds: ['a' + control],
+    }), /control characters/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a')],
+      signerIds: ['a' + control],
+    }), /control characters/);
+  }
+  assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
+});
+
+
+test('accepted trustees require a distinct provenance reference before eligibility', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'ref\u0000', 123]) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: invalid })],
+      signerIds: ['a'],
+    }), /appointment.acceptanceEvidenceRef/);
+  }
+  assert.equal(evaluate({
+    appointments: [appointment('a', { acceptanceEvidenceRef: 'verified-pointer-1' })],
+    signerIds: ['a'],
+  }).eligible, true);
+});
+
+test('different trustee appointments cannot replay the same acceptance evidence', () => {
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { acceptanceEvidenceRef: 'shared-acceptance' }),
+      appointment('b', { acceptanceEvidenceRef: 'shared-acceptance' }),
+    ],
+    signerIds: ['a'],
+  }), /Duplicate trustee acceptance evidence reference/);
+  assert.equal(evaluate().eligible, true);
+});
+
+
+test('trustee revocations require distinct, non-replayed evidence references', () => {
+  for (const invalid of [undefined, null, '', ' ', ' padded ', 'ref\u0000', 42]) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', {
+        revokedOn: '2026-10-28', revocationEvidenceRef: invalid,
+      })],
+    }), /appointment.revocationEvidenceRef/);
+  }
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'same-revocation' }),
+      appointment('b', { revokedOn: '2026-10-28', revocationEvidenceRef: 'same-revocation' }),
+    ],
+  }), /Reused trustee governance evidence reference/);
+  assert.throws(() => evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'acceptance-b' }),
+      appointment('b'),
+    ],
+  }), /Reused trustee governance evidence reference/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', {
+      revokedOn: '2026-10-28', revocationEvidenceRef: 'acceptance-a',
+    })],
+  }), /Reused trustee governance evidence reference/);
+  assert.equal(evaluate({
+    appointments: [
+      appointment('a', { revokedOn: '2026-10-28' }), appointment('b'),
+    ], signerIds: ['b'],
+  }).eligible, true);
+});
+
+test('governance snapshot rejects inherited, getter-backed, hidden and unsupported authority claims', () => {
+  const valid = snapshot();
+  assert.throws(() => evaluateTrusteeSigningPolicy(Object.create(valid)), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'mode', {
+    enumerable: true,
+    get() { getterCalled = true; return 'independent'; },
+  });
+  assert.throws(() => evaluateTrusteeSigningPolicy(accessor), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'signatureVerified', { value: true, enumerable: false });
+  assert.throws(() => evaluateTrusteeSigningPolicy(hidden), /Unsupported Governance snapshot field/);
+  assert.throws(() => evaluate({ paymentAuthorized: true }), /Unsupported Governance snapshot field/);
+  assert.throws(() => evaluateTrusteeSigningPolicy({ ...valid, [Symbol('approved')]: true }),
+    /Unsupported Governance snapshot field/);
+  const missing = { ...valid };
+  delete missing.trustId;
+  assert.throws(() => evaluateTrusteeSigningPolicy(missing), /Governance snapshot.trustId/);
+  assert.equal(evaluateTrusteeSigningPolicy(Object.assign(Object.create(null), valid)).eligible, true);
+});
+
+test('trustee appointments require own plain-data evidence and cannot smuggle signing claims', () => {
+  const valid = appointment('a');
+  assert.throws(() => evaluate({ appointments: [Object.create(valid)] }), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...valid };
+  Object.defineProperty(accessor, 'acceptedOn', {
+    enumerable: true,
+    get() { getterCalled = true; return '2025-01-02'; },
+  });
+  assert.throws(() => evaluate({ appointments: [accessor] }), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...valid };
+  Object.defineProperty(hidden, 'identityVerified', { value: true, enumerable: false });
+  assert.throws(() => evaluate({ appointments: [hidden] }), /Unsupported Trustee appointment field/);
+  assert.throws(() => evaluate({ appointments: [{ ...valid, delegationAuthorized: true }] }),
+    /Unsupported Trustee appointment field/);
+  assert.throws(() => evaluate({ appointments: [{ ...valid, [Symbol('executed')]: true }] }),
+    /Unsupported Trustee appointment field/);
+  const missing = { ...valid };
+  delete missing.trusteeId;
+  assert.throws(() => evaluate({ appointments: [missing] }), /Trustee appointment.trusteeId/);
+  assert.equal(evaluate({
+    appointments: [Object.assign(Object.create(null), valid)],
+    signerIds: ['a'],
+  }).eligible, true);
+});
+
+test('trustee and signer lists reject sparse, accessor-backed and extra-property arrays', () => {
+  for (const field of ['appointments', 'signerIds']) {
+    const valid = snapshot();
+    const accessor = [...valid[field]];
+    let getterCalled = false;
+    Object.defineProperty(accessor, '0', {
+      enumerable: true,
+      configurable: true,
+      get() { getterCalled = true; throw new Error('unexpected getter execution'); },
+    });
+    assert.throws(() => evaluate({ [field]: accessor }), /enumerable data elements/);
+    assert.equal(getterCalled, false);
+    const sparse = [...valid[field]];
+    delete sparse[0];
+    assert.throws(() => evaluate({ [field]: sparse }), /must not contain holes/);
+    const extra = [...valid[field]];
+    Object.defineProperty(extra, 'authorized', { value: true, enumerable: false });
+    assert.throws(() => evaluate({ [field]: extra }), /only array indices/);
+    const symbol = [...valid[field]];
+    symbol[Symbol('authority')] = true;
+    assert.throws(() => evaluate({ [field]: symbol }), /only array indices/);
+    const subclass = class GovernanceList extends Array {};
+    assert.throws(() => evaluate({ [field]: subclass.from(valid[field]) }), /plain array/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('governance evidence cannot impersonate trustees, including later appointments', () => {
+  for (const reversed of [false, true]) {
+    const appointments = [
+      appointment('a', { acceptanceEvidenceRef: 'b' }),
+      appointment('b'),
+    ];
+    if (reversed) appointments.reverse();
+    assert.throws(() => evaluate({ appointments }), /collides with identity or scope/);
+  }
+  for (const reversed of [false, true]) {
+    const appointments = [
+      appointment('a', { revokedOn: '2026-10-28', revocationEvidenceRef: 'b' }),
+      appointment('b'),
+    ];
+    if (reversed) appointments.reverse();
+    assert.throws(() => evaluate({ appointments }), /collides with identity or scope/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('governance evidence cannot masquerade as tenant, entity or trust scope', () => {
+  for (const scopeId of ['tenant-a', 'entity-a', 'trust-a']) {
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: scopeId })],
+    }), /collides with identity or scope/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', {
+        revokedOn: '2026-10-28', revocationEvidenceRef: scopeId,
+      })],
+    }), /collides with identity or scope/);
+  }
+  assert.equal(evaluate().eligible, true);
+});
+
+test('rejects non-NFC trustee governance identities and signer aliases', () => {
+  const decomposed = 'Jose\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => evaluate({ [key]: decomposed }), /NFC-normalized Unicode/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { [key]: decomposed })],
+    }), /NFC-normalized Unicode|mismatch/);
+  }
+  assert.throws(() => evaluate({
+    appointments: [appointment(decomposed)], signerIds: [decomposed],
+  }), /NFC-normalized Unicode/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a')], signerIds: [decomposed],
+  }), /NFC-normalized Unicode/);
+});
+
+test('rejects non-NFC governance evidence and preserves canonical international IDs', () => {
+  const decomposed = 'Cafe\u0301';
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', { acceptanceEvidenceRef: decomposed })],
+    signerIds: ['a'],
+  }), /NFC-normalized Unicode/);
+  assert.throws(() => evaluate({
+    appointments: [appointment('a', {
+      revokedOn: '2026-10-28', revocationEvidenceRef: decomposed,
+    })],
+    signerIds: ['a'],
+  }), /NFC-normalized Unicode/);
+  const composed = 'Jos\u00e9';
+  const result = evaluate({
+    appointments: [appointment(composed, { acceptanceEvidenceRef: 'acceptance-' + composed })],
+    signerIds: [composed],
+  });
+  assert.equal(result.eligible, true);
+  assert.equal(result.activeTrusteeCount, 1);
+  assert.equal(result.signerCount, 1);
+});
+
+test('governance list size is bounded before enumerating untrusted appointments or signers', () => {
+  for (const field of ['appointments', 'signerIds']) {
+    let enumerated = false;
+    const oversized = new Proxy(new Array(10001), {
+      ownKeys() {
+        enumerated = true;
+        throw new Error('Oversized governance list must not be enumerated');
+      },
+    });
+    assert.throws(() => evaluate({ [field]: oversized }),
+      new RegExp(field + ' exceeds maximum entry count'));
+    assert.equal(enumerated, false);
+  }
+
+  // The exact boundary is admitted to normal identity checks, not truncated.
+  // Duplicate identities at the end of either list must still fail closed.
+  assert.throws(() => evaluate({
+    appointments: Array(10000).fill(appointment('a')),
+  }), /Duplicate trustee appointment/);
+  assert.throws(() => evaluate({
+    signerIds: Array(10000).fill('a'),
+  }), /Duplicate signer ID/);
+  assert.equal(evaluate().eligible, true);
+});
+
+test('rejects malformed UTF-16 in trustee scope, appointments, signer IDs and governance evidence', () => {
+  for (const malformed of ['\uD800', '\uDC00', 'prefix\uD800', '\uDC00suffix']) {
+    for (const key of ['tenantId', 'entityId', 'trustId']) {
+      assert.throws(() => evaluate({ [key]: malformed }), /well-formed Unicode/);
+    }
+    assert.throws(() => evaluate({
+      appointments: [appointment(malformed)], signerIds: [malformed],
+    }), /well-formed Unicode/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a')], signerIds: [malformed],
+    }), /well-formed Unicode/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: malformed })],
+      signerIds: ['a'],
+    }), /well-formed Unicode/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', {
+        revokedOn: '2026-10-28', revocationEvidenceRef: malformed,
+      })],
+      signerIds: ['b'],
+    }), /well-formed Unicode/);
+  }
+  const supplementary = 'trustee-\u{1F680}';
+  assert.equal(evaluate({
+    appointments: [appointment(supplementary)],
+    signerIds: [supplementary],
+  }).eligible, true);
+});
+
+
+test('governance scope and trustee principals cannot reuse ownership identifiers', () => {
+  for (const [first, second] of [
+    ['tenantId', 'entityId'], ['tenantId', 'trustId'], ['entityId', 'trustId'],
+  ]) {
+    const aliased = snapshot({ [second]: snapshot()[first], appointments: [], signerIds: [] });
+    // Reject even without appointments or signers; no implicit authority can
+    // be inferred from a collapsed tenant/entity/trust namespace.
+    assert.throws(() => evaluateTrusteeSigningPolicy(aliased),
+      /Governance tenant, entity and trust identifiers must be distinct/);
+  }
+  for (const scopeId of ['tenant-a', 'entity-a', 'trust-a']) {
+    for (const mode of ['independent', 'joint']) {
+      assert.throws(() => evaluate({
+        mode, appointments: [appointment(scopeId)], signerIds: [scopeId],
+      }), /Trustee identifier collides with governance scope/);
+    }
+  }
+  // Valid trustees and signers retain the existing independent/joint rules.
+  assert.equal(evaluate().eligible, true);
+  assert.equal(evaluate({ mode: 'joint', signerIds: ['a', 'b'] }).eligible, true);
+});
+
+test('governance event absence rejects explicit null/undefined and orphan provenance', () => {
+  for (const invalid of [null, undefined]) {
+    for (const field of ['acceptedOn', 'revokedOn']) {
+      assert.throws(() => evaluate({
+        appointments: [appointment('a', { [field]: invalid })],
+      }), new RegExp('appointment\\.' + field));
+    }
+    assert.throws(() => evaluate({
+      appointments: [{ ...unaccepted('a'), acceptanceEvidenceRef: invalid }],
+    }), /Unaccepted trustee appointment cannot claim acceptance evidence/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { revocationEvidenceRef: invalid })],
+    }), /Unrevoked trustee appointment cannot claim revocation evidence/);
+  }
+  // Explicit absence is valid; the supplied policy still never authorizes
+  // an unaccepted trustee, and ordinary accepted trustees remain eligible.
+  assert.equal(evaluate({ appointments: [unaccepted('a')] }).reason,
+    'no_active_accepted_trustees');
+  assert.equal(evaluate({ appointments: [appointment('a')], signerIds: ['a'] }).eligible, true);
+});
+
+test('governance identities reject invisible, noncharacter and oversized audit keys', () => {
+  for (const invalid of ['a\u200b', 'a\u202e', 'a\uFDD0', 'a\uFFFF',
+    'a\u{1FFFE}', 'a'.repeat(257)]) {
+    assert.throws(() => evaluate({ tenantId: invalid }), /tenantId/);
+    assert.throws(() => evaluate({
+      appointments: [appointment(invalid)], signerIds: [invalid],
+    }), /appointment.trusteeId/);
+    assert.throws(() => evaluate({ signerIds: [invalid] }), /signerIds item/);
+    assert.throws(() => evaluate({
+      appointments: [appointment('a', { acceptanceEvidenceRef: invalid })],
+    }), /appointment.acceptanceEvidenceRef/);
+  }
+  assert.equal(evaluate({ appointments: [appointment('😀')], signerIds: ['😀'] }).eligible, true);
+});
