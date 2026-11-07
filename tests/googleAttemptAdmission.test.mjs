@@ -406,3 +406,35 @@ test('accessor-backed nested OAuth state fails closed without executing getters'
   assert.equal(reducerCalled, false);
   assert.equal(getterCalls, 0);
 });
+
+test('cyclic and shared OAuth snapshot graphs remain isolated from active state', () => {
+  const shared = { workspaceId: 'owner', enabled: false };
+  const current = {
+    status: 'pending-gsi', googleAttemptId: 'attempt-B',
+    primaryWorkspace: shared, workspaces: [shared],
+  };
+  current.self = current;
+  const next = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    assert.equal(snapshot.self, snapshot);
+    assert.equal(snapshot.primaryWorkspace, snapshot.workspaces[0]);
+    assert.notEqual(snapshot.primaryWorkspace, shared);
+    assert.throws(() => { snapshot.primaryWorkspace.enabled = true; }, TypeError);
+    assert.throws(() => { snapshot.workspaces.push({ workspaceId: 'other' }); }, TypeError);
+    return { ...snapshot, status: 'pending-drive-check' };
+  });
+  assert.equal(next.status, 'pending-drive-check');
+  assert.equal(current.primaryWorkspace.enabled, false);
+  assert.equal(current.workspaces.length, 1);
+});
+
+test('unsupported mutable nested OAuth values fail closed before reducer execution', () => {
+  for (const nested of [new Date(), new Map(), new Set(), new Uint8Array([1])]) {
+    const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', nested };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(invoked, false);
+  }
+});
