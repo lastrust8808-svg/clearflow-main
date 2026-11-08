@@ -861,4 +861,36 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Tenant B cursor CAS modified tenant A evidence'; END IF;
 END $test$;
 
+-- A stale cursor compare-and-swap must not advance the same tenant twice.
+-- Rejected replay must preserve both tenant checkpoints and committed evidence.
+DO $test$
+DECLARE affected INTEGER;
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+     SET cursor = 'tenant-b-stale-replay', revision = 1
+   WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+     AND connection_id = 'shared-item'
+     AND cursor IS NULL AND revision = 0;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 0 THEN RAISE EXCEPTION 'Stale tenant B cursor CAS unexpectedly succeeded'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+      AND connection_id = 'shared-item'
+      AND cursor = 'tenant-b-cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Stale cursor replay altered tenant B checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item'
+      AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Stale tenant B replay altered tenant A checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+  ) THEN RAISE EXCEPTION 'Stale tenant B replay altered tenant A evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
