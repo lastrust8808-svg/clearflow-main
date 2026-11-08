@@ -34,6 +34,25 @@ const accepted = [
     completionReceiptId: '123e4567-e89b-42d3-a456-426614174103', completionPersistedAt: '2026-10-28T00:00:03Z' } },
 ];
 try {
+  await test('missing or padded financial identities fail before any network request', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw Error('unexpected request'); };
+    const identityFields = [
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['reconciliationId', 'bankAccountId'],
+      ['reconciliationId'],
+    ];
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of identityFields[index]) {
+        for (const value of [undefined, null, '', ' ', ' padded', 'padded ']) {
+          await assert.rejects(operations[index]({ ...payloads[index], [field]: value }),
+            /requires nonempty canonical request identities/);
+        }
+      }
+    }
+    assert.equal(requests, 0);
+  });
   for (let i = 0; i < operations.length; i++) {
     await test(`ERP operation ${i + 1} treats lost network response as unknown, not rejected`, async () => {
       globalThis.fetch = async () => { throw new Error('offline'); };
