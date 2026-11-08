@@ -157,3 +157,26 @@ test('append requires a real new event even when a Proxy forges array length rea
     /at least one new event/);
   assert.equal(lengthReads, 0);
 });
+
+test('append rejects rewritten historical descriptors despite forged Proxy index reads', () => {
+  const previous = snapshot([event]);
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  const rewritten = { ...event, amountMinor: 9000 };
+  const removed = { ...scope, eventId: 'event-b', type: 'asset_removed',
+    occurredAt: '2026-11-01T13:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-b' };
+  let indexReads = 0;
+  const disguised = new Proxy([rewritten, removed], {
+    get(target, key, receiver) {
+      if (key === '0') {
+        indexReads++;
+        return event;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(
+    () => verifyReserveJournalAppend(previous, snapshot(disguised), checkpoint),
+    /rewrite historical events/,
+  );
+  assert.equal(indexReads, 0);
+});
