@@ -168,6 +168,21 @@ function isConfirmedInvoiceDelivery(
 }
 
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
+  // Never send an ambiguous financial request. JSON.stringify silently omits
+  // undefined identity fields, and a server may otherwise accept the wrong job.
+  const requiredFields: Record<string, string[]> = {
+    'Invoice delivery': ['invoiceId', 'entityId', 'invoiceNumber'],
+    'Invoice export': ['invoiceId', 'entityId', 'invoiceNumber'],
+    'Statement import': ['reconciliationId', 'bankAccountId'],
+    'Reconciliation close': ['reconciliationId'],
+  };
+  if (!isRecord(payload) || !(label in requiredFields) ||
+      !requiredFields[label].every((field) =>
+        typeof payload[field] === 'string' &&
+        (payload[field] as string).trim().length > 0 &&
+        payload[field] === (payload[field] as string).trim())) {
+    throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
+  }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
   let response: Response;
   try {
