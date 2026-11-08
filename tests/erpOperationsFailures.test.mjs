@@ -276,6 +276,23 @@ try {
       }), accepted[2]);
     }
   });
+  await test('invisible and control characters in financial identities fail before network submission', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      const fields = index < 2
+        ? ['invoiceId', 'entityId', 'invoiceNumber']
+        : index === 2 ? ['reconciliationId', 'bankAccountId'] : ['reconciliationId'];
+      for (const field of fields) {
+        for (const suffix of ['\\u0000', '\\u000a', '\\u200b', '\\u202e']) {
+          let calls = 0;
+          globalThis.fetch = async () => { calls++; throw new Error('unexpected network request'); };
+          await assert.rejects(operations[index]({
+            ...payloads[index], [field]: payloads[index][field] + suffix + 'x',
+          }), /canonical request identities/);
+          assert.equal(calls, 0, field + ' must fail before fetch');
+        }
+      }
+    }
+  });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
