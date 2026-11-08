@@ -111,3 +111,30 @@ test('reserve append uses snapshot descriptors without reading adversarial Proxy
   assert.equal(result.journalEventCount, 2);
   assert.equal(result.activeAssetCount, 0);
 });
+
+test('reserve replay and append never invoke adversarial array index reads', () => {
+  const previous = snapshot([event]);
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  const removed = { ...scope, eventId: 'event-b', type: 'asset_removed',
+    occurredAt: '2026-11-01T13:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-b' };
+  let reads = 0;
+  const adversarial = elements => new Proxy(elements, {
+    get(target, key, receiver) {
+      if (typeof key === 'string' && /^(0|1)$/.test(key)) {
+        reads++;
+        throw new Error('array index get trap must not execute');
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const projected = projectReserveJournal(snapshot(adversarial([event])));
+  assert.equal(projected.checkpointSha256, checkpoint);
+  const appended = verifyReserveJournalAppend(
+    snapshot(adversarial([event])),
+    snapshot(adversarial([event, removed])),
+    checkpoint,
+  );
+  assert.equal(appended.journalEventCount, 2);
+  assert.equal(appended.activeAssetCount, 0);
+  assert.equal(reads, 0);
+});
