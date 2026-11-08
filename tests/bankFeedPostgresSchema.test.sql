@@ -996,4 +996,37 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Mercury replay changed Plaid cursor'; END IF;
 END $test$;
 
+-- A failed feed batch must not leave partial transaction evidence or move its
+-- checkpoint. PL/pgSQL exception blocks roll back all writes in the subtransaction.
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-rollback-probe',
+            '{"amountCents":1234}'::jsonb);
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET cursor = 'uncommitted-batch', revision = 2
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1;
+    -- No checkpoint exists for this connection: force a referential failure.
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'plaid', 'missing-batch-checkpoint', 'acct-a',
+            'tx-rollback-invalid', '{}'::jsonb);
+    RAISE EXCEPTION 'Invalid feed batch unexpectedly committed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND transaction_id = 'tx-rollback-probe'
+  ) THEN RAISE EXCEPTION 'Failed feed batch leaked partial transaction'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Failed feed batch advanced checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
