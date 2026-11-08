@@ -125,6 +125,15 @@ try {
       assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
     }
   });
+  await test('native Fetch responses without a final URL cannot confirm financial writes', async () => {
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async () => new Response(JSON.stringify(accepted[index]), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+      await assert.rejects(operations[index](payloads[index]),
+        /outcome unknown: missing financial response URL.*Verify operation status before retrying/);
+    }
+  });
   await test('followed redirects cannot confirm financial writes even with a valid receipt', async () => {
     for (let index = 0; index < operations.length; index++) {
       globalThis.fetch = async () => ({
