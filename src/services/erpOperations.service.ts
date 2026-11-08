@@ -196,7 +196,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   // the exact requested URL; a missing URL is tolerated only for legacy test
   // adapters, not for native Fetch responses.
   const expectedUrl = new URL(`${ERP_API_BASE}${path}`, globalThis.location?.href || 'https://localhost').href;
-  // Native Fetch responses always expose their final URL. An empty URL on a\n  // native response means the endpoint cannot be authenticated as requested.\n  // Legacy in-memory test adapters may omit URL metadata entirely.\n  if (response instanceof Response && !response.url) {\n    throw new Error(`${label} outcome unknown: missing financial response URL. Verify operation status before retrying.`);\n  }\n  if (typeof response.url === 'string' && response.url !== '' && response.url !== expectedUrl) {
+  // Native Fetch responses always expose their final URL. An empty URL on a
+  // native response means the endpoint cannot be authenticated as requested.
+  // Legacy in-memory test adapters may omit URL metadata entirely.
+  if (response instanceof Response && !response.url) {\n    throw new Error(`${label} outcome unknown: missing financial response URL. Verify operation status before retrying.`);\n  }\n  if (typeof response.url === 'string' && response.url !== '' && response.url !== expectedUrl) {
     throw new Error(`${label} outcome unknown: mismatched financial response URL. Verify operation status before retrying.`);
   }
   if (response.redirected === true) {
