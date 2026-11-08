@@ -524,7 +524,7 @@ test('reserve identifiers accept valid supplementary Unicode and reject unpaired
 test('reserve identifiers reject invisible Unicode aliases and embedded whitespace', () => {
   for (const invalid of ['asset-\u200B', 'asset-\u2060', 'asset-\u00A0', 'asset\tkey', 'asset key']) {
     assert.throws(() => calculate([entry('cash-a', 100, { assetId: invalid })]),
-      /invisible or whitespace|control characters/);
+      /invisible or whitespace|control characters|nonempty unpadded/);
   }
   assert.equal(calculate([entry('cash-a', 100, { assetId: 'asset-key' })]).unencumberedCashMinor, 100);
 });
