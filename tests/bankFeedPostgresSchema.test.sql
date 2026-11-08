@@ -1387,4 +1387,44 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected tenant reassignment changed other tenant checkpoint'; END IF;
 END $test$;
 
+
+-- A plain duplicate insert (without an explicit replay upsert) must fail closed.
+-- The rejected collision must not replace committed evidence or advance cursors.
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-1',
+            '{"amountCents":999999,"source":"collision"}'::jsonb);
+    RAISE EXCEPTION 'Duplicate provider transaction identity unexpectedly accepted';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+       WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+         AND connection_id = 'shared-item' AND account_id = 'acct-a'
+         AND transaction_id = 'tx-1') <> 1 THEN
+    RAISE EXCEPTION 'Duplicate collision changed transaction cardinality';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Duplicate collision overwrote committed evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND revision = 9007199254740991
+       AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Duplicate collision changed Mercury checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 3
+       AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Duplicate collision changed Plaid checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
