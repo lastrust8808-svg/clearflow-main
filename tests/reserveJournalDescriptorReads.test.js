@@ -138,3 +138,22 @@ test('reserve replay and append never invoke adversarial array index reads', () 
   assert.equal(appended.activeAssetCount, 0);
   assert.equal(reads, 0);
 });
+
+
+test('append requires a real new event even when a Proxy forges array length reads', () => {
+  const previous = snapshot([event]);
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  let lengthReads = 0;
+  const forged = new Proxy([event], {
+    get(target, key, receiver) {
+      if (key === 'length') {
+        lengthReads++;
+        return 2;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(() => verifyReserveJournalAppend(previous, snapshot(forged), checkpoint),
+    /at least one new event/);
+  assert.equal(lengthReads, 0);
+});
