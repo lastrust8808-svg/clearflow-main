@@ -264,15 +264,17 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
   if (nextSnapshot.maxEvidenceAgeMs !== previousSnapshot.maxEvidenceAgeMs) {
     throw new Error('Reserve journal append cannot change evidence freshness policy');
   }
-  if (nextSnapshot.events.length <= previousSnapshot.events.length) {
+  // Use descriptor-backed arrays for the append count as well as the prefix.
+  // An untrusted Proxy may lie about .length via its get trap after replay.
+  const previousEvents = plainEvents(previousSnapshot.events);
+  const nextEvents = plainEvents(nextSnapshot.events);
+  if (nextEvents.length <= previousEvents.length) {
     throw new Error('Reserve journal append requires at least one new event');
   }
   // Replaying valid event sets alone cannot detect a rewritten historical
   // prefix. Compare canonical event bytes so key insertion order is irrelevant.
   // Compare the same descriptor-backed event slots used by replay. Indexed
   // Proxy reads may otherwise substitute a different historical prefix.
-  const previousEvents = plainEvents(previousSnapshot.events);
-  const nextEvents = plainEvents(nextSnapshot.events);
   for (let i = 0; i < previousEvents.length; i++) {
     // Replay validates descriptor-backed values; prefix comparison must use
     // those same values rather than invoking adversarial Proxy get traps.
