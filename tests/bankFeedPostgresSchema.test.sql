@@ -756,7 +756,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_checkpoints
      WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
-       AND connection_id = 'shared-item' AND cursor IS NULL AND revision = 0
+       AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1' AND revision = 1
   ) THEN RAISE EXCEPTION 'Rejected provider re-key altered existing Mercury checkpoint'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_entries
