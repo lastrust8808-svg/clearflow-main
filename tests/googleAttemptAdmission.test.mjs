@@ -184,14 +184,14 @@ test('inherited and accessor-backed active OAuth identities cannot admit callbac
   assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
 });
 
-test('OAuth identity reads use own descriptors rather than contradictory Proxy get traps', () => {
+test('OAuth admission rejects Proxy-backed identity even when descriptors appear valid', () => {
   const current = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-B' }, {
     get(target, key, receiver) {
       if (key === 'googleAttemptId') return 'attempt-A';
       return Reflect.get(target, key, receiver);
     },
   });
-  assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), true);
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
   assert.equal(isCurrentGoogleAttempt(current, 'attempt-A'), false);
 
   const spoofedCurrent = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-A' }, {
