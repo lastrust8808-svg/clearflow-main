@@ -834,7 +834,9 @@ END $test$;
 INSERT INTO public.clearflow_bank_feed_entries
   (tenant_id, provider, connection_id, account_id, transaction_id, payload)
 VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
-        '{"amountCents":7900}'::jsonb);
+        '{"amountCents":7900}'::jsonb)
+ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
+DO NOTHING;
 INSERT INTO public.clearflow_bank_feed_entries
   (tenant_id, provider, connection_id, account_id, transaction_id, payload)
 VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
