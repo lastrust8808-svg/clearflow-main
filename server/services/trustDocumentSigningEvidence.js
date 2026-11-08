@@ -297,7 +297,7 @@ export function assessTrustDocumentSigningPacket(packet) {
     for (const evidenceRef of [identityEvidenceRef, consentEvidenceRef, signatureEvidenceRef]) {
       // Receipt pointers must not alias ownership or document identifiers.
       // Such aliases obscure the distinction between a record and its evidence.
-      if (Object.values(scope).includes(evidenceRef) || evidenceRef === signerId) {
+      if (Object.values(scope).includes(evidenceRef) || signers.has(evidenceRef)) {
         throw new Error('Signing evidence reference collides with scope or signer identity');
       }
       if (evidenceRefs.has(evidenceRef)) throw new Error('Reused signing evidence reference');
