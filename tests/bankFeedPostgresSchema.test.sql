@@ -1427,4 +1427,41 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Duplicate collision changed Plaid checkpoint'; END IF;
 END $test$;
 
+-- Account identity is part of the replay key. A provider may reuse a transaction
+-- identifier on a different account without mutating the original evidence.
+-- Keep this fixture inside a transaction so existing row-count assertions remain stable.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-second', 'tx-1',
+        '{"amountCents":7600,"source":"second-account"}'::jsonb);
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+      WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+        AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2
+  THEN RAISE EXCEPTION 'Distinct bank accounts incorrectly share replay identity'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Second-account insert changed original account evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-second'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":7600,"source":"second-account"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Second-account evidence was not persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND revision = 9007199254740991
+       AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Second-account insert advanced provider checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
