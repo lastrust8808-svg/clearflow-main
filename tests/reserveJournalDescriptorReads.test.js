@@ -88,3 +88,26 @@ test('reserve projection snapshots policy and event descriptors without Proxy ge
   assert.equal(actual.journalSha256, baseline.journalSha256);
   assert.equal(actual.checkpointSha256, baseline.checkpointSha256);
 });
+
+test('reserve append uses snapshot descriptors without reading adversarial Proxy properties', () => {
+  const previous = snapshot([event]);
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  const removed = { ...scope, eventId: 'event-b', type: 'asset_removed',
+    occurredAt: '2026-11-01T13:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-b' };
+  const next = snapshot([event, removed]);
+  let reads = 0;
+  const adversarial = value => new Proxy(value, {
+    get(target, key, receiver) {
+      if (['tenantId', 'entityId', 'trustId', 'currency', 'asOfAt',
+        'maxEvidenceAgeMs', 'events'].includes(key)) {
+        reads++;
+        throw new Error('append must not invoke snapshot get trap');
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const result = verifyReserveJournalAppend(adversarial(previous), adversarial(next), checkpoint);
+  assert.equal(reads, 0);
+  assert.equal(result.journalEventCount, 2);
+  assert.equal(result.activeAssetCount, 0);
+});
