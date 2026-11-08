@@ -199,7 +199,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   // Native Fetch responses always expose their final URL. An empty URL on a
   // native response means the endpoint cannot be authenticated as requested.
   // Legacy in-memory test adapters may omit URL metadata entirely.
-  if (response instanceof Response && !response.url) {\n    throw new Error(`${label} outcome unknown: missing financial response URL. Verify operation status before retrying.`);\n  }\n  if (typeof response.url === 'string' && response.url !== '' && response.url !== expectedUrl) {
+  if (response instanceof Response && !response.url) {
+    throw new Error(`${label} outcome unknown: missing financial response URL. Verify operation status before retrying.`);
+  }
+  if (typeof response.url === 'string' && response.url !== '' && response.url !== expectedUrl) {
     throw new Error(`${label} outcome unknown: mismatched financial response URL. Verify operation status before retrying.`);
   }
   if (response.redirected === true) {
