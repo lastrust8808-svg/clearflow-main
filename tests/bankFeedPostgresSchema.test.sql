@@ -1124,4 +1124,34 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Invalid revisions modified durable Mercury checkpoint'; END IF;
 END $test$;
 
+-- The maximum exactly representable revision must be accepted, while the
+-- next revision is rejected without changing the cursor or other providers.
+DO $test$
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+     SET revision = 9007199254740991
+   WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+     AND connection_id = 'shared-item' AND revision = 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Safe upper-bound revision was not accepted'; END IF;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET revision = revision + 1, cursor = 'overflow-cursor'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Revision increment beyond safe bound unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND revision = 9007199254740991
+       AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Overflow increment changed maximum safe checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1 AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Overflow increment modified Plaid checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
