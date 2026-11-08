@@ -1323,4 +1323,39 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected Mercury deletion changed Plaid checkpoint'; END IF;
 END $test$;
 
+-- Reparenting committed evidence to an absent provider checkpoint must fail.
+-- The composite foreign key must preserve the original transaction and both
+-- independent provider cursors even when connection identifiers are reused.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET connection_id = 'missing-connection'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Orphaned bank-feed evidence unexpectedly accepted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected evidence reparenting altered committed transaction'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND revision = 9007199254740991
+       AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Rejected reparenting changed Mercury checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 3
+       AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Rejected reparenting changed Plaid checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
