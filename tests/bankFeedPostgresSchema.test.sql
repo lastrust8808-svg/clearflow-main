@@ -1154,4 +1154,41 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Overflow increment modified Plaid checkpoint'; END IF;
 END $test$;
 
+-- Feed payloads must be JSON objects. Rejecting arrays and scalar replacements
+-- must preserve committed transaction evidence and the provider checkpoint.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET payload = '[{"amountCents":9999}]'::jsonb
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Array payload unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET payload = '"replaced"'::jsonb
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Scalar payload unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Invalid payload replacement changed committed evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item'
+       AND revision = 9007199254740991 AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Invalid payload replacement changed checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
