@@ -183,7 +183,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         payload[field] === (payload[field] as string).trim() &&
         // Invisible/control characters can make distinct ledger identities
         // appear identical in audit views while preserving string equality.
-        !/[\p{Cc}\p{Cf}]/u.test(payload[field] as string))) {
+        !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
