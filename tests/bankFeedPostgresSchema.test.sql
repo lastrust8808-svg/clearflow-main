@@ -1053,4 +1053,46 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Failed Plaid batch changed Mercury evidence'; END IF;
 END $test$;
 
+-- A failed batch that updates previously committed evidence must restore the old
+-- payload as well as the cursor. Insert-only rollback tests cannot catch this.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET payload = '{"amountCents":9999,"uncommitted":true}'::jsonb
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET cursor = 'mercury-uncommitted', revision = 2
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND revision = 1;
+    INSERT INTO public.clearflow_bank_feed_entries
+      (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+    VALUES ('tenant-a', 'mercury', 'missing-update-checkpoint', 'acct-a',
+            'tx-invalid-update', '{}'::jsonb);
+    RAISE EXCEPTION 'Invalid Mercury update batch unexpectedly committed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'source' = 'mercury'
+      AND payload->>'amountCents' = '4500'
+      AND payload->>'uncommitted' IS NULL
+  ) THEN RAISE EXCEPTION 'Failed update batch changed committed Mercury evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+      AND revision = 1
+  ) THEN RAISE EXCEPTION 'Failed update batch advanced Mercury checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Failed Mercury update affected Plaid checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
