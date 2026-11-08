@@ -29,7 +29,8 @@ test('signer and signing receipt identity namespaces remain disjoint in both dir
       trustId: scope.trustId, mode: 'independent',
       appointments: [appointment('alice'), appointment('receipt-alice')] },
     attestations: [first, second],
-    versionRegistry: { ...scope, versions: [{
+    versionRegistry: { tenantId: scope.tenantId, entityId: scope.entityId,
+      trustId: scope.trustId, documentId: scope.documentId, versions: [{
       ...scope, sequence: 1, sha256: sha, status: 'current',
       finalizedAt: '2026-10-28T09:00:00.000Z',
       registeredAt: '2026-10-28T09:00:00.000Z',
