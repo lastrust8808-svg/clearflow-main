@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { assessTrustDocumentSigningPacket } from '../server/services/trustDocumentSigningEvidence.js';
 
-test('later trustee identity cannot alias an earlier signing receipt pointer', () => {
+test('signer and signing receipt identity namespaces remain disjoint in both directions', () => {
   const scope = { tenantId: 'tenant', entityId: 'entity', trustId: 'trust',
     documentId: 'document', versionId: 'version' };
   const content = Buffer.from('finalized document');
@@ -38,6 +38,11 @@ test('later trustee identity cannot alias an earlier signing receipt pointer', (
   };
   assert.throws(() => assessTrustDocumentSigningPacket(packet),
     /Signing principal identifier collides with earlier signing evidence reference/);
+  assert.throws(() => assessTrustDocumentSigningPacket({
+    ...packet,
+    attestations: [first, { ...second, signerId: 'bob', identityEvidenceRef: 'alice' }],
+    governance: { ...packet.governance, appointments: [appointment('alice'), appointment('bob')] },
+  }), /Signing evidence reference collides with scope or signer identity/);
   assert.equal(assessTrustDocumentSigningPacket({
     ...packet, attestations: [first, { ...second, signerId: 'bob' }],
     governance: { ...packet.governance, appointments: [appointment('alice'), appointment('bob')] },
