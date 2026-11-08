@@ -106,7 +106,7 @@ function requiredString(value, field) {
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
   }
-  // Reject lone UTF-16 surrogates: UTF-8/JSON encoders can replace them with
+  // Invisible Unicode formatting and internal whitespace can alias ledger keys\n  // across storage, signatures, and human review; reject rather than normalize.\n  if (/\\p{White_Space}|\\p{Default_Ignorable_Code_Point}/u.test(value)) {\n    throw new TypeError(`${field} must not contain invisible or whitespace characters`);\n  }\n  // Reject lone UTF-16 surrogates: UTF-8/JSON encoders can replace them with
   // U+FFFD, making distinct reserve, asset, or evidence IDs collide on storage.
   // Valid supplementary-plane characters (paired surrogates) are preserved.
   if (/(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u.test(value)) {
