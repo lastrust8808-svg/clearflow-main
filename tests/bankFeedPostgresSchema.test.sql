@@ -933,4 +933,32 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Stale tenant B replay altered tenant A evidence'; END IF;
 END $test$;
 
+-- Committed feed evidence must prevent deletion of its durable replay anchor.
+-- The restrictive FK must preserve both the cursor and all account evidence.
+DO $test$
+BEGIN
+  BEGIN
+    DELETE FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Referenced checkpoint was deleted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected deletion changed checkpoint'; END IF;
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+       WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+         AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2
+  THEN RAISE EXCEPTION 'Rejected deletion changed committed account evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item'
+       AND cursor = 'tenant-b-cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected deletion affected other tenant'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
