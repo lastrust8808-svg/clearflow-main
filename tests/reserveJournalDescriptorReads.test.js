@@ -186,7 +186,7 @@ test('append rejects rewritten historical removal events without Proxy index rea
     occurredAt: '2026-11-01T13:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-b' };
   const replacement = { ...scope, eventId: 'event-c', type: 'asset_recorded',
     occurredAt: '2026-11-01T14:00:00.000Z', assetId: 'asset-c', evidenceRef: 'proof-c',
-    currency: 'USD', kind: 'cash', sourceType: 'bank_balance', amountMinor: 5000 };
+    currency: 'USD', kind: 'cash', sourceType: 'bank_balance', amountMinor: 5000, restrictedMinor: 0, pledgedMinor: 0 };
   const previous = snapshot([event, removed]);
   const checkpoint = projectReserveJournal(previous).checkpointSha256;
   const rewritten = { ...removed, evidenceRef: 'forged-proof' };
