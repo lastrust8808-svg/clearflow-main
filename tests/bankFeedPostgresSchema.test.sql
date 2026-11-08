@@ -829,4 +829,36 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected tenant re-key altered committed feed evidence'; END IF;
 END $test$;
 
+-- A cursor CAS for a shared connection name must remain tenant-scoped.
+-- A successful tenant B advance cannot move tenant A's committed replay anchor.
+DO $test$
+DECLARE affected INTEGER;
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+     SET cursor = 'tenant-b-cursor-1', revision = 1
+   WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+     AND connection_id = 'shared-item'
+     AND cursor IS NULL AND revision = 0;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'Tenant B scoped cursor CAS failed'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+      AND connection_id = 'shared-item'
+      AND cursor = 'tenant-b-cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Tenant B cursor advance not durable'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item'
+      AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Tenant B cursor CAS modified tenant A'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+  ) THEN RAISE EXCEPTION 'Tenant B cursor CAS modified tenant A evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
