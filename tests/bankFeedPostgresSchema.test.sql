@@ -1358,4 +1358,33 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected reparenting changed Plaid checkpoint'; END IF;
 END $test$;
 
+
+-- Committed feed evidence must not be reassigned to an absent tenant checkpoint.
+-- The composite foreign key must reject the mutation atomically.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET tenant_id = 'missing-tenant'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Cross-tenant orphaned feed evidence unexpectedly accepted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment changed committed evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1
+       AND cursor = 'tenant-b-cursor-1'
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment changed other tenant checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
