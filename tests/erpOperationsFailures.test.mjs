@@ -78,6 +78,17 @@ try {
       assert.equal(request.options.headers['Cache-Control'], 'no-store');
     }
   });
+  await test('fetch error response types never confirm a financial operation', async () => {
+    // A custom adapter can return an apparently successful status/body while
+    // reporting a network error response type. Never promote its receipt.
+    for (let index = 0; index < operations.length; index++) {
+      globalThis.fetch = async () => ({
+        type: 'error', ok: true, status: 200, json: async () => accepted[index],
+      });
+      await assert.rejects(operations[index](payloads[index]),
+        /outcome unknown: opaque financial response.*Verify operation status before retrying/);
+    }
+  });
   await test('redirect failures remain indeterminate and never imply a rejected financial write', async () => {
     for (let index = 0; index < operations.length; index++) {
       globalThis.fetch = async (_url, options) => {
