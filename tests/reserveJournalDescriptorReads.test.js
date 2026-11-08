@@ -50,3 +50,23 @@ test('append prefix comparison uses descriptor values, not substituted Proxy rea
   assert.equal(result.journalEventCount, 2);
   assert.equal(result.activeAssetCount, 0);
 });
+
+test('reserve journal rejects symbol-keyed accessors without invoking them', () => {
+  let calls = 0;
+  const symbol = Symbol('untrusted-metadata');
+  const record = { ...event };
+  Object.defineProperty(record, symbol, {
+    enumerable: true,
+    get() { calls++; throw new Error('getter must not execute'); },
+  });
+  assert.throws(() => projectReserveJournal(snapshot([record])),
+    /Unsupported Reserve journal event field/);
+  const events = [event];
+  Object.defineProperty(events, symbol, {
+    enumerable: true,
+    get() { calls++; throw new Error('getter must not execute'); },
+  });
+  assert.throws(() => projectReserveJournal(snapshot(events)),
+    /Reserve journal must contain only dense data elements/);
+  assert.equal(calls, 0);
+});
