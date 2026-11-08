@@ -180,3 +180,29 @@ test('append rejects rewritten historical descriptors despite forged Proxy index
   );
   assert.equal(indexReads, 0);
 });
+
+test('append rejects rewritten historical removal events without Proxy index reads', () => {
+  const removed = { ...scope, eventId: 'event-b', type: 'asset_removed',
+    occurredAt: '2026-11-01T13:00:00.000Z', assetId: 'asset-a', evidenceRef: 'proof-b' };
+  const replacement = { ...scope, eventId: 'event-c', type: 'asset_recorded',
+    occurredAt: '2026-11-01T14:00:00.000Z', assetId: 'asset-c', evidenceRef: 'proof-c',
+    currency: 'USD', kind: 'cash', sourceType: 'bank_balance', amountMinor: 5000 };
+  const previous = snapshot([event, removed]);
+  const checkpoint = projectReserveJournal(previous).checkpointSha256;
+  const rewritten = { ...removed, evidenceRef: 'forged-proof' };
+  let indexReads = 0;
+  const disguised = new Proxy([event, rewritten, replacement], {
+    get(target, key, receiver) {
+      if (key === '1') {
+        indexReads++;
+        return removed;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(
+    () => verifyReserveJournalAppend(previous, snapshot(disguised), checkpoint),
+    /rewrite historical events/,
+  );
+  assert.equal(indexReads, 0);
+});
