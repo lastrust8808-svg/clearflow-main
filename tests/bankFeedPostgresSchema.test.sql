@@ -1464,4 +1464,37 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Provider identity is part of the replay key. Mercury and Plaid may use
+-- the same account and transaction identifiers without evidence collision.
+-- Roll back the fixture to preserve downstream repeatability.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-1',
+        '{"amountCents":8100,"source":"plaid"}'::jsonb);
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Plaid replay identity collided with Mercury evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":8100,"source":"plaid"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Independent Plaid transaction evidence missing'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 3
+       AND cursor = 'cursor-1'
+  ) THEN RAISE EXCEPTION 'Provider-isolated insert advanced Plaid checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
