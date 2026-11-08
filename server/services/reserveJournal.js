@@ -103,7 +103,11 @@ function canonicalJournalEvent(event) {
  * Returns a frozen reserve capacity projection, not a spendable balance.
  */
 export function projectReserveJournal(snapshot) {
-  plainRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve journal snapshot');
+  const snapshotDescriptors = plainRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve journal snapshot');
+  // Capture validated own data descriptors once; Proxy get traps must not
+  // substitute valuation policy or journal contents after validation.
+  snapshot = Object.fromEntries(Object.entries(snapshotDescriptors).map(
+    ([key, descriptor]) => [key, descriptor.value]));
   const scope = Object.fromEntries(SCOPE_FIELDS.map(key => [key, identifier(snapshot[key], key)]));
   if (new Set(Object.values(scope)).size !== 3) {
     throw new Error('Reserve journal scope identifiers must be distinct');
