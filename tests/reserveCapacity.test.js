@@ -528,3 +528,29 @@ test('reserve identifiers reject invisible Unicode aliases and embedded whitespa
   }
   assert.equal(calculate([entry('cash-a', 100, { assetId: 'asset-key' })]).unencumberedCashMinor, 100);
 });
+
+
+test('reserve array symbol accessors are rejected without invoking metadata getters', () => {
+  let getterReads = 0;
+  const entries = [entry('cash-a', 100)];
+  Object.defineProperty(entries, Symbol('settlement-claim'), {
+    enumerable: false,
+    get() { getterReads++; throw new Error('metadata accessor executed'); },
+  });
+  assert.throws(() => calculate(entries), /only array indices/);
+  assert.equal(getterReads, 0);
+});
+
+test('reserve record symbol accessors are rejected without invoking metadata getters', () => {
+  for (const target of ['snapshot', 'entry']) {
+    let getterReads = 0;
+    const snapshot = { ...base, asOfAt, maxEvidenceAgeMs: 3600000, entries: [entry('cash-a', 100)] };
+    const record = target === 'snapshot' ? snapshot : snapshot.entries[0];
+    Object.defineProperty(record, Symbol('settlement-claim'), {
+      enumerable: false,
+      get() { getterReads++; throw new Error('metadata accessor executed'); },
+    });
+    assert.throws(() => calculateReserveCapacity(snapshot), /Unsupported Reserve (snapshot|entry) field/);
+    assert.equal(getterReads, 0);
+  }
+});
