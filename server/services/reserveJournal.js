@@ -232,6 +232,17 @@ export function verifyReserveJournalAppend(previousSnapshot, nextSnapshot, expec
       !/^[0-9a-f]{64}$/.test(expectedPreviousSha256)) {
     throw new TypeError('Expected reserve checkpoint must be a lowercase SHA-256 digest');
   }
+  // Snapshot own data descriptors before replay and append comparisons.
+  // Proxy get traps must not substitute scope, policy, or event arrays after
+  // the independently validated replay has accepted them.
+  const stableSnapshot = raw => {
+    const descriptors = plainRecord(raw, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS,
+      'Reserve journal snapshot');
+    return Object.fromEntries(Object.entries(descriptors).map(
+      ([key, descriptor]) => [key, descriptor.value]));
+  };
+  previousSnapshot = stableSnapshot(previousSnapshot);
+  nextSnapshot = stableSnapshot(nextSnapshot);
   // Full replay validates every historical and proposed event before any
   // comparison. The previous snapshot must independently pass its own policy.
   const previous = projectReserveJournal(previousSnapshot);
