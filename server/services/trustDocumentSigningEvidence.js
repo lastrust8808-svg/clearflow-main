@@ -273,6 +273,11 @@ export function assessTrustDocumentSigningPacket(packet) {
     if (Object.values(scope).includes(signerId)) {
       throw new Error('Signing principal identifier collides with document or ownership scope');
     }
+    // A later signer cannot reuse an earlier receipt pointer as their identity.
+    // Keep signer and evidence namespaces disjoint across the entire batch.
+    if (evidenceRefs.has(signerId)) {
+      throw new Error('Signing principal identifier collides with earlier signing evidence reference');
+    }
     if (signers.has(signerId)) throw new Error('Duplicate signer attestation');
     signers.add(signerId);
     const signedAt = timestamp(attestation.signedAt, 'attestation.signedAt');
