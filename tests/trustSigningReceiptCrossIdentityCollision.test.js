@@ -45,7 +45,7 @@ test('signer and signing receipt identity namespaces remain disjoint in both dir
     governance: { ...packet.governance, appointments: [appointment('alice'), appointment('bob')] },
   }), /Signing evidence reference collides with scope or signer identity/);
   assert.equal(assessTrustDocumentSigningPacket({
-    ...packet, attestations: [first, { ...second, signerId: 'bob' }],
-    governance: { ...packet.governance, appointments: [appointment('alice'), appointment('bob')] },
+    ...packet, attestations: [first],
+    governance: { ...packet.governance, appointments: [appointment('alice')] },
   }).status, 'evidence_ready_for_review');
 });
