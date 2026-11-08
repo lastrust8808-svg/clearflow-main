@@ -109,7 +109,7 @@ function requiredString(value, field) {
   // Reject lone UTF-16 surrogates: UTF-8/JSON encoders can replace them with
   // U+FFFD, making distinct reserve, asset, or evidence IDs collide on storage.
   // Valid supplementary-plane characters (paired surrogates) are preserved.
-  if (/[\uD800-\uDFFF]/u.test(value)) {
+  if (/(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u.test(value)) {
     throw new TypeError(`${field} must contain well-formed Unicode`);
   }
   // Canonically equivalent identifiers must never count as distinct assets,
