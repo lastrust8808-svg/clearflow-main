@@ -112,6 +112,39 @@ BEGIN
   IF affected <> 0 THEN RAISE EXCEPTION 'Stale cursor CAS succeeded'; END IF;
 END $test$;
 
+-- Replaying a matching provider ID under another tenant must never overwrite
+-- the original tenant's payload or advance its durable cursor.
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-b', 'plaid', 'shared-item', 'acct-b', 'tx-1',
+        '{"amountCents":3500,"tenantBReplay":true}'::jsonb)
+ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
+DO UPDATE SET payload = EXCLUDED.payload;
+
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-b'
+      AND transaction_id = 'tx-1'
+      AND payload->>'tenantBReplay' = 'true'
+  ) THEN RAISE EXCEPTION 'Tenant B replay was not persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+      AND payload->>'replayed' = 'true'
+      AND payload->>'tenantBReplay' IS NULL
+  ) THEN RAISE EXCEPTION 'Tenant B replay changed tenant A payload'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Tenant B replay changed tenant A checkpoint'; END IF;
+END $test$;
+
 -- Provider namespace is part of the composite key: identical connection/account/
 -- transaction identifiers from Plaid and Mercury must never overwrite each other.
 INSERT INTO public.clearflow_bank_feed_checkpoints
