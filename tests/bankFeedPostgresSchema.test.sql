@@ -961,4 +961,39 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected deletion affected other tenant'; END IF;
 END $test$;
 
+-- Identical provider transaction IDs may occur on different bank providers.
+-- Replaying Mercury evidence must not rewrite Plaid evidence or either cursor.
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-1',
+        '{"amountCents":4500,"source":"mercury"}'::jsonb)
+ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
+DO UPDATE SET payload = EXCLUDED.payload;
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'source' = 'mercury'
+  ) THEN RAISE EXCEPTION 'Mercury provider-scoped replay not durable'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+      AND payload->>'source' IS NULL
+  ) THEN RAISE EXCEPTION 'Mercury replay modified Plaid evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Mercury replay changed Mercury cursor'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Mercury replay changed Plaid cursor'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
