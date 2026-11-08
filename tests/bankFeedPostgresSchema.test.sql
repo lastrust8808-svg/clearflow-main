@@ -1228,4 +1228,38 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Null payload attempt changed durable checkpoint'; END IF;
 END $test$;
 
+-- A cursor must be either SQL NULL (initial sync) or a nonempty bounded token.
+-- Invalid cursor updates cannot advance the committed checkpoint revision.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET cursor = '', revision = 2
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1;
+    RAISE EXCEPTION 'Empty synchronization cursor unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET cursor = repeat('x', 4097), revision = 2
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1;
+    RAISE EXCEPTION 'Oversized synchronization cursor unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1'
+       AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected cursor update changed committed Plaid checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+       AND revision = 9007199254740991
+  ) THEN RAISE EXCEPTION 'Rejected Plaid cursor affected Mercury checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
