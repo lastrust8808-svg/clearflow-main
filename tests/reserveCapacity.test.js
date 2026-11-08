@@ -512,3 +512,11 @@ test('reserve snapshots reject all pairwise tenant, entity and trust identity al
   assert.deepEqual([valid.tenantId, valid.entityId, valid.trustId],
     [base.tenantId, base.entityId, base.trustId]);
 });
+
+test('reserve identifiers accept valid supplementary Unicode and reject unpaired surrogates', () => {
+  const valid = 'asset-\u{1F4C4}';
+  assert.equal(calculate([entry('cash-a', 100, { assetId: valid })]).unencumberedCashMinor, 100);
+  for (const invalid of ['asset-\uD800', 'asset-\uDC00']) {
+    assert.throws(() => calculate([entry('cash-a', 100, { assetId: invalid })]), /well-formed Unicode/);
+  }
+});
