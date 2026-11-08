@@ -766,4 +766,34 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected provider re-key altered feed evidence'; END IF;
 END $test$;
 
+-- A referenced checkpoint cannot be reassigned to another tenant. Tenant identity
+-- is part of the durable replay key and must remain bound to committed entries.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET tenant_id = 'tenant-moved'
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Referenced checkpoint tenant was re-keyed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected tenant re-key altered checkpoint'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-moved' AND provider = 'plaid'
+       AND connection_id = 'shared-item'
+  ) THEN RAISE EXCEPTION 'Rejected tenant re-key created foreign tenant checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected tenant re-key altered committed feed evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
