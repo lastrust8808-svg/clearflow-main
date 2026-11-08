@@ -829,6 +829,44 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected tenant re-key altered committed feed evidence'; END IF;
 END $test$;
 
+-- Provider transaction IDs may recur across accounts in the same tenant and connection.
+-- An account-scoped replay must not mutate the other account's evidence.
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
+        '{"amountCents":7900}'::jsonb);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-other', 'tx-1',
+        '{"amountCents":7900,"accountReplay":true}'::jsonb)
+ON CONFLICT (tenant_id, provider, connection_id, account_id, transaction_id)
+DO UPDATE SET payload = EXCLUDED.payload;
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2
+  THEN RAISE EXCEPTION 'Account-scoped replay collapsed distinct accounts'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-other'
+      AND transaction_id = 'tx-1' AND payload->>'accountReplay' = 'true'
+  ) THEN RAISE EXCEPTION 'Account-scoped replay did not persist'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'replayed' = 'true'
+      AND payload->>'accountReplay' IS NULL
+  ) THEN RAISE EXCEPTION 'Account-scoped replay modified another account'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Account-scoped replay moved checkpoint'; END IF;
+END $test$;
+
 -- A cursor CAS for a shared connection name must remain tenant-scoped.
 -- A successful tenant B advance cannot move tenant A's committed replay anchor.
 DO $test$
