@@ -1095,4 +1095,33 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Failed Mercury update affected Plaid checkpoint'; END IF;
 END $test$;
 
+
+-- Cursor revision must remain within the JavaScript safe-integer range.
+-- Rejected overflow and negative revisions cannot corrupt a durable checkpoint.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET revision = 9007199254740992
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Unsafe revision overflow unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET revision = -1
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Negative revision unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND revision = 1
+      AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Invalid revisions modified durable Mercury checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
