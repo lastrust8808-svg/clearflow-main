@@ -282,7 +282,7 @@ try {
         ? ['invoiceId', 'entityId', 'invoiceNumber']
         : index === 2 ? ['reconciliationId', 'bankAccountId'] : ['reconciliationId'];
       for (const field of fields) {
-        for (const suffix of ['\u0000', '\u000a', '\u200b', '\u202e']) {
+        for (const suffix of ['\u0000', '\u000a', '\u200b', '\u202e', '\u2028', '\u2029', '\ud800']) {
           let calls = 0;
           globalThis.fetch = async () => { calls++; throw new Error('unexpected network request'); };
           await assert.rejects(operations[index]({
