@@ -1191,4 +1191,41 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Invalid payload replacement changed checkpoint'; END IF;
 END $test$;
 
+-- SQL NULL and JSON null are distinct invalid payloads. Neither may erase
+-- committed provider evidence or advance its durable cursor.
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET payload = NULL
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'SQL NULL payload unexpectedly accepted';
+  EXCEPTION WHEN not_null_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET payload = 'null'::jsonb
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'JSON null payload unexpectedly accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Null payload attempt changed committed evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item'
+       AND revision = 9007199254740991 AND cursor = 'mercury-cursor-1'
+  ) THEN RAISE EXCEPTION 'Null payload attempt changed durable checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
