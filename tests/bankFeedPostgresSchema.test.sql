@@ -1262,4 +1262,32 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Rejected Plaid cursor affected Mercury checkpoint'; END IF;
 END $test$;
 
+-- Exactly 4,096 cursor characters must be accepted; the bound is inclusive.
+-- Restore the prior committed token to keep subsequent fixture expectations stable.
+DO $test$
+BEGIN
+  UPDATE public.clearflow_bank_feed_checkpoints
+     SET cursor = repeat('x', 4096), revision = 2
+   WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+     AND connection_id = 'shared-item' AND revision = 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Maximum-length cursor update did not match checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 2
+       AND length(cursor) = 4096 AND cursor = repeat('x', 4096)
+  ) THEN RAISE EXCEPTION 'Maximum-length cursor was not persisted'; END IF;
+  UPDATE public.clearflow_bank_feed_checkpoints
+     SET cursor = 'cursor-1', revision = 3
+   WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+     AND connection_id = 'shared-item' AND revision = 2;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Cursor restoration failed'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item'
+       AND cursor = 'mercury-cursor-1' AND revision = 9007199254740991
+  ) THEN RAISE EXCEPTION 'Boundary cursor update changed Mercury checkpoint'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
