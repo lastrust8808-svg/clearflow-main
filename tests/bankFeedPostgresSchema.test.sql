@@ -1029,4 +1029,28 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Failed feed batch advanced checkpoint'; END IF;
 END $test$;
 
+-- Failed batches must preserve unrelated tenant and provider checkpoints as well.
+-- This guards against a broad rollback/recovery update after a provider error.
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'tenant-b-cursor-1'
+      AND revision = 1
+  ) THEN RAISE EXCEPTION 'Failed batch changed another tenant checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+      AND revision = 1
+  ) THEN RAISE EXCEPTION 'Failed Plaid batch changed Mercury checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1' AND payload->>'source' = 'mercury'
+  ) THEN RAISE EXCEPTION 'Failed Plaid batch changed Mercury evidence'; END IF;
+END $test$;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
