@@ -99,6 +99,32 @@ try {
         /outcome unknown: no server confirmation was received.*Verify operation status before retrying/);
     }
   });
+  await test('response URL must match the requested ERP endpoint', async () => {
+    const paths = [
+      '/api/erp/invoice-deliveries',
+      '/api/erp/invoice-exports',
+      '/api/erp/reconciliations/rec-1/statement-import',
+      '/api/erp/reconciliations/rec-1/close',
+    ];
+    for (let index = 0; index < operations.length; index++) {
+      const expectedUrl = 'https://erp.test' + paths[index];
+      for (const url of ['https://other.test' + paths[index],
+        expectedUrl + '/wrong', 'https://erp.test/api/erp/invoice-exports']) {
+        if (url === expectedUrl) continue;
+        globalThis.fetch = async () => ({
+          ok: true, status: 200, redirected: false, url,
+          json: async () => accepted[index],
+        });
+        await assert.rejects(operations[index](payloads[index]),
+          /outcome unknown: mismatched financial response URL/);
+      }
+      globalThis.fetch = async () => ({
+        ok: true, status: 200, redirected: false, url: expectedUrl,
+        json: async () => accepted[index],
+      });
+      assert.deepEqual(await operations[index](payloads[index]), accepted[index]);
+    }
+  });
   await test('followed redirects cannot confirm financial writes even with a valid receipt', async () => {
     for (let index = 0; index < operations.length; index++) {
       globalThis.fetch = async () => ({
