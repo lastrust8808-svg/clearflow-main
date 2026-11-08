@@ -191,6 +191,14 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   // A custom fetch adapter or service worker may follow a redirect despite
   // redirect: 'error'. A final HTTP 200 is not evidence that the original
   // financial endpoint accepted the operation; require status reconciliation.
+  // Even with redirected=false, a custom adapter may return a receipt from
+  // another origin or endpoint. A financial acknowledgement must be bound to
+  // the exact requested URL; a missing URL is tolerated only for legacy test
+  // adapters, not for native Fetch responses.
+  const expectedUrl = new URL(`${ERP_API_BASE}${path}`, globalThis.location?.href || 'https://localhost').href;
+  if (typeof response.url === 'string' && response.url !== '' && response.url !== expectedUrl) {
+    throw new Error(`${label} outcome unknown: mismatched financial response URL. Verify operation status before retrying.`);
+  }
   if (response.redirected === true) {
     throw new Error(`${label} outcome unknown: redirected financial response. Verify operation status before retrying.`);
   }
