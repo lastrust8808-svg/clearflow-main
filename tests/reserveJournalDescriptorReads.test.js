@@ -70,3 +70,21 @@ test('reserve journal rejects symbol-keyed accessors without invoking them', () 
     /Reserve journal must contain only dense data elements/);
   assert.equal(calls, 0);
 });
+
+test('reserve projection snapshots policy and event descriptors without Proxy get reads', () => {
+  const baseline = projectReserveJournal(snapshot([event]));
+  let reads = 0;
+  const input = new Proxy(snapshot([event]), {
+    get(target, key, receiver) {
+      if (key === 'currency' || key === 'asOfAt' || key === 'events') {
+        reads++;
+        throw new Error('snapshot get trap must not execute');
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const actual = projectReserveJournal(input);
+  assert.equal(reads, 0);
+  assert.equal(actual.journalSha256, baseline.journalSha256);
+  assert.equal(actual.checkpointSha256, baseline.checkpointSha256);
+});
