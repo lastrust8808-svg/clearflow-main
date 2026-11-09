@@ -1766,6 +1766,9 @@ ROLLBACK;
 -- Reassigning a Plaid connection into an occupied replay identity must fail
 -- without changing either connection's transaction or synchronization cursor.
 BEGIN;
+INSERT INTO public.clearflow_bank_feed_checkpoints
+  (tenant_id, provider, connection_id, cursor, revision)
+VALUES ('tenant-a', 'plaid', 'connection-reassignment-fixture', 'fixture-cursor-1', 1);
 INSERT INTO public.clearflow_bank_feed_entries
   (tenant_id, provider, connection_id, account_id, transaction_id, payload)
 VALUES ('tenant-a', 'plaid', 'connection-reassignment-fixture', 'acct-a', 'tx-1',
@@ -1799,6 +1802,12 @@ BEGIN
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
        AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 3
   ) THEN RAISE EXCEPTION 'Connection reassignment advanced destination cursor'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'connection-reassignment-fixture'
+       AND cursor = 'fixture-cursor-1' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Connection reassignment advanced source cursor'; END IF;
 END $test$;
 ROLLBACK;
 
