@@ -38,13 +38,14 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   // copy/paste errors; require one explicit approval per canonical origin.
   // Iterate by validated numeric indices: a caller-supplied Symbol.iterator
   // must not hide duplicate configuration entries from the review gate.
-  const seenOrigins = new Set();
+  // Bounded configuration (at most 128 entries) permits direct comparisons,
+  // avoiding mutable Set prototype methods during duplicate validation.
   for (let index = 0; index < entries.length; index++) {
-    const approved = entries[index];
-    if (seenOrigins.has(approved)) {
-      throw new TypeError('Duplicate approved QR verification origin');
+    for (let prior = 0; prior < index; prior++) {
+      if (entries[prior] === entries[index]) {
+        throw new TypeError('Duplicate approved QR verification origin');
+      }
     }
-    seenOrigins.add(approved);
   }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
