@@ -213,6 +213,18 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   } catch {
     throw new TypeError(`${label} contains a non-serializable payload; no request was sent.`);
   }
+  // Custom toJSON hooks can silently remove or replace validated identities.
+  // Verify the actual wire representation before crossing the financial boundary.
+  let wirePayload: unknown;
+  try {
+    wirePayload = JSON.parse(requestBody);
+  } catch {
+    throw new TypeError(`${label} produced invalid JSON; no request was sent.`);
+  }
+  if (!isRecord(wirePayload) ||
+      !requiredFields[label].every((field) => wirePayload[field] === payload[field])) {
+    throw new TypeError(`${label} changed request identities during serialization; no request was sent.`);
+  }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
   let response: Response;
   try {
