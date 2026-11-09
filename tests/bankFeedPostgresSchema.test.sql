@@ -1915,33 +1915,41 @@ END $test$;
 ROLLBACK;
 
 -- A provider change on a checkpoint with dependent replay entries must fail closed.
--- Provider identity is part of the foreign-key scope, not a mutable label.
+-- Use an isolated connection: the shared-item fixture already has a Mercury
+-- checkpoint, which would produce a unique violation before the FK is checked.
 BEGIN;
+INSERT INTO public.clearflow_bank_feed_checkpoints
+  (tenant_id, provider, connection_id, cursor, revision)
+VALUES ('tenant-a', 'plaid', 'checkpoint-provider-reassignment-fixture', 'provider-fixture-cursor', 1);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'checkpoint-provider-reassignment-fixture', 'acct-a', 'tx-provider-fixture',
+        '{"source":"checkpoint-provider-reassignment-fixture"}'::jsonb);
 DO $test$
 BEGIN
   BEGIN
     UPDATE public.clearflow_bank_feed_checkpoints
        SET provider = 'mercury'
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
-       AND connection_id = 'shared-item';
+       AND connection_id = 'checkpoint-provider-reassignment-fixture';
     RAISE EXCEPTION 'Checkpoint provider reassignment unexpectedly succeeded';
   EXCEPTION WHEN foreign_key_violation THEN NULL;
   END;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_checkpoints
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
-       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 3
+       AND connection_id = 'checkpoint-provider-reassignment-fixture' AND cursor = 'provider-fixture-cursor' AND revision = 1
   ) THEN RAISE EXCEPTION 'Rejected provider reassignment changed original checkpoint'; END IF;
   IF EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_checkpoints
      WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
-       AND connection_id = 'shared-item'
+       AND connection_id = 'checkpoint-provider-reassignment-fixture'
   ) THEN RAISE EXCEPTION 'Rejected provider reassignment created Mercury checkpoint'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_entries
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
-       AND connection_id = 'shared-item' AND account_id = 'acct-a'
-       AND transaction_id = 'tx-1'
+       AND connection_id = 'checkpoint-provider-reassignment-fixture' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-provider-fixture'
   ) THEN RAISE EXCEPTION 'Rejected provider reassignment lost Plaid replay evidence'; END IF;
 END $test$;
 ROLLBACK;
