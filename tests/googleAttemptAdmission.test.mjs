@@ -510,3 +510,19 @@ test('proxy-backed OAuth state and reducer results fail closed without invoking 
   assert.equal(reducerCalled, false);
   assert.equal(trapCalls, 0);
 });
+
+
+test('Unicode noncharacters cannot identify an OAuth attempt', () => {
+  for (const codepoint of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x2FFFF, 0x10FFFF]) {
+    const id = `attempt-${String.fromCodePoint(codepoint)}-B`;
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+});
