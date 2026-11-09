@@ -1658,4 +1658,59 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Changing the provider to an existing replay identity must be rejected.
+-- A failed provider reassignment must not change either provider's evidence or cursor.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-provider-reassignment',
+        '{"amountCents":6700,"source":"provider-reassignment"}'::jsonb);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-provider-reassignment',
+        '{"amountCents":8900,"source":"plaid-provider-reassignment"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET provider = 'plaid'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-provider-reassignment';
+    RAISE EXCEPTION 'Provider reassignment unexpectedly succeeded';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+       WHERE tenant_id = 'tenant-a' AND connection_id = 'shared-item'
+         AND account_id = 'acct-a' AND transaction_id = 'tx-provider-reassignment') <> 2
+  THEN RAISE EXCEPTION 'Rejected provider reassignment changed row count'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-provider-reassignment'
+       AND payload = '{"amountCents":6700,"source":"provider-reassignment"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected provider reassignment changed Mercury evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-provider-reassignment'
+       AND payload = '{"amountCents":8900,"source":"plaid-provider-reassignment"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected provider reassignment changed Plaid evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+       AND revision = 9007199254740991
+  ) THEN RAISE EXCEPTION 'Rejected provider reassignment advanced Mercury cursor'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1'
+       AND revision = 3
+  ) THEN RAISE EXCEPTION 'Rejected provider reassignment advanced Plaid cursor'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
