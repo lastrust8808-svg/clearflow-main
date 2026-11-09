@@ -222,7 +222,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     throw new TypeError(`${label} produced invalid JSON; no request was sent.`);
   }
   if (!isRecord(wirePayload) ||
-      !requiredFields[label].every((field) => wirePayload[field] === payload[field])) {
+      !requiredFields[label].every((field) => wirePayload[field] === payload[field]) ||
+      // Statement amounts are financial facts, not optional metadata. A custom
+      // toJSON hook must not substitute or omit a previously validated balance.
+      (label === 'Statement import' &&
+        (typeof wirePayload.statementEndingBalance !== 'number' ||
+         !Object.is(wirePayload.statementEndingBalance, payload.statementEndingBalance)))) {
     throw new TypeError(`${label} changed request identities during serialization; no request was sent.`);
   }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
