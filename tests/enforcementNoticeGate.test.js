@@ -224,3 +224,15 @@ test('all notice scope and evidence identities are pairwise distinct', () => {
     }
   }
 });
+
+test('chronology equality boundaries are review-only and one-millisecond inversions are incomplete', () => {
+  const instant = '2026-11-03T10:00:00.000Z';
+  const before = '2026-11-03T09:59:59.999Z';
+  const after = '2026-11-03T10:00:00.001Z';
+  const sameInstant = {...base, preparedAt:instant, deliveredAt:instant, evaluatedAt:instant};
+  assert.deepEqual(assess(sameInstant), {status:'evidence_ready_for_review', reason:'unverified_delivery_claim'});
+  assert.equal(assess({...sameInstant, deliveredAt:before}).reason, 'delivery_before_preparation');
+  assert.equal(assess({...sameInstant, deliveredAt:after}).reason, 'delivery_after_evaluation');
+  assert.equal(assess({...sameInstant, preparedAt:after}).reason, 'preparation_after_evaluation');
+  assert.equal(assess({...sameInstant, preparedAt:before}).status, 'evidence_ready_for_review');
+});
