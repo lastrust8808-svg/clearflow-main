@@ -10,6 +10,7 @@ on:
       - 'server/services/noteAmortization.js'
       - 'tests/noteAmortization.test.js'
       - 'tests/noteAmortizationProxyDescriptor.test.js'
+      - 'tests/noteAmortizationProxyOwnKeys.test.js'
       - 'server/services/trusteeSigningPolicy.js'
       - 'tests/trusteeSigningPolicy.test.js'
       - 'server/services/privateNoteLifecycle.js'
@@ -41,6 +42,7 @@ on:
       - 'server/services/noteAmortization.js'
       - 'tests/noteAmortization.test.js'
       - 'tests/noteAmortizationProxyDescriptor.test.js'
+      - 'tests/noteAmortizationProxyOwnKeys.test.js'
       - 'server/services/trusteeSigningPolicy.js'
       - 'tests/trusteeSigningPolicy.test.js'
       - 'server/services/privateNoteLifecycle.js'
@@ -81,4 +83,4 @@ jobs:
       - run: node --check server/services/trustDocumentQrRegistryPolicy.js
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
-      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/reserveJournalDescriptorReads.test.js tests/noteAmortization.test.js tests/noteAmortizationProxyDescriptor.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNoticeGate.test.js
+      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/reserveJournalDescriptorReads.test.js tests/noteAmortization.test.js tests/noteAmortizationProxyDescriptor.test.js tests/noteAmortizationProxyOwnKeys.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNoticeGate.test.js
