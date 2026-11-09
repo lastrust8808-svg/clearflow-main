@@ -49,6 +49,12 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
   if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
     throw new TypeError('Non-serializable admission state');
   }
+  // JSON persistence would silently coerce non-finite numbers to null and
+  // round unsafe integers, corrupting authentication/workspace evidence.
+  if (typeof value === 'number' && (!Number.isFinite(value) ||
+      (Number.isInteger(value) && !Number.isSafeInteger(value)))) {
+    throw new TypeError('Non-serializable numeric admission state');
+  }
   if (!value || typeof value !== 'object') return value;
   // Proxy traps can impersonate plain records and run code during cloning.
   if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
