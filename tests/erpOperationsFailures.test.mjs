@@ -646,6 +646,25 @@ try {
     assert.deepEqual((await api.queueInvoiceDelivery(internalRequest)).job, receipt);
   });
 
+  await test('financial request serialization cannot change or omit validated identities', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      const identity = index < 2 ? 'invoiceId' : 'reconciliationId';
+      const altered = { ...payloads[index], toJSON() {
+        return { ...payloads[index], [identity]: 'different-id' };
+      } };
+      await assert.rejects(operations[index](altered), /changed request identities during serialization/);
+      const omitted = { ...payloads[index], toJSON() {
+        const value = { ...payloads[index] };
+        delete value[identity];
+        return value;
+      } };
+      await assert.rejects(operations[index](omitted), /changed request identities during serialization/);
+    }
+    assert.equal(requests, 0, 'no financial POST may be initiated');
+  });
+
   await test('delivery receipt rejects ambiguous Unicode without false sent confirmation', async () => {
     for (const deliveryReceiptId of ['receipt\uFDD0', 'receipt\u{1FFFE}', 'receipt\u2028', 'receipt\uD800', 'rece\u0301ipt']) {
       globalThis.fetch = async () => ({
