@@ -228,3 +228,18 @@ test('encoded tenant identifiers remain single path components on POSIX and Wind
     }
   }
 });
+
+
+test('encoded tenant identities cannot escape their storage root through dot-like or separator spellings', () => {
+  const identifiers = ['..%2f..', '%2e%2e/', '.%2e\\\\', 'tenant/%2e%2e', 'tenant\\\\..', 'tenant%252fchild'];
+  for (const identifier of identifiers) {
+    const segment = sanitizeStorageSegment(identifier);
+    for (const implementation of [path.posix, path.win32]) {
+      const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+      const filename = segment + '.json';
+      const resolved = implementation.resolve(base, filename);
+      assert.equal(implementation.dirname(resolved), base, identifier);
+      assert.equal(implementation.basename(resolved), filename, identifier);
+    }
+  }
+});
