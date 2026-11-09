@@ -20,22 +20,12 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
       lengthDescriptor.value > 128) {
     throw new TypeError('Approved QR verification origin required');
   }
-  // Reject unreviewed own metadata (including symbols and non-enumerable
-  // properties). Configuration review must account for every own field.
-  for (const key of Reflect.ownKeys(approvedOrigins)) {
-    if (key === 'length') continue;
-    const index = typeof key === 'string' ? Number(key) : NaN;
-    if (!Number.isSafeInteger(index) || index < 0 ||
-        index >= lengthDescriptor.value || String(index) !== key) {
-      throw new TypeError('Approved QR verification origin required');
-    }
-  }
   // Snapshot descriptor values once. A Proxy can return a safe descriptor but
   // a different value from indexed reads; never authorize the latter.
   const entries = [];
   for (let index = 0; index < lengthDescriptor.value; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(approvedOrigins, String(index));
-    if (!descriptor || !Object.hasOwn(descriptor, 'value') || typeof descriptor.value !== 'string') {
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value') || typeof descriptor.value !== 'string') {
       throw new TypeError('Approved QR verification origin required');
     }
     entries.push(descriptor.value);
