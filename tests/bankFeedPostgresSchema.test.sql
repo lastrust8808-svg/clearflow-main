@@ -1763,4 +1763,43 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Reassigning a Plaid connection into an occupied replay identity must fail
+-- without changing either connection's transaction or synchronization cursor.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'connection-reassignment-fixture', 'acct-a', 'tx-1',
+        '{"amountCents":9100,"source":"connection-reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET connection_id = 'shared-item'
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'connection-reassignment-fixture'
+       AND account_id = 'acct-a' AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Connection reassignment unexpectedly succeeded';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Connection reassignment displaced committed transaction'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'connection-reassignment-fixture'
+       AND account_id = 'acct-a' AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":9100,"source":"connection-reassignment-fixture"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Connection reassignment changed source transaction'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 3
+  ) THEN RAISE EXCEPTION 'Connection reassignment advanced destination cursor'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
