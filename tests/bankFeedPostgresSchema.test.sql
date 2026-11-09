@@ -1468,9 +1468,14 @@ ROLLBACK;
 -- the same account and transaction identifiers without evidence collision.
 -- Roll back the fixture to preserve downstream repeatability.
 BEGIN;
+-- Use a fresh identity because the baseline fixture already contains Plaid tx-1.
 INSERT INTO public.clearflow_bank_feed_entries
   (tenant_id, provider, connection_id, account_id, transaction_id, payload)
-VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-1',
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-provider-isolation',
+        '{"amountCents":4500,"source":"mercury"}'::jsonb);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'acct-a', 'tx-provider-isolation',
         '{"amountCents":8100,"source":"plaid"}'::jsonb);
 DO $test$
 BEGIN
@@ -1478,14 +1483,14 @@ BEGIN
     SELECT 1 FROM public.clearflow_bank_feed_entries
      WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
        AND connection_id = 'shared-item' AND account_id = 'acct-a'
-       AND transaction_id = 'tx-1'
+       AND transaction_id = 'tx-provider-isolation'
        AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
   ) THEN RAISE EXCEPTION 'Plaid replay identity collided with Mercury evidence'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_entries
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
        AND connection_id = 'shared-item' AND account_id = 'acct-a'
-       AND transaction_id = 'tx-1'
+       AND transaction_id = 'tx-provider-isolation'
        AND payload = '{"amountCents":8100,"source":"plaid"}'::jsonb
   ) THEN RAISE EXCEPTION 'Independent Plaid transaction evidence missing'; END IF;
   IF NOT EXISTS (
