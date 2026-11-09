@@ -679,6 +679,22 @@ try {
     assert.equal(requests, 0, 'no altered statement balance may cross the network');
   });
 
+  await test('statement import serialization preserves source audit metadata', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    const original = payloads[2];
+    for (const field of ['statementFileName', 'exceptionNotes']) {
+      for (const replacement of ['substituted', null, undefined]) {
+        const altered = { ...original, toJSON() {
+          return { ...original, [field]: replacement };
+        } };
+        await assert.rejects(api.importReconciliationStatement(altered),
+          /changed request identities during serialization/);
+      }
+    }
+    assert.equal(requests, 0, 'altered statement provenance must never cross the network');
+  });
+
   await test('delivery receipt rejects ambiguous Unicode without false sent confirmation', async () => {
     for (const deliveryReceiptId of ['receipt\uFDD0', 'receipt\u{1FFFE}', 'receipt\u2028', 'receipt\uD800', 'rece\u0301ipt']) {
       globalThis.fetch = async () => ({
