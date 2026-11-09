@@ -221,3 +221,23 @@ test('QR allowlist rejects proxy descriptor accessors even when indexed reads ap
   assert.equal(getterCalls, 0);
   assert.equal(indexedReads, 0);
 });
+
+
+test('QR allowlist fails closed when proxy descriptor inspection throws', () => {
+  let indexedReads = 0;
+  for (const blockedKey of ['length', '0']) {
+    const adversarial = new Proxy([origin], {
+      get(target, key, receiver) {
+        if (key === '0') indexedReads++;
+        return Reflect.get(target, key, receiver);
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (key === blockedKey) throw new Error('descriptor inspection denied');
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    assert.throws(() => requireApprovedQrOrigin(origin, adversarial),
+      /descriptor inspection denied/);
+    assert.equal(indexedReads, 0);
+  }
+});
