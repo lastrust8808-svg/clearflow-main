@@ -509,3 +509,18 @@ test('transfer review uses calendar days across DST transitions and year boundar
     assert.deepEqual(plan([accepted, debit]), matched, debitDate);
   }
 });
+
+
+test('bank transfer review enforces the 1000-record batch cap without partial candidates', () => {
+  const transactions = Array.from({ length: 1000 }, (_, index) =>
+    row('checking', 'batch-' + index, -100, {
+      providerReference: 'unique-ref-' + index,
+    }));
+  const accepted = plan(transactions);
+  assert.deepEqual(accepted, { candidates: [], ambiguous: [] });
+  const overflow = [...transactions, row('savings', 'overflow', 100, {
+    providerReference: 'unique-ref-0',
+  })];
+  assert.throws(() => plan(overflow), /Invalid authorized transfer scope or batch/);
+  assert.equal(overflow.length, 1001);
+});
