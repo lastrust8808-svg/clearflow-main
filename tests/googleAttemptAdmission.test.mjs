@@ -558,3 +558,25 @@ test('non-serializable symbol and bigint values cannot enter OAuth admission sta
   }
   assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('lossy numeric OAuth snapshot and reducer values fail closed', () => {
+  const current = pending('attempt-B');
+  for (const value of [NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    let invoked = false;
+    const withNumeric = { ...current, profile: { quota: value } };
+    assert.equal(admitGoogleAttemptResult(withNumeric, 'attempt-B', () => {
+      invoked = true;
+      return { ...current, status: 'authenticated' };
+    }), withNumeric);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', workspace: { quota: value },
+    })), current);
+  }
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', profile: { quota: Number.MAX_SAFE_INTEGER, fraction: 0.5 },
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.profile.fraction, 0.5);
+});
