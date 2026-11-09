@@ -45,7 +45,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 // Clone ordinary nested records before invoking an untrusted admission reducer.
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
 function snapshotAdmissionState(value, seen = new WeakMap()) {
-  if (!value || typeof value !== 'object') return value;
+  // Executable values must not be admitted into authentication snapshots.\n  if (typeof value === 'function') throw new TypeError('Executable admission state');\n  if (!value || typeof value !== 'object') return value;
   // Proxy traps can impersonate plain records and run code during cloning.
   if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
   if (seen.has(value)) return seen.get(value);
