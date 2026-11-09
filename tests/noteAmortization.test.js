@@ -302,3 +302,32 @@ test('one-period maximum-rate projection preserves exact minor-unit reconciliati
   assert.equal(result.totalRepaymentMinor, 220_000);
   assert.equal(result.installments[0].remainingPrincipalMinor, 0);
 });
+
+
+test('long-horizon fixed-rate note conserves every minor unit without negative balances', () => {
+  const result = schedule({ principalMinor: 12_000_000, annualRateBps: 725,
+    paymentCount: 600, firstDueDate: '2026-12-31' });
+  assert.equal(result.installments.length, 600);
+  let outstanding = result.principalMinor;
+  let paidPrincipal = 0;
+  let paidInterest = 0;
+  let paidTotal = 0;
+  for (const [index, row] of result.installments.entries()) {
+    assert.equal(row.installmentNumber, index + 1);
+    assert.ok(row.paymentMinor > 0 && row.principalMinor > 0);
+    assert.ok(row.interestMinor >= 0 && row.remainingPrincipalMinor >= 0);
+    assert.equal(row.paymentMinor, row.principalMinor + row.interestMinor);
+    assert.equal(row.remainingPrincipalMinor, outstanding - row.principalMinor);
+    if (index < 599) assert.equal(row.paymentMinor, result.scheduledPaymentMinor);
+    outstanding = row.remainingPrincipalMinor;
+    paidPrincipal += row.principalMinor;
+    paidInterest += row.interestMinor;
+    paidTotal += row.paymentMinor;
+  }
+  assert.equal(outstanding, 0);
+  assert.equal(paidPrincipal, result.principalMinor);
+  assert.equal(paidInterest, result.totalInterestMinor);
+  assert.equal(paidTotal, result.totalRepaymentMinor);
+  assert.equal(result.installments[0].dueDate, '2026-12-31');
+  assert.equal(result.installments.at(-1).dueDate, '2076-11-30');
+});
