@@ -1616,4 +1616,46 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+
+-- Reassigning a transaction ID to an already committed replay key must fail
+-- without mutating either record or advancing the provider cursor.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-a', 'tx-id-reassignment',
+        '{"amountCents":6200,"source":"id-reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET transaction_id = 'tx-1'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-id-reassignment';
+    RAISE EXCEPTION 'Transaction ID reassignment unexpectedly succeeded';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected transaction ID reassignment modified committed evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-id-reassignment'
+       AND payload = '{"amountCents":6200,"source":"id-reassignment-fixture"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected transaction ID reassignment modified source evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+       AND revision = 9007199254740991
+  ) THEN RAISE EXCEPTION 'Rejected transaction ID reassignment advanced checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
