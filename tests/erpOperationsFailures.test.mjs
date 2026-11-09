@@ -631,6 +631,19 @@ try {
     assert.deepEqual((await api.queueInvoiceDelivery(internalRequest)).job, receipt);
   });
 
+  await test('delivery receipt rejects ambiguous Unicode without false sent confirmation', async () => {
+    for (const deliveryReceiptId of ['receipt\\uFDD0', 'receipt\\u{1FFFE}', 'receipt\\u2028', 'receipt\\uD800', 'rece\\u0301ipt']) {
+      globalThis.fetch = async () => ({
+        ok: true, status: 200,
+        json: async () => ({ success: true, job: { ...accepted[0].job, deliveryReceiptId } }),
+      });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/);
+    }
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[0] });
+    assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), accepted[0]);
+  });
+
+
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(directory, { recursive: true, force: true });
