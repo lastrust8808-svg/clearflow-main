@@ -48,7 +48,14 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
-  if (!seenOrigins.has(origin)) {
+  // Authorization must not depend on a mutable Set.prototype.has method.
+  // Compare the validated descriptor snapshot directly, without invoking
+  // caller-controlled collection methods or property accessors.
+  let approvedOrigin = false;
+  for (let index = 0; index < entries.length; index++) {
+    if (entries[index] === origin) approvedOrigin = true;
+  }
+  if (!approvedOrigin) {
     throw new TypeError('Unapproved QR verification origin');
   }
   return origin;
