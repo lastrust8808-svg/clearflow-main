@@ -231,7 +231,11 @@ test('encoded tenant identifiers remain single path components on POSIX and Wind
 
 
 test('encoded tenant identities cannot escape their storage root through dot-like or separator spellings', () => {
-  const identifiers = ['..%2f..', '%2e%2e/', '.%2e\\\\', 'tenant/%2e%2e', 'tenant\\\\..', 'tenant%252fchild'];
+  // Trailing literal dots are intentionally rejected on Windows, not encoded.
+  for (const rejected of ['..%2f..', 'tenant\\\\..']) {
+    assert.throws(() => sanitizeStorageSegment(rejected), TypeError, rejected);
+  }
+  const identifiers = ['%2e%2e/', '.%2e\\\\', 'tenant/%2e%2e', 'tenant%252fchild'];
   for (const identifier of identifiers) {
     const segment = sanitizeStorageSegment(identifier);
     for (const implementation of [path.posix, path.win32]) {
