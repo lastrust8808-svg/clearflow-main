@@ -1811,4 +1811,47 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Account reassignment into an occupied Plaid replay identity must fail closed.
+-- Both accounts' evidence and their shared connection checkpoint remain intact.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'shared-item', 'account-reassignment-fixture', 'tx-1',
+        '{"amountCents":9200,"source":"account-reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET account_id = 'acct-a'
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item'
+       AND account_id = 'account-reassignment-fixture' AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Account reassignment unexpectedly succeeded';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+       WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+         AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2
+  THEN RAISE EXCEPTION 'Rejected account reassignment changed transaction count'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected account reassignment displaced original transaction'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item'
+       AND account_id = 'account-reassignment-fixture' AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":9200,"source":"account-reassignment-fixture"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected account reassignment altered source evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1' AND revision = 3
+  ) THEN RAISE EXCEPTION 'Rejected account reassignment advanced connection cursor'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
