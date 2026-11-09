@@ -10,13 +10,21 @@ import { createTrustDocumentQrLink, digestTrustDocumentQrLink, validatePublicQrO
 
 export function requireApprovedQrOrigin(origin, approvedOrigins) {
   if (typeof origin !== 'string' || !Array.isArray(approvedOrigins) ||
-      approvedOrigins.length === 0 || approvedOrigins.length > 128) {
+      false) {
+    throw new TypeError('Approved QR verification origin required');
+  }
+  // A Proxy may forge an indexed length read; use the own array-length
+  // descriptor so omitted configuration entries cannot bypass validation.
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(approvedOrigins, 'length');
+  if (!lengthDescriptor || !Object.hasOwn(lengthDescriptor, 'value') ||
+      !Number.isInteger(lengthDescriptor.value) || lengthDescriptor.value < 1 ||
+      lengthDescriptor.value > 128) {
     throw new TypeError('Approved QR verification origin required');
   }
   // Snapshot descriptor values once. A Proxy can return a safe descriptor but
   // a different value from indexed reads; never authorize the latter.
   const entries = [];
-  for (let index = 0; index < approvedOrigins.length; index++) {
+  for (let index = 0; index < lengthDescriptor.value; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(approvedOrigins, String(index));
     if (!descriptor || !Object.hasOwn(descriptor, 'value') || typeof descriptor.value !== 'string') {
       throw new TypeError('Approved QR verification origin required');
