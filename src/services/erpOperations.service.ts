@@ -330,7 +330,7 @@ export async function queueInvoiceExport(payload: {
 // otherwise throw URIError instead of the canonical fail-closed identity error.
 function assertCanonicalReconciliationId(value: unknown, label: string): void {
   if (typeof value !== 'string' || value.trim() === '' || value !== value.trim() ||
-      /[\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]/u.test(value)) {
+      /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
 }
