@@ -45,7 +45,7 @@ try {
     ];
     for (let index = 0; index < operations.length; index++) {
       for (const field of identityFields[index]) {
-        for (const value of [undefined, null, '', ' ', ' padded', 'padded ']) {
+        for (const value of [undefined, null, '', ' ', ' padded', 'padded ', 'x'.repeat(256)]) {
           await assert.rejects(operations[index]({ ...payloads[index], [field]: value }),
             /requires nonempty canonical request identities/);
         }
