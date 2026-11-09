@@ -204,6 +204,15 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
+  // Serialize before opening the network boundary. Circular objects and BigInt
+  // cannot be represented as JSON; reporting an unknown remote outcome for
+  // these local failures would incorrectly suggest a job might have committed.
+  let requestBody: string;
+  try {
+    requestBody = JSON.stringify(payload);
+  } catch {
+    throw new TypeError(`${label} contains a non-serializable payload; no request was sent.`);
+  }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
   let response: Response;
   try {
@@ -216,7 +225,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       // may conceal a changed tenant/API endpoint or an uncertain first write.
       redirect: 'error',
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-      body: JSON.stringify(payload),
+      body: requestBody,
     });
   } catch {
     // A connection may fail after the server has already committed the job.
