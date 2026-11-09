@@ -241,3 +241,18 @@ test('QR allowlist fails closed when proxy descriptor inspection throws', () => 
     assert.equal(indexedReads, 0);
   }
 });
+
+
+test('QR allowlist rejects extra named, hidden, and symbol metadata', () => {
+  const named = [origin];
+  named.secondary = 'https://attacker.example.org';
+  const hidden = [origin];
+  Object.defineProperty(hidden, 'shadow', { value: origin });
+  const symbol = [origin];
+  symbol[Symbol('hidden-origin')] = origin;
+  for (const config of [named, hidden, symbol]) {
+    assert.throws(() => requireApprovedQrOrigin(origin, config),
+      /Approved QR verification origin required/);
+  }
+  assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
+});
