@@ -49,3 +49,23 @@ test('note projection rejects symbol-keyed execution claims without invoking acc
   assert.throws(() => buildFixedMonthlyNoteSchedule(input), /Unsupported note terms field/);
   assert.equal(reads, 0);
 });
+
+test('note projection fails closed when Proxy prototype inspection is denied', () => {
+  let reads = 0;
+  const input = new Proxy({ ...valid }, {
+    getPrototypeOf() { throw new Error('prototype inspection denied'); },
+    get() { reads++; throw new Error('untrusted term read'); },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(input), /prototype inspection denied/);
+  assert.equal(reads, 0);
+});
+
+test('note projection fails closed when Proxy descriptor enumeration is denied', () => {
+  let reads = 0;
+  const input = new Proxy({ ...valid }, {
+    getOwnPropertyDescriptor() { throw new Error('descriptor inspection denied'); },
+    get() { reads++; throw new Error('untrusted term read'); },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(input), /descriptor inspection denied/);
+  assert.equal(reads, 0);
+});
