@@ -52,7 +52,7 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
   // JSON persistence would silently coerce non-finite numbers to null and
   // round unsafe integers, corrupting authentication/workspace evidence.
   if (typeof value === 'number' && (!Number.isFinite(value) ||
-      (Number.isInteger(value) && !Number.isSafeInteger(value)))) {
+      (Number.isInteger(value) && !Number.isSafeInteger(value)) || Object.is(value, -0))) {
     throw new TypeError('Non-serializable numeric admission state');
   }
   if (!value || typeof value !== 'object') return value;
