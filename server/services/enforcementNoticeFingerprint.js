@@ -6,10 +6,17 @@ import { assessEnforcementNoticeEvidence } from './enforcementNoticeGate.js';
  * This is an audit comparison aid, never verification of delivery or service.
  */
 export function fingerprintEnforcementNoticeEvidence(packet) {
-  const assessment = assessEnforcementNoticeEvidence(packet);
-  // Revalidate and snapshot own descriptors; do not read user-controlled getters.
+  // Capture one immutable data-only snapshot and validate exactly what is hashed.
   const descriptors = Object.getOwnPropertyDescriptors(packet);
-  const keys = Object.keys(descriptors).sort();
+  const keys = Reflect.ownKeys(descriptors);
+  const snapshotPacket = {};
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Unsupported or accessor notice field');
+    Object.defineProperty(snapshotPacket, key, { value: descriptor.value, enumerable: true, configurable: true });
+  }
+  const assessment = assessEnforcementNoticeEvidence(snapshotPacket);
+  keys.sort();
   const snapshot = keys.map(key => [key, descriptors[key].value]);
   const canonical = JSON.stringify(['clearflow.enforcement-notice-evidence.v1', snapshot]);
   return Object.freeze({
