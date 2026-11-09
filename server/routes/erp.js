@@ -102,6 +102,12 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
   const { reconciliationId } = req.params;
   const { bankAccountId, statementEndingBalance } = req.body || {};
 
+  // A body identity that disagrees with the route can reserve work against
+  // the wrong reconciliation once durable execution is introduced.
+  if (req.body && Object.hasOwn(req.body, 'reconciliationId') &&
+      req.body.reconciliationId !== reconciliationId) {
+    return rejectInvalidErpPayload(res, 'Statement reconciliation identity mismatch.', 'ERP_RECONCILIATION_ID_MISMATCH');
+  }
   if (![reconciliationId, bankAccountId].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing statement import payload.');
   }
