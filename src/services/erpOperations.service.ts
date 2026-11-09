@@ -227,7 +227,11 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       // toJSON hook must not substitute or omit a previously validated balance.
       (label === 'Statement import' &&
         (typeof wirePayload.statementEndingBalance !== 'number' ||
-         !Object.is(wirePayload.statementEndingBalance, payload.statementEndingBalance)))) {
+         !Object.is(wirePayload.statementEndingBalance, payload.statementEndingBalance) ||
+         // The source filename and review notes are part of the import audit
+         // evidence. Serialization hooks must not rewrite or erase them.
+         wirePayload.statementFileName !== payload.statementFileName ||
+         wirePayload.exceptionNotes !== payload.exceptionNotes))) {
     throw new TypeError(`${label} changed request identities during serialization; no request was sent.`);
   }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
