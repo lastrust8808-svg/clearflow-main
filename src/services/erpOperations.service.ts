@@ -231,6 +231,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
          // The source filename and review notes are part of the import audit
          // evidence. Serialization hooks must not rewrite or erase them.
          wirePayload.statementFileName !== payload.statementFileName ||
+         wirePayload.exceptionNotes !== payload.exceptionNotes)) ||
+      // Reconciliation closure summaries and exception notes are accounting
+      // audit evidence. A serializer must not silently change the approval
+      // record that the operator reviewed before submitting the close.
+      (label === 'Reconciliation close' &&
+        (wirePayload.closeSummary !== payload.closeSummary ||
          wirePayload.exceptionNotes !== payload.exceptionNotes))) {
     throw new TypeError(`${label} changed request identities during serialization; no request was sent.`);
   }
