@@ -300,7 +300,7 @@ try {
       const fields = index < 2 ? ['invoiceId', 'entityId', 'invoiceNumber']
         : index === 2 ? ['reconciliationId', 'bankAccountId'] : ['reconciliationId'];
       for (const field of fields) {
-        for (const invalid of ['\\uFDD0', '\\uFFFE', '\\uFFFF', '\\u{1FFFE}', '\\u{10FFFF}']) {
+        for (const invalid of ['\uFDD0', '\uFFFE', '\uFFFF', '\u{1FFFE}', '\u{10FFFF}']) {
           await assert.rejects(operations[index]({ ...payloads[index], [field]: 'valid' + invalid }),
             /canonical request identities/, field + ' noncharacter');
         }
