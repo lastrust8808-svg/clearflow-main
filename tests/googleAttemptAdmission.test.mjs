@@ -598,3 +598,28 @@ test('undefined OAuth fields cannot silently disappear during JSON persistence',
   }
   assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('sparse workspace arrays cannot silently become null entries during OAuth persistence', () => {
+  const current = pending('attempt-B');
+  const hole = new Array(2);
+  hole[1] = { id: 'owner' };
+  const deleted = [{ id: 'owner' }, { id: 'company' }];
+  delete deleted[0];
+  for (const workspaces of [hole, deleted]) {
+    let invoked = false;
+    const active = { ...current, workspaces };
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      invoked = true;
+      return { ...active, status: 'authenticated' };
+    }), active);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', workspaces,
+    })), current);
+  }
+  const valid = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', workspaces: [{ id: 'owner' }],
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
