@@ -1713,4 +1713,54 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Tenant reassignment into an occupied replay key must fail closed, retaining
+-- both tenants' evidence and their independent synchronization checkpoints.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-b', 'plaid', 'shared-item', 'acct-a', 'tx-1',
+        '{"amountCents":8100,"source":"tenant-reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET tenant_id = 'tenant-a'
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Tenant reassignment unexpectedly succeeded';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
+       WHERE provider = 'plaid' AND connection_id = 'shared-item'
+         AND account_id = 'acct-a' AND transaction_id = 'tx-1') <> 2
+  THEN RAISE EXCEPTION 'Rejected tenant reassignment changed row count'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment displaced original evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":8100,"source":"tenant-reassignment-fixture"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment changed source evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1'
+       AND revision = 3
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment advanced original checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'tenant-b-cursor-1'
+       AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected tenant reassignment changed source checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
