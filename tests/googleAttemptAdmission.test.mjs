@@ -580,3 +580,21 @@ test('lossy numeric OAuth snapshot and reducer values fail closed (including neg
   assert.equal(accepted.status, 'pending-drive-check');
   assert.equal(accepted.profile.fraction, 0.5);
 });
+
+
+test('undefined OAuth fields cannot silently disappear during JSON persistence', () => {
+  const active = pending('attempt-B');
+  for (const nested of [{ optional: undefined }, [undefined]]) {
+    const current = { ...active, workspace: nested };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      invoked = true;
+      return { ...current, status: 'authenticated' };
+    }), current);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => ({
+      ...active, status: 'authenticated', workspace: nested,
+    })), active);
+  }
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
+});
