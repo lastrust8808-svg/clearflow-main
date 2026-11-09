@@ -357,3 +357,16 @@ test('Google profile admission rejects access tokens containing whitespace', () 
   assert.equal(admitted.status, 'pending-drive-check');
   assert.equal(admitted.apiAccessToken, 'valid-token');
 });
+
+
+test('verified Google profile never fabricates or reuses an application-session token', () => {
+  const user = { name: 'Verified', email: 'verified@example.test' };
+  for (const staleToken of ['old-app-session', null]) {
+    const current = Object.freeze({ ...pending('existing'), token: staleToken });
+    const next = admitVerifiedGoogleProfile(current, 'fresh-google-access-token', user);
+    assert.equal(next.status, 'pending-drive-check');
+    assert.equal(next.token, null, 'profile lookup cannot grant an application session');
+    assert.equal(next.apiAccessToken, 'fresh-google-access-token');
+    assert.equal(current.token, staleToken);
+  }
+});
