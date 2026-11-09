@@ -151,3 +151,18 @@ test('QR allowlist rejects forged proxy length without indexed reads', () => {
     /Duplicate approved QR verification origin/);
   assert.equal(indexReads, 0);
 });
+
+
+test('QR origin authorization does not depend on mutable Array.prototype.includes', () => {
+  const original = Array.prototype.includes;
+  let calls = 0;
+  try {
+    Array.prototype.includes = function () { calls++; return true; };
+    assert.throws(() => requireApprovedQrOrigin('https://attacker.example.org', allowlist),
+      /Unapproved QR verification origin/);
+    assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
+  } finally {
+    Array.prototype.includes = original;
+  }
+  assert.equal(calls, 0);
+});
