@@ -142,7 +142,9 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
 
   return {
     ...current,
-    token: current.token || 'google-oauth-token',
+    // OAuth profile admission is not application-session authentication.
+    // Never carry forward a cached credential or fabricate a token here.
+    token: null,
     apiAccessToken: accessToken,
     status: 'pending-drive-check',
     gsiUser: { name: verifiedName, email: verifiedEmail },
