@@ -56,14 +56,13 @@ test('QR origin allowlist rejects sparse and accessor-backed entries without eva
   assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
 });
 
-test('QR origin authorization ignores overridden array membership methods', () => {
+test('QR origin authorization rejects overridden array membership metadata', () => {
   const malicious = [origin];
   Object.defineProperty(malicious, 'includes', { value: () => true });
-  assert.throws(
-    () => requireApprovedQrOrigin('https://attacker.example.org', malicious),
-    /Unapproved QR verification origin/,
-  );
-  assert.equal(requireApprovedQrOrigin(origin, malicious), origin);
+  assert.throws(() => requireApprovedQrOrigin('https://attacker.example.org', malicious),
+    /Approved QR verification origin required/);
+  assert.throws(() => requireApprovedQrOrigin(origin, malicious),
+    /Approved QR verification origin required/);
   const inherited = [origin];
   Object.setPrototypeOf(inherited, Object.assign(Object.create(Array.prototype), {
     includes: () => true,
@@ -97,20 +96,21 @@ test('approved QR origin configuration rejects duplicate entries', () => {
 });
 
 
-test('duplicate QR origin detection does not trust an overridden array iterator', () => {
+test('QR origin configuration rejects overridden array iterators without executing them', () => {
   const malicious = [origin, origin];
   let iteratorCalls = 0;
   Object.defineProperty(malicious, Symbol.iterator, {
     value: function* () { iteratorCalls++; yield 'https://other.example.org'; },
   });
   assert.throws(() => requireApprovedQrOrigin(origin, malicious),
-    /Duplicate approved QR verification origin/);
+    /Approved QR verification origin required/);
   assert.equal(iteratorCalls, 0);
   const distinct = [origin, 'https://second.example.org'];
   Object.defineProperty(distinct, Symbol.iterator, {
     value: () => { throw new Error('iterator must not execute'); },
   });
-  assert.equal(requireApprovedQrOrigin(origin, distinct), origin);
+  assert.throws(() => requireApprovedQrOrigin(origin, distinct),
+    /Approved QR verification origin required/);
 });
 
 
