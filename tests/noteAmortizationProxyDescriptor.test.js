@@ -43,3 +43,13 @@ test('note projection does not invoke accessor values returned by Proxy descript
   assert.throws(() => buildFixedMonthlyNoteSchedule(input), /enumerable data properties/);
   assert.equal(reads, 0);
 });
+
+test('note projection fails closed when Proxy key enumeration is denied', () => {
+  let reads = 0;
+  const input = new Proxy({ ...terms }, {
+    ownKeys() { throw new Error('enumeration denied'); },
+    get() { reads++; throw new Error('untrusted property read'); },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(input), /enumeration denied/);
+  assert.equal(reads, 0, 'untrusted property reads must never execute');
+});
