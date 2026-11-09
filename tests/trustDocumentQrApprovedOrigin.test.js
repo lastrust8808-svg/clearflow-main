@@ -127,3 +127,27 @@ test('QR allowlist authorization uses validated descriptors, not proxy index rea
     /Unapproved QR verification origin/);
   assert.equal(indexedReads, 0);
 });
+
+
+test('QR allowlist rejects forged proxy length without indexed reads', () => {
+  let indexReads = 0;
+  const hiddenInvalid = new Proxy([origin, 'http://unsafe.example.org'], {
+    get(target, key, receiver) {
+      if (key === 'length') return 1;
+      if (key === '0' || key === '1') indexReads++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, hiddenInvalid), /origin required/);
+  assert.equal(indexReads, 0);
+  const hiddenDuplicate = new Proxy([origin, origin], {
+    get(target, key, receiver) {
+      if (key === 'length') return 1;
+      if (key === '0' || key === '1') indexReads++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, hiddenDuplicate),
+    /Duplicate approved QR verification origin/);
+  assert.equal(indexReads, 0);
+});
