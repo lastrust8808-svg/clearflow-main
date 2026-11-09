@@ -48,7 +48,7 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   }
   // Exact comparison intentionally refuses wildcard, suffix, case-folded,
   // and URL-normalized matches, preventing subdomain and port confusion.
-  if (!Array.prototype.includes.call(entries, origin)) {
+  if (!seenOrigins.has(origin)) {
     throw new TypeError('Unapproved QR verification origin');
   }
   return origin;
