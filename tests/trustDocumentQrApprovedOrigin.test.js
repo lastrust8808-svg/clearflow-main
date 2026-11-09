@@ -166,3 +166,18 @@ test('QR origin authorization does not depend on mutable Array.prototype.include
   }
   assert.equal(calls, 0);
 });
+
+
+test('QR origin membership does not invoke mutable Set.prototype.has', () => {
+  const original = Set.prototype.has;
+  let calls = 0;
+  try {
+    Set.prototype.has = function () { calls++; return true; };
+    assert.throws(() => requireApprovedQrOrigin('https://attacker.example.org', allowlist),
+      /Unapproved QR verification origin/);
+    assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
+  } finally {
+    Set.prototype.has = original;
+  }
+  assert.equal(calls, 0);
+});
