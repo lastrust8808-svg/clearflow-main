@@ -326,6 +326,15 @@ export async function queueInvoiceExport(payload: {
     (result) => isAcceptedJob(result, 'job', 'export', { invoiceId: payload.invoiceId, entityId: payload.entityId, invoiceNumber: payload.invoiceNumber }));
 }
 
+// Validate route parameters before URI encoding: lone surrogate code units
+// otherwise throw URIError instead of the canonical fail-closed identity error.
+function assertCanonicalReconciliationId(value: unknown, label: string): void {
+  if (typeof value !== 'string' || value.trim() === '' || value !== value.trim() ||
+      /[\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]/u.test(value)) {
+    throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
+  }
+}
+
 export async function importReconciliationStatement(payload: {
   reconciliationId: string;
   bankAccountId: string;
@@ -347,6 +356,7 @@ export async function importReconciliationStatement(payload: {
       roundedCents / 100 !== balance) {
     throw new TypeError('Invalid statement ending balance: a finite, exact cent amount is required.');
   }
+  assertCanonicalReconciliationId(payload.reconciliationId, 'Statement import');
   return postErp<StatementImportResponse>(
     `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/statement-import`,
     payload, 'Statement import', (result) => isAcceptedJob(result, 'importJob', undefined,
@@ -358,6 +368,7 @@ export async function closeReconciliationJob(payload: {
   closeSummary: string;
   exceptionNotes?: string;
 }) {
+  assertCanonicalReconciliationId(payload.reconciliationId, 'Reconciliation close');
   return postErp<ReconciliationCloseResponse>(
     `/api/erp/reconciliations/${encodeURIComponent(payload.reconciliationId)}/close`,
     payload, 'Reconciliation close', (result) => isAcceptedJob(result, 'closeJob', undefined,
