@@ -293,6 +293,25 @@ try {
       }
     }
   });
+  await test('non-NFC financial identities fail before any network request', async () => {
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw new Error('unexpected fetch'); };
+    const decomposed = 'Cafe\u0301';
+    assert.notEqual(decomposed, decomposed.normalize('NFC'));
+    for (let index = 0; index < operations.length; index++) {
+      const fields = index < 2
+        ? ['invoiceId', 'entityId', 'invoiceNumber']
+        : index === 2 ? ['reconciliationId', 'bankAccountId'] : ['reconciliationId'];
+      for (const field of fields) {
+        await assert.rejects(
+          operations[index]({ ...payloads[index], [field]: decomposed }),
+          /canonical request identities/,
+          `operation ${index} must reject non-NFC ${field}`,
+        );
+      }
+    }
+    assert.equal(calls, 0);
+  });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
