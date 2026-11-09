@@ -1954,4 +1954,44 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- A checkpoint connection identifier is immutable while dependent entries exist.
+-- An isolated destination avoids a duplicate-key error masking the FK guard.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_checkpoints
+  (tenant_id, provider, connection_id, cursor, revision)
+VALUES ('tenant-a', 'plaid', 'checkpoint-connection-reassignment-fixture', 'connection-fixture-cursor', 1);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'checkpoint-connection-reassignment-fixture', 'acct-a', 'tx-connection-fixture',
+        '{"source":"checkpoint-connection-reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_checkpoints
+       SET connection_id = 'checkpoint-connection-reassignment-destination'
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'checkpoint-connection-reassignment-fixture';
+    RAISE EXCEPTION 'Checkpoint connection reassignment unexpectedly succeeded';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'checkpoint-connection-reassignment-fixture'
+       AND cursor = 'connection-fixture-cursor' AND revision = 1
+  ) THEN RAISE EXCEPTION 'Rejected connection reassignment changed source checkpoint'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'checkpoint-connection-reassignment-destination'
+  ) THEN RAISE EXCEPTION 'Rejected connection reassignment created destination checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'checkpoint-connection-reassignment-fixture'
+       AND account_id = 'acct-a' AND transaction_id = 'tx-connection-fixture'
+  ) THEN RAISE EXCEPTION 'Rejected connection reassignment lost replay evidence'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
