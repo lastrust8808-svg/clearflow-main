@@ -331,3 +331,21 @@ test('long-horizon fixed-rate note conserves every minor unit without negative b
   assert.equal(result.installments[0].dueDate, '2026-12-31');
   assert.equal(result.installments.at(-1).dueDate, '2076-11-30');
 });
+
+
+test('50-year zero-interest projection preserves every cent and month-end anchor', () => {
+  const principalMinor = 1_200_001;
+  const result = schedule({ principalMinor, annualRateBps: 0, paymentCount: 600,
+    firstDueDate: '2028-01-31' });
+  assert.equal(result.installments.length, 600);
+  assert.equal(result.scheduledPaymentMinor, 2_001);
+  assert.equal(result.totalInterestMinor, 0);
+  assert.equal(result.totalRepaymentMinor, principalMinor);
+  assert.equal(result.installments[1].dueDate, '2028-02-29');
+  assert.equal(result.installments[13].dueDate, '2029-02-28');
+  assert.equal(result.installments.at(-1).dueDate, '2077-12-31');
+  assert.equal(result.installments.at(-1).paymentMinor, 1_402);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), principalMinor);
+  assert.ok(result.installments.every(row => row.paymentMinor > 0 && row.interestMinor === 0));
+});
