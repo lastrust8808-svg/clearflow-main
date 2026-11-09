@@ -30,6 +30,20 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
     }
     entries.push(descriptor.value);
   }
+  // Refuse additional own configuration keys, including hidden named entries
+  // and symbols. Only the intrinsic length and validated indices are allowed.
+  // This prevents metadata-bearing arrays from silently bypassing review.
+  const ownKeys = Reflect.ownKeys(approvedOrigins);
+  if (ownKeys.length !== lengthDescriptor.value + 1) {
+    throw new TypeError('Approved QR verification origin required');
+  }
+  for (const key of ownKeys) {
+    if (key === 'length') continue;
+    if (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
+        Number(key) >= lengthDescriptor.value) {
+      throw new TypeError('Approved QR verification origin required');
+    }
+  }
   // A malformed unused entry must not silently survive trusted configuration.
   for (let index = 0; index < entries.length; index++) {
     validatePublicQrOrigin(entries[index]);
