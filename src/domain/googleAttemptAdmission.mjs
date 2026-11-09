@@ -63,7 +63,7 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
   if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
   }
-  const copy = Array.isArray(value) ? [] : Object.create(proto);
+  // JSON.stringify converts array holes into null, losing workspace evidence.\n  // Reject sparse arrays rather than admitting a different persisted shape.\n  if (Array.isArray(value)) {\n    for (let index = 0; index < value.length; index++) {\n      if (!Object.hasOwn(value, index)) {\n        throw new TypeError('Sparse admission state array');\n      }\n    }\n  }\n  const copy = Array.isArray(value) ? [] : Object.create(proto);
   seen.set(value, copy);
   for (const key of Reflect.ownKeys(value)) {
     if (Array.isArray(value) && key === 'length') continue;
