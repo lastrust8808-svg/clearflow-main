@@ -180,6 +180,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       !requiredFields[label].every((field) =>
         typeof payload[field] === 'string' &&
         (payload[field] as string).trim().length > 0 &&
+        (payload[field] as string).length <= 255 &&
         payload[field] === (payload[field] as string).trim() &&
         // Canonically equivalent Unicode identifiers must not name distinct jobs.
         payload[field] === (payload[field] as string).normalize('NFC') &&
@@ -331,7 +332,7 @@ export async function queueInvoiceExport(payload: {
 // Validate route parameters before URI encoding: lone surrogate code units
 // otherwise throw URIError instead of the canonical fail-closed identity error.
 function assertCanonicalReconciliationId(value: unknown, label: string): void {
-  if (typeof value !== 'string' || value.trim() === '' || value !== value.trim() || value !== value.normalize('NFC') ||
+  if (typeof value !== 'string' || value.trim() === '' || value.length > 255 || value !== value.trim() || value !== value.normalize('NFC') ||
       /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
