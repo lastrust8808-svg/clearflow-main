@@ -46,7 +46,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
 function snapshotAdmissionState(value, seen = new WeakMap()) {
   // Executable values must not be admitted into authentication snapshots.
-  if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+  if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
     throw new TypeError('Non-serializable admission state');
   }
   // JSON persistence would silently coerce non-finite numbers to null and
