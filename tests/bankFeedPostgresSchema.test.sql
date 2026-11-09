@@ -1502,4 +1502,36 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+
+-- Tenant identity must isolate replay keys even when provider, connection,
+-- account, and transaction identifiers are identical across tenants.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-b', 'plaid', 'shared-item', 'acct-a', 'tx-1',
+        '{"amountCents":9900,"source":"tenant-b"}'::jsonb);
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":9900,"source":"tenant-b"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Other tenant replay identity was not persisted'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Other tenant insert displaced original Plaid evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-b' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND revision = 1
+       AND cursor = 'tenant-b-cursor-1'
+  ) THEN RAISE EXCEPTION 'Other tenant insert changed its checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
