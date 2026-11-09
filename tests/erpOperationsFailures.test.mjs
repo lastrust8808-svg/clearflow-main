@@ -665,6 +665,20 @@ try {
     assert.equal(requests, 0, 'no financial POST may be initiated');
   });
 
+  await test('statement import serialization cannot substitute or omit a validated balance', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    const original = payloads[2];
+    for (const replacement of [original.statementEndingBalance + 1, null, undefined]) {
+      const altered = { ...original, toJSON() {
+        return { ...original, statementEndingBalance: replacement };
+      } };
+      await assert.rejects(api.importReconciliationStatement(altered),
+        /changed request identities during serialization/);
+    }
+    assert.equal(requests, 0, 'no altered statement balance may cross the network');
+  });
+
   await test('delivery receipt rejects ambiguous Unicode without false sent confirmation', async () => {
     for (const deliveryReceiptId of ['receipt\uFDD0', 'receipt\u{1FFFE}', 'receipt\u2028', 'receipt\uD800', 'rece\u0301ipt']) {
       globalThis.fetch = async () => ({
