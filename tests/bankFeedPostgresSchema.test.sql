@@ -1575,4 +1575,45 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- A replay identity must not be changed to collide with an existing account's
+-- committed transaction. A rejected account reassignment preserves both rows.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'mercury', 'shared-item', 'acct-reassignment', 'tx-1',
+        '{"amountCents":7300,"source":"reassignment-fixture"}'::jsonb);
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.clearflow_bank_feed_entries
+       SET account_id = 'acct-a'
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-reassignment'
+       AND transaction_id = 'tx-1';
+    RAISE EXCEPTION 'Account reassignment unexpectedly overwrote replay identity';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":4500,"source":"mercury"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected reassignment changed original account evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND account_id = 'acct-reassignment'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":7300,"source":"reassignment-fixture"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Rejected reassignment changed source account evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'mercury'
+       AND connection_id = 'shared-item' AND cursor = 'mercury-cursor-1'
+       AND revision = 9007199254740991
+  ) THEN RAISE EXCEPTION 'Rejected reassignment advanced Mercury checkpoint'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
