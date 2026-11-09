@@ -327,6 +327,20 @@ try {
     }
     assert.equal(calls, 0);
   });
+  await test('non-serializable ERP payload fails locally without claiming an uncertain remote outcome', async () => {
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw new Error('unexpected network request'); };
+    const circular = { ...payloads[0] };
+    circular.self = circular;
+    for (const payload of [
+      { ...payloads[0], metadata: 1n },
+      circular,
+    ]) {
+      await assert.rejects(api.queueInvoiceDelivery(payload),
+        /contains a non-serializable payload; no request was sent/);
+    }
+    assert.equal(calls, 0, 'serialization failures must not initiate a financial POST');
+  });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); } });
     await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
