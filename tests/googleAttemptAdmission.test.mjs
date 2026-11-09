@@ -526,3 +526,18 @@ test('Unicode noncharacters cannot identify an OAuth attempt', () => {
   }
   assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
 });
+
+
+test('executable nested OAuth state cannot cross the admission boundary', () => {
+  const current = pending('attempt-B');
+  let invoked = false;
+  const withFunction = { ...current, profile: { onLogin() { invoked = true; } } };
+  assert.equal(admitGoogleAttemptResult(withFunction, 'attempt-B', () => {
+    invoked = true;
+    return { ...withFunction, status: 'authenticated' };
+  }), withFunction);
+  assert.equal(invoked, false);
+  const result = { ...current, status: 'authenticated', workspace: { callback: () => {} } };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
