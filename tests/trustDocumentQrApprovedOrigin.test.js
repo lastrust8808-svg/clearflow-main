@@ -199,3 +199,25 @@ test('QR allowlist rejects non-enumerable origin entries without reading them', 
     /Approved QR verification origin required/);
   assert.equal(reads, 0);
 });
+
+
+test('QR allowlist rejects proxy descriptor accessors even when indexed reads appear valid', () => {
+  let getterCalls = 0;
+  let indexedReads = 0;
+  const adversarial = new Proxy([origin], {
+    get(target, key, receiver) {
+      if (key === '0') { indexedReads++; return origin; }
+      return Reflect.get(target, key, receiver);
+    },
+    getOwnPropertyDescriptor(target, key) {
+      if (key === '0') {
+        return { configurable: true, enumerable: true, get() { getterCalls++; return origin; } };
+      }
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, adversarial),
+    /Approved QR verification origin required/);
+  assert.equal(getterCalls, 0);
+  assert.equal(indexedReads, 0);
+});
