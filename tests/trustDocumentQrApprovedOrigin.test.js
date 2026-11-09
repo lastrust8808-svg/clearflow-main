@@ -181,3 +181,21 @@ test('QR origin membership does not invoke mutable Set.prototype.has', () => {
   }
   assert.equal(calls, 0);
 });
+
+
+test('QR allowlist rejects non-enumerable origin entries without reading them', () => {
+  const hidden = [origin];
+  Object.defineProperty(hidden, '0', { value: origin, enumerable: false });
+  assert.throws(() => requireApprovedQrOrigin(origin, hidden),
+    /Approved QR verification origin required/);
+  let reads = 0;
+  const proxied = new Proxy(hidden, {
+    get(target, key, receiver) {
+      if (key === '0') reads++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, proxied),
+    /Approved QR verification origin required/);
+  assert.equal(reads, 0);
+});
