@@ -29,3 +29,24 @@ test('partial evidence cannot hide year-boundary chronological contradictions', 
   assert.equal(assess({...partial, deliveredAt:'2027-01-01T00:00:00.002Z'}).reason, 'delivery_after_evaluation');
   assert.equal(assess(partial).reason, 'partial_delivery_evidence');
 });
+
+test('leap-day notice chronology accepts real February 29 and rejects impossible dates', () => {
+  const leap = {
+    ...base,
+    preparedAt:'2028-02-29T23:59:59.998Z',
+    deliveredAt:'2028-02-29T23:59:59.999Z',
+    evaluatedAt:'2028-03-01T00:00:00.000Z'
+  };
+  assert.deepEqual(assess(leap), {
+    status:'evidence_ready_for_review', reason:'unverified_delivery_claim'
+  });
+  for (const key of ['preparedAt', 'deliveredAt', 'evaluatedAt']) {
+    assert.throws(
+      () => assess({...leap, [key]:'2027-02-29T23:59:59.999Z'}),
+      /Invalid canonical UTC timestamp/,
+      key
+    );
+  }
+  assert.equal(assess({...leap, deliveredAt:'2028-02-29T23:59:59.997Z'}).reason, 'delivery_before_preparation');
+  assert.equal(assess({...leap, deliveredAt:'2028-03-01T00:00:00.001Z'}).reason, 'delivery_after_evaluation');
+});
