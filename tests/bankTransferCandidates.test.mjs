@@ -489,3 +489,23 @@ test('transfer source records reject inherited, hidden and symbol-keyed financia
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].status, 'review_required');
 });
+
+
+test('transfer review uses calendar days across DST transitions and year boundaries', () => {
+  // Wall-clock DST shifts must not change the three-calendar-day matching gate.
+  for (const [debitDate, acceptedDate, rejectedDate] of [
+    ['2026-03-07', '2026-03-10', '2026-03-11'],
+    ['2026-10-31', '2026-11-03', '2026-11-04'],
+    ['2026-12-30', '2027-01-02', '2027-01-03'],
+  ]) {
+    const debit = row('checking', 'out-' + debitDate, -1234, { postedDate: debitDate });
+    const accepted = row('savings', 'in-' + acceptedDate, 1234, { postedDate: acceptedDate });
+    const rejected = row('savings', 'in-' + rejectedDate, 1234, { postedDate: rejectedDate });
+    const matched = plan([debit, accepted]);
+    assert.equal(matched.candidates.length, 1, debitDate);
+    assert.equal(matched.candidates[0].dayGap, 3, debitDate);
+    assert.equal(matched.candidates[0].status, 'review_required');
+    assert.deepEqual(plan([debit, rejected]), { candidates: [], ambiguous: [] }, debitDate);
+    assert.deepEqual(plan([accepted, debit]), matched, debitDate);
+  }
+});
