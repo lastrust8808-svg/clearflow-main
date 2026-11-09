@@ -64,6 +64,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Unicode noncharacters are not covered by control/format/surrogate classes.
+// Reject them in financial identities before any request or URI encoding.
+function containsUnicodeNoncharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!;
+    if ((codePoint >= 0xfdd0 && codePoint <= 0xfdef) ||
+        (codePoint & 0xfffe) === 0xfffe) return true;
+  }
+  return false;
+}
+
 // A queued acknowledgement is not proof of durable acceptance unless the
 // authenticated backend supplies an explicit persistence receipt. This is
 // response validation, not a substitute for server-side transactional storage.
@@ -186,7 +197,8 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         payload[field] === (payload[field] as string).normalize('NFC') &&
         // Invisible/control characters can make distinct ledger identities
         // appear identical in audit views while preserving string equality.
-        !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string))) {
+        !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string) &&
+        !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
   // Never fabricate a successful job. The caller must retain the user's input for retry.
@@ -333,7 +345,7 @@ export async function queueInvoiceExport(payload: {
 // otherwise throw URIError instead of the canonical fail-closed identity error.
 function assertCanonicalReconciliationId(value: unknown, label: string): void {
   if (typeof value !== 'string' || value.trim() === '' || value.length > 255 || value !== value.trim() || value !== value.normalize('NFC') ||
-      /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value)) {
+      (/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value) || containsUnicodeNoncharacter(value))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
 }
