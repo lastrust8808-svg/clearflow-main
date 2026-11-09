@@ -210,3 +210,21 @@ test('encoded punctuation obeys the filesystem basename limit at exact boundarie
   assert.equal(sanitizeStorageSegment(unicodeAtLimit).length, 250);
   assert.throws(() => sanitizeStorageSegment('a'.repeat(239) + '🙂'), TypeError);
 });
+
+
+test('encoded tenant identifiers remain single path components on POSIX and Windows', () => {
+  const identifiers = [
+    'tenant/child', 'tenant\\\\child', '../tenant', '..\\\\tenant',
+    'tenant:stream', 'tenant?query', 'tenant*glob', 'tenant|pipe',
+    'tenant%2Fchild', 'tenant%5Cchild', 'tenant space', '商店/一号',
+  ];
+  for (const identifier of identifiers) {
+    const segment = sanitizeStorageSegment(identifier);
+    for (const implementation of [path.posix, path.win32]) {
+      const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+      const resolved = implementation.resolve(base, segment + '.json');
+      assert.equal(implementation.dirname(resolved), base, identifier);
+      assert.equal(implementation.basename(resolved), segment + '.json', identifier);
+    }
+  }
+});
