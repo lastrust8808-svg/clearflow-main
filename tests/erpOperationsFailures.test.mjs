@@ -700,7 +700,8 @@ try {
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
     const original = payloads[3];
     for (const field of ['closeSummary', 'exceptionNotes']) {
-      for (const replacement of ['substituted', null, undefined]) {
+      for (const replacement of (field === 'exceptionNotes'
+      ? ['substituted', null, ''] : ['substituted', null, undefined])) {
         const altered = { ...original, toJSON() {
           return { ...original, [field]: replacement };
         } };
