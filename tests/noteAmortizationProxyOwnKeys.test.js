@@ -26,3 +26,26 @@ test('note projection rejects injected execution metadata exposed through Proxy 
   assert.throws(() => buildFixedMonthlyNoteSchedule(input), /Unsupported note terms field/);
   assert.equal(reads, 0);
 });
+
+test('note projection rejects hidden settlement claims without invoking accessors', () => {
+  let reads = 0;
+  const input = { ...valid };
+  Object.defineProperty(input, 'settled', {
+    enumerable: false,
+    configurable: true,
+    get() { reads++; throw new Error('untrusted settlement getter'); },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(input), /Unsupported note terms field/);
+  assert.equal(reads, 0);
+});
+
+test('note projection rejects symbol-keyed execution claims without invoking accessors', () => {
+  let reads = 0;
+  const input = { ...valid };
+  Object.defineProperty(input, Symbol('executed'), {
+    enumerable: true,
+    get() { reads++; throw new Error('untrusted execution getter'); },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(input), /Unsupported note terms field/);
+  assert.equal(reads, 0);
+});
