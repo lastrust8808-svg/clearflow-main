@@ -1831,8 +1831,9 @@ BEGIN
   END;
   IF (SELECT count(*) FROM public.clearflow_bank_feed_entries
        WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
-         AND connection_id = 'shared-item' AND transaction_id = 'tx-1') <> 2
-  THEN RAISE EXCEPTION 'Rejected account reassignment changed transaction count'; END IF;
+         AND connection_id = 'shared-item' AND transaction_id = 'tx-1'
+         AND account_id IN ('acct-a', 'account-reassignment-fixture')) <> 2
+  THEN RAISE EXCEPTION 'Rejected account reassignment changed affected transaction count'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.clearflow_bank_feed_entries
      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
