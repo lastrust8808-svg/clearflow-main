@@ -9,8 +9,7 @@
 import { createTrustDocumentQrLink, digestTrustDocumentQrLink, validatePublicQrOrigin } from './trustDocumentQrPolicy.js';
 
 export function requireApprovedQrOrigin(origin, approvedOrigins) {
-  if (typeof origin !== 'string' || !Array.isArray(approvedOrigins) ||
-      false) {
+  if (typeof origin !== 'string' || !Array.isArray(approvedOrigins)) {
     throw new TypeError('Approved QR verification origin required');
   }
   // A Proxy may forge an indexed length read; use the own array-length
