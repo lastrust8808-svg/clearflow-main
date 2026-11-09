@@ -30,6 +30,7 @@ on:
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'tests/enforcementNoticeGate.test.js'
+      - 'tests/enforcementNoticeProxyFailure.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -62,6 +63,7 @@ on:
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'tests/enforcementNoticeGate.test.js'
+      - 'tests/enforcementNoticeProxyFailure.test.js'
 permissions:
   contents: read
 jobs:
@@ -83,4 +85,4 @@ jobs:
       - run: node --check server/services/trustDocumentQrRegistryPolicy.js
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
-      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/reserveJournalDescriptorReads.test.js tests/noteAmortization.test.js tests/noteAmortizationProxyDescriptor.test.js tests/noteAmortizationProxyOwnKeys.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNoticeGate.test.js
+      - run: node --test tests/reserveCapacity.test.js tests/reserveJournal.test.js tests/reserveJournalDescriptorReads.test.js tests/noteAmortization.test.js tests/noteAmortizationProxyDescriptor.test.js tests/noteAmortizationProxyOwnKeys.test.js tests/trusteeSigningPolicy.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNoticeGate.test.js tests/enforcementNoticeProxyFailure.test.js
