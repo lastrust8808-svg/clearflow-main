@@ -541,3 +541,20 @@ test('executable nested OAuth state cannot cross the admission boundary', () => 
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('non-serializable symbol and bigint values cannot enter OAuth admission state', () => {
+  const active = pending('attempt-B');
+  for (const value of [Symbol('private'), 1n]) {
+    let called = false;
+    const current = { ...active, profile: { unsafe: value } };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...current, status: 'authenticated' };
+    }), current);
+    assert.equal(called, false, 'unsafe current state must not invoke reducer');
+    const candidate = { ...active, status: 'authenticated', profile: { unsafe: value } };
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => candidate), active);
+  }
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
+});
