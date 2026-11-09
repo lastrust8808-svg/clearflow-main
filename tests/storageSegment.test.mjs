@@ -247,3 +247,20 @@ test('encoded tenant identities cannot escape their storage root through dot-lik
     }
   }
 });
+
+
+test('encoded Windows alternate-stream and device-like spellings remain ordinary filenames', () => {
+  // Literal device names are rejected, but percent-encoded user identities
+  // must not be decoded a second time by storage path construction.
+  const identifiers = ['CON%2Etxt', 'NUL%3Astream', 'tenant:stream', 'tenant%3Astream', 'COM1%2Elog'];
+  const segments = identifiers.map(sanitizeStorageSegment);
+  assert.equal(new Set(segments).size, identifiers.length);
+  for (const segment of segments) {
+    assert.ok(!segment.includes(':'), segment);
+    for (const implementation of [path.posix, path.win32]) {
+      const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+      const filename = segment + '.json';
+      assert.equal(implementation.dirname(implementation.resolve(base, filename)), base);
+    }
+  }
+});
