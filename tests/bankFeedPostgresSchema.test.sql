@@ -1534,4 +1534,45 @@ BEGIN
 END $test$;
 ROLLBACK;
 
+-- Connection identity must isolate replay keys for the same tenant/provider/account.
+-- A second authorized connection can use the same transaction ID without overwriting
+-- the original connection's evidence or advancing its checkpoint.
+BEGIN;
+INSERT INTO public.clearflow_bank_feed_checkpoints
+  (tenant_id, provider, connection_id, cursor, revision)
+VALUES ('tenant-a', 'plaid', 'second-item', 'second-cursor', 7);
+INSERT INTO public.clearflow_bank_feed_entries
+  (tenant_id, provider, connection_id, account_id, transaction_id, payload)
+VALUES ('tenant-a', 'plaid', 'second-item', 'acct-a', 'tx-1',
+        '{"amountCents":1234,"source":"second-connection"}'::jsonb);
+DO $test$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'second-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+       AND payload = '{"amountCents":1234,"source":"second-connection"}'::jsonb
+  ) THEN RAISE EXCEPTION 'Second connection evidence missing'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND account_id = 'acct-a'
+       AND transaction_id = 'tx-1'
+  ) THEN RAISE EXCEPTION 'Second connection displaced original evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'shared-item' AND cursor = 'cursor-1'
+       AND revision = 3
+  ) THEN RAISE EXCEPTION 'Second connection advanced original checkpoint'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+     WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+       AND connection_id = 'second-item' AND cursor = 'second-cursor'
+       AND revision = 7
+  ) THEN RAISE EXCEPTION 'Second connection checkpoint changed'; END IF;
+END $test$;
+ROLLBACK;
+
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
