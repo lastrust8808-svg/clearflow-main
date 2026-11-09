@@ -303,6 +303,22 @@ try {
     assert.equal(response.body.importJob, undefined);
   });
 
+  await test('statement import rejects mismatched route and body reconciliation identities', async () => {
+    const base = { bankAccountId: 'bank-test', statementEndingBalance: 100 };
+    for (const reconciliationId of ['other-reconciliation', '', null, 42]) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import',
+        { ...base, reconciliationId }, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.body.code, 'ERP_RECONCILIATION_ID_MISMATCH');
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.equal(response.body.importJob, undefined);
+    }
+    const matching = await invoke('POST', '/reconciliations/:reconciliationId/statement-import',
+      { ...base, reconciliationId: 'recon-test' }, { reconciliationId: 'recon-test' });
+    assert.equal(matching.statusCode, 503);
+    assert.equal(matching.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+  });
+
   await test('statement import retains required identifier validation', async () => {
     const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import',
       { statementEndingBalance: 100 }, { reconciliationId: 'recon-test' });
