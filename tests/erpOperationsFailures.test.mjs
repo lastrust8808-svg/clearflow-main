@@ -435,7 +435,8 @@ try {
   await test('completed delivery requires an actual transport receipt identifier', async () => {
     const valid = accepted[0].job;
     for (const deliveryReceiptId of [undefined, null, '', '  ', 42, 'x'.repeat(256),
-      'provider\nreceipt', 'provider\u200breceipt', '\u200b', 'provider\u0000receipt']) {
+      'provider\nreceipt', 'provider\u200breceipt', '\u200b', 'provider\u0000receipt',
+      ' provider-receipt-42', 'provider-receipt-42 ', '\tprovider-receipt-42']) {
       globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
         success: true, job: { ...valid, deliveryReceiptId },
       }) });
