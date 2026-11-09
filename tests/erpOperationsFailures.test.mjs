@@ -633,7 +633,7 @@ try {
   });
 
   await test('delivery receipt rejects ambiguous Unicode without false sent confirmation', async () => {
-    for (const deliveryReceiptId of ['receipt\\uFDD0', 'receipt\\u{1FFFE}', 'receipt\\u2028', 'receipt\\uD800', 'rece\\u0301ipt']) {
+    for (const deliveryReceiptId of ['receipt\uFDD0', 'receipt\u{1FFFE}', 'receipt\u2028', 'receipt\uD800', 'rece\u0301ipt']) {
       globalThis.fetch = async () => ({
         ok: true, status: 200,
         json: async () => ({ success: true, job: { ...accepted[0].job, deliveryReceiptId } }),
