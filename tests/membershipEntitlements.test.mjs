@@ -512,3 +512,14 @@ test('decomposed Unicode cannot create visually identical billing identity alias
   })], asOf);
   assert.equal(accepted.entitled, true);
 });
+
+// Invisible Unicode separators must not create lookalike tenant or payment IDs.
+test('Unicode separators in authenticated scope and billing identities fail closed', () => {
+  for (const separator of ['\u00a0', '\u2028', '\u2029', '\u2007', '\u3000']) {
+    assert.throws(() => project({ ...scope, tenantId: 'tenant' + separator + 'a' }, [], asOf), /canonical/);
+    assert.throws(() => project(scope, [paid('evt' + separator + 'paid')], asOf), /canonical/);
+    assert.throws(() => project(scope, [paid('evt-paid', { invoiceId: 'inv' + separator + '1' })], asOf), /canonical/);
+    assert.throws(() => project(scope, [paid('evt-paid', { settlementId: 'settle' + separator + '1' })], asOf), /canonical/);
+  }
+  assert.equal(project(scope, [paid()], asOf).entitled, true);
+});
