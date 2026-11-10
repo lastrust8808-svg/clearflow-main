@@ -32,3 +32,16 @@ test('a separate provider reference does not quarantine a valid USD pair', () =>
   assert.equal(result.candidates[0].status, 'review_required');
   assert.deepEqual(result.ambiguous, []);
 });
+
+// A shared provider reference does not authorize conversion or FX matching.
+test('posted cross-currency equal-and-opposite amounts never form a transfer', () => {
+  const transactions = [
+    row('usd-debit', 'checking', -1500, 'USD'),
+    row('eur-credit', 'foreign', 1500, 'EUR'),
+  ];
+  const snapshot = structuredClone(transactions);
+  const result = proposeBankTransferCandidates({ tenantId: 'tenant-a', transactions });
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, []);
+  assert.deepEqual(transactions, snapshot);
+});
