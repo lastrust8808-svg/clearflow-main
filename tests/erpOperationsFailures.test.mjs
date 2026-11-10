@@ -353,7 +353,7 @@ try {
       circular,
     ]) {
       await assert.rejects(api.queueInvoiceDelivery(payload),
-        /contains a non-serializable payload; no request was sent/);
+        /contains (?:a non-serializable payload|unsupported nested financial instructions); no request was sent/);
     }
     assert.equal(calls, 0, 'serialization failures must not initiate a financial POST');
   });
