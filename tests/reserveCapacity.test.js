@@ -589,3 +589,25 @@ test('reserve scope and provenance identifiers enforce bounded length without tr
     assert.equal(calculate([entry('cash-a', 100, { [field]: atLimit })]).unencumberedCashMinor, 100);
   }
 });
+
+
+test('reserve identifier length boundary counts UTF-16 units without splitting supplementary characters', () => {
+  const valid = 'x'.repeat(1022) + String.fromCodePoint(0x1F680);
+  const oversized = 'x'.repeat(1023) + String.fromCodePoint(0x1F680);
+  assert.equal(valid.length, 1024);
+  assert.equal(oversized.length, 1025);
+  for (const field of ['tenantId', 'entityId', 'trustId']) {
+    const accepted = calculateReserveCapacity({
+      ...base, [field]: valid, asOfAt, maxEvidenceAgeMs: 3600000, entries: [],
+    });
+    assert.equal(accepted[field], valid);
+    assert.throws(() => calculateReserveCapacity({
+      ...base, [field]: oversized, asOfAt, maxEvidenceAgeMs: 3600000, entries: [],
+    }), /maximum identifier length/);
+  }
+  for (const field of ['id', 'assetId', 'evidenceRef']) {
+    assert.equal(calculate([entry('cash-a', 100, { [field]: valid })]).unencumberedCashMinor, 100);
+    assert.throws(() => calculate([entry('cash-a', 100, { [field]: oversized })]),
+      /maximum identifier length/);
+  }
+});
