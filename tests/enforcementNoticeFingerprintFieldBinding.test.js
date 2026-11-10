@@ -34,3 +34,15 @@ test('omitting delivery fields is distinct from an explicit partial claim', () =
   assert.equal(partialTimestamp.status, 'incomplete');
   assert.equal(new Set([absent.sha256, partialReference.sha256, partialTimestamp.sha256]).size, 3);
 });
+
+test('canonical fingerprint is independent of property insertion order but binds optional preparation chronology', () => {
+  const original = fingerprint(packet);
+  const reordered = Object.fromEntries(Object.entries(packet).reverse());
+  assert.equal(fingerprint(reordered).sha256, original.sha256);
+  const { preparedAt, ...withoutPreparation } = packet;
+  const missing = fingerprint(withoutPreparation);
+  assert.equal(missing.status, 'incomplete');
+  assert.equal(missing.reason, 'preparation_timestamp_missing');
+  assert.notEqual(missing.sha256, original.sha256);
+  assert.equal(missing.serviceVerified, false);
+});
