@@ -234,6 +234,21 @@ test('reservation rejects empty accounting property names before database access
   assert.equal(db.calls, 0);
 });
 
+test('reservation rejects Unicode noncharacters in nested accounting field names before SQL', async () => {
+  const db = fakeDatabase();
+  for (const codepoint of [0xfdd0, 0xffff, 0x1fffe, 0x10ffff]) {
+    const hidden = String.fromCodePoint(codepoint);
+    for (const payload of [
+      { ['amount' + hidden + 'Cents']: 125 },
+      { invoiceId: 'invoice-123', details: { ['recipient' + hidden]: 'test@example.test' } },
+      { lines: [{ ['quantity' + hidden]: 2 }] },
+    ]) {
+      await assert.rejects(reserve({ db, ...args, payload }), /unsafe Unicode property name/);
+    }
+  }
+  assert.equal(db.calls, 0, 'unsafe accounting keys must never reserve a durable job');
+});
+
 test('reservation rejects accessors without invoking them', async () => {
   const db = fakeDatabase();
   let invoked = 0;
