@@ -176,3 +176,21 @@ test('pending and posted copies of one provider event cannot create a transfer c
   assert.throws(() => review([posted, pending]), /Duplicate provider transaction identity/);
   assert.throws(() => review([pending, posted]), /Duplicate provider transaction identity/);
 });
+
+
+test('a pending collision quarantines only its own reference within the same connection', () => {
+  const blockedDebit = row('checking', 'blocked-debit', -1250);
+  const blockedCredit = row('savings', 'blocked-credit', 1250);
+  const pending = { ...row('pending-account', 'pending-event', 900), status: 'pending' };
+  const safeDebit = { ...row('checking', 'safe-debit', -2400), providerReference: 'independent-transfer' };
+  const safeCredit = { ...row('savings', 'safe-credit', 2400), providerReference: 'independent-transfer' };
+  const first = review([blockedDebit, safeCredit, pending, blockedCredit, safeDebit]);
+  const reordered = review([safeDebit, blockedCredit, pending, safeCredit, blockedDebit]);
+  assert.deepEqual(first, reordered);
+  assert.equal(first.candidates.length, 1);
+  assert.equal(first.candidates[0].providerReference, 'independent-transfer');
+  assert.equal(first.candidates[0].status, 'review_required');
+  assert.deepEqual(first.ambiguous.map((entry) => entry.transactionId),
+    ['blocked-debit', 'blocked-credit']);
+  assert.deepEqual(first.ambiguous.map((entry) => entry.candidateCount), [1, 1]);
+});
