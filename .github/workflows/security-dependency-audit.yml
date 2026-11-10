@@ -32,7 +32,7 @@ jobs:
           result=$?
           set -e
           # Validate that npm returned a real audit report; network/registry failures are not vulnerability evidence.
-          if ! node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); if (!a.metadata || !a.metadata.vulnerabilities || typeof a.metadata.vulnerabilities.high !== "number" || typeof a.metadata.vulnerabilities.critical !== "number") process.exit(1)' ; then
+          if ! node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); if (!a.metadata || !a.metadata.vulnerabilities || !["critical","high","moderate","low"].every(k=>Number.isSafeInteger(a.metadata.vulnerabilities[k]) && a.metadata.vulnerabilities[k]>=0)) process.exit(1)' ; then
             echo "Dependency audit did not return valid vulnerability metadata; treat as an audit execution failure." >&2
             exit 2
           fi
@@ -40,6 +40,11 @@ jobs:
           # npm audit returns nonzero for findings above the threshold; never mask other failures.
           if [ "$result" -ne 0 ]; then
             echo "Dependency audit failed (exit $result); see uploaded JSON report." >&2
+          fi
+          # Enforce the release gate from validated counts, even if npm unexpectedly exits zero.
+          if node -e 'const a=require("./dependency-audit.json"); process.exit(a.metadata.vulnerabilities.critical+a.metadata.vulnerabilities.high>0 ? 0 : 1)'; then
+            echo "High/critical production dependency findings block release." >&2
+            exit 1
           fi
           exit "$result"
       - name: Upload dependency audit evidence
