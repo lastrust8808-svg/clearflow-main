@@ -662,3 +662,24 @@ test('non-enumerable workspace fields cannot disappear during OAuth persistence'
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+test('custom array properties are rejected before OAuth workspace persistence', () => {
+  const base = pending('attempt-B');
+  for (const property of ['workspaceId', '01', '4294967295']) {
+    const workspaces = [{ id: 'owner' }];
+    workspaces[property] = 'must-not-disappear';
+    const active = { ...base, workspaces };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      invoked = true;
+      return { ...base, status: 'authenticated' };
+    }), active);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspaces,
+    })), base);
+  }
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: [{ id: 'owner' }],
+  })).status, 'authenticated');
+});
