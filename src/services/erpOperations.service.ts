@@ -223,6 +223,14 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   }
   if (!isRecord(wirePayload) ||
       !requiredFields[label].every((field) => wirePayload[field] === payload[field]) ||
+      // Invoice transport details are delivery instructions. A custom toJSON
+      // hook must not redirect an email or internal delivery after the user
+      // reviewed the destination, even when invoice identities are unchanged.
+      (label === 'Invoice delivery' &&
+        ['deliveryMethod', 'recipientEmail', 'internalDeliveryTarget',
+         'emailSubject', 'emailTextBody', 'emailHtmlBody', 'replyTo',
+         'attachmentFileName', 'attachmentHtml', 'fromName'].some(
+          (field) => wirePayload[field] !== payload[field])) ||
       // Statement amounts are financial facts, not optional metadata. A custom
       // toJSON hook must not substitute or omit a previously validated balance.
       (label === 'Statement import' &&
