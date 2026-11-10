@@ -773,6 +773,25 @@ try {
     assert.equal(requests, 0);
   });
 
+  await test('nested financial instructions cannot be silently changed by JSON serialization', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      for (const nested of [
+        { approved: true, reviewer: undefined },
+        { approved: true, [Symbol('tenant')]: 'other-entity' },
+        { toJSON() { return { approved: false }; } },
+        ['recipient', undefined],
+      ]) {
+        await assert.rejects(
+          operations[index]({ ...payloads[index], approvalMetadata: nested }),
+          /unsupported nested financial instructions; no request was sent/,
+        );
+      }
+    }
+    assert.equal(requests, 0, 'nested instructions must not reach the network');
+  });
+
   await test('financial scalar instructions cannot disappear or mutate during JSON serialization', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
