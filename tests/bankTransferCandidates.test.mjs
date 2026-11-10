@@ -549,3 +549,24 @@ test('pending reference collisions are isolated by provider and connection names
   });
   assert.deepEqual(plan([...posted, sameConnection]).candidates, []);
 });
+
+
+test('out-of-window posted evidence with a reused connection reference quarantines an otherwise valid pair', () => {
+  const transactions = [
+    row('checking', 'debit', -725, { providerReference: 'statement-batch' }),
+    row('savings', 'credit', 725, { providerReference: 'statement-batch' }),
+    row('reserve', 'historical-posted', 50, {
+      providerReference: 'statement-batch', postedDate: '2026-10-01',
+    }),
+  ];
+  const before = structuredClone(transactions);
+  const result = plan(transactions);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.ambiguous, [
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'checking', transactionId: 'debit', candidateCount: 1 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'reserve', transactionId: 'historical-posted', candidateCount: 0 },
+    { provider: 'plaid', connectionId: 'item-a', accountId: 'savings', transactionId: 'credit', candidateCount: 1 },
+  ]);
+  assert.deepEqual(plan([...transactions].reverse()), result);
+  assert.deepEqual(transactions, before);
+});
