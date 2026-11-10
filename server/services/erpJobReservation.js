@@ -161,7 +161,12 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       if (/\p{Cs}/u.test(key)) {
         throw new TypeError('ERP job payload contains malformed Unicode');
       }
-      if (!key || /[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(key) || key !== key.normalize('NFC')) {
+      if (!key || /[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(key) || key !== key.normalize('NFC') ||
+          [...key].some(char => {
+            const cp = char.codePointAt(0);
+            return (cp >= 0xfdd0 && cp <= 0xfdef) ||
+              (cp >= 0xfffe && (cp & 0xffff) >= 0xfffe);
+          })) {
         // Canonically equivalent JSON keys must not be distinct accounting
         // fields or idempotency inputs (e.g. composed vs decomposed accents).
         // Keep legitimate NFC international labels available.
