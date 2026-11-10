@@ -13,6 +13,16 @@ on:
       - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedCheckpointCasEnvelope.test.mjs'
+      - 'tests/bankFeedCheckpointCasResult.test.mjs'
+      - 'tests/bankFeedCheckpointCursorNoncharacters.test.mjs'
+      - 'tests/bankFeedDuplicateCheckpointRows.test.mjs'
+      - 'tests/bankFeedDuplicatePersistedEntries.test.mjs'
+      - 'tests/bankFeedOutgoingBatchBounds.test.mjs'
+      - 'tests/bankFeedOutgoingScopeMutation.test.mjs'
+      - 'tests/bankFeedPersistedBatchBounds.test.mjs'
+      - 'tests/bankFeedScopeNoncharacters.test.mjs'
+      - 'tests/bankFeedUpsertAcknowledgement.test.mjs'
       - 'tests/bankFeedAtomicCommit.test.mjs'
       - 'tests/bankTransferCandidates.test.mjs'
       - 'tests/bankTransferBatchLimit.test.mjs'
@@ -42,6 +52,16 @@ on:
       - 'tests/bankFeedPostgresSchema.test.sql'
       - 'tests/reconciliationCloseGuards.test.mjs'
       - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedCheckpointCasEnvelope.test.mjs'
+      - 'tests/bankFeedCheckpointCasResult.test.mjs'
+      - 'tests/bankFeedCheckpointCursorNoncharacters.test.mjs'
+      - 'tests/bankFeedDuplicateCheckpointRows.test.mjs'
+      - 'tests/bankFeedDuplicatePersistedEntries.test.mjs'
+      - 'tests/bankFeedOutgoingBatchBounds.test.mjs'
+      - 'tests/bankFeedOutgoingScopeMutation.test.mjs'
+      - 'tests/bankFeedPersistedBatchBounds.test.mjs'
+      - 'tests/bankFeedScopeNoncharacters.test.mjs'
+      - 'tests/bankFeedUpsertAcknowledgement.test.mjs'
       - 'tests/bankFeedAtomicCommit.test.mjs'
       - 'tests/bankTransferCandidates.test.mjs'
       - 'tests/bankTransferBatchLimit.test.mjs'
@@ -75,7 +95,7 @@ jobs:
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
           node --check server/services/bankFeedPostgresStore.js
           node --check server/services/bankTransferCandidates.js
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs tests/bankTransferCandidates.test.mjs tests/bankTransferBatchLimit.test.mjs tests/bankTransferBatchBounds.test.mjs tests/bankTransferCalendarBoundary.test.mjs tests/bankTransferReferenceCollision.test.mjs tests/bankTransferIdentityUnicode.test.mjs tests/bankTransferCollisionCapacity.test.mjs tests/bankTransferMaxCapacity.test.mjs tests/bankTransferPendingConnectionIsolation.test.mjs tests/bankTransferTenantBatchIsolation.test.mjs tests/bankTransferTenantHiddenEvidence.test.mjs tests/bankTransferLeapYearBoundary.test.mjs
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs tests/bankTransferCandidates.test.mjs tests/bankTransferBatchLimit.test.mjs tests/bankTransferBatchBounds.test.mjs tests/bankTransferCalendarBoundary.test.mjs tests/bankTransferReferenceCollision.test.mjs tests/bankTransferIdentityUnicode.test.mjs tests/bankTransferCollisionCapacity.test.mjs tests/bankTransferMaxCapacity.test.mjs tests/bankTransferPendingConnectionIsolation.test.mjs tests/bankTransferTenantBatchIsolation.test.mjs tests/bankTransferTenantHiddenEvidence.test.mjs tests/bankTransferLeapYearBoundary.test.mjs tests/bankFeedCheckpointCasEnvelope.test.mjs tests/bankFeedCheckpointCasResult.test.mjs tests/bankFeedCheckpointCursorNoncharacters.test.mjs tests/bankFeedDuplicateCheckpointRows.test.mjs tests/bankFeedDuplicatePersistedEntries.test.mjs tests/bankFeedOutgoingBatchBounds.test.mjs tests/bankFeedOutgoingScopeMutation.test.mjs tests/bankFeedPersistedBatchBounds.test.mjs tests/bankFeedScopeNoncharacters.test.mjs tests/bankFeedUpsertAcknowledgement.test.mjs
 
   banking-postgres-schema:
     runs-on: ubuntu-latest
