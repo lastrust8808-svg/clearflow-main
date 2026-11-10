@@ -59,3 +59,19 @@ test('digest comparison binds evidence without elevating its legal status', () =
   assert.equal(incomplete.status, 'incomplete');
   assert.equal(incomplete.serviceVerified, false);
 });
+
+// Every accepted field must be cryptographically bound, not merely the delivery fields.
+test('digest comparison rejects substitution of every notice identity and evidence field', () => {
+  const expected = fingerprint(base).sha256;
+  const substitutions = {
+    tenantId: 'tenant-2', trustId: 'trust-2', noteId: 'note-2',
+    noticeId: 'notice-2', noticeVersionId: 'version-2',
+    preparedEvidenceRef: 'prepared-2', preparedAt: '2026-11-03T09:00:00.001Z',
+    deliveryEvidenceRef: 'delivery-2', deliveredAt: '2026-11-03T10:00:00.001Z',
+    evaluatedAt: '2026-11-03T11:00:00.001Z'
+  };
+  for (const [field, replacement] of Object.entries(substitutions)) {
+    assert.equal(matches({...base, [field]: replacement}, expected), false, field);
+  }
+  assert.equal(matches(Object.fromEntries(Object.entries(base).reverse()), expected), true);
+});
