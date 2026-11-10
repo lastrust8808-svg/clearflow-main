@@ -792,6 +792,25 @@ try {
     assert.equal(requests, 0, 'nested instructions must not reach the network');
   });
 
+  await test('accessor-backed financial instructions fail before network submission', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of ['approvalCode', 'entityOverride', 'toJSON']) {
+        const request = { ...payloads[index] };
+        let reads = 0;
+        Object.defineProperty(request, field, {
+          enumerable: true, configurable: true,
+          get() { reads++; return field === 'toJSON' ? () => request : 'approved'; },
+        });
+        await assert.rejects(operations[index](request),
+          /accessor-backed financial instructions; no request was sent/);
+        assert.equal(reads, 0, 'accessor must not execute');
+      }
+    }
+    assert.equal(requests, 0, 'accessor instructions must not reach the network');
+  });
+
   await test('function-valued financial instructions fail before network submission', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
