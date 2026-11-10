@@ -92,3 +92,15 @@ test('fingerprint preserves contradictory delivery chronology as incomplete evid
     assert.equal(matches(base, result.sha256), false);
   }
 });
+
+
+test('complete delivery claim without preparation timestamp remains incomplete and fingerprint-bound', () => {
+  const { preparedAt, ...withoutPreparationTime } = base;
+  const result = fingerprint(withoutPreparationTime);
+  assert.equal(result.status, 'incomplete');
+  assert.equal(result.reason, 'preparation_timestamp_missing');
+  assert.equal(result.serviceVerified, false);
+  assert.equal(matches(withoutPreparationTime, result.sha256), true);
+  assert.equal(matches(base, result.sha256), false);
+  assert.notEqual(result.sha256, fingerprint(base).sha256);
+});
