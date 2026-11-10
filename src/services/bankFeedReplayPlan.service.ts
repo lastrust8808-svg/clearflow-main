@@ -47,9 +47,17 @@ export interface FeedReplayInput {
   events: FeedReplayEvent[];
 }
 
+// Provider identifiers are persisted as exact replay keys. Reject noncanonical
+// Unicode and noncharacters so equivalent feed events cannot fork identity.
 const validId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 256 &&
-  value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
+  value === value.trim() && value === value.normalize('NFC') &&
+  value.isWellFormed() &&
+  !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\u2028\u2029]/u.test(value.replaceAll(' ', '')) &&
+  ![...value].some((character) => {
+    const code = character.codePointAt(0)!;
+    return (code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe;
+  });
 
 const keyOf = (accountId: string, transactionId: string): string =>
   JSON.stringify([accountId, transactionId]);
