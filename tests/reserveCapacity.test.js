@@ -650,3 +650,20 @@ test('pledged cash aggregate overflow fails closed even when each pledge is vali
   assert.equal(mixed.noncashCollateralMinor, max);
   assert.equal(mixed.unencumberedCashMinor, max);
 });
+
+
+test('per-asset cash encumbrance overflow fails closed before availability calculation', () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  // Each reported encumbrance is individually representable, but their sum
+  // is not. It must never wrap, round, or become apparently available cash.
+  assert.throws(() => calculate([
+    entry('cash-encumbered', max, { restrictedMinor: max, pledgedMinor: 1 }),
+  ]), /encumberedMinor.*safe integer range/);
+  // At the exact boundary, fully encumbered cash contributes no availability.
+  const boundary = calculate([
+    entry('cash-boundary', max, { restrictedMinor: max - 1, pledgedMinor: 1 }),
+  ]);
+  assert.equal(boundary.cashRestrictedMinor, max - 1);
+  assert.equal(boundary.cashPledgedMinor, 1);
+  assert.equal(boundary.unencumberedCashMinor, 0);
+});
