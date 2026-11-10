@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { assessEnforcementNoticeEvidence } from './enforcementNoticeGate.js';
 
 /**
@@ -28,4 +28,11 @@ export function fingerprintEnforcementNoticeEvidence(packet) {
     reason: assessment.reason,
     serviceVerified: false
   });
+}
+
+/** Compare an expected digest to a freshly validated packet; never proves service. */
+export function matchesEnforcementNoticeEvidenceFingerprint(packet, expectedSha256) {
+  if (typeof expectedSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new TypeError('Canonical SHA-256 digest required');
+  const actual = fingerprintEnforcementNoticeEvidence(packet).sha256;
+  return timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expectedSha256, 'hex'));
 }
