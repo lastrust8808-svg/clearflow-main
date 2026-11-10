@@ -19,7 +19,7 @@ for (const [name, makeResult] of [
   ['string row count', () => ({ rowCount: '1' })],
   ['null envelope', () => null],
   ['Proxy envelope', () => new Proxy({ rowCount: 1 }, {
-    get() { throw Error('Proxy get executed'); },
+    get(_target, key) { if (key === 'then') return undefined; throw Error('Proxy get executed'); },
     getOwnPropertyDescriptor() { throw Error('Proxy descriptor executed'); },
   })],
   ['getter-backed row count', () => Object.defineProperty({}, 'rowCount', {
