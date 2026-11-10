@@ -742,6 +742,18 @@ try {
 
 
 
+  await test('symbol-keyed financial instructions fail before network submission', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      const request = { ...payloads[index] };
+      request[Symbol('approval-instruction')] = 'approved';
+      await assert.rejects(operations[index](request),
+        /contains symbol-keyed instructions; no request was sent/);
+    }
+    assert.equal(requests, 0);
+  });
+
   await test('financial scalar instructions cannot disappear or mutate during JSON serialization', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
