@@ -224,6 +224,14 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       field !== 'toJSON' && value !== null && typeof value === 'object')) {
     throw new TypeError(`${label} contains unsupported nested financial instructions; no request was sent.`);
   }
+  // JSON.stringify silently omits function-valued own fields. Such values
+  // may carry approval or delivery instructions that would never reach the
+  // backend; reject them before any network request. The special toJSON hook
+  // is checked separately against the exact wire payload below.
+  if (Object.entries(payload).some(([field, value]) =>
+      field !== 'toJSON' && typeof value === 'function')) {
+    throw new TypeError(`${label} contains unsupported function-valued financial instructions; no request was sent.`);
+  }
   // Serialize before opening the network boundary. Circular objects and BigInt
   // cannot be represented as JSON; reporting an unknown remote outcome for
   // these local failures would incorrectly suggest a job might have committed.
