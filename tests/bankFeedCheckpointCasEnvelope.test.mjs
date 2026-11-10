@@ -27,7 +27,7 @@ function fakePool(result) {
 test('checkpoint CAS rejects Proxy SQL result without executing traps', async () => {
   let trapCalls = 0;
   const result = new Proxy({ rowCount: 1 }, {
-    get() { trapCalls++; throw Error('unexpected getter'); },
+    get(_target, key) { if (key === 'then') return undefined; trapCalls++; throw Error('unexpected getter'); },
     getOwnPropertyDescriptor() { trapCalls++; throw Error('unexpected descriptor'); },
   });
   const pool = fakePool(result);
