@@ -25,8 +25,18 @@ function rejectInvalidErpPayload(res, error, code) {
   return res.status(400).json({ success: false, ...(code ? { code } : {}), error });
 }
 
+function containsUnicodeNoncharacter(value) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if ((codePoint >= 0xfdd0 && codePoint <= 0xfdef) ||
+        (codePoint & 0xfffe) === 0xfffe) return true;
+  }
+  return false;
+}
+
 function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
+    !containsUnicodeNoncharacter(value) &&
     Boolean(value.trim()) && value === value.trim() &&
     value === value.normalize('NFC') &&
     !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
