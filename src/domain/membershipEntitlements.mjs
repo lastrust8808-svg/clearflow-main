@@ -21,12 +21,23 @@ const ORDER = {
   subscription_cancelled: 4,
 };
 
+function hasUnicodeNoncharacter(value) {
+  // Unicode reserves U+FDD0..FDEF and the final two code points of every
+  // plane. They are not stable human-readable billing identity characters.
+  for (const char of value) {
+    const code = char.codePointAt(0);
+    if ((code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe) return true;
+  }
+  return false;
+}
+
 function required(value, label) {
   // Ambiguous or invisible billing identities must not become entitlement
   // keys. In particular, whitespace and Unicode formatting controls can
   // make distinct tenant, invoice, and settlement IDs look identical in logs.
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
       value !== value.trim() || value !== value.normalize('NFC') ||
+      hasUnicodeNoncharacter(value) ||
       /[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new TypeError(label + ' must be a canonical nonempty string');
   }
