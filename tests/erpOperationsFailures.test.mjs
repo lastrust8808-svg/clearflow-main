@@ -742,6 +742,25 @@ try {
 
 
 
+  await test('non-enumerable financial instructions fail before network submission', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of ['approvalInstruction', 'entityOverride']) {
+        const request = { ...payloads[index] };
+        Object.defineProperty(request, field, {
+          value: 'reviewed-but-hidden', enumerable: false, configurable: true,
+        });
+        await assert.rejects(operations[index](request),
+          /contains hidden financial instructions; no request was sent/);
+      }
+    }
+    assert.equal(requests, 0, 'hidden instructions must not be silently dropped');
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[1] });
+    assert.deepEqual(await api.queueInvoiceExport({ ...payloads[1] }), accepted[1],
+      'ordinary enumerable request fields must remain valid');
+  });
+
   await test('symbol-keyed financial instructions fail before network submission', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
