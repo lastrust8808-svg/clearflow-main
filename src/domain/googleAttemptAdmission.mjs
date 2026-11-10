@@ -75,6 +75,9 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
   const copy = Array.isArray(value) ? [] : Object.create(proto);
   seen.set(value, copy);
   for (const key of Reflect.ownKeys(value)) {
+    // JSON persistence ignores symbol-keyed fields, even when their values
+    // are serializable. Never admit a workspace snapshot that loses them.
+    if (typeof key === 'symbol') throw new TypeError('Symbol-keyed admission state');
     if (Array.isArray(value) && key === 'length') continue;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
