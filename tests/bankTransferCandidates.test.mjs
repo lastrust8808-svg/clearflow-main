@@ -524,3 +524,28 @@ test('bank transfer review enforces the 1000-record batch cap without partial ca
   assert.throws(() => plan(overflow), /Invalid authorized transfer scope or batch/);
   assert.equal(overflow.length, 1001);
 });
+
+test('pending reference collisions are isolated by provider and connection namespace', () => {
+  const posted = [
+    row('checking', 'debit-isolated', -1400, { providerReference: 'provider-ref' }),
+    row('savings', 'credit-isolated', 1400, { providerReference: 'provider-ref' }),
+  ];
+  for (const pending of [
+    row('reserve', 'pending-other-provider', 300, {
+      provider: 'mercury', status: 'pending', providerReference: 'provider-ref',
+    }),
+    row('reserve', 'pending-other-connection', 300, {
+      connectionId: 'item-other', status: 'pending', providerReference: 'provider-ref',
+    }),
+  ]) {
+    const forward = plan([...posted, pending]);
+    assert.equal(forward.candidates.length, 1);
+    assert.equal(forward.candidates[0].status, 'review_required');
+    assert.deepEqual(forward.ambiguous, []);
+    assert.deepEqual(plan([pending, ...posted].reverse()), forward);
+  }
+  const sameConnection = row('reserve', 'pending-same-connection', 300, {
+    status: 'pending', providerReference: 'provider-ref',
+  });
+  assert.deepEqual(plan([...posted, sameConnection]).candidates, []);
+});
