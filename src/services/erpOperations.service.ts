@@ -217,6 +217,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   if (Object.getOwnPropertySymbols(payload).length > 0) {
     throw new TypeError(`${label} contains symbol-keyed instructions; no request was sent.`);
   }
+  // ERP route contracts accept scalar fields only. Nested arrays/records can
+  // silently lose approval or delivery instructions (undefined, symbols,
+  // custom toJSON) without affecting top-level scalar comparisons.
+  if (Object.entries(payload).some(([field, value]) =>
+      field !== 'toJSON' && value !== null && typeof value === 'object')) {
+    throw new TypeError(`${label} contains unsupported nested financial instructions; no request was sent.`);
+  }
   // Serialize before opening the network boundary. Circular objects and BigInt
   // cannot be represented as JSON; reporting an unknown remote outcome for
   // these local failures would incorrectly suggest a job might have committed.
