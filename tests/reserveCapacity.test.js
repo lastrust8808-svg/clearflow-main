@@ -556,7 +556,7 @@ test('reserve record symbol accessors are rejected without invoking metadata get
 });
 
 test('reserve scope, asset and evidence IDs reject Unicode noncharacters across planes', () => {
-  const invalid = ['id-\\uFDD0', 'id-\\uFFFF', 'id-\\u{1FFFE}', 'id-\\u{10FFFF}'];
+  const invalid = [0xFDD0, 0xFFFF, 0x1FFFE, 0x10FFFF].map(cp => 'id-' + String.fromCodePoint(cp));
   for (const value of invalid) {
     for (const field of ['tenantId', 'entityId', 'trustId']) {
       assert.throws(() => calculateReserveCapacity({
@@ -568,5 +568,5 @@ test('reserve scope, asset and evidence IDs reject Unicode noncharacters across 
         /Unicode noncharacters/, field);
     }
   }
-  assert.equal(calculate([entry('cash-a', 100, { assetId: 'asset-\\u{1F680}' })]).unencumberedCashMinor, 100);
+  assert.equal(calculate([entry('cash-a', 100, { assetId: 'asset-' + String.fromCodePoint(0x1F680) })]).unencumberedCashMinor, 100);
 });
