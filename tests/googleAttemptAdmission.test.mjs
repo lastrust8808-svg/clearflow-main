@@ -623,3 +623,23 @@ test('sparse workspace arrays cannot silently become null entries during OAuth p
   }));
   assert.equal(valid.status, 'pending-drive-check');
 });
+
+test('symbol-keyed workspace metadata fails closed before JSON persistence can omit it', () => {
+  const active = pending('attempt-B');
+  const hidden = Symbol('workspace-audit');
+  const workspace = { id: 'owner', [hidden]: 'must-not-disappear' };
+  let reducerCalled = false;
+  const current = { ...active, workspace };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...active, status: 'authenticated' };
+  }), current);
+  assert.equal(reducerCalled, false);
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => ({
+    ...active, status: 'authenticated', workspace,
+  })), active);
+  const valid = admitGoogleAttemptResult(active, 'attempt-B', () => ({
+    ...active, status: 'pending-drive-check', workspace: { id: 'owner' },
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
