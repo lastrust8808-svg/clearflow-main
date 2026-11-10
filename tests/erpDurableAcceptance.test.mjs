@@ -367,7 +367,9 @@ try {
   await test('ERP HTTP routes reject ambiguous accounting identities before durable-job admission', async () => {
     const invalid = [null, 0, true, {}, [], '', ' ', ' padded', 'padded ',
       'line\nbreak', 'zero\u200bwidth', 'bidi\u202ealias',
-      'cafe\u0301', 'embedded space', '\ud800', 'x'.repeat(256)];
+      'cafe\u0301', 'embedded space', '\ud800', '\ufdd0', '\ufdef', '\ufffe', '\uffff',
+      String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff),
+      'x'.repeat(256)];
     const requests = [
       { method: 'POST', path: '/invoice-deliveries',
         body: { ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid' },
