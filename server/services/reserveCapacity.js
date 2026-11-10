@@ -119,9 +119,13 @@ function requiredString(value, field) {
   }
   // Unicode noncharacters are not valid durable audit identifiers, including
   // U+FDD0..FDEF and the final two code points of every Unicode plane.
-  // Reject them consistently across tenant, asset and provenance keys.
-  if (/[\uFDD0-\uFDEF\uFFFE\uFFFF]|[\uD800-\uDBFF][\uDFFE\uDFFF]/u.test(value)) {
-    throw new TypeError(`${field} must not contain Unicode noncharacters`);
+  // Iterate Unicode scalar values so supplementary-plane endings are covered.
+  for (const scalar of value) {
+    const codePoint = scalar.codePointAt(0);
+    if ((codePoint >= 0xFDD0 && codePoint <= 0xFDEF) ||
+        (codePoint & 0xFFFE) === 0xFFFE) {
+      throw new TypeError(`${field} must not contain Unicode noncharacters`);
+    }
   }
   // Canonically equivalent identifiers must never count as distinct assets,
   // evidence references or trust scopes in a reserve ledger. Reject aliases
