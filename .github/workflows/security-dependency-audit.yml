@@ -36,7 +36,7 @@ jobs:
             echo "Dependency audit did not return valid vulnerability metadata; treat as an audit execution failure." >&2
             exit 2
           fi
-          node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); const v=a.metadata.vulnerabilities; const line=`Production dependency audit: critical=${v.critical}, high=${v.high}, moderate=${v.moderate}, low=${v.low}`; console.log(line); if(process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,line+"\\n");'
+          node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); const v=a.metadata.vulnerabilities; const line=`Production dependency audit: critical=${v.critical}, high=${v.high}, moderate=${v.moderate}, low=${v.low}`; console.log(line); if(process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,line+"\n");'
           # npm audit returns nonzero for findings above the threshold; never mask other failures.
           if [ "$result" -ne 0 ]; then
             echo "Dependency audit failed (exit $result); see uploaded JSON report." >&2
@@ -53,5 +53,5 @@ jobs:
         with:
           name: production-dependency-audit-json
           path: dependency-audit.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
