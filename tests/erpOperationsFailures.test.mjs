@@ -607,7 +607,7 @@ try {
     for (const deliveryMethod of [undefined, '', 'manual', 'unknown']) {
       await assert.rejects(
         api.queueInvoiceDelivery({ ...payloads[0], deliveryMethod }),
-        /not confirmed/,
+        deliveryMethod === undefined ? /no request was sent/ : /not confirmed/,
       );
     }
   });
@@ -616,11 +616,11 @@ try {
     replyWith({ ...accepted[0].job });
     await assert.rejects(
       api.queueInvoiceDelivery({ ...payloads[0], recipientEmail: undefined }),
-      /not confirmed/,
+      /no request was sent/,
     );
     await assert.rejects(
       api.queueInvoiceDelivery({ ...payloads[0], deliveryMethod: 'internal_user', internalDeliveryTarget: undefined }),
-      /not confirmed/,
+      /no request was sent/,
     );
   });
 
