@@ -10,6 +10,7 @@ on:
       - server/utils/storageSegment.js
       - tests/storageSegment.test.mjs
       - tests/storageHangulNormalization.test.mjs
+      - tests/storageNoncharacterPlanes.test.mjs
       - tests/accountStoragePathContainment.test.mjs
       - .github/workflows/security-storage-path-guards.yml
 
@@ -28,4 +29,4 @@ jobs:
           node --check server/utils/storageSegment.js
           node --check server/services/accountStorage.js
       - name: Run path traversal and storage integration regressions
-        run: node --test tests/storageSegment.test.mjs tests/storageHangulNormalization.test.mjs tests/accountStoragePathContainment.test.mjs
+        run: node --test tests/storageSegment.test.mjs tests/storageHangulNormalization.test.mjs tests/storageNoncharacterPlanes.test.mjs tests/accountStoragePathContainment.test.mjs
