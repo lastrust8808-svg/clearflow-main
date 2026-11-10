@@ -643,3 +643,22 @@ test('symbol-keyed workspace metadata fails closed before JSON persistence can o
   }));
   assert.equal(valid.status, 'pending-drive-check');
 });
+
+
+test('non-enumerable workspace fields cannot disappear during OAuth persistence', () => {
+  const current = pending('attempt-B');
+  for (const key of ['workspaceId', 'billingScope']) {
+    const hidden = { id: 'owner' };
+    Object.defineProperty(hidden, key, { value: 'private', enumerable: false });
+    const active = { ...current, workspace: hidden };
+    let called = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      called = true;
+      return { ...active, status: 'authenticated' };
+    }), active);
+    assert.equal(called, false);
+    const output = { ...current, status: 'authenticated', workspace: hidden };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => output), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
