@@ -194,3 +194,24 @@ test('a pending collision quarantines only its own reference within the same con
     ['blocked-debit', 'blocked-credit']);
   assert.deepEqual(first.ambiguous.map((entry) => entry.candidateCount), [1, 1]);
 });
+
+
+test('a third posted reference collision quarantines only that reference, not an independent pair', () => {
+  const blockedDebit = row('checking', 'blocked-posted-debit', -1250);
+  const blockedCredit = row('savings', 'blocked-posted-credit', 1250);
+  const thirdPosted = row('external', 'third-posted', 700, 'EUR', '2026-11-12');
+  const safeDebit = { ...row('checking', 'independent-debit', -2400), providerReference: 'independent-posted-ref' };
+  const safeCredit = { ...row('savings', 'independent-credit', 2400), providerReference: 'independent-posted-ref' };
+  const input = [blockedDebit, safeCredit, thirdPosted, blockedCredit, safeDebit];
+  const snapshot = structuredClone(input);
+  const first = review(input);
+  const reversed = review([...input].reverse());
+  assert.deepEqual(first, reversed);
+  assert.equal(first.candidates.length, 1);
+  assert.equal(first.candidates[0].providerReference, 'independent-posted-ref');
+  assert.equal(first.candidates[0].status, 'review_required');
+  assert.deepEqual(first.ambiguous.map((entry) => entry.transactionId),
+    ['blocked-posted-debit', 'third-posted', 'blocked-posted-credit']);
+  assert.deepEqual(first.ambiguous.map((entry) => entry.candidateCount), [1, 0, 1]);
+  assert.deepEqual(input, snapshot);
+});
