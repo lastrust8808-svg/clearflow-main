@@ -792,6 +792,23 @@ try {
     assert.equal(requests, 0, 'nested instructions must not reach the network');
   });
 
+  await test('function-valued financial instructions fail before network submission', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of ['approvalCallback', 'deliveryResolver']) {
+        await assert.rejects(
+          operations[index]({ ...payloads[index], [field]: () => 'approved' }),
+          /unsupported function-valued financial instructions; no request was sent/,
+        );
+      }
+    }
+    assert.equal(requests, 0, 'function-valued instructions must not be omitted on wire');
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[1] });
+    assert.deepEqual(await api.queueInvoiceExport({ ...payloads[1] }), accepted[1],
+      'ordinary JSON scalar instructions remain supported');
+  });
+
   await test('financial scalar instructions cannot disappear or mutate during JSON serialization', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
