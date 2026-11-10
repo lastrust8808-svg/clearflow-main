@@ -42,3 +42,17 @@ test('fingerprint rejects unknown fields, symbols, and accessor fields', () => {
   assert.throws(() => fingerprint(accessor), /Unsupported or accessor/);
   assert.equal(reads, 0);
 });
+
+test('fingerprint rejects non-plain evidence packets rather than laundering their prototype', () => {
+  const inherited = Object.create({ inheritedClaim: 'trusted' });
+  Object.assign(inherited, base);
+  assert.throws(() => fingerprint(inherited), /Plain notice packet required/);
+  const nullPrototype = Object.assign(Object.create(null), base);
+  assert.throws(() => fingerprint(nullPrototype), /Plain notice packet required/);
+  class NoticePacket { constructor() { Object.assign(this, base); } }
+  assert.throws(() => fingerprint(new NoticePacket()), /Plain notice packet required/);
+  assert.throws(() => fingerprint(null), /Plain notice packet required/);
+  const proxy = new Proxy({ ...base }, { getPrototypeOf() { throw new Error('prototype-blocked'); } });
+  assert.throws(() => fingerprint(proxy), /prototype-blocked/);
+  assert.equal(fingerprint({ ...base }).serviceVerified, false);
+});
