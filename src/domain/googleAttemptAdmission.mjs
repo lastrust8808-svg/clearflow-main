@@ -44,7 +44,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 
 // Clone ordinary nested records before invoking an untrusted admission reducer.
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
-function snapshotAdmissionState(value, seen = new WeakMap()) {
+function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet()) {
   // Executable values must not be admitted into authentication snapshots.
   if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
     throw new TypeError('Non-serializable admission state');
@@ -58,7 +58,7 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
   if (!value || typeof value !== 'object') return value;
   // Proxy traps can impersonate plain records and run code during cloning.
   if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
-  if (seen.has(value)) return seen.get(value);
+  // Shared references are serializable, but cycles make JSON persistence fail.\n  // Reject cycles before allowing a reducer to advance authentication state.\n  if (active.has(value)) throw new TypeError('Cyclic admission state');\n  if (seen.has(value)) return seen.get(value);
   const proto = Object.getPrototypeOf(value);
   if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
@@ -73,7 +73,7 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
     }
   }
   const copy = Array.isArray(value) ? [] : Object.create(proto);
-  seen.set(value, copy);
+  seen.set(value, copy);\n  active.add(value);
   for (const key of Reflect.ownKeys(value)) {
     // JSON persistence ignores symbol-keyed fields, even when their values
     // are serializable. Never admit a workspace snapshot that loses them.
@@ -92,10 +92,10 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
     if (!descriptor.enumerable) throw new TypeError('Non-enumerable admission state');
     Object.defineProperty(copy, key, {
       ...descriptor,
-      value: snapshotAdmissionState(descriptor.value, seen),
+      value: snapshotAdmissionState(descriptor.value, seen, active),
     });
   }
-  return Object.freeze(copy);
+  active.delete(value);\n  return Object.freeze(copy);
 }
 
 export function admitGoogleAttemptResult(current, attemptId, reducer, expectedStatus = 'pending-gsi') {
