@@ -782,3 +782,16 @@ test('oversized provider pages and account scopes fail before replay allocation'
   });
   assert.equal(boundary.applied, 5000);
 });
+
+
+test('feed replay rejects noncanonical and noncharacter provider identity keys', () => {
+  const invalidIds = ['cafe\u0301', 'id\uFDD0', 'id\u{1FFFE}', 'id\u2028suffix', 'id\u00a0suffix'];
+  for (const id of invalidIds) {
+    for (const field of ['tenantId', 'connectionId']) {
+      assert.throws(() => planBankFeedReplay({ ...base(), [field]: id }), /Invalid authorized feed scope/);
+    }
+    assert.throws(() => planBankFeedReplay({ ...base(), allowedAccountIds: [id] }), /Invalid authorized feed scope/);
+    assert.throws(() => planBankFeedReplay({ ...base(), events: [event(id)] }), /invalid or unauthorized/);
+  }
+  assert.equal(planBankFeedReplay({ ...base(), events: [event('café')] }).applied, 1);
+});
