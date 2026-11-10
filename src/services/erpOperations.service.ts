@@ -221,7 +221,16 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   } catch {
     throw new TypeError(`${label} produced invalid JSON; no request was sent.`);
   }
-  if (!isRecord(wirePayload) ||
+  // JSON.stringify can silently drop undefined, NaN, Infinity and symbol-valued
+  // top-level financial instructions even without a custom toJSON hook. Never
+  // submit a payload whose explicitly supplied scalar fields change on wire.
+  // Nested records remain governed by the backend schema and receipt contract.
+  const scalarFieldsPreserved = Object.entries(payload).every(([field, value]) => {
+    if (value !== null && (typeof value === 'object' || typeof value === 'function')) return true;
+    return Object.hasOwn(wirePayload as Record<string, unknown>, field) &&
+      Object.is((wirePayload as Record<string, unknown>)[field], value);
+  });
+  if (!isRecord(wirePayload) || !scalarFieldsPreserved ||
       !requiredFields[label].every((field) => wirePayload[field] === payload[field]) ||
       // Invoice transport details are delivery instructions. A custom toJSON
       // hook must not redirect an email or internal delivery after the user
