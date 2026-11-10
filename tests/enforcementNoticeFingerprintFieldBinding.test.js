@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fingerprintEnforcementNoticeEvidence as fingerprint } from '../server/services/enforcementNoticeFingerprint.js';
+import { fingerprintEnforcementNoticeEvidence as fingerprint, matchesEnforcementNoticeEvidenceFingerprint as matches } from '../server/services/enforcementNoticeFingerprint.js';
 
 const packet = Object.freeze({
   tenantId: 'tenant-a', trustId: 'trust-a', noteId: 'note-a',
@@ -45,4 +45,20 @@ test('canonical fingerprint is independent of property insertion order but binds
   assert.equal(missing.reason, 'preparation_timestamp_missing');
   assert.notEqual(missing.sha256, original.sha256);
   assert.equal(missing.serviceVerified, false);
+});
+
+test('digest comparison accepts identical evidence and rejects tampering without asserting service', () => {
+  const digest = fingerprint(packet).sha256;
+  assert.equal(matches(packet, digest), true);
+  assert.equal(matches({ ...packet, deliveryEvidenceRef: 'delivery-b' }, digest), false);
+  assert.equal(matches({ ...packet, evaluatedAt: '2026-11-03T12:00:00.000Z' }, digest), false);
+  assert.equal(fingerprint(packet).serviceVerified, false);
+});
+
+test('digest comparison fails closed on malformed expected digests and invalid packets', () => {
+  const digest = fingerprint(packet).sha256;
+  for (const invalid of ['', '0'.repeat(63), digest.toUpperCase(), 'z'.repeat(64), null, undefined]) {
+    assert.throws(() => matches(packet, invalid), TypeError);
+  }
+  assert.throws(() => matches({ ...packet, deliveryEvidenceRef: null }, digest), TypeError);
 });
