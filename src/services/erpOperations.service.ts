@@ -204,6 +204,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
+  // Non-enumerable own properties are also discarded by JSON.stringify. A
+  // hidden approval, tenant or delivery instruction must never be accepted as
+  // though it had been transmitted to the authenticated ERP backend.
+  if (Object.getOwnPropertyNames(payload).some((key) =>
+      !Object.prototype.propertyIsEnumerable.call(payload, key))) {
+    throw new TypeError(`${label} contains hidden financial instructions; no request was sent.`);
+  }
   // JSON ignores symbol-keyed properties entirely. A caller may attach an
   // approval or delivery instruction under a symbol; silently dropping it
   // would make the transmitted financial request differ from the reviewed one.
