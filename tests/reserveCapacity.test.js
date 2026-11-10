@@ -667,3 +667,22 @@ test('per-asset cash encumbrance overflow fails closed before availability calcu
   assert.equal(boundary.cashPledgedMinor, 1);
   assert.equal(boundary.unencumberedCashMinor, 0);
 });
+
+
+test('cash encumbrances across distinct assets preserve exact available reserve totals', () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  const result = calculate([
+    entry('cash-restricted', max - 1, { restrictedMinor: max - 1 }),
+    entry('cash-pledged', 1, { pledgedMinor: 1 }),
+  ]);
+  assert.equal(result.cashTotalMinor, max);
+  assert.equal(result.cashRestrictedMinor, max - 1);
+  assert.equal(result.cashPledgedMinor, 1);
+  assert.equal(result.unencumberedCashMinor, 0);
+  // A separate asset cannot add a cent above the safe aggregate boundary.
+  assert.throws(() => calculate([
+    entry('cash-restricted', max - 1, { restrictedMinor: max - 1 }),
+    entry('cash-pledged', 1, { pledgedMinor: 1 }),
+    entry('cash-extra', 1),
+  ]), /safe integer range/);
+});
