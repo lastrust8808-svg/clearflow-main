@@ -523,3 +523,18 @@ test('Unicode separators in authenticated scope and billing identities fail clos
   }
   assert.equal(project(scope, [paid()], asOf).entitled, true);
 });
+
+test('Unicode noncharacters never authorize billing identities across planes', () => {
+  const invalid = ['\uFDD0', '\uFDEF', '\uFFFE', '\uFFFF',
+    String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff)];
+  for (const codepoint of invalid) {
+    assert.throws(() => project({ ...scope, tenantId: 'tenant-' + codepoint }, [], asOf),
+      /canonical/);
+    for (const field of ['id', 'invoiceId', 'settlementId']) {
+      assert.throws(() => project(scope, [paid('evt-valid', {
+        [field]: 'billing-' + codepoint,
+      })], asOf), /canonical/, field);
+    }
+  }
+  assert.equal(project(scope, [paid()], asOf).entitled, true);
+});
