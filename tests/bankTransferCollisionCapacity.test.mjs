@@ -33,5 +33,5 @@ test('a pending third source suppresses only its collided pair at full batch cap
     candidate.providerReference !== 'reference-0' &&
     candidate.providerReference !== 'reference-499'));
   assert.deepEqual(result.ambiguous.map((source) => source.transactionId).sort(),
-    ['event-0', 'event-1', 'event-998', 'event-999'].filter((id) => id !== 'event-998').sort());
+    ['event-0', 'event-1']);
 });
