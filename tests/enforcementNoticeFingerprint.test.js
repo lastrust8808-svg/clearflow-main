@@ -75,3 +75,20 @@ test('digest comparison rejects substitution of every notice identity and eviden
   }
   assert.equal(matches(Object.fromEntries(Object.entries(base).reverse()), expected), true);
 });
+
+
+test('fingerprint preserves contradictory delivery chronology as incomplete evidence', () => {
+  const cases = [
+    [{ ...base, preparedAt: '2026-11-03T12:00:00.000Z' }, 'preparation_after_evaluation'],
+    [{ ...base, deliveredAt: '2026-11-03T12:00:00.000Z' }, 'delivery_after_evaluation'],
+    [{ ...base, deliveredAt: '2026-11-03T08:00:00.000Z' }, 'delivery_before_preparation']
+  ];
+  for (const [packet, reason] of cases) {
+    const result = fingerprint(packet);
+    assert.equal(result.status, 'incomplete', reason);
+    assert.equal(result.reason, reason);
+    assert.equal(result.serviceVerified, false);
+    assert.equal(matches(packet, result.sha256), true);
+    assert.equal(matches(base, result.sha256), false);
+  }
+});
