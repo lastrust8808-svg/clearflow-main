@@ -58,7 +58,10 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   if (!value || typeof value !== 'object') return value;
   // Proxy traps can impersonate plain records and run code during cloning.
   if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
-  // Shared references are serializable, but cycles make JSON persistence fail.\n  // Reject cycles before allowing a reducer to advance authentication state.\n  if (active.has(value)) throw new TypeError('Cyclic admission state');\n  if (seen.has(value)) return seen.get(value);
+  // Shared references are serializable, but cycles make JSON persistence fail.
+  // Reject cycles before allowing a reducer to advance authentication state.
+  if (active.has(value)) throw new TypeError('Cyclic admission state');
+  if (seen.has(value)) return seen.get(value);
   const proto = Object.getPrototypeOf(value);
   if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
@@ -73,7 +76,8 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     }
   }
   const copy = Array.isArray(value) ? [] : Object.create(proto);
-  seen.set(value, copy);\n  active.add(value);
+  seen.set(value, copy);
+  active.add(value);
   for (const key of Reflect.ownKeys(value)) {
     // JSON persistence ignores symbol-keyed fields, even when their values
     // are serializable. Never admit a workspace snapshot that loses them.
@@ -95,7 +99,8 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
       value: snapshotAdmissionState(descriptor.value, seen, active),
     });
   }
-  active.delete(value);\n  return Object.freeze(copy);
+  active.delete(value);
+  return Object.freeze(copy);
 }
 
 export function admitGoogleAttemptResult(current, attemptId, reducer, expectedStatus = 'pending-gsi') {
