@@ -117,6 +117,12 @@ function requiredString(value, field) {
   if (/(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u.test(value)) {
     throw new TypeError(`${field} must contain well-formed Unicode`);
   }
+  // Unicode noncharacters are not valid durable audit identifiers, including
+  // U+FDD0..FDEF and the final two code points of every Unicode plane.
+  // Reject them consistently across tenant, asset and provenance keys.
+  if (/[\uFDD0-\uFDEF\uFFFE\uFFFF]|[\uD800-\uDBFF][\uDFFE\uDFFF]/u.test(value)) {
+    throw new TypeError(`${field} must not contain Unicode noncharacters`);
+  }
   // Canonically equivalent identifiers must never count as distinct assets,
   // evidence references or trust scopes in a reserve ledger. Reject aliases
   // rather than silently rewriting an authenticated storage identifier.
