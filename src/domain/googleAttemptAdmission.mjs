@@ -83,6 +83,9 @@ function snapshotAdmissionState(value, seen = new WeakMap()) {
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
       throw new TypeError('Accessor-backed admission state');
     }
+    // JSON persistence silently drops non-enumerable own fields. Reject
+    // hidden workspace/authentication metadata rather than losing it.
+    if (!descriptor.enumerable) throw new TypeError('Non-enumerable admission state');
     Object.defineProperty(copy, key, {
       ...descriptor,
       value: snapshotAdmissionState(descriptor.value, seen),
