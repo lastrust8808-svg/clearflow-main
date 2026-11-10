@@ -570,3 +570,22 @@ test('reserve scope, asset and evidence IDs reject Unicode noncharacters across 
   }
   assert.equal(calculate([entry('cash-a', 100, { assetId: 'asset-' + String.fromCodePoint(0x1F680) })]).unencumberedCashMinor, 100);
 });
+
+
+test('reserve scope and provenance identifiers enforce bounded length without truncation', () => {
+  const atLimit = 'x'.repeat(1024);
+  const tooLong = 'x'.repeat(1025);
+  for (const field of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(() => calculateReserveCapacity({
+      ...base, [field]: tooLong, asOfAt, maxEvidenceAgeMs: 3600000, entries: [],
+    }), /maximum identifier length/);
+    assert.equal(calculateReserveCapacity({
+      ...base, [field]: atLimit, asOfAt, maxEvidenceAgeMs: 3600000, entries: [],
+    })[field], atLimit);
+  }
+  for (const field of ['id', 'assetId', 'evidenceRef']) {
+    assert.throws(() => calculate([entry('cash-a', 100, { [field]: tooLong })]),
+      /maximum identifier length/);
+    assert.equal(calculate([entry('cash-a', 100, { [field]: atLimit })]).unencumberedCashMinor, 100);
+  }
+});
