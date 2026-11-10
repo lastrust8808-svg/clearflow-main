@@ -26,3 +26,21 @@ test('invalid evidence fails closed without reading accessor values', () => {
   assert.throws(()=>fingerprint(packet),/Unsupported or accessor/);
   assert.equal(reads,0);
 });
+
+// A preparation-only packet is auditable, but must never be treated as delivery.
+test('fingerprint distinguishes missing delivery from partial delivery claims', () => {
+  const { deliveryEvidenceRef, deliveredAt, ...preparedOnly } = base;
+  const absent = fingerprint(preparedOnly);
+  const referenceOnly = fingerprint({ ...preparedOnly, deliveryEvidenceRef });
+  const timestampOnly = fingerprint({ ...preparedOnly, deliveredAt });
+  assert.equal(absent.status, 'incomplete');
+  assert.equal(absent.reason, 'delivery_evidence_missing');
+  for (const partial of [referenceOnly, timestampOnly]) {
+    assert.equal(partial.status, 'incomplete');
+    assert.equal(partial.reason, 'partial_delivery_evidence');
+    assert.equal(partial.serviceVerified, false);
+    assert.notEqual(partial.sha256, absent.sha256);
+  }
+  assert.notEqual(referenceOnly.sha256, timestampOnly.sha256);
+  assert.notEqual(fingerprint(base).sha256, referenceOnly.sha256);
+});
