@@ -683,3 +683,26 @@ test('custom array properties are rejected before OAuth workspace persistence', 
     ...base, status: 'authenticated', workspaces: [{ id: 'owner' }],
   })).status, 'authenticated');
 });
+
+
+test('dense multi-digit workspace arrays survive OAuth admission without losing indices', () => {
+  const active = pending('attempt-B');
+  for (const length of [10, 12, 100]) {
+    const workspaces = Array.from({ length }, (_, index) => ({ id: 'workspace-' + index }));
+    const current = { ...active, workspaces };
+    const next = admitGoogleAttemptResult(current, 'attempt-B', snapshot => ({
+      ...snapshot, status: 'pending-drive-check',
+    }));
+    assert.notEqual(next, current, 'valid dense array must be admitted');
+    assert.equal(next.status, 'pending-drive-check');
+    assert.equal(next.workspaces.length, length);
+    assert.equal(next.workspaces[9].id, 'workspace-9');
+    assert.equal(next.workspaces[length - 1].id, 'workspace-' + (length - 1));
+  }
+  const withCustomProperty = Array.from({ length: 12 }, (_, index) => index);
+  withCustomProperty.label = 'not persisted by JSON';
+  const invalid = { ...active, workspaces: withCustomProperty };
+  assert.equal(admitGoogleAttemptResult(invalid, 'attempt-B', () => ({
+    ...invalid, status: 'authenticated',
+  })), invalid);
+});
