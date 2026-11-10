@@ -184,6 +184,10 @@ function isConfirmedInvoiceDelivery(
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
   // Never send an ambiguous financial request. JSON.stringify silently omits
   // undefined identity fields, and a server may otherwise accept the wrong job.
+  if (isRecord(payload) && Object.values(Object.getOwnPropertyDescriptors(payload)).some((descriptor) =>
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value'))) {
+    throw new TypeError(`${label} contains accessor-backed financial instructions; no request was sent.`);
+  }
   const requiredFields: Record<string, string[]> = {
     'Invoice delivery': ['invoiceId', 'entityId', 'invoiceNumber'],
     'Invoice export': ['invoiceId', 'entityId', 'invoiceNumber'],
@@ -203,13 +207,6 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string) &&
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
-  }
-  // Accessor properties can return different financial instructions between
-  // validation and serialization, or run side effects during inspection.
-  // Require fixed own data properties for every supplied request field.
-  if (Object.values(Object.getOwnPropertyDescriptors(payload)).some((descriptor) =>
-      !Object.prototype.hasOwnProperty.call(descriptor, 'value'))) {
-    throw new TypeError(`${label} contains accessor-backed financial instructions; no request was sent.`);
   }
   // Non-enumerable own properties are also discarded by JSON.stringify. A
   // hidden approval, tenant or delivery instruction must never be accepted as
