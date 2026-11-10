@@ -7,7 +7,9 @@ import { assessEnforcementNoticeEvidence } from './enforcementNoticeGate.js';
  */
 export function fingerprintEnforcementNoticeEvidence(packet) {
   // Capture one immutable data-only snapshot and validate exactly what is hashed.
-  // Preserve the same plain-object boundary as the evidence assessor before snapshotting.\n  // Otherwise a class instance or exotic prototype can be laundered into a plain object.\n  if (!packet || Object.getPrototypeOf(packet) !== Object.prototype) throw new TypeError('Plain notice packet required');\n  const descriptors = Object.getOwnPropertyDescriptors(packet);
+  // Preserve the same plain-object boundary as the evidence assessor before snapshotting.
+  // Otherwise a class instance or exotic prototype can be laundered into a plain object.
+  if (!packet || Object.getPrototypeOf(packet) !== Object.prototype) throw new TypeError('Plain notice packet required');\n  const descriptors = Object.getOwnPropertyDescriptors(packet);
   const keys = Reflect.ownKeys(descriptors);
   const snapshotPacket = {};
   for (const key of keys) {
