@@ -264,3 +264,21 @@ test('encoded Windows alternate-stream and device-like spellings remain ordinary
     }
   }
 });
+
+
+test('Windows device aliases with mixed-case extensions fail closed before file creation', () => {
+  const devices = ['con', 'prn', 'aux', 'nul', 'conin$', 'conout$', ...Array.from({ length: 9 }, (_, i) => 'com' + (i + 1)), ...Array.from({ length: 9 }, (_, i) => 'lpt' + (i + 1))];
+  for (const device of devices) {
+    for (const spelling of [device.toUpperCase(), device.toLowerCase(), device[0].toUpperCase() + device.slice(1)]) {
+      for (const suffix of ['', '.json', '.TXT', '.backup.json']) {
+        assert.throws(() => sanitizeStorageSegment(spelling + suffix), TypeError, spelling + suffix);
+      }
+    }
+  }
+  for (const allowed of ['com0', 'com10', 'lpt0', 'lpt10', 'console.json', 'auxiliary.json']) {
+    const segment = sanitizeStorageSegment(allowed);
+    assert.equal(segment, encodeURIComponent(allowed));
+    const base = path.win32.resolve('C:\\', 'clearflow', 'accounts');
+    assert.equal(path.win32.dirname(path.win32.resolve(base, segment + '.json')), base);
+  }
+});
