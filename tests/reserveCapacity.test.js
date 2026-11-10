@@ -629,3 +629,24 @@ test('aggregate reserve totals fail closed on safe-integer overflow across disti
     entry('extra-restricted', 1, { restrictedMinor: 1 }),
   ]), /safe integer range/);
 });
+
+
+test('pledged cash aggregate overflow fails closed even when each pledge is valid', () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  // Pledged amounts must be exact across the whole snapshot, not merely
+  // valid on each entry. Neither pledge can be counted as spendable cash.
+  assert.equal(calculate([entry('pledged-max', max, { pledgedMinor: max })]).cashPledgedMinor, max);
+  assert.throws(() => calculate([
+    entry('pledged-max', max, { pledgedMinor: max }),
+    entry('pledged-extra', 1, { pledgedMinor: 1 }),
+  ]), /safe integer range/);
+  // Distinct cash and noncash buckets are separately bounded; collateral
+  // must never compensate for or conceal an overflowing cash total.
+  const mixed = calculate([
+    entry('cash-max', max),
+    entry('note-max', max, { kind: 'noncash_collateral', sourceType: 'private_note' }),
+  ]);
+  assert.equal(mixed.cashTotalMinor, max);
+  assert.equal(mixed.noncashCollateralMinor, max);
+  assert.equal(mixed.unencumberedCashMinor, max);
+});
