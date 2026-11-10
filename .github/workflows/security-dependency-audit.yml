@@ -23,5 +23,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Audit locked production dependencies for high or critical advisories
-        run: npm audit --package-lock-only --omit=dev --audit-level=high
+      - name: Audit locked production dependencies and retain machine-readable evidence
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --package-lock-only --omit=dev --audit-level=high --json > dependency-audit.json
+          result=$?
+          set -e
+          # npm audit returns 1 for findings above the threshold; never mask other failures.
+          if [ "$result" -ne 0 ]; then
+            echo "Dependency audit failed (exit $result); see uploaded JSON report." >&2
+          fi
+          exit "$result"
+      - name: Upload dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dependency-audit-json
+          path: dependency-audit.json
+          if-no-files-found: warn
+          retention-days: 14
