@@ -407,15 +407,22 @@ test('accessor-backed nested OAuth state fails closed without executing getters'
   assert.equal(getterCalls, 0);
 });
 
-test('cyclic and shared OAuth snapshot graphs remain isolated from active state', () => {
+test('cyclic OAuth snapshots fail closed while shared references remain isolated', () => {
   const shared = { workspaceId: 'owner', enabled: false };
   const current = {
     status: 'pending-gsi', googleAttemptId: 'attempt-B',
     primaryWorkspace: shared, workspaces: [shared],
   };
   current.self = current;
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...current, status: 'pending-drive-check' };
+  }), current);
+  assert.equal(invoked, false);
+
+  delete current.self;
   const next = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
-    assert.equal(snapshot.self, snapshot);
     assert.equal(snapshot.primaryWorkspace, snapshot.workspaces[0]);
     assert.notEqual(snapshot.primaryWorkspace, shared);
     assert.throws(() => { snapshot.primaryWorkspace.enabled = true; }, TypeError);
