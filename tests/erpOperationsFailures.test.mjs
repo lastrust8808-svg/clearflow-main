@@ -741,6 +741,26 @@ try {
   });
 
 
+
+  await test('financial scalar instructions cannot disappear or mutate during JSON serialization', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected network request'); };
+    for (const [index, extra] of [
+      [0, { emailSubject: undefined }],
+      [1, { exportFormat: undefined }],
+      [1, { exportFormat: Symbol('csv') }],
+      [1, { exportRevision: NaN }],
+      [1, { exportRevision: Infinity }],
+      [1, { exportRevision: -0 }],
+      [3, { approvalCode: undefined }],
+    ]) {
+      await assert.rejects(operations[index]({ ...payloads[index], ...extra }),
+        /changed request identities during serialization/,
+        'operation ' + index + ' must not silently lose scalar instructions');
+    }
+    assert.equal(requests, 0, 'lossy scalar payloads must fail before fetch');
+  });
+
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(directory, { recursive: true, force: true });
