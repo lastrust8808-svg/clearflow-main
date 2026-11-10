@@ -27,7 +27,7 @@ function required(value, label) {
   // make distinct tenant, invoice, and settlement IDs look identical in logs.
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
       value !== value.trim() || value !== value.normalize('NFC') ||
-      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) {
+      /[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new TypeError(label + ' must be a canonical nonempty string');
   }
   return value;
