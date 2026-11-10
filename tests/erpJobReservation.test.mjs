@@ -2363,3 +2363,29 @@ test('single-job quarantine rejects future-dated database receipts without fallb
     assert.equal(calls, 1, 'invalid quarantine cannot trigger fallback reads');
   }
 });
+
+
+test('durable ERP reservations reject noncharacter actor and tenant identities before database access', async () => {
+  const db = fakeDatabase();
+  for (const invalid of ['tenant\\uFDD0', 'actor\\uFFFE', 'actor\\u{1FFFF}', 'tenant\\u{10FFFF}']) {
+    for (const field of ['tenantId', 'actorId']) {
+      await assert.rejects(reserve({
+        db, ...args, authenticatedScope: { ...scope, [field]: invalid },
+      }), /Invalid authenticated/);
+    }
+  }
+  assert.equal(db.calls, 0);
+});
+
+test('durable ERP worker claims reject noncharacter tenant and worker identities before SQL', async () => {
+  const db = { calls: 0, async query() { this.calls++; return { rows: [] }; } };
+  for (const invalid of ['worker\\uFDD0', 'worker\\uFFFE', 'worker\\u{1FFFF}', 'worker\\u{10FFFF}']) {
+    for (const field of ['tenantId', 'workerId']) {
+      await assert.rejects(claim({
+        db, authenticatedWorker: { tenantId: 'tenant-a', workerId: 'worker-a', [field]: invalid },
+        operation: 'invoice_delivery',
+      }), /Invalid authenticated/);
+    }
+  }
+  assert.equal(db.calls, 0);
+});
