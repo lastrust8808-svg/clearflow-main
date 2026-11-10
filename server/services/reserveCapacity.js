@@ -101,7 +101,7 @@ function requiredString(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new TypeError(`${field} must be a nonempty unpadded string`);
   }
-  // Match Security's storage identifier boundary before these values reach
+  // Bound identifier size before normalization, hashing or durable storage.\n  // This is a local admission limit; Security must align its storage contract.\n  if (value.length > 1024) {\n    throw new RangeError(`${field} exceeds maximum identifier length`);\n  }\n  // Match Security's storage identifier boundary before these values reach
   // a durable ledger. Invisible controls can alias or corrupt record keys.
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new TypeError(`${field} must not contain control characters`);
