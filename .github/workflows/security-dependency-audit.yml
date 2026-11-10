@@ -31,7 +31,13 @@ jobs:
           npm audit --package-lock-only --omit=dev --audit-level=high --json > dependency-audit.json
           result=$?
           set -e
-          # npm audit returns 1 for findings above the threshold; never mask other failures.
+          # Validate that npm returned a real audit report; network/registry failures are not vulnerability evidence.
+          if ! node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); if (!a.metadata || !a.metadata.vulnerabilities || typeof a.metadata.vulnerabilities.high !== "number" || typeof a.metadata.vulnerabilities.critical !== "number") process.exit(1)' ; then
+            echo "Dependency audit did not return valid vulnerability metadata; treat as an audit execution failure." >&2
+            exit 2
+          fi
+          node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); const v=a.metadata.vulnerabilities; const line=`Production dependency audit: critical=${v.critical}, high=${v.high}, moderate=${v.moderate}, low=${v.low}`; console.log(line); if(process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,line+"\\n");'
+          # npm audit returns nonzero for findings above the threshold; never mask other failures.
           if [ "$result" -ne 0 ]; then
             echo "Dependency audit failed (exit $result); see uploaded JSON report." >&2
           fi
