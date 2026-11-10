@@ -16,7 +16,12 @@ const operations = new Set([
 function isCanonicalIdentifier(value) {
   return typeof value === 'string' && Boolean(value.trim()) && value.length <= 255 &&
     value === value.trim() && value === value.normalize('NFC') &&
-    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
+    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value) &&
+    ![...value].some(char => {
+      const cp = char.codePointAt(0);
+      return (cp >= 0xfdd0 && cp <= 0xfdef) ||
+        (cp >= 0xfffe && (cp & 0xffff) >= 0xfffe);
+    });
 }
 
 function requiredIdentifier(value, label) {
