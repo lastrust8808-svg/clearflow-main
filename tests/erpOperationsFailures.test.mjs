@@ -53,6 +53,22 @@ try {
     }
     assert.equal(requests, 0);
   });
+  await test('invoice delivery rejects serializer-mutated destination and content before POST', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw Error('unexpected network request'); };
+    const base = { ...payloads[0], emailSubject: 'Approved subject' };
+    for (const mutation of [
+      { recipientEmail: 'attacker@example.invalid' },
+      { deliveryMethod: 'internal_user', internalDeliveryTarget: 'other-user' },
+      { emailSubject: 'Changed subject' },
+      { recipientEmail: undefined },
+    ]) {
+      const payload = { ...base, toJSON() { return { ...base, ...mutation }; } };
+      await assert.rejects(api.queueInvoiceDelivery(payload),
+        /changed request identities during serialization; no request was sent/);
+    }
+    assert.equal(requests, 0);
+  });
   for (let i = 0; i < operations.length; i++) {
     await test(`ERP operation ${i + 1} treats lost network response as unknown, not rejected`, async () => {
       globalThis.fetch = async () => { throw new Error('offline'); };
