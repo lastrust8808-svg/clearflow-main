@@ -204,6 +204,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
+  // Accessor properties can return different financial instructions between
+  // validation and serialization, or run side effects during inspection.
+  // Require fixed own data properties for every supplied request field.
+  if (Object.values(Object.getOwnPropertyDescriptors(payload)).some((descriptor) =>
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value'))) {
+    throw new TypeError(`${label} contains accessor-backed financial instructions; no request was sent.`);
+  }
   // Non-enumerable own properties are also discarded by JSON.stringify. A
   // hidden approval, tenant or delivery instruction must never be accepted as
   // though it had been transmitted to the authenticated ERP backend.
