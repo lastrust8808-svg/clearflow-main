@@ -611,3 +611,21 @@ test('reserve identifier length boundary counts UTF-16 units without splitting s
       /maximum identifier length/);
   }
 });
+
+// An individually valid set of balances must not overflow aggregate minor units.
+// Never round an unsafe total into a seemingly available reserve balance.
+test('aggregate reserve totals fail closed on safe-integer overflow across distinct assets', () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  assert.equal(calculate([entry('max-cash', max)]).unencumberedCashMinor, max);
+  assert.throws(() => calculate([
+    entry('max-cash', max), entry('extra-cash', 1),
+  ]), /safe integer range/);
+  assert.throws(() => calculate([
+    entry('max-note', max, { kind: 'noncash_collateral', sourceType: 'private_note' }),
+    entry('extra-note', 1, { kind: 'noncash_collateral', sourceType: 'private_note' }),
+  ]), /safe integer range/);
+  assert.throws(() => calculate([
+    entry('max-restricted', max, { restrictedMinor: max }),
+    entry('extra-restricted', 1, { restrictedMinor: 1 }),
+  ]), /safe integer range/);
+});
