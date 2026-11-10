@@ -204,7 +204,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
-  // JSON ignores symbol-keyed properties entirely. A caller may attach an\n  // approval or delivery instruction under a symbol; silently dropping it\n  // would make the transmitted financial request differ from the reviewed one.\n  if (Object.getOwnPropertySymbols(payload).length > 0) {\n    throw new TypeError(`${label} contains symbol-keyed instructions; no request was sent.`);\n  }\n  // Serialize before opening the network boundary. Circular objects and BigInt
+  // JSON ignores symbol-keyed properties entirely. A caller may attach an
+  // approval or delivery instruction under a symbol; silently dropping it
+  // would make the transmitted financial request differ from the reviewed one.
+  if (Object.getOwnPropertySymbols(payload).length > 0) {
+    throw new TypeError(`${label} contains symbol-keyed instructions; no request was sent.`);
+  }
+  // Serialize before opening the network boundary. Circular objects and BigInt
   // cannot be represented as JSON; reporting an unknown remote outcome for
   // these local failures would incorrectly suggest a job might have committed.
   let requestBody: string;
