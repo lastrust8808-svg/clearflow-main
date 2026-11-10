@@ -706,3 +706,26 @@ test('dense multi-digit workspace arrays survive OAuth admission without losing 
     ...invalid, status: 'authenticated',
   })), invalid);
 });
+
+
+test('cyclic workspace records fail closed before reducer or persistence', () => {
+  const base = pending('attempt-B');
+  const workspace = { id: 'owner' };
+  workspace.self = workspace;
+  const current = { ...base, workspace };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  const output = { ...base, status: 'authenticated', workspace };
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => output), base);
+
+  // Reusing the same noncyclic record is valid and JSON serializable.
+  const shared = { id: 'owner' };
+  const accepted = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', primary: shared, secondary: shared,
+  }));
+  assert.equal(accepted.status, 'authenticated');
+});
