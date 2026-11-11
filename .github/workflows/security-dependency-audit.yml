@@ -49,9 +49,9 @@ jobs:
                 : entry.fixAvailable === true ? 'available'
                 : entry.fixAvailable && typeof entry.fixAvailable === 'object' ? 'requires upgrade'
                 : 'unknown';
-              return `| ${name.replace(/\\|/g, '\\|')} | ${entry.severity} | ${fix} |`;
+              return `| ${JSON.stringify(name)} | ${entry.severity} | ${fix} |`;
             });
-          const summary = ['### High/critical production dependencies', '', '| Package | Severity | npm fix |', '| --- | --- | --- |', ...rows, ''].join('\\n');
+          const summary = ['### High/critical production dependencies', '', '| Package | Severity | npm fix |', '| --- | --- | --- |', ...rows, ''].join(String.fromCharCode(10));
           console.log(summary);
           if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           NODE
