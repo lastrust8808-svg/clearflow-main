@@ -232,8 +232,8 @@ test('same-account statement reference reuse invalidates an otherwise unique cro
   assert.deepEqual(first.candidates, []);
   assert.deepEqual(first.ambiguous.map(({ transactionId, candidateCount }) =>
     [transactionId, candidateCount]), [
-    ['outbound', 1],
     ['other-checking-entry', 0],
+    ['outbound', 1],
     ['inbound', 1],
   ]);
   assert.deepEqual(input, snapshot);
