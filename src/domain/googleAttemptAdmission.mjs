@@ -44,7 +44,10 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 
 // Clone ordinary nested records before invoking an untrusted admission reducer.
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
-function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet()) {
+function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet(), depth = 0) {
+  // Cap nesting before recursive traversal can exhaust the JavaScript stack.
+  // A deeply nested workspace must fail closed rather than stall OAuth.
+  if (depth > 64) throw new TypeError('Excessively nested admission state');
   // Executable values must not be admitted into authentication snapshots.
   if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
     throw new TypeError('Non-serializable admission state');
@@ -111,7 +114,7 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     if (!descriptor.enumerable) throw new TypeError('Non-enumerable admission state');
     Object.defineProperty(copy, key, {
       ...descriptor,
-      value: snapshotAdmissionState(descriptor.value, seen, active),
+      value: snapshotAdmissionState(descriptor.value, seen, active, depth + 1),
     });
   }
   active.delete(value);
