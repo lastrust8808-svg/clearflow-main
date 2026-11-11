@@ -66,6 +66,11 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   if (Array.isArray(value) ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
   }
+  // Bound array traversal before checking sparse indices; a hostile length must
+  // not monopolize the OAuth callback or freeze the sign-in UI.
+  if (Array.isArray(value) && value.length > 10000) {
+    throw new TypeError('Oversized admission state array');
+  }
   // JSON.stringify converts array holes into null, losing workspace evidence.
   // Reject sparse arrays rather than admitting a different persisted shape.
   if (Array.isArray(value)) {
