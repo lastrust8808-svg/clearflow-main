@@ -834,3 +834,28 @@ test('malformed Unicode workspace identities fail closed on both admission paths
   }));
   assert.equal(valid.status, 'authenticated');
 });
+
+
+test('deeply nested workspace snapshots fail closed without advancing OAuth', () => {
+  const base = pending('attempt-B');
+  const nest = depth => {
+    let value = { id: 'owner' };
+    for (let index = 0; index < depth; index++) value = { child: value };
+    return value;
+  };
+  const tooDeep = nest(65);
+  const current = { ...base, workspace: tooDeep };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspace: tooDeep,
+  })), base);
+  const accepted = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'pending-drive-check', workspace: nest(62),
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+});
