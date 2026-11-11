@@ -2420,3 +2420,17 @@ test('durable ERP worker claims reject noncharacter tenant and worker identities
   }
   assert.equal(db.calls, 0);
 });
+
+
+test('oversized ERP string values and property names fail before database access', async () => {
+  const db = fakeDatabase();
+  const cases = [
+    [{ description: 'x'.repeat(65537) }, /string length limit exceeded/],
+    [{ ['x'.repeat(1025)]: 'value' }, /property name length limit exceeded/],
+    [{ nested: [{ ['x'.repeat(1025)]: 'value' }] }, /property name length limit exceeded/],
+  ];
+  for (const [payload, message] of cases) {
+    await assert.rejects(reserve({ db, ...args, payload }), message);
+  }
+  assert.equal(db.calls, 0, 'oversized input must never reach SQL');
+});
