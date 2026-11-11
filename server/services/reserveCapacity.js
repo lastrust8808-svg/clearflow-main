@@ -106,6 +106,11 @@ function requiredString(value, field) {
   if (value.length > 1024) {
     throw new RangeError(`${field} exceeds maximum identifier length`);
   }
+  // Refuse prototype-sensitive bare identifiers before they can be used as
+  // keys in downstream ledger maps or JSON-based storage adapters.
+  if (value === '__proto__' || value === 'constructor' || value === 'prototype') {
+    throw new TypeError(`${field} must not be a prototype-sensitive identifier`);
+  }
   // Match Security's storage identifier boundary before these values reach
   // a durable ledger. Invisible controls can alias or corrupt record keys.
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
