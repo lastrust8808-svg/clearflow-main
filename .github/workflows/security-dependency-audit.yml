@@ -37,6 +37,24 @@ jobs:
             exit 2
           fi
           node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync("dependency-audit.json","utf8")); const v=a.metadata.vulnerabilities; const line=`Production dependency audit: critical=${v.critical}, high=${v.high}, moderate=${v.moderate}, low=${v.low}`; console.log(line); if(process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,line+"\n");'
+          # Surface actionable package-level findings in the run summary without requiring artifact download.
+          node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('dependency-audit.json', 'utf8'));
+          const rows = Object.entries(report.vulnerabilities)
+            .filter(([, entry]) => ['critical', 'high'].includes(entry.severity))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, entry]) => {
+              const fix = entry.fixAvailable === false ? 'none reported'
+                : entry.fixAvailable === true ? 'available'
+                : entry.fixAvailable && typeof entry.fixAvailable === 'object' ? 'requires upgrade'
+                : 'unknown';
+              return `| ${name.replace(/\\|/g, '\\|')} | ${entry.severity} | ${fix} |`;
+            });
+          const summary = ['### High/critical production dependencies', '', '| Package | Severity | npm fix |', '| --- | --- | --- |', ...rows, ''].join('\\n');
+          console.log(summary);
+          if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          NODE
           # npm audit returns nonzero for findings above the threshold; never mask other failures.
           if [ "$result" -ne 0 ]; then
             echo "Dependency audit failed (exit $result); see uploaded JSON report." >&2
