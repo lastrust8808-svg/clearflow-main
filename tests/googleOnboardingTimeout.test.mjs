@@ -370,3 +370,15 @@ test('verified Google profile never fabricates or reuses an application-session 
     assert.equal(current.token, staleToken);
   }
 });
+
+test('Google profile admission rejects unpaired UTF-16 surrogates in access tokens', () => {
+  const waiting = Object.freeze(pending('existing'));
+  const profile = { name: 'Verified', email: 'verified@example.test' };
+  for (const token of ['bad\uD800token', 'bad\uDC00token', '\uD800', '\uDC00']) {
+    assert.equal(admitVerifiedGoogleProfile(waiting, token, profile), waiting,
+      'lossy Unicode token must not reach workspace recovery');
+  }
+  const valid = admitVerifiedGoogleProfile(waiting, 'valid-😀-token', profile);
+  assert.equal(valid.status, 'pending-drive-check');
+  assert.equal(valid.apiAccessToken, 'valid-😀-token');
+});
