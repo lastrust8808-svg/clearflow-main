@@ -15,6 +15,7 @@ on:
       - 'tests/googleAttemptAdmission.test.mjs'
       - 'src/contexts/AuthContext.tsx'
       - 'tests/googleOnboardingTimeout.test.mjs'
+      - 'tests/googleOAuthTokenNoncharacters.test.mjs'
       - 'tests/googleWorkspaceAutosaveDurability.test.mjs'
       - '.github/workflows/membership-entitlements.yml'
 permissions:
@@ -30,4 +31,4 @@ jobs:
       - name: Check syntax
         run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs && node --check src/domain/googleOnboardingTimeout.mjs && node --check src/domain/googleAttemptAdmission.mjs
       - name: Run deterministic entitlement tests
-        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs tests/googleAttemptAdmission.test.mjs tests/googleWorkspaceAutosaveDurability.test.mjs
+        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs tests/googleOAuthTokenNoncharacters.test.mjs tests/googleAttemptAdmission.test.mjs tests/googleWorkspaceAutosaveDurability.test.mjs
