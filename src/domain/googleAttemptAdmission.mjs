@@ -55,6 +55,11 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
       (Number.isInteger(value) && !Number.isSafeInteger(value)) || Object.is(value, -0))) {
     throw new TypeError('Non-serializable numeric admission state');
   }
+  // JSON may escape lone surrogates, but UTF-8 storage and downstream APIs can
+  // replace them with U+FFFD, changing workspace identities after admission.
+  if (typeof value === 'string' && /\p{Cs}/u.test(value)) {
+    throw new TypeError('Malformed Unicode admission state');
+  }
   if (!value || typeof value !== 'object') return value;
   // Proxy traps can impersonate plain records and run code during cloning.
   if (nodeTypes.isProxy(value)) throw new TypeError('Proxy-backed admission state');
