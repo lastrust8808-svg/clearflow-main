@@ -95,6 +95,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
   // encoders replace them with U+FFFD, potentially changing recipient or
   // invoice identities after the idempotency digest was persisted.
   if (typeof value === 'string') {
+    if (value.length > 65536) throw new TypeError('ERP job payload string length limit exceeded');
     if (/\p{Cs}/u.test(value)) throw new TypeError('ERP job payload contains malformed Unicode');
     return;
   }
@@ -164,6 +165,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       // character), bypassing the minor-unit type guard and misleading audits.
       // Free-text VALUES may still contain ordinary newlines; only object
       // property names are required to be visible, canonical field labels.
+      if (key.length > 1024) {
+        throw new TypeError('ERP job payload property name length limit exceeded');
+      }
       if (/\p{Cs}/u.test(key)) {
         throw new TypeError('ERP job payload contains malformed Unicode');
       }
