@@ -185,7 +185,7 @@ export function calculateReserveCapacity(snapshot) {
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
   const asOfAt = canonicalInstant(snapshot.asOfAt, 'asOfAt');
   const maxEvidenceAgeMs = snapshot.maxEvidenceAgeMs;
-  if (!Number.isSafeInteger(maxEvidenceAgeMs) || maxEvidenceAgeMs < 0) {
+  if (!Number.isSafeInteger(maxEvidenceAgeMs) || maxEvidenceAgeMs < 0 || Object.is(maxEvidenceAgeMs, -0)) {
     throw new RangeError('maxEvidenceAgeMs must be a nonnegative safe integer');
   }
   const asOfEpochMs = Date.parse(asOfAt);
