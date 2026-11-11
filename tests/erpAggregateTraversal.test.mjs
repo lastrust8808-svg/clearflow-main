@@ -52,3 +52,37 @@ test('valid supplementary Unicode remains permitted through payload validation',
   );
   assert.equal(queries, 1);
 });
+
+test('Unicode noncharacters in accounting field names fail before SQL', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
+  for (const invalid of ['\\uFDD0', String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff)]) {
+    await assert.rejects(
+      reserveErpOperationJob({
+        db,
+        authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+        operation: 'invoice_delivery',
+        idempotencyKey: 'noncharacter-key-001',
+        payload: { ['invoice' + invalid]: 'value' },
+      }),
+      /unsafe Unicode property name/,
+    );
+  }
+  assert.equal(queries, 0);
+});
+
+test('valid supplementary Unicode accounting field names pass validation', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('test database unavailable'); } };
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'unicode-key-valid-001',
+      payload: { ['invoice' + String.fromCodePoint(0x1f600)]: 'value' },
+    }),
+    /test database unavailable/,
+  );
+  assert.equal(queries, 1);
+});
