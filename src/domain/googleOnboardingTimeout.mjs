@@ -129,6 +129,10 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
   try {
     if (!current || current.status !== 'pending-gsi') return current;
     if (typeof accessToken !== 'string' || !accessToken.trim() || /[\s\p{Z}\p{Cc}\p{Cf}]/u.test(accessToken) ||
+      Array.from(accessToken).some((character) => {
+        const point = character.codePointAt(0);
+        return (point >= 0xFDD0 && point <= 0xFDEF) || (point & 0xFFFE) === 0xFFFE;
+      }) ||
       !user || typeof user.email !== 'string' ||
       !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(user.email) ||
       user.email !== user.email.normalize('NFC')) {
