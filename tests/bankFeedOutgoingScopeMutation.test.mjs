@@ -53,3 +53,42 @@ test('outgoing multi-row INSERTs retain authorized scope and evidence after asyn
   assert.deepEqual(inserts.map(p => JSON.parse(p[5]).amountMinor), [125, 250]);
   assert.equal(statements.at(-1), 'COMMIT');
 });
+
+test('direct adapter refuses noncanonical authorization scopes before financial SQL', async () => {
+  const base = {
+    tenantId: 'tenant-original', provider: 'plaid',
+    connectionId: 'connection-original', allowedAccountIds: ['account-original'],
+  };
+  const statements = [];
+  let getterCalls = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query(sql) { statements.push(sql); return { rows: [] }; },
+        release() {},
+      };
+    },
+  };
+  const store = createBankFeedPostgresStore(pool);
+  const entry = {
+    ...base, accountId: 'account-original', transactionId: 'tx-1', amountMinor: 125,
+  };
+  const inherited = Object.assign(Object.create({ foreign: 'tenant' }), base);
+  const extra = { ...base, unexpected: 'foreign' };
+  const accessor = { ...base };
+  Object.defineProperty(accessor, 'unexpected', {
+    enumerable: true, get() { getterCalls++; throw new Error('executed getter'); },
+  });
+  const symbol = { ...base, [Symbol('hidden')]: 'foreign' };
+  const customAccounts = { ...base, allowedAccountIds: Object.assign(['account-original'], { extra: true }) };
+  const customPrototypeAccounts = { ...base, allowedAccountIds: ['account-original'] };
+  Object.setPrototypeOf(customPrototypeAccounts.allowedAccountIds, Object.create(Array.prototype));
+  for (const scope of [inherited, extra, accessor, symbol, customAccounts, customPrototypeAccounts]) {
+    await assert.rejects(
+      store.withTransaction(tx => tx.saveEntries(scope, [entry])),
+      /Invalid authenticated banking scope/,
+    );
+  }
+  assert.equal(getterCalls, 0);
+  assert.ok(statements.every(sql => sql === 'BEGIN' || sql === 'ROLLBACK'));
+});
