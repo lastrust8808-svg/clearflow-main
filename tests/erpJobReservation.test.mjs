@@ -237,6 +237,19 @@ test('reservation bounds oversized arrays before database reservation', async ()
   assert.equal(db.calls > 0, true);
 });
 
+test('reservation bounds wide accounting objects before database access', async () => {
+  const db = fakeDatabase();
+  const wide = Object.fromEntries(Array.from({ length: 10001 }, (_, i) => ['field' + i, i]));
+  await assert.rejects(reserve({ db, ...args, payload: wide }),
+    /object property count limit exceeded/);
+  assert.equal(db.calls, 0, 'wide objects must not reach SQL');
+
+  const boundary = Object.fromEntries(Array.from({ length: 10000 }, (_, i) => ['f' + i, i]));
+  // The serialized-size guard remains independent of the property-count guard.
+  await assert.rejects(reserve({ db, ...args, payload: boundary }), /too large/);
+  assert.equal(db.calls, 0);
+});
+
 test('reservation rejects empty accounting property names before database access', async () => {
   const db = fakeDatabase();
   for (const payload of [
