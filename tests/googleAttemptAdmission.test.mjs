@@ -786,3 +786,30 @@ test('oversized OAuth workspace arrays fail closed before reducer execution', ()
   assert.equal(accepted.status, 'pending-drive-check');
   assert.equal(accepted.workspaces.length, 10000);
 });
+
+test('oversized OAuth admission records fail closed before reducer execution', () => {
+  const oversized = Object.fromEntries(
+    Array.from({ length: 10001 }, (_, i) => ['field' + i, i])
+  );
+  const current = { ...pending('attempt-B'), profile: oversized };
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    called = true;
+    return { ...current, status: 'authenticated' };
+  }), current);
+  assert.equal(called, false);
+
+  const valid = Object.fromEntries(
+    Array.from({ length: 10000 }, (_, i) => ['field' + i, i])
+  );
+  const accepted = admitGoogleAttemptResult(
+    { ...pending('attempt-B'), profile: valid },
+    'attempt-B',
+    state => ({ ...state, status: 'pending-drive-check' })
+  );
+  assert.equal(accepted.status, 'pending-drive-check');
+
+  const original = pending('attempt-B');
+  const result = { ...original, status: 'authenticated', profile: oversized };
+  assert.equal(admitGoogleAttemptResult(original, 'attempt-B', () => result), original);
+});
