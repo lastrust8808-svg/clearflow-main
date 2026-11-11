@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify production lockfile installs reproducibly without lifecycle scripts
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Audit locked production dependencies and retain machine-readable evidence
         id: audit
         shell: bash
