@@ -278,6 +278,19 @@ test('reservation rejects Unicode noncharacters in nested accounting field names
   assert.equal(db.calls, 0, 'unsafe accounting keys must never reserve a durable job');
 });
 
+test('nested invoice minor-unit amounts reject fractional, unsafe and negative-zero values before SQL', async () => {
+  const db = fakeDatabase();
+  for (const amount of [1.5, Number.MAX_SAFE_INTEGER + 1, -0, NaN, Infinity, '125', null]) {
+    for (const field of ['amountCents', 'amount_cents', 'amountMinorUnits']) {
+      await assert.rejects(reserve({
+        db, ...args,
+        payload: { invoiceId: 'invoice-123', lines: [{ description: 'service', [field]: amount }] },
+      }), /ERP job payload/);
+    }
+  }
+  assert.equal(db.calls, 0, 'invalid minor-unit line items must never reach SQL');
+});
+
 test('reservation rejects accessors without invoking them', async () => {
   const db = fakeDatabase();
   let invoked = 0;
