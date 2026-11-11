@@ -63,7 +63,7 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   if (active.has(value)) throw new TypeError('Cyclic admission state');
   if (seen.has(value)) return seen.get(value);
   const proto = Object.getPrototypeOf(value);
-  if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+  if (Array.isArray(value) ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
   }
   // JSON.stringify converts array holes into null, losing workspace evidence.
