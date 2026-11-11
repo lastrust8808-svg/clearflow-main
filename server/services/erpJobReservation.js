@@ -138,6 +138,12 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
     throw new TypeError('ERP job payload contains a symbol property');
   }
   if (Array.isArray(value)) {
+    // Bound validation work before iterating a caller-controlled line-item array.
+    // The byte limit is checked after canonicalization, so it cannot protect
+    // against excessive sparse/dense array traversal on its own.
+    if (value.length > 10000) {
+      throw new TypeError('ERP job payload array length limit exceeded');
+    }
     for (const key of Object.keys(descriptors)) {
       if (key !== 'length' && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) {
         throw new TypeError('ERP job payload contains an ignored array property');
