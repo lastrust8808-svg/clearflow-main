@@ -763,3 +763,26 @@ test('custom workspace array prototypes fail closed before OAuth state admission
   }));
   assert.equal(valid.status, 'pending-drive-check');
 });
+
+test('oversized OAuth workspace arrays fail closed before reducer execution', () => {
+  const current = pending('attempt-B');
+  let called = false;
+  const oversized = [];
+  oversized.length = 10001;
+  const incoming = { ...current, workspaces: oversized };
+  assert.equal(admitGoogleAttemptResult(incoming, 'attempt-B', () => {
+    called = true;
+    return { ...incoming, status: 'authenticated' };
+  }), incoming);
+  assert.equal(called, false);
+
+  const output = { ...current, status: 'authenticated', workspaces: oversized };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => output), current);
+
+  const boundary = Array.from({ length: 10000 }, (_, i) => i);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', workspaces: boundary,
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.workspaces.length, 10000);
+});
