@@ -8,7 +8,8 @@ const base = { ...scope, currency: 'USD', asOfAt: '2026-11-11T12:00:00.000Z',
 const recorded = () => ({ ...scope, eventId: 'event-1', type: 'asset_recorded',
   occurredAt: '2026-11-11T10:00:00.000Z', assetId: 'asset-1',
   evidenceRef: 'proof-1', currency: 'USD', kind: 'cash',
-  sourceType: 'bank_balance', amountMinor: 1000 });
+  sourceType: 'bank_balance', amountMinor: 1000,
+  restrictedMinor: 0, pledgedMinor: 0 });
 const removed = () => ({ ...scope, eventId: 'event-2', type: 'asset_removed',
   occurredAt: '2026-11-11T11:00:00.000Z', assetId: 'asset-1',
   evidenceRef: 'proof-2' });
