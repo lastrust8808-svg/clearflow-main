@@ -859,3 +859,25 @@ test('deeply nested workspace snapshots fail closed without advancing OAuth', ()
   }));
   assert.equal(accepted.status, 'pending-drive-check');
 });
+
+
+test('aggregate OAuth snapshot budget rejects many individually small records', () => {
+  const base = pending('attempt-B');
+  // Every container is below its individual limit, but total traversal is not.
+  const large = Array.from({ length: 9000 }, (_, index) => ({ id: index, detail: { active: true } }));
+  const current = { ...base, workspaces: large };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: large,
+  })), base);
+
+  const small = Array.from({ length: 100 }, (_, index) => ({ id: index, detail: { active: true } }));
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: small,
+  })).status, 'authenticated');
+});
