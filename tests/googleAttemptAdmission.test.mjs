@@ -736,3 +736,30 @@ test('cyclic workspace records fail closed before reducer or persistence', () =>
   }));
   assert.equal(accepted.status, 'authenticated');
 });
+
+
+test('custom workspace array prototypes fail closed before OAuth state admission', () => {
+  const base = pending('attempt-B');
+  const derived = [{ id: 'owner' }];
+  const customPrototype = Object.create(Array.prototype);
+  customPrototype.toJSON = () => [{ id: 'substituted' }];
+  Object.setPrototypeOf(derived, customPrototype);
+  const subclassed = new (class WorkspaceList extends Array {} )();
+  subclassed.push({ id: 'owner' });
+  for (const workspaces of [derived, subclassed]) {
+    const active = { ...base, workspaces };
+    let reducerCalled = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      reducerCalled = true;
+      return { ...base, status: 'authenticated' };
+    }), active);
+    assert.equal(reducerCalled, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspaces,
+    })), base);
+  }
+  const valid = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'pending-drive-check', workspaces: [{ id: 'owner' }],
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
