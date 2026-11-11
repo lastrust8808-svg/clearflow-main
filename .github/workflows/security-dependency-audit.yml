@@ -8,6 +8,8 @@ on:
     paths:
       - package.json
       - package-lock.json
+      - npm-shrinkwrap.json
+      - .npmrc
       - .github/workflows/security-dependency-audit.yml
   workflow_dispatch:
 
