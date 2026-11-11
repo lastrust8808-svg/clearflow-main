@@ -157,6 +157,11 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       assertJsonSafe(descriptor.value, seen, depth + 1);
     }
   } else {
+    // Bound descriptor traversal before canonical hashing or SQL. A very wide
+    // object can exhaust CPU even when its serialized byte count is rejected.
+    if (Object.keys(descriptors).length > 10000) {
+      throw new TypeError('ERP job payload object property count limit exceeded');
+    }
     for (const [key, descriptor] of Object.entries(descriptors)) {
       // JSON.stringify silently omits non-enumerable object properties.
       // Reject them rather than hashing/storing a different financial payload.
