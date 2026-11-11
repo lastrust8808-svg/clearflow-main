@@ -215,3 +215,26 @@ test('a third posted reference collision quarantines only that reference, not an
   assert.deepEqual(first.ambiguous.map((entry) => entry.candidateCount), [1, 0, 1]);
   assert.deepEqual(input, snapshot);
 });
+
+
+test('same-account statement reference reuse invalidates an otherwise unique cross-account pair', () => {
+  const debit = row('checking', 'outbound', -1250);
+  const credit = row('savings', 'inbound', 1250);
+  // A second posted entry on the debit account demonstrates that this
+  // reference identifies a statement or batch rather than a unique transfer.
+  const sameAccount = row('checking', 'other-checking-entry', -900);
+  const baseline = review([debit, credit]);
+  assert.equal(baseline.candidates.length, 1);
+  const input = [debit, sameAccount, credit];
+  const snapshot = structuredClone(input);
+  const first = review(input);
+  assert.deepEqual(first, review([...input].reverse()));
+  assert.deepEqual(first.candidates, []);
+  assert.deepEqual(first.ambiguous.map(({ transactionId, candidateCount }) =>
+    [transactionId, candidateCount]), [
+    ['outbound', 1],
+    ['other-checking-entry', 0],
+    ['inbound', 1],
+  ]);
+  assert.deepEqual(input, snapshot);
+});
