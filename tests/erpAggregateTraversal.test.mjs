@@ -18,3 +18,37 @@ test('aggregate payload traversal fails closed before SQL reservation', async ()
   );
   assert.equal(queries, 0);
 });
+
+test('Unicode noncharacters in invoice recipient and memo fail before SQL', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
+  for (const invalid of ['\uFDD0', String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff)]) {
+    await assert.rejects(
+      reserveErpOperationJob({
+        db,
+        authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+        operation: 'invoice_delivery',
+        idempotencyKey: 'noncharacter-001',
+        payload: { recipient: 'customer' + invalid, memo: 'invoice' },
+      }),
+      /Unicode noncharacter/,
+    );
+  }
+  assert.equal(queries, 0);
+});
+
+test('valid supplementary Unicode remains permitted through payload validation', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('test database unavailable'); } };
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'unicode-valid-001',
+      payload: { recipient: 'customer ' + String.fromCodePoint(0x1f600) },
+    }),
+    /test database unavailable/,
+  );
+  assert.equal(queries, 1);
+});
