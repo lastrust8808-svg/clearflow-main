@@ -221,6 +221,22 @@ test('reservation rejects lossy JSON payload values before any database write', 
   assert.equal(db.calls, 0);
 });
 
+test('reservation bounds oversized arrays before database reservation', async () => {
+  const db = fakeDatabase();
+  const oversized = Array(10001).fill(0);
+  await assert.rejects(reserve({
+    db, ...args, payload: { invoiceId: 'invoice-123', lines: oversized },
+  }), /array length limit exceeded/);
+  assert.equal(db.calls, 0, 'oversized arrays must never reach SQL');
+
+  const boundary = Array(10000).fill(0);
+  const receipt = await reserve({
+    db, ...args, payload: { invoiceId: 'invoice-123', lines: boundary },
+  });
+  assert.equal(receipt.status, 'queued');
+  assert.equal(db.calls > 0, true);
+});
+
 test('reservation rejects empty accounting property names before database access', async () => {
   const db = fakeDatabase();
   for (const payload of [
