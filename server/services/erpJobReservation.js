@@ -88,7 +88,8 @@ function authenticatedWorkerIdentity(scope) {
 // operation, { amount: NaN } must never become { amount: null }, and a missing
 // recipient must not hash identically to a deliberately omitted field.
 // Only explicit, plain JSON data is accepted; no getters or custom toJSON.
-function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
+function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remaining: 20000 }) {
+  if (--budget.remaining < 0) throw new TypeError('ERP job payload aggregate traversal limit exceeded');
   if (depth > 32) throw new TypeError('ERP job payload nesting limit exceeded');
   if (value === null || typeof value === 'boolean') return;
   // Lone UTF-16 surrogates are not Unicode scalar values. Downstream UTF-8
@@ -154,7 +155,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
       if (!Object.hasOwn(descriptors, i)) throw new TypeError('ERP job payload contains a sparse array');
       const descriptor = descriptors[i];
       if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('ERP job payload contains an accessor');
-      assertJsonSafe(descriptor.value, seen, depth + 1);
+      assertJsonSafe(descriptor.value, seen, depth + 1, budget);
     }
   } else {
     // Bound descriptor traversal before canonical hashing or SQL. A very wide
@@ -206,7 +207,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0) {
         // separately rejects unsafe integers, negative zero and non-finites.
         throw new TypeError('ERP job payload contains an invalid minor-unit amount');
       }
-      assertJsonSafe(descriptor.value, seen, depth + 1);
+      assertJsonSafe(descriptor.value, seen, depth + 1, budget);
     }
   }
   seen.delete(value);
