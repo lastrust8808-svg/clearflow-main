@@ -98,6 +98,11 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
   if (typeof value === 'string') {
     if (value.length > 65536) throw new TypeError('ERP job payload string length limit exceeded');
     if (/\p{Cs}/u.test(value)) throw new TypeError('ERP job payload contains malformed Unicode');
+    if ([...value].some(char => {
+      const cp = char.codePointAt(0);
+      return (cp >= 0xfdd0 && cp <= 0xfdef) ||
+        (cp >= 0xfffe && (cp & 0xffff) >= 0xfffe);
+    })) throw new TypeError('ERP job payload contains a Unicode noncharacter');
     return;
   }
   if (typeof value === 'number') {
