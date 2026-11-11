@@ -570,3 +570,27 @@ test('out-of-window posted evidence with a reused connection reference quarantin
   assert.deepEqual(plan([...transactions].reverse()), result);
   assert.deepEqual(transactions, before);
 });
+
+
+test('review scope accessors and inherited or symbol keys fail closed without execution', () => {
+  let reads = 0;
+  const accessorScope = {};
+  Object.defineProperty(accessorScope, 'tenantId', {
+    enumerable: true,
+    get() { reads += 1; throw new Error('scope getter executed'); },
+  });
+  accessorScope.transactions = [];
+  assert.throws(() => proposeBankTransferCandidates(accessorScope), /Invalid authorized transfer scope/);
+  assert.equal(reads, 0);
+
+  const inheritedScope = Object.create({ tenantId: 'tenant-a' });
+  inheritedScope.transactions = [];
+  assert.throws(() => proposeBankTransferCandidates(inheritedScope), /Invalid authorized transfer scope/);
+
+  const symbolScope = { tenantId: 'tenant-a', transactions: [] };
+  symbolScope[Symbol('hidden')] = 'untrusted';
+  assert.throws(() => proposeBankTransferCandidates(symbolScope), /Invalid authorized transfer scope/);
+
+  assert.deepEqual(proposeBankTransferCandidates({ tenantId: 'tenant-a', transactions: [] }),
+    { candidates: [], ambiguous: [] });
+});
