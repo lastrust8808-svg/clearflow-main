@@ -281,7 +281,7 @@ test('reservation rejects Unicode noncharacters in nested accounting field names
 test('nested invoice minor-unit amounts reject fractional, unsafe and negative-zero values before SQL', async () => {
   const db = fakeDatabase();
   for (const amount of [1.5, Number.MAX_SAFE_INTEGER + 1, -0, NaN, Infinity, '125', null]) {
-    for (const field of ['amountCents', 'amount_cents', 'amountMinorUnits']) {
+    for (const field of ['amountCents', 'amount_cents', 'amountMinorUnits', 'amount-minor-units', 'amount_minor-units', 'amount-minor_units']) {
       await assert.rejects(reserve({
         db, ...args,
         payload: { invoiceId: 'invoice-123', lines: [{ description: 'service', [field]: amount }] },
