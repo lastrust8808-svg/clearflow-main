@@ -813,3 +813,24 @@ test('oversized OAuth admission records fail closed before reducer execution', (
   const result = { ...original, status: 'authenticated', profile: oversized };
   assert.equal(admitGoogleAttemptResult(original, 'attempt-B', () => result), original);
 });
+
+
+test('malformed Unicode workspace identities fail closed on both admission paths', () => {
+  const base = pending('attempt-B');
+  for (const malformed of ['owner-\\uD800', 'owner-\\uDC00']) {
+    const current = { ...base, workspace: { id: malformed } };
+    let called = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...base, status: 'authenticated' };
+    }), current);
+    assert.equal(called, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspace: { id: malformed },
+    })), base);
+  }
+  const valid = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspace: { id: 'owner-\\u{1F680}' },
+  }));
+  assert.equal(valid.status, 'authenticated');
+});
