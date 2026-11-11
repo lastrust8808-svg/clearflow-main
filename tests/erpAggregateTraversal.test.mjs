@@ -86,3 +86,21 @@ test('valid supplementary Unicode accounting field names pass validation', async
   );
   assert.equal(queries, 1);
 });
+
+test('nested accounting field names with noncharacters fail before SQL', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
+  for (const invalid of [String.fromCodePoint(0xfdef), String.fromCodePoint(0x2ffff), String.fromCodePoint(0x10fffe)]) {
+    await assert.rejects(
+      reserveErpOperationJob({
+        db,
+        authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+        operation: 'invoice_delivery',
+        idempotencyKey: 'nested-noncharacter-001',
+        payload: { lineItems: [{ ['amount' + invalid]: 1200 }] },
+      }),
+      /unsafe Unicode property name/,
+    );
+  }
+  assert.equal(queries, 0);
+});
