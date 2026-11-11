@@ -54,7 +54,20 @@ function snapshotScope(scope) {
   if (!scope || typeof scope !== 'object' || Array.isArray(scope) || nodeTypes.isProxy(scope)) {
     throw new Error('Invalid authenticated banking scope.');
   }
+  // An authorization scope must be a closed, inert data envelope. Reject
+  // inherited identities, unexpected fields and accessor side channels before
+  // constructing any SQL parameters (including direct adapter calls).
+  const prototype = Object.getPrototypeOf(scope);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('Invalid authenticated banking scope.');
+  }
   const descriptors = Object.getOwnPropertyDescriptors(scope);
+  const scopeKeys = ['tenantId', 'provider', 'connectionId', 'allowedAccountIds'];
+  if (Reflect.ownKeys(descriptors).length !== scopeKeys.length ||
+      !scopeKeys.every((key) => descriptors[key]?.enumerable &&
+        Object.hasOwn(descriptors[key], 'value'))) {
+    throw new Error('Invalid authenticated banking scope.');
+  }
   const ownValue = (key) => {
     const descriptor = descriptors[key];
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
@@ -63,7 +76,8 @@ function snapshotScope(scope) {
     return descriptor.value;
   };
   const originalIds = ownValue('allowedAccountIds');
-  if (!Array.isArray(originalIds) || nodeTypes.isProxy(originalIds)) {
+  if (!Array.isArray(originalIds) || nodeTypes.isProxy(originalIds) ||
+      Object.getPrototypeOf(originalIds) !== Array.prototype) {
     throw new Error('Invalid authenticated banking scope.');
   }
   const idDescriptors = Object.getOwnPropertyDescriptors(originalIds);
