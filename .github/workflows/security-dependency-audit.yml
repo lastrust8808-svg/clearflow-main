@@ -70,7 +70,10 @@ jobs:
           fi
           exit "$result"
       - name: Upload dependency audit evidence
-        if: always()
+        # npm ci can fail before an audit report exists (for example, an out-of-sync lockfile).
+        # Do not obscure that installation failure with a second missing-artifact error.
+        # If the audit ran but produced no JSON, keep the missing-evidence failure visible.
+        if: ${{ always() && steps.audit.outcome != 'skipped' }}
         uses: actions/upload-artifact@v4
         with:
           name: production-dependency-audit-json
