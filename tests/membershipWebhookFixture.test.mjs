@@ -456,3 +456,23 @@ test('signed fixture bounds JSON nesting before scoped event admission', () => {
   })), null);
   assert.equal(verifyScoped(scopedInput(scopedPayload))?.verified, true);
 });
+
+
+test('signed NFC-equivalent duplicate event keys fail closed before entitlement projection', () => {
+  // Distinct JSON spellings can represent canonically equivalent Unicode keys.
+  // Neither a valid HMAC nor a later JSON.parse overwrite may promote them.
+  const canonical = JSON.stringify(scopedPayload).slice(1);
+  const aliases = [
+    '"caf\\u00e9":"first","cafe\\u0301":"second"',
+    '"\\u0069d":"evt-shadow","id":"evt-shadow-2"',
+    '"tenantId":"foreign","\\u0074enantId":"tenant-test"',
+  ];
+  for (const fields of aliases) {
+    const body = Buffer.from('{' + fields + ',' + canonical, 'utf8');
+    assert.equal(verify(input({ rawBody: body, signatureHeader: sign(body) })), true);
+    assert.equal(verifyScoped(scopedInput(scopedPayload, {
+      rawBody: body, signatureHeader: sign(body),
+    })), null, fields);
+  }
+  assert.equal(verifyScoped(scopedInput())?.verified, true);
+});
