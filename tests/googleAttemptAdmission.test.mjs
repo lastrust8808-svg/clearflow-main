@@ -817,7 +817,7 @@ test('oversized OAuth admission records fail closed before reducer execution', (
 
 test('malformed Unicode workspace identities fail closed on both admission paths', () => {
   const base = pending('attempt-B');
-  for (const malformed of ['owner-\\uD800', 'owner-\\uDC00']) {
+  for (const malformed of ['owner-' + String.fromCharCode(0xD800), 'owner-' + String.fromCharCode(0xDC00)]) {
     const current = { ...base, workspace: { id: malformed } };
     let called = false;
     assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
