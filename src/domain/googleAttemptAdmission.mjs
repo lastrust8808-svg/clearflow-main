@@ -80,7 +80,12 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
       }
     }
   }
-  // Bound record traversal before cloning; large workspace maps can otherwise\n  // monopolize the OAuth callback even when each individual field is valid.\n  if (!Array.isArray(value) && Reflect.ownKeys(value).length > 10000) {\n    throw new TypeError('Oversized admission state object');\n  }\n  const copy = Array.isArray(value) ? [] : Object.create(proto);
+  // Bound record traversal before cloning; large workspace maps can otherwise
+  // monopolize the OAuth callback even when each individual field is valid.
+  if (!Array.isArray(value) && Reflect.ownKeys(value).length > 10000) {
+    throw new TypeError('Oversized admission state object');
+  }
+  const copy = Array.isArray(value) ? [] : Object.create(proto);
   seen.set(value, copy);
   active.add(value);
   for (const key of Reflect.ownKeys(value)) {
