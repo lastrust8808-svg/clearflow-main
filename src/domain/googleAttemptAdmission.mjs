@@ -44,7 +44,10 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 
 // Clone ordinary nested records before invoking an untrusted admission reducer.
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
-function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet(), depth = 0) {
+function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet(), depth = 0, budget = { remaining: 20000 }) {
+  // Bound total traversal, not only individual containers. Many small records
+  // can otherwise bypass per-array and per-object limits during OAuth.
+  if (--budget.remaining < 0) throw new TypeError('Oversized aggregate admission state');
   // Cap nesting before recursive traversal can exhaust the JavaScript stack.
   // A deeply nested workspace must fail closed rather than stall OAuth.
   if (depth > 64) throw new TypeError('Excessively nested admission state');
@@ -114,7 +117,7 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     if (!descriptor.enumerable) throw new TypeError('Non-enumerable admission state');
     Object.defineProperty(copy, key, {
       ...descriptor,
-      value: snapshotAdmissionState(descriptor.value, seen, active, depth + 1),
+      value: snapshotAdmissionState(descriptor.value, seen, active, depth + 1, budget),
     });
   }
   active.delete(value);
