@@ -90,6 +90,31 @@ try {
     }
   });
 
+  await test('every valid financial mutation remains non-cacheable and unacknowledged', async () => {
+    const cases = [
+      ['/invoice-deliveries', { ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid' }, {}],
+      ['/invoice-exports', invoice, {}],
+      ['/settlements/execute', {
+        entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 0.01,
+      }, {}],
+      ['/reconciliations/:reconciliationId/statement-import', {
+        bankAccountId: 'bank-test', statementEndingBalance: 0.01,
+      }, { reconciliationId: 'recon-test' }],
+      ['/reconciliations/:reconciliationId/close', {}, { reconciliationId: 'recon-test' }],
+    ];
+    for (const [path, body, params] of cases) {
+      const response = await invoke('POST', path, body, params);
+      assert.equal(response.statusCode, 503, path);
+      assert.equal(response.headers['cache-control'], 'no-store', path);
+      assert.equal(response.body.success, false, path);
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED', path);
+      assert.match(response.body.error, /No job was queued and no message was sent/, path);
+      for (const key of ['job', 'importJob', 'closeJob', 'execution', 'receipt', 'queuedAt']) {
+        assert.equal(response.body[key], undefined, path + ': ' + key);
+      }
+    }
+  });
+
   await test('missing delivery fields remain a 400 validation error', async () => {
     const response = await invoke('POST', '/invoice-deliveries', { invoiceId: 'inv-test' });
     assert.equal(response.statusCode, 400);
