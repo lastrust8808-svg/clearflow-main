@@ -76,6 +76,11 @@ function identifier(value, label) {
       throw new TypeError(label + ' must be a canonical nonempty identifier');
     }
   }
+  // Match reserveCapacity's prototype-sensitive identity admission boundary.
+  // Removed-asset events do not pass through the active-entry classifier.
+  if (value === '__proto__' || value === 'constructor' || value === 'prototype') {
+    throw new TypeError(label + ' must not be a prototype-sensitive identifier');
+  }
   return value;
 }
 
