@@ -56,7 +56,7 @@ test('valid supplementary Unicode remains permitted through payload validation',
 test('Unicode noncharacters in accounting field names fail before SQL', async () => {
   let queries = 0;
   const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
-  for (const invalid of ['\\uFDD0', String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff)]) {
+  for (const invalid of [String.fromCodePoint(0xfdd0), String.fromCodePoint(0x1fffe), String.fromCodePoint(0x10ffff)]) {
     await assert.rejects(
       reserveErpOperationJob({
         db,
