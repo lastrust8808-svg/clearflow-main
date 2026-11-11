@@ -830,7 +830,7 @@ test('malformed Unicode workspace identities fail closed on both admission paths
     })), base);
   }
   const valid = admitGoogleAttemptResult(base, 'attempt-B', () => ({
-    ...base, status: 'authenticated', workspace: { id: 'owner-\\u{1F680}' },
+    ...base, status: 'authenticated', workspace: { id: 'owner-' + String.fromCodePoint(0x1F680) },
   }));
   assert.equal(valid.status, 'authenticated');
 });
