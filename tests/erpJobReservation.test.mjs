@@ -2460,3 +2460,17 @@ test('oversized ERP string values and property names fail before database access
   }
   assert.equal(db.calls, 0, 'oversized input must never reach SQL');
 });
+
+test('mixed-separator minor-unit accounting fields cannot bypass exact-cent validation', async () => {
+  const db = fakeDatabase();
+  for (const key of ['amount_minorUnits', 'amount-minorUnits', 'amount_minor-units', 'amount-minor_units']) {
+    for (const value of [1.5, '150', null, true]) {
+      await assert.rejects(reserve({ db, ...args, payload: { invoiceId: 'invoice-123', [key]: value } }),
+        /invalid minor-unit amount/, key);
+    }
+  }
+  assert.equal(db.calls, 0, 'invalid accounting amounts must fail before SQL');
+  const accepted = await reserve({ db, ...args, payload: { amount_minorUnits: 150 } });
+  assert.equal(accepted.status, 'queued');
+  assert.equal(db.calls, 1);
+});
