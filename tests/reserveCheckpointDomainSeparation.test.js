@@ -34,7 +34,7 @@ test('append refuses a history digest substituted for authenticated predecessor 
     ...scope, eventId: 'event-digest-2', type: 'asset_recorded',
     occurredAt: '2026-11-11T12:00:00.001Z', assetId: 'asset-digest-2',
     evidenceRef: 'evidence-digest-2', currency: 'USD', kind: 'cash',
-    sourceType: 'bank_balance', amountMinor: 200,
+    sourceType: 'bank_balance', amountMinor: 200, restrictedMinor: 0, pledgedMinor: 0,
   }], '2026-11-11T12:00:00.001Z');
   const predecessor = projectReserveJournal(before);
   assert.throws(() => verifyReserveJournalAppend(before, after, predecessor.journalSha256),
