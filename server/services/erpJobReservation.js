@@ -204,7 +204,7 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
       // Accept both camelCase and snake_case accounting conventions. Without
       // this, amount_cents: 1.5 bypasses the same exact-minor-unit rule that
       // rejects amountCents: 1.5, creating inconsistent financial receipts.
-      if (/(?:Minor|Cents|MinorUnits|(?:_|-)(?:minor|cents|minor(?:_|-)units))$/i.test(key) &&
+      if (/(?:MinorUnits|Minor|Cents|(?:_|-)(?:minor(?:_|-)?units|minor|cents))$/i.test(key) &&
           (typeof descriptor.value !== 'number' ||
            (Number.isFinite(descriptor.value) && !Number.isInteger(descriptor.value)))) {
         // A string, null, boolean, object, or fractional amount can be
