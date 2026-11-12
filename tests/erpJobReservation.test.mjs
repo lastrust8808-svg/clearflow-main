@@ -297,6 +297,22 @@ test('reservation rejects Unicode noncharacters in nested accounting field names
   assert.equal(db.calls, 0, 'unsafe accounting keys must never reserve a durable job');
 });
 
+test('default-ignorable accounting property names reject before SQL', async () => {
+  const db = fakeDatabase();
+  // Combining grapheme joiner and variation selector are invisible but are
+  // not covered by the usual Unicode control/format/space categories.
+  for (const invisible of ['\u034f', '\ufe0f']) {
+    for (const payload of [
+      { ['amount' + invisible + 'Cents']: 125 },
+      { invoiceId: 'invoice-123', details: { ['recipient' + invisible]: 'member@example.test' } },
+      { lines: [{ ['quantity' + invisible]: 2 }] },
+    ]) {
+      await assert.rejects(reserve({ db, ...args, payload }), /unsafe Unicode property name/);
+    }
+  }
+  assert.equal(db.calls, 0, 'hidden accounting keys must never reach SQL');
+});
+
 test('nested invoice minor-unit amounts reject fractional, unsafe and negative-zero values before SQL', async () => {
   const db = fakeDatabase();
   for (const amount of [1.5, Number.MAX_SAFE_INTEGER + 1, -0, NaN, Infinity, '125', null]) {
