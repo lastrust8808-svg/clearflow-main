@@ -186,6 +186,25 @@ test('tenant boundaries and operation boundaries do not collide', async () => {
   assert.equal(db.rows.size, 3);
 });
 
+test('default-ignorable authenticated identifiers fail before SQL', async () => {
+  // U+034F (combining grapheme joiner) and U+FE0F (variation selector)
+  // are invisible identity modifiers outside the usual control categories.
+  for (const invisible of ['\u034f', '\ufe0f']) {
+    const db = fakeDatabase();
+    for (const authenticatedScope of [
+      { tenantId: 'tenant' + invisible + '-a', actorId: 'actor-a' },
+      { tenantId: 'tenant-a', actorId: 'actor' + invisible + '-a' },
+    ]) {
+      await assert.rejects(reserve({ db, ...args, authenticatedScope }), /Invalid authenticated/);
+    }
+    await assert.rejects(claim({
+      db, authenticatedWorker: { tenantId: 'tenant-a', workerId: 'worker' + invisible + '-a' },
+      operation: 'invoice_delivery',
+    }), /Invalid authenticated worker/);
+    assert.equal(db.calls, 0, 'invisible identities must not reach SQL');
+  }
+});
+
 test('rejects unauthenticated, invalid and oversized requests before querying', async () => {
   const db = fakeDatabase();
   for (const invalid of [
