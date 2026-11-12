@@ -795,3 +795,25 @@ test('feed replay rejects noncanonical and noncharacter provider identity keys',
   }
   assert.equal(planBankFeedReplay({ ...base(), events: [event('café')] }).applied, 1);
 });
+
+
+test('proxy-backed feed envelopes and batches fail closed without executing traps', () => {
+  let trapCalls = 0;
+  const proxy = (value) => new Proxy(value, {
+    get() { trapCalls++; throw new Error('proxy getter executed'); },
+    getPrototypeOf() { trapCalls++; throw new Error('proxy prototype trap executed'); },
+    ownKeys() { trapCalls++; throw new Error('proxy ownKeys trap executed'); },
+  });
+  const original = base();
+  for (const input of [
+    proxy(original),
+    { ...base(), allowedAccountIds: proxy(['acct-a']) },
+    { ...base(), existing: proxy([]) },
+    { ...base(), events: proxy([event('tx-1')]) },
+    { ...base(), events: [proxy(event('tx-1'))] },
+  ]) {
+    assert.throws(() => planBankFeedReplay(input), /malformed canonical feed/);
+  }
+  assert.equal(trapCalls, 0);
+  assert.deepEqual(planBankFeedReplay({ ...base(), events: [event('valid')] }).applied, 1);
+});
