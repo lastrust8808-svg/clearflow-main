@@ -45,3 +45,19 @@ test('scoped signed multibyte JSON uses raw UTF-8 byte length at boundary', () =
   assert.equal(aboveLimit.length, 65540);
   assert.equal(verifyScopedMembershipWebhookFixture(signed(aboveLimit)), null);
 });
+
+test('correctly signed malformed UTF-8 at the byte ceiling never becomes a verified event', () => {
+  const base = Buffer.from(JSON.stringify(payload), 'utf8');
+  const body = Buffer.concat([
+    base,
+    Buffer.alloc(65536 - base.length - 1, 0x20),
+    Buffer.from([0xff]),
+  ]);
+  assert.equal(body.length, 65536);
+  // HMAC validates the exact bytes; scoped JSON admission must independently
+  // reject lossy UTF-8 decoding rather than normalize an attacker-signed body.
+  assert.equal(verifyScopedMembershipWebhookFixture(signed(body)), null);
+  assert.equal(verifyScopedMembershipWebhookFixture(signed(
+    Buffer.concat([base, Buffer.alloc(65536 - base.length, 0x20)]),
+  ))?.verified, true);
+});
