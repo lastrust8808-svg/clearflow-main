@@ -76,3 +76,27 @@ test('embedded Unicode space separators cannot spoof authenticated ERP identitie
     assert.equal(queries, 0, 'invalid identities must be rejected before SQL');
   }
 });
+
+test('bidirectional controls and zero-width formatting cannot spoof ERP tenant or worker identities', async () => {
+  for (const control of ['\u200b', '\u200d', '\u202e', '\u2066', '\u2069']) {
+    let queries = 0;
+    const db = { async query() { queries++; throw new Error('unexpected database call'); } };
+    for (const field of ['tenantId', 'actorId']) {
+      await assert.rejects(reserveErpOperationJob({
+        db,
+        authenticatedScope: { tenantId: 'tenant-a', actorId: 'actor-a', [field]: 'safe' + control + 'spoof' },
+        operation: 'invoice_delivery',
+        idempotencyKey: 'unique-key-123',
+        payload: { invoiceId: 'inv-1' },
+      }), /Invalid authenticated (tenant|actor)/);
+    }
+    for (const field of ['tenantId', 'workerId']) {
+      await assert.rejects(claimErpOperationJob({
+        db,
+        authenticatedWorker: { tenantId: 'tenant-a', workerId: 'worker-a', [field]: 'safe' + control + 'spoof' },
+        operation: 'invoice_delivery',
+      }), /Invalid authenticated (tenant|worker)/);
+    }
+    assert.equal(queries, 0, 'format-control identities must be rejected before SQL');
+  }
+});
