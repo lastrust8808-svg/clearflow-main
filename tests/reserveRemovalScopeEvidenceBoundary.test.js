@@ -36,5 +36,5 @@ test('distinct removal evidence is accepted and removed cash stays excluded', ()
     projectReserveJournal(previous).checkpointSha256);
   assert.equal(result.removedAssetCount, 1);
   assert.equal(result.activeAssetCount, 0);
-  assert.equal(result.availableMinor, 0);
+  assert.equal(result.unencumberedCashMinor, 0);
 });
