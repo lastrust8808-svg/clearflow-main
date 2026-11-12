@@ -54,7 +54,7 @@ const validId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 256 &&
   value === value.trim() && value === value.normalize('NFC') &&
   value.isWellFormed() &&
-  !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\u2028\u2029]/u.test(value.replaceAll(' ', '')) &&
+  !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\u2028\u2029]/u.test(value) &&
   ![...value].some((character) => {
     const code = character.codePointAt(0)!;
     return (code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe;
