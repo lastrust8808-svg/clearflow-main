@@ -476,3 +476,18 @@ test('signed NFC-equivalent duplicate event keys fail closed before entitlement 
   }
   assert.equal(verifyScoped(scopedInput())?.verified, true);
 });
+
+
+test('signed UTF-8 string fixture enforces byte ceiling, not character count', () => {
+  // Each emoji occupies four UTF-8 bytes but two UTF-16 code units.
+  // The HMAC is valid in both cases; only the bounded body is admissible.
+  const within = '😀'.repeat(16384);
+  const over = within + '😀';
+  assert.equal(Buffer.byteLength(within, 'utf8'), 65536);
+  assert.equal(Buffer.byteLength(over, 'utf8'), 65540);
+  assert.equal(verify(input({ rawBody: within, signatureHeader: sign(within) })), true);
+  assert.equal(verify(input({ rawBody: over, signatureHeader: sign(over) })), false);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: over, signatureHeader: sign(over),
+  })), null);
+});
