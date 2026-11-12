@@ -38,7 +38,12 @@ test('ordinary Unicode persisted checkpoint cursor remains readable', async () =
 });
 
 test('persisted checkpoint cursor rejects unpaired UTF-16 surrogates before commit', async () => {
-  for (const cursor of ['cursor-\\uD800', 'cursor-\\uDC00', '\\uD800cursor', 'cursor\\uDC00']) {
+  for (const cursor of [
+    'cursor-' + String.fromCharCode(0xD800),
+    'cursor-' + String.fromCharCode(0xDC00),
+    String.fromCharCode(0xD800) + 'cursor',
+    'cursor' + String.fromCharCode(0xDC00),
+  ]) {
     const { pool, calls } = poolWithCheckpoint(cursor);
     await assert.rejects(
       createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(scope)),
