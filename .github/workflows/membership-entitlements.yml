@@ -9,6 +9,7 @@ on:
       - 'tests/membershipEntitlements.test.mjs'
       - 'src/domain/membershipWebhookFixture.mjs'
       - 'tests/membershipWebhookFixture.test.mjs'
+      - 'tests/membershipScopedBodyBoundary.test.mjs'
       - 'tests/membershipAdmissionProjection.test.mjs'
       - 'src/domain/googleOnboardingTimeout.mjs'
       - 'src/domain/googleAttemptAdmission.mjs'
@@ -31,4 +32,4 @@ jobs:
       - name: Check syntax
         run: node --check src/domain/membershipEntitlements.mjs && node --check src/domain/membershipWebhookFixture.mjs && node --check src/domain/googleOnboardingTimeout.mjs && node --check src/domain/googleAttemptAdmission.mjs
       - name: Run deterministic entitlement tests
-        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs tests/googleOAuthTokenNoncharacters.test.mjs tests/googleAttemptAdmission.test.mjs tests/googleWorkspaceAutosaveDurability.test.mjs
+        run: node --test tests/membershipEntitlements.test.mjs tests/membershipWebhookFixture.test.mjs tests/membershipScopedBodyBoundary.test.mjs tests/membershipAdmissionProjection.test.mjs tests/googleOnboardingTimeout.test.mjs tests/googleOAuthTokenNoncharacters.test.mjs tests/googleAttemptAdmission.test.mjs tests/googleWorkspaceAutosaveDurability.test.mjs
