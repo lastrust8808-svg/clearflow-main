@@ -36,3 +36,22 @@ test('ordinary international accounting text remains permitted', async () => {
   }), /database unavailable/);
   assert.equal(queries, 1, 'valid Unicode reaches durable storage, never an in-memory fallback');
 });
+
+test('unpaired UTF-16 surrogates in accounting values fail before SQL; valid astral text remains accepted', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('database unavailable'); } };
+  for (const malformed of ['\\uD800', '\\uDC00', 'client\\uD800@example.test', 'repair\\uDC00']) {
+    await assert.rejects(reserveErpOperationJob({
+      db, authenticatedScope: scope, operation: 'invoice_delivery',
+      idempotencyKey: 'invoice-surrogate-1',
+      payload: { invoiceId: 'invoice-1', lines: [{ description: malformed, amountCents: 125 }] },
+    }), /ERP job payload contains malformed Unicode/);
+  }
+  assert.equal(queries, 0, 'lossy UTF-8 replacement must not reach durable storage');
+  await assert.rejects(reserveErpOperationJob({
+    db, authenticatedScope: scope, operation: 'invoice_delivery',
+    idempotencyKey: 'invoice-astral-valid-1',
+    payload: { invoiceId: 'invoice-1', lines: [{ description: 'Repair 🔧', amountCents: 125 }] },
+  }), /database unavailable/);
+  assert.equal(queries, 1, 'valid supplementary Unicode must reach durable storage');
+});
