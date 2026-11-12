@@ -491,3 +491,21 @@ test('signed UTF-8 string fixture enforces byte ceiling, not character count', (
     rawBody: over, signatureHeader: sign(over),
   })), null);
 });
+
+
+test('scope-bound signed JSON admits the exact byte ceiling but rejects one extra byte', () => {
+  const canonical = scopedBody(scopedPayload);
+  assert.ok(canonical.length < 65536);
+  const exact = Buffer.concat([canonical, Buffer.alloc(65536 - canonical.length, 0x20)]);
+  const over = Buffer.concat([exact, Buffer.from(' ')]);
+  assert.equal(exact.length, 65536);
+  assert.equal(over.length, 65537);
+  assert.equal(verify(input({ rawBody: exact, signatureHeader: sign(exact) })), true);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: exact, signatureHeader: sign(exact),
+  }))?.verified, true, 'valid signed JSON at the byte ceiling must be admitted');
+  assert.equal(verify(input({ rawBody: over, signatureHeader: sign(over) })), false);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, {
+    rawBody: over, signatureHeader: sign(over),
+  })), null, 'one extra signed byte must fail closed');
+});
