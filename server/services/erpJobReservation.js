@@ -183,7 +183,8 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
       if (/\p{Cs}/u.test(key)) {
         throw new TypeError('ERP job payload contains malformed Unicode');
       }
-      if (!key || /[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(key) ||\n          /\p{Default_Ignorable_Code_Point}/u.test(key) || key !== key.normalize('NFC') ||
+      if (!key || /[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(key) ||
+          /\p{Default_Ignorable_Code_Point}/u.test(key) || key !== key.normalize('NFC') ||
           [...key].some(char => {
             const cp = char.codePointAt(0);
             return (cp >= 0xfdd0 && cp <= 0xfdef) ||
