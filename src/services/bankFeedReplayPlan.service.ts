@@ -427,7 +427,7 @@ const CURSOR_CHECKPOINT_FIELDS = new Set([
 const validCursor = (value: unknown): value is string | null =>
   value === null ||
   (typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
-   value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value));
+   value === value.trim() && value.isWellFormed() &&\n   !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value) &&\n   ![...value].some((character) => {\n     const code = character.codePointAt(0)!;\n     return (code >= 0xfdd0 && code <= 0xfdef) || (code & 0xfffe) === 0xfffe;\n   }));
 
 /**
  * Fail closed on stale checkpoints and non-advancing nonempty pages.
