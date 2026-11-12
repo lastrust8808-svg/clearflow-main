@@ -1,3 +1,4 @@
+import { types as nodeTypes } from 'node:util';
 /**
  * Pure, non-posting provider-feed replay planner. This deliberately does not
  * persist a cursor, write a ledger entry, or approve a reconciliation.
@@ -89,7 +90,8 @@ const EVENT_POSTING_FIELDS = new Set([
 ]);
 
 function assertCanonicalFeedList(value: unknown, label: string, maxItems = Infinity): void {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+  if (!Array.isArray(value) || nodeTypes.isProxy(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype) {
     throw new Error(`malformed canonical feed ${label} array.`);
   }
   if (value.length > maxItems) {
@@ -112,7 +114,8 @@ function assertCanonicalFeedObject(
   value: unknown, fields: ReadonlySet<string>, label: string,
   requiredFields: ReadonlySet<string> = new Set()
 ): void {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      nodeTypes.isProxy(value)) {
     throw new Error(`malformed canonical feed ${label} object.`);
   }
   const prototype = Object.getPrototypeOf(value);
