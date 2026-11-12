@@ -817,3 +817,19 @@ test('proxy-backed feed envelopes and batches fail closed without executing trap
   assert.equal(trapCalls, 0);
   assert.deepEqual(planBankFeedReplay({ ...base(), events: [event('valid')] }).applied, 1);
 });
+
+test('feed identity keys reject embedded ASCII spaces without changing valid keys', () => {
+  const valid = planBankFeedReplay({ ...base(), events: [event('tx-1')] });
+  assert.equal(valid.applied, 1);
+  const invalid = [
+    { ...base(), tenantId: 'tenant a' },
+    { ...base(), connectionId: 'item a' },
+    { ...base(), allowedAccountIds: ['acct a'] },
+    { ...base(), events: [event('tx 1')] },
+    { ...base(), events: [event('tx-1', { accountId: 'acct a' })] },
+    { ...base(), existing: [{ ...valid.entries[0], transactionId: 'tx 1' }] },
+  ];
+  for (const input of invalid) {
+    assert.throws(() => planBankFeedReplay(input), /Invalid authorized|invalid or unauthorized|outside the authorized scope/);
+  }
+});
