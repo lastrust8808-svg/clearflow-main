@@ -9,6 +9,7 @@ on:
       - 'tests/erpJobReservation.test.mjs'
       - 'tests/erpAggregateTraversal.test.mjs'
       - 'tests/erpIdentitySeparator.test.mjs'
+      - 'tests/erpSingularMinorUnits.test.mjs'
       - 'server/services/erpJobReservation.js'
       - 'server/db/erp_operation_jobs.proposed.sql'
       - 'tests/erpPostgresSchema.test.sql'
@@ -30,7 +31,7 @@ jobs:
           node-version: '22'
       - run: node --check server/routes/erp.js
       - run: node --check server/services/erpJobReservation.js
-      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs tests/erpDurableAcceptance.test.mjs tests/erpJobReservation.test.mjs tests/erpAggregateTraversal.test.mjs tests/erpIdentitySeparator.test.mjs
+      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs tests/erpDurableAcceptance.test.mjs tests/erpJobReservation.test.mjs tests/erpAggregateTraversal.test.mjs tests/erpIdentitySeparator.test.mjs tests/erpSingularMinorUnits.test.mjs
 
   postgres-schema:
     runs-on: ubuntu-latest
