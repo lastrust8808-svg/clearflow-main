@@ -212,6 +212,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         // Invisible/control characters can make distinct ledger identities
         // appear identical in audit views while preserving string equality.
         !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string) &&
+        !/\p{Default_Ignorable_Code_Point}/u.test(payload[field] as string) &&
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
@@ -440,7 +441,7 @@ export async function queueInvoiceExport(payload: {
 // otherwise throw URIError instead of the canonical fail-closed identity error.
 function assertCanonicalReconciliationId(value: unknown, label: string): void {
   if (typeof value !== 'string' || value.trim() === '' || value.length > 255 || value !== value.trim() || value !== value.normalize('NFC') ||
-      (/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value) || containsUnicodeNoncharacter(value))) {
+      (/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(value) || /\p{Default_Ignorable_Code_Point}/u.test(value) || containsUnicodeNoncharacter(value))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
   }
 }
