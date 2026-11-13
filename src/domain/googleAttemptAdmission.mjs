@@ -171,7 +171,10 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
     // Validate nested reducer output without invoking getters or accepting
     // mutable class instances. This traversal is cycle-safe and does not
     // change the returned state object's identity.
-    snapshotAdmissionState(next);
+    // Retain the validated detached snapshot, not the reducer-owned object.
+    // Otherwise a caller holding `next` can mutate workspace membership after
+    // validation and before React consumes the admitted authentication state.
+    const admittedSnapshot = snapshotAdmissionState(next);
     // Inspect thenability without invoking a potentially side-effecting getter.
     // Promise instances inherit a callable `then` from their prototype.
     let candidate = next;
@@ -193,8 +196,8 @@ export function admitGoogleAttemptResult(current, attemptId, reducer, expectedSt
     }
     if (!['unauthenticated', 'pending-gsi', 'pending-drive-check', 'pending-profile-setup', 'pending-verification', 'authenticated'].includes(fields.status) ||
         fields.googleAttemptId !== attemptId) return current;
+    return admittedSnapshot;
   } catch {
     return current;
   }
-  return next;
 }
