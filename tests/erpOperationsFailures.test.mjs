@@ -69,6 +69,28 @@ try {
     }
     assert.equal(requests, 0);
   });
+  await test('default-ignorable financial identities fail closed before all ERP POSTs', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw Error('unexpected POST'); };
+    const identityFields = [
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['reconciliationId', 'bankAccountId'],
+      ['reconciliationId'],
+    ];
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of identityFields[index]) {
+        for (const invisible of ['\\u034f', '\\ufe0f', '\\u200d']) {
+          await assert.rejects(
+            operations[index]({ ...payloads[index], [field]: 'id-' + invisible + '-value' }),
+            /requires nonempty canonical request identities/,
+            field + ' must reject ' + JSON.stringify(invisible),
+          );
+        }
+      }
+    }
+    assert.equal(requests, 0);
+  });
   await test('invoice delivery rejects serializer-mutated destination and content before POST', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw Error('unexpected network request'); };
