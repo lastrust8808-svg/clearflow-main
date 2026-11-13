@@ -922,3 +922,23 @@ test('invisible workspace property names cannot advance OAuth admission', () => 
   }));
   assert.equal(valid.status, 'authenticated');
 });
+
+
+test('accepted OAuth result is detached from reducer-owned mutable workspace records', () => {
+  const current = pending('attempt-B');
+  const reducerOwned = {
+    ...current, status: 'authenticated',
+    workspaces: [{ id: 'company', role: 'member' }],
+  };
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', () => reducerOwned);
+  assert.equal(accepted.status, 'authenticated');
+  assert.notEqual(accepted, reducerOwned);
+  assert.notEqual(accepted.workspaces, reducerOwned.workspaces);
+  assert.notEqual(accepted.workspaces[0], reducerOwned.workspaces[0]);
+  reducerOwned.workspaces[0].role = 'owner';
+  reducerOwned.workspaces.push({ id: 'personal', role: 'owner' });
+  reducerOwned.status = 'unauthenticated';
+  assert.equal(accepted.status, 'authenticated');
+  assert.deepEqual(accepted.workspaces.map((w) => [w.id, w.role]), [['company', 'member']]);
+  assert.throws(() => { accepted.workspaces[0].role = 'owner'; }, TypeError);
+});
