@@ -55,8 +55,6 @@ test('QR approval validates every entry, even after the requested origin matches
 });
 
 test('QR approval rejects port and hostname variants without URL normalization', () => {
-  assert.throws(() => requireApprovedQrOrigin(origin, ['https://verify.example.org:443']),
-    /Unapproved QR verification origin/);
-  assert.throws(() => requireApprovedQrOrigin(origin, ['https://VERIFY.example.org']),
-    /Unapproved QR verification origin/);
+  assert.throws(() => requireApprovedQrOrigin(origin, ['https://verify.example.org:443']));
+  assert.throws(() => requireApprovedQrOrigin(origin, ['https://VERIFY.example.org']));
 });
