@@ -24,7 +24,8 @@ test('approved QR lookup refuses unapproved origins even for an otherwise valid 
 
 test('approved QR lookup rejects token and route tampering without changing registry state', () => {
   const issued = createApprovedTrustDocumentQrLink(origin, approved);
-  const changed = issued.url.slice(0, -1) + (issued.url.endsWith('A') ? 'B' : 'A');
+  const tokenStart = issued.url.lastIndexOf('/') + 1;
+  const changed = issued.url.slice(0, tokenStart) + (issued.url[tokenStart] === 'A' ? 'B' : 'A') + issued.url.slice(tokenStart + 1);
   assert.notEqual(digestApprovedTrustDocumentQrLink(changed, origin, approved), issued.tokenHashSha256);
   assert.throws(() => digestApprovedTrustDocumentQrLink(issued.url + '?x=1', origin, approved));
   assert.throws(() => digestApprovedTrustDocumentQrLink(issued.url.replace('/verify/document/', '/verify/other/'), origin, approved));
