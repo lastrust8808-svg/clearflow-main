@@ -1,3 +1,5 @@
+import { types as nodeTypes } from 'node:util';
+
 /**
  * Resolve a Google OAuth popup timeout without manufacturing a membership.
  *
@@ -128,19 +130,28 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
   let verifiedEmail;
   try {
     if (!current || current.status !== 'pending-gsi') return current;
+    // A provider profile must not execute getters or proxy traps while being
+    // admitted to the pending workspace recovery state.
+    if (!user || typeof user !== 'object' || Array.isArray(user) || nodeTypes.isProxy(user)) return current;
+    const prototype = Object.getPrototypeOf(user);
+    if (prototype !== Object.prototype && prototype !== null) return current;
+    const emailField = Object.getOwnPropertyDescriptor(user, 'email');
+    const nameField = Object.getOwnPropertyDescriptor(user, 'name');
+    if (!emailField || !Object.hasOwn(emailField, 'value') ||
+        (nameField && !Object.hasOwn(nameField, 'value'))) return current;
     if (typeof accessToken !== 'string' || !accessToken.trim() || /[\s\p{Z}\p{Cc}\p{Cf}]/u.test(accessToken) ||
       Array.from(accessToken).some((character) => {
         const point = character.codePointAt(0);
         return (point >= 0xD800 && point <= 0xDFFF) ||
           (point >= 0xFDD0 && point <= 0xFDEF) || (point & 0xFFFE) === 0xFFFE;
       }) ||
-      !user || typeof user.email !== 'string' ||
-      !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(user.email) ||
-      user.email !== user.email.normalize('NFC')) {
+      !user || typeof emailField.value !== 'string' ||
+      !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(emailField.value) ||
+      emailField.value !== emailField.value.normalize('NFC')) {
       return current;
     }
-    verifiedName = user.name;
-    verifiedEmail = user.email;
+    verifiedName = nameField?.value;
+    verifiedEmail = emailField.value;
   } catch {
     return current;
   }
