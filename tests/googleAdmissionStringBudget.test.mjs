@@ -23,8 +23,8 @@ test('oversized reducer results cannot advance authenticated state', () => {
   assert.equal(rejected, current);
   const admitted = admitGoogleAttemptResult(current, 'bounded-attempt', () => ({
     ...current, status: 'pending-drive-check',
-    workspace: { description: 'x'.repeat(1048576) },
+    workspace: { description: 'x'.repeat(1048576 - 'bounded-attempt'.length - 'pending-drive-check'.length) },
   }));
   assert.equal(admitted.status, 'pending-drive-check');
-  assert.equal(admitted.workspace.description.length, 1048576);
+  assert.equal(admitted.workspace.description.length, 1048576 - 'bounded-attempt'.length - 'pending-drive-check'.length);
 });
