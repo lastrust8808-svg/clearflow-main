@@ -44,7 +44,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
 
 // Clone ordinary nested records before invoking an untrusted admission reducer.
 // A shallow spread leaves nested profile/workspace objects aliased to live state.
-function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet(), depth = 0, budget = { remaining: 20000 }) {
+function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSet(), depth = 0, budget = { remaining: 20000, remainingStringUnits: 1048576 }) {
   // Bound total traversal, not only individual containers. Many small records
   // can otherwise bypass per-array and per-object limits during OAuth.
   if (--budget.remaining < 0) throw new TypeError('Oversized aggregate admission state');
@@ -63,7 +63,7 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   }
   // JSON may escape lone surrogates, but UTF-8 storage and downstream APIs can
   // replace them with U+FFFD, changing workspace identities after admission.
-  // Bound string payloads as well as record counts: one oversized profile or\n  // workspace field must not monopolize OAuth admission and persistence.\n  if (typeof value === 'string' && value.length > 1048576) {\n    throw new TypeError('Oversized admission state string');\n  }\n  if (typeof value === 'string' && /\p{Cs}/u.test(value)) {
+  // Bound string payloads as well as record counts: one oversized profile or\n  // workspace field must not monopolize OAuth admission and persistence.\n  if (typeof value === 'string' && (value.length > 1048576 || (budget.remainingStringUnits -= value.length) < 0)) {\n    throw new TypeError('Oversized admission state string');\n  }\n  if (typeof value === 'string' && /\p{Cs}/u.test(value)) {
     throw new TypeError('Malformed Unicode admission state');
   }
   if (!value || typeof value !== 'object') return value;
