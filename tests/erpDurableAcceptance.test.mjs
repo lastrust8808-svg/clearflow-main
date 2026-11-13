@@ -115,6 +115,24 @@ try {
     }
   });
 
+  await test('reconciliation close rejects mismatched body identity before durable reservation', async () => {
+    for (const supplied of ['recon-other', '', null, 42]) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/close',
+        { reconciliationId: supplied }, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.equal(response.body.success, false);
+      assert.equal(response.body.code, 'ERP_RECONCILIATION_ID_MISMATCH');
+      assert.equal(response.body.closeJob, undefined);
+    }
+    for (const body of [{ reconciliationId: 'recon-test' }, {}]) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/close',
+        body, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 503);
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    }
+  });
+
   await test('missing delivery fields remain a 400 validation error', async () => {
     const response = await invoke('POST', '/invoice-deliveries', { invoiceId: 'inv-test' });
     assert.equal(response.statusCode, 400);
