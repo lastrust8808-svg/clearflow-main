@@ -11,7 +11,7 @@ const removed = { ...scope, eventId: 'remove-cash', type: 'asset_removed',
   assetId: 'cash-old', evidenceRef: 'evidence-removal', occurredAt: '2026-11-10T10:00:00.001Z' };
 const noncash = { ...original, eventId: 'record-collateral', assetId: 'collateral-new',
   evidenceRef: 'evidence-collateral', occurredAt: '2026-11-10T10:00:00.002Z',
-  kind: 'noncash', sourceType: 'other', amountMinor: 9000 };
+  kind: 'noncash_collateral', sourceType: 'other_collateral', amountMinor: 9000 };
 delete noncash.restrictedMinor;
 delete noncash.pledgedMinor;
 const snapshot = events => ({ ...scope, currency: 'USD',
