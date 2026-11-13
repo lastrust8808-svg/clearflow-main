@@ -217,7 +217,8 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
       assertJsonSafe(descriptor.value, seen, depth + 1, budget);
     }
   }
-  seen.delete(value);
+  // Keep completed nodes in the traversal set: repeated references are not
+  // independent JSON values and must not be silently duplicated in the digest.
 }
 
 // Idempotency must describe the JSON value, not the insertion order of keys
