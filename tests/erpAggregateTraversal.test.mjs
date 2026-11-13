@@ -104,3 +104,36 @@ test('nested accounting field names with noncharacters fail before SQL', async (
   }
   assert.equal(queries, 0);
 });
+
+test('shared accounting payload nodes fail closed before SQL reservation', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
+  const line = { amountCents: 1250, description: 'service' };
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'shared-node-001',
+      payload: { lineItems: [line, line] },
+    }),
+    /circular or shared reference/,
+  );
+  assert.equal(queries, 0);
+});
+
+test('distinct equal accounting payload nodes remain valid', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('test database unavailable'); } };
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'distinct-node-001',
+      payload: { lineItems: [{ amountCents: 1250 }, { amountCents: 1250 }] },
+    }),
+    /test database unavailable/,
+  );
+  assert.equal(queries, 1);
+});
