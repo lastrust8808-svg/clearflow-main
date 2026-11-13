@@ -25,6 +25,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify lockfile root dependency parity before registry access
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const root = lock.packages?.[''];
+          if (!root) throw new Error('Lockfile is missing the root package entry');
+          for (const group of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+            const expected = manifest[group] ?? {};
+            const actual = root[group] ?? {};
+            const names = new Set([...Object.keys(expected), ...Object.keys(actual)]);
+            for (const name of [...names].sort()) {
+              if (expected[name] !== actual[name]) {
+                throw new Error(`Lockfile root mismatch: ${group}.${name} (manifest=${JSON.stringify(expected[name] ?? null)}, lock=${JSON.stringify(actual[name] ?? null)}). Regenerate package-lock.json using npm install --package-lock-only, then verify npm ci.`);
+              }
+            }
+          }
+          console.log('Lockfile root dependency declarations match package.json');
+          NODE
       - name: Verify production lockfile installs reproducibly without lifecycle scripts
         run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Audit locked production dependencies and retain machine-readable evidence
