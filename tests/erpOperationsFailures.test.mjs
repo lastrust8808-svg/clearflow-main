@@ -698,13 +698,13 @@ try {
       const altered = { ...payloads[index], toJSON() {
         return { ...payloads[index], [identity]: 'different-id' };
       } };
-      await assert.rejects(operations[index](altered), /changed request identities during serialization/);
+      await assert.rejects(operations[index](altered), /custom JSON serializer; no request was sent/);
       const omitted = { ...payloads[index], toJSON() {
         const value = { ...payloads[index] };
         delete value[identity];
         return value;
       } };
-      await assert.rejects(operations[index](omitted), /changed request identities during serialization/);
+      await assert.rejects(operations[index](omitted), /custom JSON serializer; no request was sent/);
     }
     assert.equal(requests, 0, 'no financial POST may be initiated');
   });
@@ -718,7 +718,7 @@ try {
         return { ...original, statementEndingBalance: replacement };
       } };
       await assert.rejects(api.importReconciliationStatement(altered),
-        /changed request identities during serialization/);
+        /custom JSON serializer; no request was sent/);
     }
     assert.equal(requests, 0, 'no altered statement balance may cross the network');
   });
@@ -733,7 +733,7 @@ try {
           return { ...original, [field]: replacement };
         } };
         await assert.rejects(api.importReconciliationStatement(altered),
-          /changed request identities during serialization/);
+          /custom JSON serializer; no request was sent/);
       }
     }
     assert.equal(requests, 0, 'altered statement provenance must never cross the network');
@@ -750,7 +750,7 @@ try {
           return { ...original, [field]: replacement };
         } };
         await assert.rejects(api.closeReconciliationJob(altered),
-          /changed request identities during serialization/);
+          /custom JSON serializer; no request was sent/);
       }
     }
     assert.equal(requests, 0, 'altered closure evidence must never cross the network');
@@ -869,7 +869,7 @@ try {
       [3, { approvalCode: undefined }],
     ]) {
       await assert.rejects(operations[index]({ ...payloads[index], ...extra }),
-        /changed request identities during serialization/,
+        /custom JSON serializer; no request was sent/,
         'operation ' + index + ' must not silently lose scalar instructions');
     }
     assert.equal(requests, 0, 'lossy scalar payloads must fail before fetch');
