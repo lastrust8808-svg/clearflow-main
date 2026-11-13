@@ -881,3 +881,23 @@ test('aggregate OAuth snapshot budget rejects many individually small records', 
     ...base, status: 'authenticated', workspaces: small,
   })).status, 'authenticated');
 });
+
+test('OAuth admission rejects prototype-sensitive keys at any workspace depth', () => {
+  const current = pending('attempt-B');
+  for (const key of ['__proto__', 'constructor', 'prototype']) {
+    for (const nested of [false, true]) {
+      const payload = Object.create(null);
+      Object.defineProperty(payload, key, { value: { owner: 'other-tenant' }, enumerable: true });
+      const candidate = { ...current, status: 'authenticated', workspace: nested ? { data: payload } : payload };
+      assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => candidate), current);
+      const contaminated = { ...current, workspace: nested ? { data: payload } : payload };
+      let invoked = false;
+      assert.equal(admitGoogleAttemptResult(contaminated, 'attempt-B', () => {
+        invoked = true;
+        return { ...contaminated, status: 'authenticated' };
+      }), contaminated);
+      assert.equal(invoked, false);
+    }
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
