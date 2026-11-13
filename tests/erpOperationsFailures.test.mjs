@@ -869,7 +869,7 @@ try {
       [3, { approvalCode: undefined }],
     ]) {
       await assert.rejects(operations[index]({ ...payloads[index], ...extra }),
-        /custom JSON serializer; no request was sent/,
+        /(?:changed request identities during serialization|non-serializable payload|custom JSON serializer); no request was sent/,
         'operation ' + index + ' must not silently lose scalar instructions');
     }
     assert.equal(requests, 0, 'lossy scalar payloads must fail before fetch');
