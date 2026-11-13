@@ -128,6 +128,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
   // Treat inspection failures as unverified rather than crashing admission.
   let verifiedName;
   let verifiedEmail;
+  let verifiedId;
   try {
     if (!current || current.status !== 'pending-gsi') return current;
     // A provider profile must not execute getters or proxy traps while being
@@ -137,8 +138,10 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     if (prototype !== Object.prototype && prototype !== null) return current;
     const emailField = Object.getOwnPropertyDescriptor(user, 'email');
     const nameField = Object.getOwnPropertyDescriptor(user, 'name');
+    const idField = Object.getOwnPropertyDescriptor(user, 'id');
     if (!emailField || !Object.hasOwn(emailField, 'value') ||
-        (nameField && !Object.hasOwn(nameField, 'value'))) return current;
+        (nameField && !Object.hasOwn(nameField, 'value')) ||
+        (idField && !Object.hasOwn(idField, 'value'))) return current;
     if (typeof accessToken !== 'string' || !accessToken.trim() || /[\s\p{Z}\p{Cc}\p{Cf}]/u.test(accessToken) ||
       Array.from(accessToken).some((character) => {
         const point = character.codePointAt(0);
@@ -151,6 +154,9 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       return current;
     }
     if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
+    if (idField && (typeof idField.value !== 'string' || !idField.value.trim() ||
+      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(idField.value) || idField.value !== idField.value.normalize('NFC'))) return current;
+    verifiedId = idField?.value;
     verifiedName = nameField?.value;
     verifiedEmail = emailField.value;
   } catch {
@@ -168,6 +174,6 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     // A cached account snapshot is not evidence for this OAuth attempt.
     // Do not retain the provider-owned object: it can be mutated after validation.
     // Only verified profile fields are needed to identify pending recovery.
-    appData: { user: { email: verifiedEmail, ...(verifiedName === undefined ? {} : { name: verifiedName }) }, entities: [] },
+    appData: { user: { ...(verifiedId === undefined ? {} : { id: verifiedId }), email: verifiedEmail, ...(verifiedName === undefined ? {} : { name: verifiedName }) }, entities: [] },
   };
 }
