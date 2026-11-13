@@ -81,7 +81,19 @@ try {
     ]) {
       const payload = { ...base, toJSON() { return { ...base, ...mutation }; } };
       await assert.rejects(api.queueInvoiceDelivery(payload),
-        /changed request identities during serialization; no request was sent/);
+        /custom JSON serializer; no request was sent/);
+    }
+    assert.equal(requests, 0);
+  });
+  await test('inherited and own serializer hooks fail before financial POST', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw Error('unexpected POST'); };
+    for (let index = 0; index < operations.length; index++) {
+      const own = { ...payloads[index], toJSON() { return { ...payloads[index] }; } };
+      const inherited = Object.assign(Object.create({ toJSON() { return payloads[index]; } }), payloads[index]);
+      for (const payload of [own, inherited]) {
+        await assert.rejects(operations[index](payload), /custom JSON serializer; no request was sent/);
+      }
     }
     assert.equal(requests, 0);
   });
