@@ -901,3 +901,24 @@ test('OAuth admission rejects prototype-sensitive keys at any workspace depth', 
   }
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('invisible workspace property names cannot advance OAuth admission', () => {
+  const current = pending('attempt-B');
+  for (const key of ['workspace\u200bId', 'workspace\u034fId', 'workspace\ud800Id', 'workspace\ufdd0Id']) {
+    const state = { ...current, profile: { [key]: 'owner' } };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(state, 'attempt-B', () => {
+      invoked = true;
+      return { ...state, status: 'authenticated' };
+    }), state);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', profile: { [key]: 'owner' },
+    })), current);
+  }
+  const valid = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'authenticated', profile: { workspaceId: 'owner' },
+  }));
+  assert.equal(valid.status, 'authenticated');
+});
