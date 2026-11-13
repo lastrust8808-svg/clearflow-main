@@ -80,7 +80,7 @@ try {
     ];
     for (let index = 0; index < operations.length; index++) {
       for (const field of identityFields[index]) {
-        for (const invisible of ['\\u034f', '\\ufe0f', '\\u200d']) {
+        for (const invisible of [0x034f, 0xfe0f, 0x200d].map((codePoint) => String.fromCodePoint(codePoint))) {
           await assert.rejects(
             operations[index]({ ...payloads[index], [field]: 'id-' + invisible + '-value' }),
             /requires nonempty canonical request identities/,
