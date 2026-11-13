@@ -63,7 +63,7 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   }
   // JSON may escape lone surrogates, but UTF-8 storage and downstream APIs can
   // replace them with U+FFFD, changing workspace identities after admission.
-  if (typeof value === 'string' && /\p{Cs}/u.test(value)) {
+  // Bound string payloads as well as record counts: one oversized profile or\n  // workspace field must not monopolize OAuth admission and persistence.\n  if (typeof value === 'string' && value.length > 1048576) {\n    throw new TypeError('Oversized admission state string');\n  }\n  if (typeof value === 'string' && /\p{Cs}/u.test(value)) {
     throw new TypeError('Malformed Unicode admission state');
   }
   if (!value || typeof value !== 'object') return value;
