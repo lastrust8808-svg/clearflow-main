@@ -2509,3 +2509,23 @@ test('mixed-separator minor-unit accounting fields cannot bypass exact-cent vali
   assert.equal(accepted.status, 'queued');
   assert.equal(db.calls, 1);
 });
+
+test('in-cents and in-minor-units aliases reject fractional or nonnumeric accounting amounts before SQL', async () => {
+  const aliases = ['amountInCents', 'amount_in_cents', 'amount-in-cents',
+    'totalInMinorUnits', 'total_in_minor_units'];
+  for (const key of aliases) {
+    for (const invalid of [1.5, '150', null]) {
+      const db = fakeDatabase();
+      await assert.rejects(reserve({
+        db, ...args, payload: { invoiceId: 'invoice-123', [key]: invalid },
+      }), /invalid minor-unit amount/, key);
+      assert.equal(db.calls, 0, key + ' must not reach SQL');
+    }
+    const db = fakeDatabase();
+    const receipt = await reserve({
+      db, ...args, payload: { invoiceId: 'invoice-123', [key]: 150 },
+    });
+    assert.equal(receipt.created, true);
+    assert.equal(db.calls, 1);
+  }
+});
