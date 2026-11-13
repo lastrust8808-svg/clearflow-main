@@ -150,7 +150,7 @@ try {
   await test('default-ignorable identifiers fail closed across ERP HTTP mutations', async () => {
     // Combining grapheme joiner and variation selector are not caught by
     // Unicode whitespace/format-control checks alone.
-    for (const invisible of ['\\u034f', '\\ufe0f']) {
+    for (const invisible of ['\u034f', '\ufe0f']) {
       const bad = 'entity' + invisible + '-test';
       const cases = [
         ['/invoice-deliveries', { ...invoice, entityId: bad }, {}],
