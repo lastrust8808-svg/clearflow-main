@@ -34,6 +34,22 @@ const accepted = [
     completionReceiptId: '123e4567-e89b-42d3-a456-426614174103', completionPersistedAt: '2026-10-28T00:00:03Z' } },
 ];
 try {
+  await test('invisible Unicode delivery receipt identifiers never confirm sent invoices', async () => {
+    for (const invisible of ['\\u034f', '\\ufe0f', '\\u200d']) {
+      const forged = {
+        ...accepted[0],
+        job: { ...accepted[0].job, deliveryReceiptId: 'smtp-' + invisible + '-receipt' },
+      };
+      globalThis.fetch = async () => ({
+        ok: true, status: 200, json: async () => forged,
+      });
+      await assert.rejects(operations[0](payloads[0]), /not confirmed/);
+    }
+    globalThis.fetch = async () => ({
+      ok: true, status: 200, json: async () => accepted[0],
+    });
+    assert.deepEqual(await operations[0](payloads[0]), accepted[0]);
+  });
   await test('missing or padded financial identities fail before any network request', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw Error('unexpected request'); };
