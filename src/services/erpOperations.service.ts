@@ -183,6 +183,12 @@ function isConfirmedInvoiceDelivery(
 }
 
 async function postErp<T>(path: string, payload: unknown, label: string, validate: (value: unknown) => boolean): Promise<T> {
+  // JSON.stringify invokes inherited toJSON before the wire comparison. Reject
+  // serializer hooks even if they happen to preserve the currently checked
+  // fields: the authenticated accounting request must be plain scalar data.
+  if (isRecord(payload) && ('toJSON' in payload)) {
+    throw new TypeError(`${label} contains a custom JSON serializer; no request was sent.`);
+  }
   // Never send an ambiguous financial request. JSON.stringify silently omits
   // undefined identity fields, and a server may otherwise accept the wrong job.
   if (isRecord(payload) && Object.values(Object.getOwnPropertyDescriptors(payload)).some((descriptor) =>
