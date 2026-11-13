@@ -150,6 +150,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       emailField.value !== emailField.value.normalize('NFC')) {
       return current;
     }
+    if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
     verifiedName = nameField?.value;
     verifiedEmail = emailField.value;
   } catch {
@@ -165,6 +166,8 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     status: 'pending-drive-check',
     gsiUser: { name: verifiedName, email: verifiedEmail },
     // A cached account snapshot is not evidence for this OAuth attempt.
-    appData: { user, entities: [] },
+    // Do not retain the provider-owned object: it can be mutated after validation.
+    // Only verified profile fields are needed to identify pending recovery.
+    appData: { user: { email: verifiedEmail, ...(verifiedName === undefined ? {} : { name: verifiedName }) }, entities: [] },
   };
 }
