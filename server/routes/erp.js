@@ -145,6 +145,12 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
 // queue is not a closed accounting period; never acknowledge one as processed.
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
+  // Match statement-import's route/body identity contract. An optional body
+  // reconciliationId must never override or disagree with the URL target.
+  if (req.body && Object.hasOwn(req.body, 'reconciliationId') &&
+      req.body.reconciliationId !== reconciliationId) {
+    return rejectInvalidErpPayload(res, 'Reconciliation close identity mismatch.', 'ERP_RECONCILIATION_ID_MISMATCH');
+  }
   if (!validErpIdentifier(reconciliationId)) {
     return rejectInvalidErpPayload(res, 'Missing reconciliation id.');
   }
