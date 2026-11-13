@@ -147,6 +147,33 @@ try {
     }
   });
 
+  await test('default-ignorable identifiers fail closed across ERP HTTP mutations', async () => {
+    // Combining grapheme joiner and variation selector are not caught by
+    // Unicode whitespace/format-control checks alone.
+    for (const invisible of ['\\u034f', '\\ufe0f']) {
+      const bad = 'entity' + invisible + '-test';
+      const cases = [
+        ['/invoice-deliveries', { ...invoice, entityId: bad }, {}],
+        ['/invoice-exports', { ...invoice, entityId: bad }, {}],
+        ['/settlements/execute', {
+          entityId: bad, paymentId: 'pay-test', settlementId: 'settle-test', amount: 1,
+        }, {}],
+        ['/reconciliations/:reconciliationId/statement-import', {
+          bankAccountId: bad, statementEndingBalance: 1,
+        }, { reconciliationId: 'recon-test' }],
+        ['/reconciliations/:reconciliationId/close', {}, { reconciliationId: bad }],
+      ];
+      for (const [path, body, params] of cases) {
+        const response = await invoke('POST', path, body, params);
+        assert.equal(response.statusCode, 400, path + ': ' + JSON.stringify(invisible));
+        assert.equal(response.headers['cache-control'], 'no-store');
+        assert.equal(response.body.success, false);
+        assert.equal(response.body.job, undefined);
+        assert.equal(response.body.execution, undefined);
+      }
+    }
+  });
+
   await test('embedded ASCII spaces cannot alias ERP operation identifiers', async () => {
     for (const field of ['invoiceId', 'entityId', 'invoiceNumber']) {
       for (const route of ['/invoice-deliveries', '/invoice-exports']) {
