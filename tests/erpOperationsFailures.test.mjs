@@ -35,7 +35,7 @@ const accepted = [
 ];
 try {
   await test('invisible Unicode delivery receipt identifiers never confirm sent invoices', async () => {
-    for (const invisible of ['\\u034f', '\\ufe0f', '\\u200d']) {
+    for (const invisible of ['\u034f', '\ufe0f', '\u200d']) {
       const forged = {
         ...accepted[0],
         job: { ...accepted[0].job, deliveryReceiptId: 'smtp-' + invisible + '-receipt' },
