@@ -31,3 +31,20 @@ test('proxy and inherited Google identity cannot establish profile admission', (
   assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', Object.create({ email: valid.email })), current);
   assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', new Date()), current);
 });
+
+
+test('verified Google profile is detached from mutable provider payload', () => {
+  const profile = { email: 'member@example.test', name: 'Member' };
+  const next = admitVerifiedGoogleProfile(pending(), 'provider-token', profile);
+  profile.email = 'attacker@example.test';
+  profile.name = 'Changed';
+  assert.equal(next.appData.user.email, 'member@example.test');
+  assert.equal(next.appData.user.name, 'Member');
+  assert.notEqual(next.appData.user, profile);
+});
+
+test('malformed provider display name cannot enter pending recovery', () => {
+  const current = pending();
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: valid.email, name: 123 }), current);
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: valid.email, name: 'Bad\\u0000Name' }), current);
+});
