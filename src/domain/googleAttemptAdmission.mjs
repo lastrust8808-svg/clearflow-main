@@ -104,6 +104,11 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     // are serializable. Never admit a workspace snapshot that loses them.
     if (typeof key === 'symbol') throw new TypeError('Symbol-keyed admission state');
     if (Array.isArray(value) && key === 'length') continue;
+    // JSON consumers may treat these keys as prototype mutation or constructor
+    // metadata. Reject them before a workspace can be admitted or persisted.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      throw new TypeError('Prototype-sensitive admission state key');
+    }
     // JSON arrays serialize only canonical indices; custom string keys vanish.
     if (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) {
       throw new TypeError('Non-index admission array property');
