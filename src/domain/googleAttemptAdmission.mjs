@@ -108,6 +108,10 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     if (/[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\uFDD0-\uFDEF\uFFFE\uFFFF]/u.test(key)) {
       throw new TypeError('Invisible admission state key');
     }
+    // Canonically equivalent workspace keys must not diverge between UI and persistence.
+    if (key !== key.normalize('NFC')) {
+      throw new TypeError('Non-canonical admission state key');
+    }
     if (Array.isArray(value) && key === 'length') continue;
     // JSON consumers may treat these keys as prototype mutation or constructor
     // metadata. Reject them before a workspace can be admitted or persisted.
