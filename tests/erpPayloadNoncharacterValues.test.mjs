@@ -40,7 +40,7 @@ test('ordinary international accounting text remains permitted', async () => {
 test('unpaired UTF-16 surrogates in accounting values fail before SQL; valid astral text remains accepted', async () => {
   let queries = 0;
   const db = { async query() { queries++; throw new Error('database unavailable'); } };
-  for (const malformed of ['\\uD800', '\\uDC00', 'client\\uD800@example.test', 'repair\\uDC00']) {
+  for (const malformed of [String.fromCharCode(0xd800), String.fromCharCode(0xdc00), 'client' + String.fromCharCode(0xd800) + '@example.test', 'repair' + String.fromCharCode(0xdc00)]) {
     await assert.rejects(reserveErpOperationJob({
       db, authenticatedScope: scope, operation: 'invoice_delivery',
       idempotencyKey: 'invoice-surrogate-1',
