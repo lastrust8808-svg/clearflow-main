@@ -14,17 +14,13 @@ on:
       - 'server/services/privateNoteLifecycle.js'
       - 'tests/privateNoteLifecycle.test.js'
       - 'server/services/trustDocumentVersionPolicy.js'
-      - 'tests/trustDocumentVersionPolicy.test.js'
+      - 'tests/trustDocument*.test.js'
       - 'server/services/trustDocumentQrPolicy.js'
       - 'server/services/trustDocumentQrApprovedOrigin.js'
-      - 'tests/trustDocumentQrPolicy.test.js'
-      - 'tests/trustDocumentQrApprovedOrigin.test.js'
       - 'tests/trustQrRegistryIdentifierHardening.test.js'
       - 'tests/trustSigningNoncharacters.test.js'
       - 'server/services/trustDocumentQrRegistryPolicy.js'
       - 'server/services/trustDocumentSigningEvidence.js'
-      - 'tests/trustDocumentQrRegistryPolicy.test.js'
-      - 'tests/trustDocumentSigningEvidence.test.js'
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'server/services/enforcementNoticeFingerprint.js'
@@ -45,17 +41,13 @@ on:
       - 'server/services/privateNoteLifecycle.js'
       - 'tests/privateNoteLifecycle.test.js'
       - 'server/services/trustDocumentVersionPolicy.js'
-      - 'tests/trustDocumentVersionPolicy.test.js'
+      - 'tests/trustDocument*.test.js'
       - 'server/services/trustDocumentQrPolicy.js'
       - 'server/services/trustDocumentQrApprovedOrigin.js'
-      - 'tests/trustDocumentQrPolicy.test.js'
-      - 'tests/trustDocumentQrApprovedOrigin.test.js'
       - 'tests/trustQrRegistryIdentifierHardening.test.js'
       - 'tests/trustSigningNoncharacters.test.js'
       - 'server/services/trustDocumentQrRegistryPolicy.js'
       - 'server/services/trustDocumentSigningEvidence.js'
-      - 'tests/trustDocumentQrRegistryPolicy.test.js'
-      - 'tests/trustDocumentSigningEvidence.test.js'
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'server/services/enforcementNoticeFingerprint.js'
@@ -82,4 +74,4 @@ jobs:
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
       - run: node --check server/services/enforcementNoticeFingerprint.js
-      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNotice*.test.js
+      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNoteLifecycle.test.js tests/trustDocument*.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustSigning*.test.js tests/enforcementNotice*.test.js
