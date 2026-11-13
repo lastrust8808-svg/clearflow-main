@@ -37,6 +37,7 @@ function containsUnicodeNoncharacter(value) {
 function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
     !containsUnicodeNoncharacter(value) &&
+    !/\p{Default_Ignorable_Code_Point}/u.test(value) &&
     Boolean(value.trim()) && value === value.trim() &&
     value === value.normalize('NFC') &&
     !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
