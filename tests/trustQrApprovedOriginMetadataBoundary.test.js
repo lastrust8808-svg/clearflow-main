@@ -36,3 +36,27 @@ test('QR approval ignores a hostile iterator and rejects duplicate descriptor va
     /Approved QR verification origin required/);
   assert.equal(iterated, false);
 });
+
+test('QR approval enforces the bounded configuration size before reading indexed getters', () => {
+  const configured = new Array(129);
+  let accessed = false;
+  Object.defineProperty(configured, '0', {
+    get() { accessed = true; throw new Error('unexpected indexed access'); },
+    enumerable: true,
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, configured),
+    /Approved QR verification origin required/);
+  assert.equal(accessed, false);
+});
+
+test('QR approval validates every entry, even after the requested origin matches', () => {
+  const configured = [origin, 'http://untrusted.example.org'];
+  assert.throws(() => requireApprovedQrOrigin(origin, configured));
+});
+
+test('QR approval rejects port and hostname variants without URL normalization', () => {
+  assert.throws(() => requireApprovedQrOrigin(origin, ['https://verify.example.org:443']),
+    /Unapproved QR verification origin/);
+  assert.throws(() => requireApprovedQrOrigin(origin, ['https://VERIFY.example.org']),
+    /Unapproved QR verification origin/);
+});
