@@ -28,13 +28,7 @@ on:
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'server/services/enforcementNoticeFingerprint.js'
-      - 'tests/enforcementNoticeGate.test.js'
-      - 'tests/enforcementNoticeFingerprint.test.js'
-      - 'tests/enforcementNoticeFingerprintAdversarial.test.js'
-      - 'tests/enforcementNoticeFingerprintFieldBinding.test.js'
-      - 'tests/enforcementNoticeProxyFailure.test.js'
-      - 'tests/enforcementNoticeYearBoundary.test.js'
-      - 'tests/enforcementNoticeCanonicalClock.test.js'
+      - 'tests/enforcementNotice*.test.js'
       - '.github/workflows/trust-reserves.yml'
   push:
     branches: [main]
@@ -65,13 +59,7 @@ on:
       - 'tests/trustSigning*.test.js'
       - 'server/services/enforcementNoticeGate.js'
       - 'server/services/enforcementNoticeFingerprint.js'
-      - 'tests/enforcementNoticeGate.test.js'
-      - 'tests/enforcementNoticeFingerprint.test.js'
-      - 'tests/enforcementNoticeFingerprintAdversarial.test.js'
-      - 'tests/enforcementNoticeFingerprintFieldBinding.test.js'
-      - 'tests/enforcementNoticeProxyFailure.test.js'
-      - 'tests/enforcementNoticeYearBoundary.test.js'
-      - 'tests/enforcementNoticeCanonicalClock.test.js'
+      - 'tests/enforcementNotice*.test.js'
 permissions:
   contents: read
 jobs:
@@ -94,4 +82,4 @@ jobs:
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
       - run: node --check server/services/enforcementNoticeFingerprint.js
-      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNoticeGate.test.js tests/enforcementNoticeFingerprint.test.js tests/enforcementNoticeFingerprintAdversarial.test.js tests/enforcementNoticeFingerprintFieldBinding.test.js tests/enforcementNoticeProxyFailure.test.js tests/enforcementNoticeYearBoundary.test.js tests/enforcementNoticeCanonicalClock.test.js
+      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNoteLifecycle.test.js tests/trustDocumentVersionPolicy.test.js tests/trustDocumentQrPolicy.test.js tests/trustDocumentQrApprovedOrigin.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustDocumentQrRegistryPolicy.test.js tests/trustDocumentSigningEvidence.test.js tests/trustSigning*.test.js tests/enforcementNotice*.test.js
