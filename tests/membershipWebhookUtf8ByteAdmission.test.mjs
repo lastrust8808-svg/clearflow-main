@@ -22,7 +22,13 @@ function signed(rawBody) {
 test('signed invalid UTF-8 bytes never become a scope-verified event', () => {
   const body = Buffer.from(JSON.stringify(event));
   for (const bad of [Buffer.from([0xff]), Buffer.from([0xc0, 0xaf]), Buffer.from([0xed, 0xa0, 0x80])]) {
-    const rawBody = Buffer.concat([body.subarray(0, -1), Buffer.from(',"extra":"'), bad, Buffer.from('"}')]);
+    // Corrupt the allowed event ID itself, rather than adding an unknown field.
+    // Otherwise the schema allowlist could reject the fixture even if fatal
+    // UTF-8 decoding were accidentally removed.
+    const identity = Buffer.from('éclair', 'utf8');
+    const at = body.indexOf(identity);
+    assert.notEqual(at, -1);
+    const rawBody = Buffer.concat([body.subarray(0, at), bad, body.subarray(at + identity.length)]);
     const candidate = signed(rawBody);
     assert.equal(verifyMembershipWebhookFixture(candidate), true, 'HMAC validates exact bytes');
     assert.equal(verifyScopedMembershipWebhookFixture(candidate), null, 'lossy UTF-8 cannot be admitted');
