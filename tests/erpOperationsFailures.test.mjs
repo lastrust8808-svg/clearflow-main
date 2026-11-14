@@ -107,6 +107,22 @@ try {
     }
     assert.equal(requests, 0);
   });
+  await test('inherited financial instructions fail before all ERP POSTs', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw Error('unexpected POST'); };
+    for (let index = 0; index < operations.length; index++) {
+      for (const inherited of [
+        { approvalStatus: 'approved' },
+        { entityId: 'another-tenant' },
+        { recipientEmail: 'attacker@example.invalid' },
+      ]) {
+        const payload = Object.assign(Object.create(inherited), payloads[index]);
+        await assert.rejects(operations[index](payload),
+          /inherited financial instructions; no request was sent/);
+      }
+    }
+    assert.equal(requests, 0);
+  });
   await test('inherited and own serializer hooks fail before financial POST', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw Error('unexpected POST'); };
