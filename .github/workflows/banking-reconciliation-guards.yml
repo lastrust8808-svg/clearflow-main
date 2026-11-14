@@ -1,0 +1,158 @@
+name: Banking reconciliation close guards
+
+on:
+  pull_request:
+    paths:
+      - 'src/services/reconciliationControls.service.ts'
+      - 'src/services/bankFeedReplayPlan.service.ts'
+      - 'src/services/bankFeedAtomicCommit.service.ts'
+      - 'server/services/bankFeedPostgresStore.js'
+      - 'server/db/versions/003_banking_feed_checkpoints.sql'
+      - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresLive.test.mjs'
+      - 'tests/bankFeedPostgresSchema.test.sql'
+      - 'tests/reconciliationCloseGuards.test.mjs'
+      - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedCheckpointCasEnvelope.test.mjs'
+      - 'tests/bankFeedCheckpointCasResult.test.mjs'
+      - 'tests/bankFeedCheckpointCursorNoncharacters.test.mjs'
+      - 'tests/bankFeedDuplicateCheckpointRows.test.mjs'
+      - 'tests/bankFeedDuplicatePersistedEntries.test.mjs'
+      - 'tests/bankFeedOutgoingBatchBounds.test.mjs'
+      - 'tests/bankFeedOutgoingScopeMutation.test.mjs'
+      - 'tests/bankFeedPersistedBatchBounds.test.mjs'
+      - 'tests/bankFeedScopeNoncharacters.test.mjs'
+      - 'tests/bankFeedUpsertAcknowledgement.test.mjs'
+      - 'tests/bankFeedAtomicCommit.test.mjs'
+      - 'tests/bankTransferCandidates.test.mjs'
+      - 'tests/bankTransferBatchLimit.test.mjs'
+      - 'tests/bankTransferBatchBounds.test.mjs'
+      - 'tests/bankTransferCalendarBoundary.test.mjs'
+      - 'tests/bankTransferReferenceCollision.test.mjs'
+      - 'tests/bankTransferIdentityUnicode.test.mjs'
+      - 'tests/bankTransferCollisionCapacity.test.mjs'
+      - 'tests/bankTransferMaxCapacity.test.mjs'
+      - 'tests/bankTransferPendingConnectionIsolation.test.mjs'
+      - 'tests/bankTransferInactiveReferenceEvidence.test.mjs'
+      - 'tests/bankTransferTenantBatchIsolation.test.mjs'
+      - 'tests/bankTransferTenantHiddenEvidence.test.mjs'
+      - 'tests/bankTransferLeapYearBoundary.test.mjs'
+      - 'tests/bankTransferCrossCurrencyPendingEvidence.test.mjs'
+      - 'tests/bankTransferSafeIntegerBoundary.test.mjs'
+      - 'tests/bankTransferLeapDayBoundary.test.mjs'
+      - 'tests/bankTransferDaylightSavingBoundary.test.mjs'
+      - 'tests/bankTransferConnectionCollisionIsolation.test.mjs'
+      - 'tests/bankTransfer*.test.mjs'
+      - 'tests/bankFeed*.test.mjs'
+      - 'server/services/bankTransferCandidates.js'
+      - '.github/workflows/banking-reconciliation-guards.yml'
+  push:
+    branches:
+      - workstream/banking-reconciliation-2026-10-28
+    paths:
+      - 'src/services/reconciliationControls.service.ts'
+      - 'src/services/bankFeedReplayPlan.service.ts'
+      - 'src/services/bankFeedAtomicCommit.service.ts'
+      - 'server/services/bankFeedPostgresStore.js'
+      - 'server/db/versions/003_banking_feed_checkpoints.sql'
+      - 'tests/bankFeedPostgresStore.test.mjs'
+      - 'tests/bankFeedPostgresLive.test.mjs'
+      - 'tests/bankFeedPostgresSchema.test.sql'
+      - 'tests/reconciliationCloseGuards.test.mjs'
+      - 'tests/bankFeedReplayPlan.test.mjs'
+      - 'tests/bankFeedCheckpointCasEnvelope.test.mjs'
+      - 'tests/bankFeedCheckpointCasResult.test.mjs'
+      - 'tests/bankFeedCheckpointCursorNoncharacters.test.mjs'
+      - 'tests/bankFeedDuplicateCheckpointRows.test.mjs'
+      - 'tests/bankFeedDuplicatePersistedEntries.test.mjs'
+      - 'tests/bankFeedOutgoingBatchBounds.test.mjs'
+      - 'tests/bankFeedOutgoingScopeMutation.test.mjs'
+      - 'tests/bankFeedPersistedBatchBounds.test.mjs'
+      - 'tests/bankFeedScopeNoncharacters.test.mjs'
+      - 'tests/bankFeedUpsertAcknowledgement.test.mjs'
+      - 'tests/bankFeedAtomicCommit.test.mjs'
+      - 'tests/bankTransferCandidates.test.mjs'
+      - 'tests/bankTransferBatchLimit.test.mjs'
+      - 'tests/bankTransferBatchBounds.test.mjs'
+      - 'tests/bankTransferCalendarBoundary.test.mjs'
+      - 'tests/bankTransferReferenceCollision.test.mjs'
+      - 'tests/bankTransferIdentityUnicode.test.mjs'
+      - 'tests/bankTransferCollisionCapacity.test.mjs'
+      - 'tests/bankTransferMaxCapacity.test.mjs'
+      - 'tests/bankTransferPendingConnectionIsolation.test.mjs'
+      - 'tests/bankTransferInactiveReferenceEvidence.test.mjs'
+      - 'tests/bankTransferTenantBatchIsolation.test.mjs'
+      - 'tests/bankTransferTenantHiddenEvidence.test.mjs'
+      - 'tests/bankTransferLeapYearBoundary.test.mjs'
+      - 'tests/bankTransferCrossCurrencyPendingEvidence.test.mjs'
+      - 'tests/bankTransferSafeIntegerBoundary.test.mjs'
+      - 'tests/bankTransferLeapDayBoundary.test.mjs'
+      - 'tests/bankTransferDaylightSavingBoundary.test.mjs'
+      - 'tests/bankTransferConnectionCollisionIsolation.test.mjs'
+      - 'tests/bankTransfer*.test.mjs'
+      - 'tests/bankFeed*.test.mjs'
+      - 'server/services/bankTransferCandidates.js'
+      - '.github/workflows/banking-reconciliation-guards.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reconciliation-close-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify close guards (no external provider credentials)
+        run: |
+          node --experimental-strip-types --check src/services/bankFeedReplayPlan.service.ts
+          node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
+          node --check server/services/bankFeedPostgresStore.js
+          node --check server/services/bankTransferCandidates.js
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs $(find tests -maxdepth 1 -type f \( -name 'bankFeed*.test.mjs' -o -name 'bankTransfer*.test.mjs' \) ! -name 'bankFeedPostgresLive.test.mjs' | sort)
+
+  banking-postgres-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: banking-ci-disposable-only
+          POSTGRES_DB: clearflow_banking_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d clearflow_banking_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated PostgreSQL test client (never modify shared lockfile)
+        run: npm install --prefix "$RUNNER_TEMP/banking-pg" --no-save --ignore-scripts --no-audit --no-fund pg@8.13.1
+      - name: Bootstrap only the reviewed 001 migration registry in disposable DB
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          echo 'CREATE TABLE public.clearflow_schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());' | docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci
+      - name: Apply proposed banking migration twice (idempotence)
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          for attempt in 1 2; do
+            docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci < server/db/versions/003_banking_feed_checkpoints.sql
+          done
+      - name: Verify real PostgreSQL rollback, deduplication and cursor constraints
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d clearflow_banking_ci < tests/bankFeedPostgresSchema.test.sql
+      - name: Verify actual pg client adapter, restart, rollback and concurrent cursors
+        env:
+          BANKING_PG_TEST_URL: postgresql://postgres:banking-ci-disposable-only@127.0.0.1:5432/clearflow_banking_ci
+        run: |
+          node --check tests/bankFeedPostgresLive.test.mjs
+          node --experimental-strip-types --test tests/bankFeedPostgresLive.test.mjs
