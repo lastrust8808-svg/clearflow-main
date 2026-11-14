@@ -48,7 +48,7 @@ test('valid multibyte UTF-8 event identity remains admissible', () => {
 });
 
 test('signed escaped lone surrogates in permitted event IDs fail closed', () => {
-  for (const escape of ['\\\\uD800', '\\\\uDC00']) {
+  for (const escape of ['\\uD800', '\\uDC00']) {
     const rawBody = Buffer.from(JSON.stringify(event).replace('evt-éclair', 'evt-' + escape), 'utf8');
     const candidate = signed(rawBody);
     assert.equal(verifyMembershipWebhookFixture(candidate), true, 'raw ASCII fixture signature is valid');
