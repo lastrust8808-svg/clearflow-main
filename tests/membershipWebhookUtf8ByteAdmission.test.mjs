@@ -68,6 +68,12 @@ test('signed escaped lone surrogates in every admitted identity field fail close
       const json = JSON.stringify({ ...event, [field]: 'sentinel' });
       const rawBody = Buffer.from(json.replace('"sentinel"', '"bad-' + escape + '"'), 'utf8');
       const candidate = signed(rawBody);
+      // For scoped identity fields, match the malformed decoded value in the
+      // authenticated test scope. A mere scope mismatch must not be what
+      // makes this malformed-Unicode regression pass.
+      if (Object.hasOwn(scope, field)) {
+        candidate.authenticatedScope = { ...scope, [field]: 'bad-' + String.fromCharCode(parseInt(escape.slice(2), 16)) };
+      }
       assert.equal(verifyMembershipWebhookFixture(candidate), true, field + ' fixture signature');
       assert.equal(verifyScopedMembershipWebhookFixture(candidate), null, field + ' malformed identity');
     }
