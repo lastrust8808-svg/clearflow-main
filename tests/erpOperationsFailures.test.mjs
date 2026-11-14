@@ -105,6 +105,28 @@ try {
     }
     assert.equal(requests, 0);
   });
+  await test('Unicode space separators in financial identities never reach any ERP endpoint', async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; throw new Error('unexpected POST'); };
+    const identityFields = [
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['invoiceId', 'entityId', 'invoiceNumber'],
+      ['reconciliationId', 'bankAccountId'],
+      ['reconciliationId'],
+    ];
+    for (let index = 0; index < operations.length; index++) {
+      for (const field of identityFields[index]) {
+        for (const separator of ['\\u00a0', '\\u2007', '\\u202f', '\\u3000']) {
+          await assert.rejects(
+            operations[index]({ ...payloads[index], [field]: 'id-' + separator + '-value' }),
+            /requires nonempty canonical request identities/,
+            field + ' must reject Unicode space separator',
+          );
+        }
+      }
+    }
+    assert.equal(requests, 0);
+  });
   await test('invoice delivery rejects serializer-mutated destination and content before POST', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw Error('unexpected network request'); };
