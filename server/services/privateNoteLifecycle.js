@@ -1,0 +1,350 @@
+/**
+ * Pure projection of a private-note document/enforcement timeline.
+ * The caller must authenticate the tenant/entity/trust, verify each event's
+ * provenance and document evidence, and store events in an immutable,
+ * transactional, tenant-scoped journal. This module neither authenticates
+ * actors nor issues notes, serves notices, posts payments, determines legal
+ * default, or confirms settlement.
+ *
+ * 'notice_prepared' means a DRAFT exists for human review, never that a notice
+ * was sent, received, effective, or legally sufficient.
+ */
+const NEXT = Object.freeze({
+  draft: Object.freeze({ issued: 'issued' }),
+  issued: Object.freeze({ presented: 'presented' }),
+  presented: Object.freeze({ disputed: 'disputed', notice_prepared: 'notice_prepared' }),
+  disputed: Object.freeze({ notice_prepared: 'notice_prepared' }),
+  notice_prepared: Object.freeze({ disputed: 'disputed' }),
+});
+
+// Only these structural fields may appear in a lifecycle event. In particular,
+// a draft event must not smuggle delivery, default, settlement or payment
+// assertions into a document-only projection. New event types require an
+// explicit reviewed schema change, not silently ignored metadata.
+const EVENT_FIELDS = new Set([
+  'eventId', 'tenantId', 'entityId', 'trustId', 'noteId',
+  'type', 'occurredAt', 'actorId', 'documentRef', 'evidenceRef',
+]);
+
+function requiredId(value, field) {
+  if (typeof value !== 'string' || !value || value.trim() !== value) {
+    throw new TypeError(field + ' must be a nonempty unpadded string');
+  }
+  // Match the storage-identifier control-character boundary in Security PR #23.
+  // Invisible control bytes must not be accepted as event, actor, or evidence IDs.
+  if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
+    throw new TypeError(field + ' must not contain control characters');
+  }
+  // Keep identity storage and journal projection bounded consistently with reserve IDs.
+  // JavaScript string length measures UTF-16 code units, including astral pairs.
+  if (value.length > 256) {
+    throw new RangeError(field + ' exceeds maximum identifier length');
+  }
+  // Reject lone UTF-16 surrogates: they cannot be faithfully encoded as UTF-8
+  // identifiers, and downstream serializers may replace them with U+FFFD.
+  // Under the Unicode flag, valid surrogate pairs are matched as one scalar
+  // value and therefore remain accepted (including supplementary scripts).
+  if (/[\uD800-\uDFFF]/u.test(value)) {
+    throw new TypeError(field + ' must contain well-formed Unicode');
+  }
+  // Reject invisible Unicode identity spoofing and non-ASCII whitespace across
+  // scope, actor, document and evidence references. Visible Unicode remains valid.
+  if (/\p{White_Space}|\p{Default_Ignorable_Code_Point}/u.test(value)) {
+    throw new TypeError(field + ' must not contain invisible formatting or whitespace');
+  }
+  // Unicode noncharacters are reserved code points, not portable external IDs.
+  // Reject U+FDD0..FDEF and the final two code points of every Unicode plane.
+  for (const scalar of value) {
+    const cp = scalar.codePointAt(0);
+    if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFF) >= 0xFFFE) {
+      throw new TypeError(field + ' must not contain Unicode noncharacters');
+    }
+  }
+  // A journal must not treat canonically equivalent Unicode spellings as
+  // independent actors, events, document versions or provenance records.
+  // Reject aliases instead of silently changing externally persisted IDs.
+  if (value !== value.normalize('NFC')) {
+    throw new TypeError(field + ' must be NFC-normalized');
+  }
+  return value;
+}
+
+function utcInstant(value, field) {
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString() !== value) {
+    throw new TypeError(field + ' must be a canonical UTC ISO timestamp');
+  }
+  return value;
+}
+
+// Bound the work for a single in-memory projection. Larger authenticated
+// journals require a separately reviewed checkpoint/pagination design;
+// silently truncating history would conceal enforcement events.
+const MAX_PRIVATE_NOTE_EVENTS = 10000;
+
+// A lifecycle journal must be an explicit dense data array. Sparse histories,
+// inherited array elements, getters and hidden metadata are not trustworthy
+// evidence of the complete ordered sequence of note events.
+function requirePlainEventHistory(events) {
+  if (!Array.isArray(events) || Object.getPrototypeOf(events) !== Array.prototype) {
+    throw new TypeError('Private note events must be a plain array');
+  }
+  // Check length before enumerating elements or allocating a descriptor map.
+  const length = Object.getOwnPropertyDescriptor(events, 'length').value;
+  if (length > MAX_PRIVATE_NOTE_EVENTS) {
+    throw new RangeError('Private note history exceeds maximum event count');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(events);
+  let indexed = 0;
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (key === 'length') continue;
+    const index = typeof key === 'string' ? Number(key) : NaN;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+      throw new TypeError('Private note events must contain only array indices');
+    }
+    const descriptor = descriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Private note events must contain enumerable data elements');
+    }
+    indexed++;
+  }
+  if (indexed !== length) throw new TypeError('Private note events must not contain holes');
+  return Array.from({ length }, (_, index) => descriptors[String(index)].value);
+}
+
+/**
+ * @param {{tenantId:string,entityId:string,trustId:string,noteId:string,
+ *   asOfAt:string,events:Array<{eventId:string,tenantId:string,entityId:string,
+ *   trustId:string,noteId:string,type:string,occurredAt:string,actorId:string,
+ *   documentRef?:string,evidenceRef?:string}>}} snapshot
+ * @returns {{status:string,eventCount:number,lastEventId:string|null,
+ *   lastEventAt:string|null}} Frozen non-authoritative projection.
+ */
+export function projectPrivateNoteLifecycle(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw new TypeError('Private note snapshot required');
+  }
+  // Snapshot-level scope and as-of claims must obey the same plain-data
+  // admission rule as lifecycle events. Never evaluate inherited identities,
+  // getters, hidden metadata or unreviewed financial/legal state fields.
+  const snapshotPrototype = Object.getPrototypeOf(snapshot);
+  if (snapshotPrototype !== Object.prototype && snapshotPrototype !== null) {
+    throw new TypeError('Private note snapshot must be a plain data record');
+  }
+  const snapshotFields = new Set(['tenantId', 'entityId', 'trustId', 'noteId', 'asOfAt', 'events']);
+  const snapshotDescriptors = Object.getOwnPropertyDescriptors(snapshot);
+  for (const key of Reflect.ownKeys(snapshotDescriptors)) {
+    const descriptor = snapshotDescriptors[key];
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Private note snapshot fields must be enumerable data properties');
+    }
+    if (typeof key !== 'string' || !snapshotFields.has(key)) {
+      throw new TypeError('Unsupported private note snapshot field');
+    }
+  }
+  const scope = {
+    tenantId: requiredId(snapshotDescriptors.tenantId?.value, 'tenantId'),
+    entityId: requiredId(snapshotDescriptors.entityId?.value, 'entityId'),
+    trustId: requiredId(snapshotDescriptors.trustId?.value, 'trustId'),
+    noteId: requiredId(snapshotDescriptors.noteId?.value, 'noteId'),
+  };
+  // Each scope role must have its own canonical identity. Reusing a tenant ID
+  // as a trust, entity or note ID makes audit/provenance namespace ownership
+  // ambiguous even when every event repeats the same malformed scope.
+  if (new Set(Object.values(scope)).size !== 4) {
+    throw new Error('Private note tenant, entity, trust and note scope identifiers must be distinct');
+  }
+  const admittedEvents = requirePlainEventHistory(snapshotDescriptors.events?.value);
+  // Snapshot time is supplied by the caller; runtime integration must use a
+  // trusted server-side clock, not an untrusted request parameter.
+  const asOfAt = utcInstant(snapshotDescriptors.asOfAt?.value, 'asOfAt');
+  const seen = new Set();
+  // Actor identifiers name principals, not independent event/document/evidence
+  // receipts. Reject role collisions anywhere in the supplied journal history.
+  const actorIds = new Set();
+  let status = 'draft';
+  let lastEventId = null;
+  let lastEventAt = null;
+  let issuedDocumentRef = null;
+  let issuedEvidenceRef = null;
+  const noticeDocumentRefs = new Set();
+  let latestNoticeDocumentRef = null;
+  const noticeEvidenceRefs = new Set();
+  // Distinguish immutable document identities from action-provenance receipts.
+  // Even a later notice document must not reuse an earlier evidence pointer.
+  const documentRefs = new Set();
+  // Evidence references identify distinct lifecycle-action provenance records.
+  // Reusing a pointer for a different action must fail closed; verification
+  // of the referenced record remains the caller's responsibility.
+  const lifecycleEvidenceRefs = new Set();
+  for (const event of admittedEvents) {
+    if (!event || typeof event !== 'object' || Array.isArray(event)) {
+      throw new TypeError('Invalid private note event');
+    }
+    // Require a plain, own-property data record. Inherited fields, getters and
+    // hidden properties must not supply purported actor, scope or legal claims.
+    // This is structural admission only; authentication is the caller's duty.
+    const prototype = Object.getPrototypeOf(event);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('Private note lifecycle event must be a plain data record');
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(event);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const descriptor = descriptors[key];
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+        throw new TypeError('Private note lifecycle event fields must be enumerable data properties');
+      }
+      if (typeof key !== 'string' ||
+          (!EVENT_FIELDS.has(key) &&
+           !(Object.hasOwn(descriptors, 'type') &&
+             descriptors.type.value === 'notice_prepared' &&
+             key === 'supersedesDocumentRef'))) {
+        throw new TypeError('Unsupported private note lifecycle event field');
+      }
+    }
+    // All currently supported event types require the same core identifiers,
+    // including document and evidence refs. Never read them from a prototype.
+    for (const key of EVENT_FIELDS) {
+      if (!Object.hasOwn(descriptors, key)) {
+        throw new TypeError('Missing own private note lifecycle event field: ' + key);
+      }
+    }
+    const eventId = requiredId(descriptors.eventId.value, 'eventId');
+    if (seen.has(eventId)) throw new Error('Duplicate private note event ID');
+    seen.add(eventId);
+    for (const [key, value] of Object.entries(scope)) {
+      if (descriptors[key].value !== value) throw new Error('Private note event ' + key + ' scope mismatch');
+    }
+    actorIds.add(requiredId(descriptors.actorId.value, 'actorId'));
+    const occurredAt = utcInstant(descriptors.occurredAt.value, 'occurredAt');
+    if (occurredAt > asOfAt) {
+      throw new Error('Private note event occurs after snapshot as-of timestamp');
+    }
+    if (lastEventAt !== null && occurredAt <= lastEventAt) {
+      throw new Error('Private note events must have strictly increasing timestamps');
+    }
+    // Never coerce untrusted event types into object keys: an object may
+    // execute Symbol.toPrimitive/toString during the transition lookup.
+    const eventType = descriptors.type.value;
+    if (typeof eventType !== 'string') {
+      throw new TypeError('Private note lifecycle event type must be a string');
+    }
+    const next = Object.hasOwn(NEXT[status], eventType) ? NEXT[status][eventType] : null;
+    if (next === null) throw new Error('Invalid private note lifecycle transition');
+    if (descriptors.type.value === 'issued') {
+      issuedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
+      documentRefs.add(issuedDocumentRef);
+      // An issuance without a provenance reference must not become an issued state.
+      // The caller must independently verify this evidence before accepting it.
+      issuedEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
+    }
+    if (descriptors.type.value === 'presented') {
+      const presentedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
+      if (presentedDocumentRef !== issuedDocumentRef) {
+        throw new Error('Presented document must match the issued note document');
+      }
+      // Evidence of signing/issuance cannot also serve as evidence that the
+      // instrument was subsequently presented. Authenticity remains a caller duty.
+      const presentmentEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
+      if (presentmentEvidenceRef === issuedEvidenceRef) {
+        throw new Error('Presentment evidence must be distinct from issuance evidence');
+      }
+    }
+    if (descriptors.type.value === 'notice_prepared') {
+      const noticeDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
+      if (noticeDocumentRef === issuedDocumentRef || noticeDocumentRefs.has(noticeDocumentRef)) {
+        throw new Error('Notice draft document reference must be distinct and unique');
+      }
+      // Revised notices must explicitly identify the immediately preceding
+      // draft. This is a document lineage check, not proof of service or legal
+      // effectiveness. Initial drafts must not claim an earlier notice.
+      const predecessorRef = Object.hasOwn(descriptors, 'supersedesDocumentRef')
+        ? descriptors.supersedesDocumentRef.value : undefined;
+      if (latestNoticeDocumentRef === null) {
+        // An initial notice has no predecessor. Even an explicitly null or
+        // undefined predecessor field is an ambiguous lineage assertion and
+        // must not be silently treated as absent in an immutable journal.
+        if (Object.hasOwn(descriptors, 'supersedesDocumentRef')) {
+          throw new Error('Initial notice draft cannot supersede another document');
+        }
+      } else {
+        const supersedes = requiredId(predecessorRef, 'supersedesDocumentRef');
+        if (supersedes !== latestNoticeDocumentRef) {
+          throw new Error('Notice revision must supersede the latest prepared draft');
+        }
+      }
+      // A new or revised draft must have its own preparation record; a reused
+      // pointer would make two different draft versions appear to share one
+      // provenance event. This does not authenticate the evidence itself.
+      const noticeEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
+      if (noticeEvidenceRefs.has(noticeEvidenceRef)) {
+        throw new Error('Notice draft preparation evidence reference must be unique');
+      }
+      noticeDocumentRefs.add(noticeDocumentRef);
+      documentRefs.add(noticeDocumentRef);
+      noticeEvidenceRefs.add(noticeEvidenceRef);
+      latestNoticeDocumentRef = noticeDocumentRef;
+    }
+    if (descriptors.type.value === 'disputed') {
+      // A dispute must identify a document already registered in this note's
+      // timeline. The disputed target may be the issued instrument or an
+      // existing notice draft, but never an unrelated or future document.
+      // This is reference integrity only, not evidence of actual delivery.
+      const disputedDocumentRef = requiredId(descriptors.documentRef.value, 'documentRef');
+      if (disputedDocumentRef !== issuedDocumentRef && !noticeDocumentRefs.has(disputedDocumentRef)) {
+        throw new Error('Dispute must reference the issued note or a previously prepared notice draft');
+      }
+      requiredId(descriptors.evidenceRef.value, 'evidenceRef');
+    }
+    const lifecycleEvidenceRef = requiredId(descriptors.evidenceRef.value, 'evidenceRef');
+    if (lifecycleEvidenceRefs.has(lifecycleEvidenceRef)) {
+      throw new Error('Private note lifecycle evidence reference must be unique across events');
+    }
+    lifecycleEvidenceRefs.add(lifecycleEvidenceRef);
+    status = next;
+    lastEventId = eventId;
+    lastEventAt = occurredAt;
+  }
+  // A document reference must not be recycled as an issuance, presentment,
+  // dispute or notice-preparation evidence receipt, regardless of event order.
+  // The caller must still authenticate both reference namespaces in storage.
+  for (const documentRef of documentRefs) {
+    if (lifecycleEvidenceRefs.has(documentRef)) {
+      throw new Error('Private note document and lifecycle evidence references must be distinct');
+    }
+  }
+  // An event's journal identity must never double as a document identity or
+  // independent evidence receipt, even when the collision occurs in a later
+  // event. This is namespace integrity, not proof that the receipt is genuine.
+  for (const eventId of seen) {
+    if (documentRefs.has(eventId) || lifecycleEvidenceRefs.has(eventId)) {
+      throw new Error('Private note event, document and evidence references must be distinct');
+    }
+  }
+  // An actor identifier must never be interpreted as a journal event,
+  // immutable document, or independent provenance receipt. Repeated actors
+  // across legitimate actions are permitted; only cross-role reuse fails.
+  for (const actorId of actorIds) {
+    if (seen.has(actorId) || documentRefs.has(actorId) || lifecycleEvidenceRefs.has(actorId)) {
+      throw new Error('Private note actor identifiers must be distinct from event, document and evidence references');
+    }
+  }
+  // Scope identities name the owning tenant, entity, trust and note, never
+  // an action actor, journal event, immutable document or provenance receipt.
+  // Check the complete history so a later event cannot reuse a scope ID and
+  // make a forged record appear to have an authenticated identity.
+  const scopeIds = new Set(Object.values(scope));
+  for (const [role, identifiers] of [
+    ['event', seen], ['actor', actorIds],
+    ['document', documentRefs], ['evidence', lifecycleEvidenceRefs],
+  ]) {
+    for (const identifier of identifiers) {
+      if (scopeIds.has(identifier)) {
+        throw new Error('Private note ' + role + ' identifier collides with note scope');
+      }
+    }
+  }
+  return Object.freeze({ status, eventCount: seen.size, lastEventId, lastEventAt });
+}

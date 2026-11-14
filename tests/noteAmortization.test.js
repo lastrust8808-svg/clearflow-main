@@ -1,0 +1,351 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildFixedMonthlyNoteSchedule } from '../server/services/noteAmortization.js';
+
+const terms = { tenantId: 'tenant-a', entityId: 'entity-a', trustId: 'trust-a', noteId: 'note-1', currency: 'USD',
+  principalMinor: 1_200_000, annualRateBps: 600, paymentCount: 12, firstDueDate: '2026-01-31' };
+const schedule = (overrides = {}) => buildFixedMonthlyNoteSchedule({ ...terms, ...overrides });
+
+test('fully amortizes a positive-rate note without inventing cash receipts', () => {
+  const result = schedule();
+  assert.equal(result.installments.length, 12);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(result.installments[0].interestMinor, 6_000);
+  assert.equal(result.installments[0].principalMinor + result.installments[0].interestMinor, result.installments[0].paymentMinor);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), terms.principalMinor);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.interestMinor, 0), result.totalInterestMinor);
+  assert.equal(result.totalRepaymentMinor, terms.principalMinor + result.totalInterestMinor);
+  assert.ok(result.totalInterestMinor > 0);
+});
+
+test('handles zero-interest notes with exact final adjustment', () => {
+  const result = schedule({ principalMinor: 100, annualRateBps: 0, paymentCount: 3 });
+  assert.deepEqual(result.installments.map(row => row.paymentMinor), [34, 34, 32]);
+  assert.equal(result.totalInterestMinor, 0);
+  assert.equal(result.totalRepaymentMinor, 100);
+});
+
+test('handles one-period notes and half-up monthly interest', () => {
+  const result = schedule({ principalMinor: 101, annualRateBps: 60_000, paymentCount: 1 });
+  assert.equal(result.installments[0].interestMinor, 51);
+  assert.equal(result.installments[0].paymentMinor, 152);
+  assert.equal(result.installments[0].remainingPrincipalMinor, 0);
+});
+
+test('anchors month-end dates to the original day, not the prior clamped day', () => {
+  const result = schedule({ paymentCount: 4 });
+  assert.deepEqual(result.installments.map(row => row.dueDate), ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+  const leap = schedule({ firstDueDate: '2028-01-31', paymentCount: 3 });
+  assert.equal(leap.installments[1].dueDate, '2028-02-29');
+});
+
+test('rejects invalid dates and malformed terms', () => {
+  for (const firstDueDate of ['2026-02-29', '2026-13-01', '2026-01-00', 'not a date', '2026-1-1']) {
+    assert.throws(() => schedule({ firstDueDate }), /firstDueDate/);
+  }
+  assert.throws(() => buildFixedMonthlyNoteSchedule(null), /plain data record/);
+  assert.throws(() => schedule({ currency: 'usd' }), /currency/);
+  assert.throws(() => schedule({ tenantId: '' }), /tenantId/);
+});
+
+test('note schedules require an explicit trust scope and preserve it in projections', () => {
+  const missing = { ...terms };
+  delete missing.trustId;
+  assert.throws(() => buildFixedMonthlyNoteSchedule(missing), /Note terms.trustId/);
+  for (const trustId of [undefined, null, '', ' trust-a ', 'trust-a\u0000']) {
+    assert.throws(() => schedule({ trustId }), /trustId/);
+  }
+  const first = schedule();
+  const second = schedule({ trustId: 'trust-b' });
+  assert.equal(first.entityId, second.entityId);
+  assert.equal(first.trustId, 'trust-a');
+  assert.equal(second.trustId, 'trust-b');
+  assert.deepEqual(first.installments, second.installments);
+  assert.equal(Object.isFrozen(second), true);
+});
+
+test('rejects non-NFC tenant, entity, trust and note identity aliases', () => {
+  const composed = 'scope-\u00e9';
+  const decomposed = 'scope-e\u0301';
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    assert.throws(() => schedule({ [key]: decomposed }), new RegExp(key + '.*NFC'));
+    const result = schedule({ [key]: composed });
+    assert.equal(result[key], composed);
+    assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  }
+});
+
+test('rejects unpaired Unicode surrogates in private-note scope without rewriting valid IDs', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const invalid of ['scope-\uD800', 'scope-\uDC00', '\uDC00scope', 'scope-\uD800x']) {
+      assert.throws(() => schedule({ [key]: invalid }), new RegExp(key + '.*well-formed Unicode'));
+    }
+    const valid = 'scope-\u{1F4DC}';
+    const result = schedule({ [key]: valid });
+    assert.equal(result[key], valid);
+    assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  }
+});
+
+test('rejects invalid or unsafe amounts, rate, and term lengths', () => {
+  for (const principalMinor of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => schedule({ principalMinor }), /principalMinor/);
+  }
+  for (const annualRateBps of [-1, 1.5, 100_001]) {
+    assert.throws(() => schedule({ annualRateBps }), /annualRateBps/);
+  }
+  for (const paymentCount of [0, -1, 1.5, 601]) {
+    assert.throws(() => schedule({ paymentCount }), /paymentCount/);
+  }
+});
+
+test('fails closed when calculated totals exceed safe integer range', () => {
+  assert.throws(() => schedule({ principalMinor: Number.MAX_SAFE_INTEGER, annualRateBps: 10_000, paymentCount: 1 }), /safe integer range/);
+});
+
+test('produces immutable schedules and does not mutate input', () => {
+  const input = { ...terms };
+  const result = buildFixedMonthlyNoteSchedule(input);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(Object.isFrozen(result.installments), true);
+  assert.equal(Object.isFrozen(result.installments[0]), true);
+  assert.deepEqual(input, terms);
+});
+
+test('rejects impossible terms that would produce zero-value future installments', () => {
+  for (const overrides of [
+    { principalMinor: 1, annualRateBps: 0, paymentCount: 12 },
+    { principalMinor: 2, annualRateBps: 0, paymentCount: 3 },
+    { principalMinor: 1, annualRateBps: 600, paymentCount: 12 },
+  ]) {
+    assert.throws(() => schedule(overrides), /zero-value future installments/);
+  }
+});
+
+test('permits a one-cent single-installment note without inventing payments', () => {
+  const input = { ...terms, principalMinor: 1, annualRateBps: 0, paymentCount: 1 };
+  const result = buildFixedMonthlyNoteSchedule(input);
+  assert.equal(result.installments.length, 1);
+  assert.equal(result.installments[0].principalMinor, 1);
+  assert.equal(result.installments[0].interestMinor, 0);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(input.principalMinor, 1);
+});
+
+
+test('rejects padded or whitespace-only note scope identifiers before amortization', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const invalid of [' ', ' valid', 'valid ', '\tvalid', 'valid\n']) {
+      assert.throws(() => schedule({ [key]: invalid }), /unpadded/);
+    }
+  }
+  assert.equal(schedule().installments.length, 12);
+});
+
+test('rejects invisible control characters in note scope identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const control of ['\u0000', '\u001f', '\u007f', '\u009f']) {
+      assert.throws(() => schedule({ [key]: 'valid' + control }), /control characters/);
+    }
+  }
+  assert.equal(schedule({ noteId: 'valid-note' }).noteId, 'valid-note');
+});
+
+test('note schedule terms reject inherited, accessor, hidden and unsupported execution claims', () => {
+  assert.throws(() => buildFixedMonthlyNoteSchedule(Object.create(terms)), /plain data record/);
+  assert.throws(() => buildFixedMonthlyNoteSchedule([]), /plain data record/);
+  let getterCalled = false;
+  const accessor = { ...terms };
+  Object.defineProperty(accessor, 'principalMinor', {
+    enumerable: true,
+    get() { getterCalled = true; return terms.principalMinor; },
+  });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(accessor), /enumerable data properties/);
+  assert.equal(getterCalled, false);
+  const hidden = { ...terms };
+  Object.defineProperty(hidden, 'paymentReceived', { value: true, enumerable: false });
+  assert.throws(() => buildFixedMonthlyNoteSchedule(hidden), /Unsupported note terms field/);
+  assert.throws(() => schedule({ settledMinor: 100 }), /Unsupported note terms field/);
+  assert.throws(() => buildFixedMonthlyNoteSchedule({ ...terms, [Symbol('executed')]: true }),
+    /Unsupported note terms field/);
+  const missing = { ...terms };
+  delete missing.noteId;
+  assert.throws(() => buildFixedMonthlyNoteSchedule(missing), /Note terms.noteId/);
+});
+
+test('null-prototype note terms with explicit own data values remain valid', () => {
+  const input = Object.assign(Object.create(null), terms);
+  const result = buildFixedMonthlyNoteSchedule(input);
+  assert.equal(result.installments.length, 12);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(Object.isFrozen(result), true);
+});
+
+
+test('note amortization rejects all pairwise aliases of tenant, entity, trust and note IDs', () => {
+  const roles = ['tenantId', 'entityId', 'trustId', 'noteId'];
+  for (let i = 0; i < roles.length; i++) {
+    for (let j = i + 1; j < roles.length; j++) {
+      assert.throws(() => schedule({ [roles[j]]: terms[roles[i]] }), /identifiers must be distinct/);
+    }
+  }
+  const valid = schedule();
+  assert.equal(valid.installments.length, terms.paymentCount);
+  assert.equal(valid.installments.at(-1).remainingPrincipalMinor, 0);
+});
+
+
+test('amortization uses inspected descriptors without invoking Proxy get traps', () => {
+  let reads = 0;
+  const proxied = new Proxy({...terms}, {
+    get(_target, key) { reads++; throw new Error('untrusted term read: ' + String(key)); }
+  });
+  const result = buildFixedMonthlyNoteSchedule(proxied);
+  assert.equal(result.installments.length, terms.paymentCount);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(reads, 0);
+});
+
+test('rejects default-ignorable Unicode in note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const invisible of ['\u200B', '\u200D', '\u2066', '\uFE0F']) {
+      assert.throws(() => schedule({ [key]: 'scope' + invisible + 'id' }), /default-ignorable Unicode/);
+    }
+  }
+  assert.equal(schedule({ noteId: 'scope-\u00e9' }).installments.length, 12);
+});
+
+test('rejects Unicode noncharacters in private-note scope identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const cp of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+      assert.throws(() => schedule({ [key]: 'scope-' + String.fromCodePoint(cp) }), /Unicode noncharacters/);
+    }
+    assert.equal(schedule({ [key]: 'scope-' + String.fromCodePoint(0x1F4DC) })[key],
+      'scope-' + String.fromCodePoint(0x1F4DC));
+  }
+});
+
+
+test('rejects Unicode line and paragraph separators in note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const separator of ['\u2028', '\u2029']) {
+      assert.throws(() => schedule({ [key]: 'scope' + separator + 'id' }), /Unicode line separators/);
+    }
+    assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
+  }
+});
+
+test('rejects embedded Unicode whitespace in private-note ownership identifiers', () => {
+  for (const key of ['tenantId', 'entityId', 'trustId', 'noteId']) {
+    for (const whitespace of [' ', '\u00A0', '\u2003', '\u3000']) {
+      assert.throws(() => schedule({ [key]: 'scope' + whitespace + 'id' }), /Unicode whitespace/);
+    }
+    assert.equal(schedule({ [key]: 'scope-valid' })[key], 'scope-valid');
+  }
+});
+
+
+test('monthly due dates handle Gregorian century boundaries without drift', () => {
+  const nonLeapCentury = schedule({ firstDueDate: '2100-01-31', paymentCount: 3 });
+  assert.deepEqual(nonLeapCentury.installments.map(row => row.dueDate),
+    ['2100-01-31', '2100-02-28', '2100-03-31']);
+  const leapCentury = schedule({ firstDueDate: '2000-01-31', paymentCount: 3 });
+  assert.deepEqual(leapCentury.installments.map(row => row.dueDate),
+    ['2000-01-31', '2000-02-29', '2000-03-31']);
+});
+
+
+test('month-end note schedules preserve calendar dates across 400-year leap cycle', () => {
+  const leap400 = schedule({ firstDueDate: '2400-01-31', paymentCount: 3 });
+  assert.deepEqual(leap400.installments.map(row => row.dueDate),
+    ['2400-01-31', '2400-02-29', '2400-03-31']);
+  assert.throws(() => schedule({ firstDueDate: '2100-02-29' }), /Invalid firstDueDate/);
+  assert.throws(() => schedule({ firstDueDate: '2400-02-30' }), /Invalid firstDueDate/);
+  assert.equal(schedule({ firstDueDate: '2400-02-29', paymentCount: 1 }).installments[0].dueDate,
+    '2400-02-29');
+});
+
+
+test('monthly due dates remain canonical at the supported calendar boundaries', () => {
+  const lower = schedule({ firstDueDate: '1900-01-31', paymentCount: 3 });
+  assert.deepEqual(lower.installments.map(row => row.dueDate),
+    ['1900-01-31', '1900-02-28', '1900-03-31']);
+  const upper = schedule({ firstDueDate: '9949-12-31', paymentCount: 600,
+    principalMinor: 1_200_000, annualRateBps: 0 });
+  assert.equal(upper.installments[0].dueDate, '9949-12-31');
+  assert.equal(upper.installments.at(-1).dueDate, '9999-11-30');
+  assert.equal(upper.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.throws(() => schedule({ firstDueDate: '1899-12-31' }), /Invalid firstDueDate/);
+  assert.throws(() => schedule({ firstDueDate: '9950-01-01' }), /Invalid firstDueDate/);
+});
+
+
+test('leap-day due dates retain the original 29th anchor through a full annual cycle', () => {
+  const result = schedule({ firstDueDate: '2028-02-29', paymentCount: 13,
+    principalMinor: 130_000, annualRateBps: 0 });
+  assert.equal(result.installments[0].dueDate, '2028-02-29');
+  assert.equal(result.installments[1].dueDate, '2028-03-29');
+  assert.equal(result.installments[11].dueDate, '2029-01-29');
+  assert.equal(result.installments[12].dueDate, '2029-02-28');
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), 130_000);
+});
+
+
+test('one-period maximum-rate projection preserves exact minor-unit reconciliation', () => {
+  const result = schedule({ principalMinor: 120_000, annualRateBps: 100_000, paymentCount: 1 });
+  assert.equal(result.installments.length, 1);
+  assert.equal(result.installments[0].interestMinor, 100_000);
+  assert.equal(result.installments[0].principalMinor, 120_000);
+  assert.equal(result.installments[0].paymentMinor, 220_000);
+  assert.equal(result.totalInterestMinor, 100_000);
+  assert.equal(result.totalRepaymentMinor, 220_000);
+  assert.equal(result.installments[0].remainingPrincipalMinor, 0);
+});
+
+
+test('long-horizon fixed-rate note conserves every minor unit without negative balances', () => {
+  const result = schedule({ principalMinor: 12_000_000, annualRateBps: 725,
+    paymentCount: 600, firstDueDate: '2026-12-31' });
+  assert.equal(result.installments.length, 600);
+  let outstanding = result.principalMinor;
+  let paidPrincipal = 0;
+  let paidInterest = 0;
+  let paidTotal = 0;
+  for (const [index, row] of result.installments.entries()) {
+    assert.equal(row.installmentNumber, index + 1);
+    assert.ok(row.paymentMinor > 0 && row.principalMinor > 0);
+    assert.ok(row.interestMinor >= 0 && row.remainingPrincipalMinor >= 0);
+    assert.equal(row.paymentMinor, row.principalMinor + row.interestMinor);
+    assert.equal(row.remainingPrincipalMinor, outstanding - row.principalMinor);
+    if (index < 599) assert.equal(row.paymentMinor, result.scheduledPaymentMinor);
+    outstanding = row.remainingPrincipalMinor;
+    paidPrincipal += row.principalMinor;
+    paidInterest += row.interestMinor;
+    paidTotal += row.paymentMinor;
+  }
+  assert.equal(outstanding, 0);
+  assert.equal(paidPrincipal, result.principalMinor);
+  assert.equal(paidInterest, result.totalInterestMinor);
+  assert.equal(paidTotal, result.totalRepaymentMinor);
+  assert.equal(result.installments[0].dueDate, '2026-12-31');
+  assert.equal(result.installments.at(-1).dueDate, '2076-11-30');
+});
+
+
+test('50-year zero-interest projection preserves every cent and month-end anchor', () => {
+  const principalMinor = 1_200_001;
+  const result = schedule({ principalMinor, annualRateBps: 0, paymentCount: 600,
+    firstDueDate: '2028-01-31' });
+  assert.equal(result.installments.length, 600);
+  assert.equal(result.scheduledPaymentMinor, 2_001);
+  assert.equal(result.totalInterestMinor, 0);
+  assert.equal(result.totalRepaymentMinor, principalMinor);
+  assert.equal(result.installments[1].dueDate, '2028-02-29');
+  assert.equal(result.installments[13].dueDate, '2029-02-28');
+  assert.equal(result.installments.at(-1).dueDate, '2077-12-31');
+  assert.equal(result.installments.at(-1).paymentMinor, 1_402);
+  assert.equal(result.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), principalMinor);
+  assert.ok(result.installments.every(row => row.paymentMinor > 0 && row.interestMinor === 0));
+});
