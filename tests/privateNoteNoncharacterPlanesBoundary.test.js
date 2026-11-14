@@ -24,7 +24,7 @@ function project(field, value) {
 
 test('private-note scope and event identities reject Unicode noncharacters on every plane', () => {
   const invalid = [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF,
-    0x1FFFE, 0x1FFFF, 0x10FFFE, 0x10FFFF].map(String.fromCodePoint);
+    0x1FFFE, 0x1FFFF, 0x10FFFE, 0x10FFFF].map((codePoint) => String.fromCodePoint(codePoint));
   for (const field of [...Object.keys(scope), 'eventId', 'actorId', 'documentRef', 'evidenceRef']) {
     for (const character of invalid) {
       assert.throws(
