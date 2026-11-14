@@ -46,3 +46,17 @@ test('valid multibyte UTF-8 event identity remains admissible', () => {
   const candidate = signed(Buffer.from(JSON.stringify(event), 'utf8'));
   assert.equal(verifyScopedMembershipWebhookFixture(candidate)?.id, event.id);
 });
+
+test('signed escaped lone surrogates in permitted event IDs fail closed', () => {
+  for (const escape of ['\\\\uD800', '\\\\uDC00']) {
+    const rawBody = Buffer.from(JSON.stringify(event).replace('evt-éclair', 'evt-' + escape), 'utf8');
+    const candidate = signed(rawBody);
+    assert.equal(verifyMembershipWebhookFixture(candidate), true, 'raw ASCII fixture signature is valid');
+    assert.equal(verifyScopedMembershipWebhookFixture(candidate), null, 'decoded malformed Unicode identity is rejected');
+  }
+});
+
+test('signed valid supplementary Unicode event IDs remain admissible', () => {
+  const candidate = signed(Buffer.from(JSON.stringify({ ...event, id: 'evt-🌱' }), 'utf8'));
+  assert.equal(verifyScopedMembershipWebhookFixture(candidate)?.id, 'evt-🌱');
+});
