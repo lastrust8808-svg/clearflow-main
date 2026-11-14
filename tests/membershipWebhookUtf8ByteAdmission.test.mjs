@@ -60,3 +60,16 @@ test('signed valid supplementary Unicode event IDs remain admissible', () => {
   const candidate = signed(Buffer.from(JSON.stringify({ ...event, id: 'evt-🌱' }), 'utf8'));
   assert.equal(verifyScopedMembershipWebhookFixture(candidate)?.id, 'evt-🌱');
 });
+
+test('signed escaped lone surrogates in every admitted identity field fail closed', () => {
+  for (const field of ['id', 'tenantId', 'memberId', 'subscriptionId', 'invoiceId', 'settlementId']) {
+    for (const escape of ['\\\\uD800', '\\\\uDC00']) {
+      // Encode a literal JSON escape, not an invalid JS source string.
+      const json = JSON.stringify({ ...event, [field]: 'sentinel' });
+      const rawBody = Buffer.from(json.replace('"sentinel"', '"bad-' + escape + '"'), 'utf8');
+      const candidate = signed(rawBody);
+      assert.equal(verifyMembershipWebhookFixture(candidate), true, field + ' fixture signature');
+      assert.equal(verifyScopedMembershipWebhookFixture(candidate), null, field + ' malformed identity');
+    }
+  }
+});
