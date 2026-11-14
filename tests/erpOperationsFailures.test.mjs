@@ -50,6 +50,20 @@ try {
     });
     assert.deepEqual(await operations[0](payloads[0]), accepted[0]);
   });
+  await test('Unicode space separators cannot authenticate invoice delivery receipts', async () => {
+    for (const separator of ['\u00a0', '\u2007', '\u202f', '\u3000']) {
+      globalThis.fetch = async () => ({
+        ok: true, status: 200,
+        json: async () => ({
+          ...accepted[0],
+          job: { ...accepted[0].job, deliveryReceiptId: 'smtp-' + separator + '-receipt' },
+        }),
+      });
+      await assert.rejects(operations[0](payloads[0]), /not confirmed/);
+    }
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[0] });
+    assert.deepEqual(await operations[0](payloads[0]), accepted[0]);
+  });
   await test('missing or padded financial identities fail before any network request', async () => {
     let requests = 0;
     globalThis.fetch = async () => { requests++; throw Error('unexpected request'); };
