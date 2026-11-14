@@ -116,7 +116,7 @@ try {
     ];
     for (let index = 0; index < operations.length; index++) {
       for (const field of identityFields[index]) {
-        for (const separator of ['\\u00a0', '\\u2007', '\\u202f', '\\u3000']) {
+        for (const separator of ['\u00a0', '\u2007', '\u202f', '\u3000']) {
           await assert.rejects(
             operations[index]({ ...payloads[index], [field]: 'id-' + separator + '-value' }),
             /requires nonempty canonical request identities/,
