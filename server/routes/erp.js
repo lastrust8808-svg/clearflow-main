@@ -1,212 +1,185 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
-import { isMailerConfigured, sendInvoiceEmail } from '../utils/mailer.js';
-import {
-  buildExecutionCapabilities,
-  buildSettlementExecution,
-} from '../services/paymentExecution.js';
 
 const router = express.Router();
 
-const invoiceDeliveryJobs = [];
-const invoiceExportJobs = [];
-const statementImportJobs = [];
-const reconciliationCloseJobs = [];
-const settlementExecutionJobs = [];
+// Fail closed until a durable, tenant-authorized job store and delivery audit exist.
+// In particular, never send SMTP before a job has been durably accepted.
+function rejectNonDurableJob(res, operation) {
+  // Never allow a proxy or browser to replay an unavailable response after
+  // durable processing becomes available, or misrepresent current readiness.
+  res.set('Cache-Control', 'no-store');
+  return res.status(503).json({
+    success: false,
+    code: 'ERP_DURABLE_JOB_STORE_REQUIRED',
+    operation,
+    error: 'This operation is unavailable until authenticated durable job storage is implemented. No job was queued and no message was sent.',
+  });
+}
 
-router.post('/invoice-deliveries', async (req, res) => {
-  const {
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    deliveryMethod,
-    recipientEmail,
-    internalDeliveryTarget,
-    emailSubject,
-    emailTextBody,
-    emailHtmlBody,
-    attachmentFileName,
-    attachmentHtml,
-    replyTo,
-    fromName,
-  } = req.body || {};
+// Every ERP operation identifier must be an explicit, canonical identity.
+// A truthy object, padded ID or invisible Unicode alias must not be treated
+// as a valid future durable-job request or tenant/accounting audit key.
+// Invalid financial-operation requests must not be cached by intermediaries.
+function rejectInvalidErpPayload(res, error, code) {
+  res.set('Cache-Control', 'no-store');
+  return res.status(400).json({ success: false, ...(code ? { code } : {}), error });
+}
 
-  if (!invoiceId || !entityId || !invoiceNumber) {
-    return res.status(400).json({ success: false, error: 'Missing invoice delivery payload.' });
+function containsUnicodeNoncharacter(value) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if ((codePoint >= 0xfdd0 && codePoint <= 0xfdef) ||
+        (codePoint & 0xfffe) === 0xfffe) return true;
   }
+  return false;
+}
 
-  const job = {
-    id: randomUUID(),
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    deliveryMethod: deliveryMethod || 'manual',
-    recipientEmail: recipientEmail || null,
-    internalDeliveryTarget: internalDeliveryTarget || null,
-    status: 'queued',
-    operation: 'send',
-    queuedAt: new Date().toISOString(),
-  };
+function validErpIdentifier(value) {
+  return typeof value === 'string' && value.length <= 255 &&
+    !containsUnicodeNoncharacter(value) &&
+    !/\p{Default_Ignorable_Code_Point}/u.test(value) &&
+    Boolean(value.trim()) && value === value.trim() &&
+    value === value.normalize('NFC') &&
+    !/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value);
+}
 
-  if (job.deliveryMethod === 'email' && recipientEmail) {
-    if (isMailerConfigured()) {
-      try {
-        await sendInvoiceEmail({
-          to: recipientEmail,
-          subject: emailSubject || `Invoice ${invoiceNumber}`,
-          text: emailTextBody || `Your invoice ${invoiceNumber} is attached.`,
-          html: emailHtmlBody || `<p>Your invoice <strong>${invoiceNumber}</strong> is attached.</p>`,
-          attachmentFileName,
-          attachmentHtml,
-          replyTo,
-          fromName,
-        });
-        job.status = 'sent';
-        job.sentAt = new Date().toISOString();
-        job.deliveryChannel = 'smtp';
-      } catch (error) {
-        job.status = 'fallback_required';
-        job.deliveryChannel = 'manual';
-        job.fallbackReason =
-          error instanceof Error ? error.message : 'SMTP delivery failed.';
-      }
-    } else {
-      job.status = 'fallback_required';
-      job.deliveryChannel = 'manual';
-      job.fallbackReason = 'SMTP is not configured on the server.';
-    }
-  } else if (job.deliveryMethod === 'internal_user') {
-    job.deliveryChannel = 'internal';
-  } else {
-    job.deliveryChannel = 'manual';
+// Settlement amounts must survive exact-cent conversion before any future
+// durable reservation or payment adapter can consume them. Reject coerced,
+// non-finite, nonpositive and unsafe-precision monetary values.
+function validSettlementAmount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return false;
+  const cents = Math.round(value * 100);
+  return Number.isSafeInteger(cents) && cents / 100 === value;
+}
+
+router.post('/invoice-deliveries', (req, res) => {
+  const { invoiceId, entityId, invoiceNumber } = req.body || {};
+  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
+    return rejectInvalidErpPayload(res, 'Missing invoice delivery payload.');
   }
-
-  invoiceDeliveryJobs.unshift(job);
-  return res.status(201).json({ success: true, job });
+  return rejectNonDurableJob(res, 'invoice_delivery');
 });
 
 router.post('/invoice-exports', (req, res) => {
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-
-  if (!invoiceId || !entityId || !invoiceNumber) {
-    return res.status(400).json({ success: false, error: 'Missing invoice export payload.' });
+  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
+    return rejectInvalidErpPayload(res, 'Missing invoice export payload.');
   }
-
-  const job = {
-    id: randomUUID(),
-    invoiceId,
-    entityId,
-    invoiceNumber,
-    status: 'queued',
-    operation: 'export',
-    queuedAt: new Date().toISOString(),
-  };
-
-  invoiceExportJobs.unshift(job);
-  return res.status(201).json({ success: true, job });
+  return rejectNonDurableJob(res, 'invoice_export');
 });
 
-router.post('/settlements/execute', async (req, res) => {
-  const {
-    entityId,
-    paymentId,
-    settlementId,
-    amount,
-    currency,
-    direction,
-    method,
-    urgency,
-    sourceBankAccount,
-    sourceLedgerAccount,
-    vendorInstruction,
-    vendorReceiveMethod,
-  } = req.body || {};
-
-  if (!entityId || !paymentId || !settlementId || !amount) {
-    return res
-      .status(400)
-      .json({ success: false, error: 'Missing settlement execution payload.' });
+// Fail closed before contacting any provider: durable tenant-scoped idempotency,
+// approval and audit persistence are not yet implemented for this endpoint.
+router.post('/settlements/execute', (req, res) => {
+  const { entityId, paymentId, settlementId, amount } = req.body || {};
+  if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
+    return rejectInvalidErpPayload(res, 'Missing settlement execution payload.');
   }
-
-  const execution = await buildSettlementExecution({
-    entityId,
-    paymentId,
-    settlementId,
-    amount,
-    currency,
-    direction,
-    method,
-    urgency,
-    sourceBankAccount,
-    sourceLedgerAccount,
-    vendorInstruction,
-    vendorReceiveMethod,
-  });
-
-  settlementExecutionJobs.unshift(execution);
-  return res.status(201).json({ success: true, execution });
+  return rejectNonDurableJob(res, 'settlement_execution');
 });
 
+// The provider configuration probe is not an execution-readiness signal.
+// This route deliberately blocks ALL settlement execution until durable,
+// tenant-authorized approval and audit persistence are integrated. Do not
+// advertise ACH/wire/check as executable merely because a token is present.
 router.get('/settlements/execution-capabilities', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  // No provider configuration is consulted: this endpoint is disabled regardless
+  // of credentials, and a read-only capability response must not leak provider
+  // configuration or fail because a provider adapter is unavailable.
   return res.status(200).json({
     success: true,
-    capabilities: buildExecutionCapabilities(),
+    capabilities: {
+      provider: 'manual',
+      executionMode: 'disabled',
+      settlementExecutionAvailable: false,
+      unavailableReason: 'durable_job_store_required',
+      liveBankExecutionReady: false,
+      mercuryApprovalReady: false,
+      achOriginationReady: false,
+      wireOriginationReady: false,
+      billerDirectReady: false,
+      printableCheckReady: false,
+      positivePayReady: false,
+      supportedMethods: [],
+      notes: [
+        'Settlement execution is disabled: authenticated durable job storage, approval and audit persistence are required. No payment request can be queued through this endpoint.',
+      ],
+    },
   });
 });
 
 router.post('/reconciliations/:reconciliationId/statement-import', (req, res) => {
   const { reconciliationId } = req.params;
-  const { bankAccountId, statementEndingBalance, statementFileName, exceptionNotes } = req.body || {};
+  const { bankAccountId, statementEndingBalance } = req.body || {};
 
-  if (!reconciliationId || !bankAccountId) {
-    return res.status(400).json({ success: false, error: 'Missing statement import payload.' });
+  // A body identity that disagrees with the route can reserve work against
+  // the wrong reconciliation once durable execution is introduced.
+  if (req.body && Object.hasOwn(req.body, 'reconciliationId') &&
+      req.body.reconciliationId !== reconciliationId) {
+    return rejectInvalidErpPayload(res, 'Statement reconciliation identity mismatch.', 'ERP_RECONCILIATION_ID_MISMATCH');
+  }
+  if (![reconciliationId, bankAccountId].every(validErpIdentifier)) {
+    return rejectInvalidErpPayload(res, 'Missing statement import payload.');
+  }
+  // Independently enforce the same exact-cent contract as the ERP client.
+  // JSON numbers may be fractional, overflowed or rounded before reaching
+  // the handler. Never allow a future durable adapter to accept a different
+  // accounting amount than the one represented by the request.
+  const cents = typeof statementEndingBalance === 'number'
+    ? Math.round(statementEndingBalance * 100) : NaN;
+  if (!Number.isFinite(statementEndingBalance) ||
+      Object.is(statementEndingBalance, -0) ||
+      !Number.isSafeInteger(cents) ||
+      cents / 100 !== statementEndingBalance) {
+    return rejectInvalidErpPayload(res, 'Statement ending balance must be a finite exact-cent amount.', 'ERP_INVALID_STATEMENT_BALANCE');
   }
 
-  const importJob = {
-    id: randomUUID(),
-    reconciliationId,
-    bankAccountId,
-    statementEndingBalance: Number(statementEndingBalance || 0),
-    statementFileName: statementFileName || null,
-    exceptionNotes: exceptionNotes || null,
-    status: 'processed',
-    importedAt: new Date().toISOString(),
-  };
-
-  statementImportJobs.unshift(importJob);
-  return res.status(201).json({ success: true, importJob });
+  // Import acceptance must persist the statement and evidence transactionally.
+  // Do not acknowledge an import held only in process memory.
+  return rejectNonDurableJob(res, 'statement_import');
 });
 
+// Reconciliation closure must be committed transactionally with tenant-scoped
+// approval, statement matching, idempotency and audit evidence. A process-local
+// queue is not a closed accounting period; never acknowledge one as processed.
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
-  const { closeSummary, exceptionNotes } = req.body || {};
-
-  if (!reconciliationId) {
-    return res.status(400).json({ success: false, error: 'Missing reconciliation id.' });
+  // Match statement-import's route/body identity contract. An optional body
+  // reconciliationId must never override or disagree with the URL target.
+  if (req.body && Object.hasOwn(req.body, 'reconciliationId') &&
+      req.body.reconciliationId !== reconciliationId) {
+    return rejectInvalidErpPayload(res, 'Reconciliation close identity mismatch.', 'ERP_RECONCILIATION_ID_MISMATCH');
   }
-
-  const closeJob = {
-    id: randomUUID(),
-    reconciliationId,
-    closeSummary: closeSummary || null,
-    exceptionNotes: exceptionNotes || null,
-    status: 'processed',
-    closedAt: new Date().toISOString(),
-  };
-
-  reconciliationCloseJobs.unshift(closeJob);
-  return res.status(201).json({ success: true, closeJob });
+  if (!validErpIdentifier(reconciliationId)) {
+    return rejectInvalidErpPayload(res, 'Missing reconciliation id.');
+  }
+  return rejectNonDurableJob(res, 'reconciliation_close');
 });
 
 router.get('/ops-status', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   return res.status(200).json({
     success: true,
+    capabilities: {
+      invoiceDeliveries: { available: false, reason: 'durable_job_store_required' },
+      invoiceExports: { available: false, reason: 'durable_job_store_required' },
+      settlementExecutions: { available: false, reason: 'durable_job_store_required' },
+      reconciliationCloses: { available: false, reason: 'durable_job_store_required' },
+      statementImports: { available: false, reason: 'durable_job_store_required' },
+    },
+    // There is no authenticated durable count query yet. Zero would
+    // incorrectly represent an unknown historical queue as empty and can
+    // mislead operators into believing invoice work was never accepted.
+    // Keep the existing count keys but mark each unavailable explicitly.
+    countsAvailable: false,
+    countsUnavailableReason: 'durable_job_store_required',
     counts: {
-      invoiceDeliveries: invoiceDeliveryJobs.length,
-      invoiceExports: invoiceExportJobs.length,
-      statementImports: statementImportJobs.length,
-      reconciliationCloses: reconciliationCloseJobs.length,
-      settlementExecutions: settlementExecutionJobs.length,
+      invoiceDeliveries: null,
+      invoiceExports: null,
+      statementImports: null,
+      reconciliationCloses: null,
+      settlementExecutions: null,
     },
   });
 });

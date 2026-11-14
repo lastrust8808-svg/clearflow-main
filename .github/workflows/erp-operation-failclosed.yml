@@ -1,0 +1,77 @@
+name: ERP operation fail-closed guards
+on:
+  pull_request:
+    paths:
+      - 'src/services/erpOperations.service.ts'
+      - 'server/routes/erp.js'
+      - 'tests/erpDurableAcceptance.test.mjs'
+      - 'tests/erpOperationsFailures.test.mjs'
+      - 'tests/erpJobReservation.test.mjs'
+      - 'tests/erpAggregateTraversal.test.mjs'
+      - 'tests/erpIdentitySeparator.test.mjs'
+      - 'tests/erpSingularMinorUnits.test.mjs'
+      - 'server/services/erpJobReservation.js'
+      - 'server/db/erp_operation_jobs.proposed.sql'
+      - 'tests/erpPostgresSchema.test.sql'
+      - 'tests/erpPostgresConnectionDurability.test.sh'
+      - 'tests/erpPostgresConcurrentClaims.test.sh'
+      - 'tests/erpPostgresServerRestart.test.sh'
+      - 'tests/erpPostgresBackupRestore.test.sh'
+      - '.github/workflows/erp-operation-failclosed.yml'
+  push:
+    branches:
+      - 'workstream/erp-business-operations-2026-10-28'
+jobs:
+  fail-closed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check server/routes/erp.js
+      - run: node --check server/services/erpJobReservation.js
+      - run: node --experimental-strip-types --test tests/erpOperationsFailures.test.mjs tests/erpDurableAcceptance.test.mjs tests/erpJobReservation.test.mjs tests/erpAggregateTraversal.test.mjs tests/erpIdentitySeparator.test.mjs tests/erpSingularMinorUnits.test.mjs
+
+  postgres-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: erp_test
+          POSTGRES_PASSWORD: ephemeral_test_only
+          POSTGRES_DB: erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erp_test -d erp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: erp_test
+      PGPASSWORD: ephemeral_test_only
+      PGDATABASE: erp_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Apply proposed schema to disposable database
+        run: psql -X -v ON_ERROR_STOP=1 -f server/db/erp_operation_jobs.proposed.sql
+      - name: Verify fail-closed constraints and tenant-scoped idempotency
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/erpPostgresSchema.test.sql
+      - name: Verify committed ERP job state across separate PostgreSQL sessions
+        run: bash tests/erpPostgresConnectionDurability.test.sh
+      - name: Verify concurrent worker claim exclusivity and tenant isolation
+        run: bash tests/erpPostgresConcurrentClaims.test.sh
+      - name: Verify committed ERP job and lease survive a disposable PostgreSQL server restart
+        run: bash tests/erpPostgresServerRestart.test.sh
+      - name: Verify ERP job backup/restore in a second disposable PostgreSQL database
+        run: bash tests/erpPostgresBackupRestore.test.sh
