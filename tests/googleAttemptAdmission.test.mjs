@@ -942,3 +942,28 @@ test('accepted OAuth result is detached from reducer-owned mutable workspace rec
   assert.deepEqual(accepted.workspaces.map((w) => [w.id, w.role]), [['company', 'member']]);
   assert.throws(() => { accepted.workspaces[0].role = 'owner'; }, TypeError);
 });
+
+
+test('aggregate OAuth string budget rejects many individually valid fields before admission', () => {
+  const current = pending('attempt-B');
+  // Individual values fit the per-string cap, but their combined UTF-16
+  // payload exceeds the bounded snapshot budget.
+  const oversized = Array.from({ length: 17 }, () => 'x'.repeat(65536));
+  const contaminated = { ...current, workspaceLabels: oversized };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(contaminated, 'attempt-B', () => {
+    invoked = true;
+    return { ...contaminated, status: 'authenticated' };
+  }), contaminated);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'authenticated', workspaceLabels: oversized,
+  })), current);
+
+  const allowed = Array.from({ length: 8 }, () => 'x'.repeat(65536));
+  const admitted = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', workspaceLabels: allowed,
+  }));
+  assert.equal(admitted.status, 'pending-drive-check');
+  assert.equal(admitted.workspaceLabels.length, 8);
+});
