@@ -37,3 +37,21 @@ test('a superseded duplicate does not quarantine the posted transfer', () => {
   assert.equal(result.candidates[0].status, 'review_required');
   assert.deepEqual(result.ambiguous, []);
 });
+
+test('pending credit-side evidence blocks an apparent transfer without mutating source rows', () => {
+  const rows = [
+    row('checking', 'posted-debit', -7500),
+    row('savings', 'posted-credit', 7500),
+    row('savings', 'pending-credit', 7500, 'pending'),
+  ];
+  const original = structuredClone(rows);
+  for (const transactions of [rows, [...rows].reverse()]) {
+    const result = proposeBankTransferCandidates({ tenantId: 'tenant-a', transactions });
+    assert.deepEqual(result.candidates, []);
+    assert.deepEqual(result.ambiguous.map(({ transactionId, candidateCount }) =>
+      [transactionId, candidateCount]), [
+      ['posted-debit', 1], ['posted-credit', 1],
+    ]);
+  }
+  assert.deepEqual(rows, original);
+});
