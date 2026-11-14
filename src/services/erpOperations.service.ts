@@ -131,7 +131,7 @@ function isAcceptedJob(
       job.deliveryReceiptId.length <= 255 &&
       // Reject control/invisible characters that can disguise a synthetic
       // transport receipt or corrupt an audit trail.
-      !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(job.deliveryReceiptId) &&
+      !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Zs}]/u.test(job.deliveryReceiptId) &&
       !/\p{Default_Ignorable_Code_Point}/u.test(job.deliveryReceiptId) &&
       job.deliveryReceiptId === job.deliveryReceiptId.normalize('NFC') &&
       !containsUnicodeNoncharacter(job.deliveryReceiptId) &&
