@@ -24,7 +24,6 @@ test('independent review candidates have stable ordering across reversed bank-fe
   assert.equal(first.candidates.length, 2);
   assert.deepEqual(first.ambiguous, []);
   assert.deepEqual(review([...rows].reverse()), first);
-  assert.deepEqual([rows[2], rows[0], rows[3], rows[1]].length, 4);
   assert.deepEqual(review([rows[2], rows[0], rows[3], rows[1]]), first);
   assert.ok(first.candidates.every((candidate) => candidate.status === 'review_required'));
   assert.deepEqual(rows, before);
