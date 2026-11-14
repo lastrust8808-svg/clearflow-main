@@ -111,7 +111,7 @@ jobs:
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
           node --check server/services/bankFeedPostgresStore.js
           node --check server/services/bankTransferCandidates.js
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeed*.test.mjs tests/bankTransfer*.test.mjs
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs $(find tests -maxdepth 1 -type f \( -name 'bankFeed*.test.mjs' -o -name 'bankTransfer*.test.mjs' \) ! -name 'bankFeedPostgresLive.test.mjs' | sort)
 
   banking-postgres-schema:
     runs-on: ubuntu-latest
