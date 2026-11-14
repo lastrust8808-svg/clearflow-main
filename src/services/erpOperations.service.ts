@@ -190,6 +190,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
       !Object.prototype.hasOwnProperty.call(descriptor, 'value'))) {
     throw new TypeError(`${label} contains accessor-backed financial instructions; no request was sent.`);
   }
+  // A prototype can supply inherited approval or tenant instructions that JSON
+  // silently discards. Financial request objects must have plain own fields.
+  if (isRecord(payload) && Object.getPrototypeOf(payload) !== Object.prototype &&
+      Object.getPrototypeOf(payload) !== null) {
+    throw new TypeError(`${label} contains inherited financial instructions; no request was sent.`);
+  }
   if (isRecord(payload) && ('toJSON' in payload)) {
     throw new TypeError(`${label} contains a custom JSON serializer; no request was sent.`);
   }
