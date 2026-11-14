@@ -217,7 +217,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
         payload[field] === (payload[field] as string).normalize('NFC') &&
         // Invisible/control characters can make distinct ledger identities
         // appear identical in audit views while preserving string equality.
-        !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(payload[field] as string) &&
+        !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Zs}]/u.test(payload[field] as string) &&
         !/\p{Default_Ignorable_Code_Point}/u.test(payload[field] as string) &&
         !containsUnicodeNoncharacter(payload[field] as string))) {
     throw new TypeError(`${label} requires nonempty canonical request identities; no request was sent.`);
