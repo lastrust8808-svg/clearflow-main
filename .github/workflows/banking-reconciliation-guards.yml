@@ -42,6 +42,8 @@ on:
       - 'tests/bankTransferLeapDayBoundary.test.mjs'
       - 'tests/bankTransferDaylightSavingBoundary.test.mjs'
       - 'tests/bankTransferConnectionCollisionIsolation.test.mjs'
+      - 'tests/bankTransfer*.test.mjs'
+      - 'tests/bankFeed*.test.mjs'
       - 'server/services/bankTransferCandidates.js'
       - '.github/workflows/banking-reconciliation-guards.yml'
   push:
@@ -87,6 +89,8 @@ on:
       - 'tests/bankTransferLeapDayBoundary.test.mjs'
       - 'tests/bankTransferDaylightSavingBoundary.test.mjs'
       - 'tests/bankTransferConnectionCollisionIsolation.test.mjs'
+      - 'tests/bankTransfer*.test.mjs'
+      - 'tests/bankFeed*.test.mjs'
       - 'server/services/bankTransferCandidates.js'
       - '.github/workflows/banking-reconciliation-guards.yml'
 
@@ -107,7 +111,7 @@ jobs:
           node --experimental-strip-types --check src/services/bankFeedAtomicCommit.service.ts
           node --check server/services/bankFeedPostgresStore.js
           node --check server/services/bankTransferCandidates.js
-          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeedReplayPlan.test.mjs tests/bankFeedAtomicCommit.test.mjs tests/bankFeedPostgresStore.test.mjs tests/bankTransferCandidates.test.mjs tests/bankTransferBatchLimit.test.mjs tests/bankTransferBatchBounds.test.mjs tests/bankTransferCalendarBoundary.test.mjs tests/bankTransferReferenceCollision.test.mjs tests/bankTransferIdentityUnicode.test.mjs tests/bankTransferCollisionCapacity.test.mjs tests/bankTransferMaxCapacity.test.mjs tests/bankTransferPendingConnectionIsolation.test.mjs tests/bankTransferInactiveReferenceEvidence.test.mjs tests/bankTransferTenantBatchIsolation.test.mjs tests/bankTransferTenantHiddenEvidence.test.mjs tests/bankTransferLeapYearBoundary.test.mjs tests/bankTransferCrossCurrencyPendingEvidence.test.mjs tests/bankFeedCheckpointCasEnvelope.test.mjs tests/bankFeedCheckpointCasResult.test.mjs tests/bankFeedCheckpointCursorNoncharacters.test.mjs tests/bankFeedDuplicateCheckpointRows.test.mjs tests/bankFeedDuplicatePersistedEntries.test.mjs tests/bankFeedOutgoingBatchBounds.test.mjs tests/bankFeedOutgoingScopeMutation.test.mjs tests/bankFeedPersistedBatchBounds.test.mjs tests/bankFeedScopeNoncharacters.test.mjs tests/bankFeedUpsertAcknowledgement.test.mjs tests/bankTransferSafeIntegerBoundary.test.mjs tests/bankTransferLeapDayBoundary.test.mjs tests/bankTransferDaylightSavingBoundary.test.mjs tests/bankTransferConnectionCollisionIsolation.test.mjs
+          node --experimental-strip-types --test tests/reconciliationCloseGuards.test.mjs tests/bankFeed*.test.mjs tests/bankTransfer*.test.mjs
 
   banking-postgres-schema:
     runs-on: ubuntu-latest
