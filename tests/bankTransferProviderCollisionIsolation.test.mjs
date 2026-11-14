@@ -31,3 +31,24 @@ test('pending collision in Plaid does not suppress Mercury review with same conn
   assert.deepEqual(result, review([...records].reverse()));
   assert.deepEqual(records, before);
 });
+
+test('removed and superseded provider events do not poison active transfer references', () => {
+  const records = [
+    row('mercury', 'shared-label', 'checking', 'm-out', -4200),
+    row('mercury', 'shared-label', 'savings', 'm-in', 4200),
+    row('mercury', 'shared-label', 'archived', 'm-removed', -4200, 'removed'),
+    row('mercury', 'shared-label', 'archived', 'm-superseded', 4200, 'superseded'),
+    row('plaid', 'shared-label', 'checking', 'p-out', -4200),
+    row('plaid', 'shared-label', 'savings', 'p-in', 4200),
+    row('plaid', 'shared-label', 'pending', 'p-pending', 4200, 'pending'),
+  ];
+  const before = structuredClone(records);
+  const result = review(records);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].provider, 'mercury');
+  assert.equal(result.candidates[0].status, 'review_required');
+  assert.equal(result.ambiguous.length, 2);
+  assert.ok(result.ambiguous.every(entry => entry.provider === 'plaid'));
+  assert.deepEqual(result, review([...records].reverse()));
+  assert.deepEqual(records, before);
+});
