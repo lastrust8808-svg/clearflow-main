@@ -1,0 +1,969 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { admitGoogleAttemptResult, isCurrentGoogleAttempt } from '../src/domain/googleAttemptAdmission.mjs';
+
+const pending = (id) => Object.freeze({ status: 'pending-gsi', googleAttemptId: id, token: null });
+const advance = (state) => ({ ...state, status: 'pending-drive-check', token: 'verified-test-token' });
+
+test('only the matching pending attempt can advance', () => {
+  const current = pending('attempt-B');
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-A'), false);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-A', advance), current);
+  const next = admitGoogleAttemptResult(current, 'attempt-B', advance);
+  assert.equal(next.status, 'pending-drive-check');
+  assert.equal(next.token, 'verified-test-token');
+  assert.equal(current.token, null);
+});
+
+test('stale failures cannot reject a newer attempt', () => {
+  const current = pending('attempt-B');
+  const reject = (state) => ({ ...state, status: 'unauthenticated' });
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-A', reject), current);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', reject).status, 'unauthenticated');
+});
+
+test('timeout, logout, completion and missing attempt identities fail closed', () => {
+  for (const status of ['unauthenticated', 'authenticated', 'pending-drive-check', 'pending-profile-setup']) {
+    const current = Object.freeze({ ...pending('attempt-B'), status });
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance), current);
+  }
+  for (const id of [null, '', undefined, 'attempt-A']) {
+    assert.equal(admitGoogleAttemptResult(pending('attempt-B'), id, advance).status, 'pending-gsi');
+  }
+  assert.equal(isCurrentGoogleAttempt({ status: 'pending-gsi' }, 'attempt-B'), false);
+});
+
+test('Drive-stage results require matching attempt and expected status', () => {
+  const current = Object.freeze({ status: 'pending-drive-check', googleAttemptId: 'attempt-B' });
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-A', advance, 'pending-drive-check'), current);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance, 'pending-drive-check').token, 'verified-test-token');
+});
+
+
+test('malformed and cross-attempt reducer results fail closed', () => {
+  const current = pending('attempt-B');
+  for (const result of [null, undefined, false, [], { status: 'authenticated' },
+    { ...current, googleAttemptId: 'attempt-A', status: 'authenticated' }]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).googleAttemptId, 'attempt-B');
+});
+
+
+test('throwing admission reducers cannot mutate or reject the current attempt', () => {
+  const current = pending('attempt-B');
+  const thrown = new Error('simulated asynchronous admission failure');
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => { throw thrown; }), current);
+  assert.equal(current.status, 'pending-gsi');
+  assert.equal(current.token, null);
+  // Stale callbacks never invoke the reducer at all.
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-A', () => {
+    called = true;
+    throw thrown;
+  }), current);
+  assert.equal(called, false);
+});
+
+test('async reducers and statusless results cannot be admitted as authenticated sessions', () => {
+  const current = pending('attempt-B');
+  for (const result of [
+    Promise.resolve({ ...current, status: 'authenticated' }),
+    { ...current, status: undefined },
+    { ...current, status: '' },
+    { ...current, status: 123 },
+  ]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(current.status, 'pending-gsi');
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('throwing result accessors fail closed without crashing OAuth callbacks', () => {
+  const current = pending('attempt-B');
+  for (const key of ['then', 'status', 'googleAttemptId']) {
+    const hostile = { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    Object.defineProperty(hostile, key, {
+      get() { throw new Error('simulated hostile ' + key + ' getter'); },
+    });
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('throwing current-state accessors fail closed before invoking reducers', () => {
+  for (const key of ['status', 'googleAttemptId']) {
+    const hostile = { status: 'pending-gsi', googleAttemptId: 'attempt-B' };
+    Object.defineProperty(hostile, key, {
+      get() { throw new Error('simulated hostile current ' + key + ' getter'); },
+    });
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(hostile, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(hostile, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), hostile);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('blank-only OAuth attempt identities never admit a callback', () => {
+  for (const id of [' ', '\t', '\n', '\u00a0', '\u2003']) {
+    const current = pending(id);
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+
+test('invisible control and formatting characters cannot identify an OAuth attempt', () => {
+  for (const id of ['attempt-\u200bB', 'attempt-\u202eB', 'attempt-\u0000B', 'attempt-\u2028B', 'attempt-\ud800B']) {
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('inherited and accessor-backed OAuth identity results fail closed', () => {
+  const current = pending('attempt-B');
+  const inherited = Object.create({ googleAttemptId: 'attempt-B' });
+  inherited.status = 'authenticated';
+  const inheritedStatus = Object.create({ status: 'authenticated' });
+  inheritedStatus.googleAttemptId = 'attempt-B';
+  const accessor = { status: 'authenticated' };
+  Object.defineProperty(accessor, 'googleAttemptId', {
+    enumerable: true,
+    get() { return 'attempt-B'; },
+  });
+  const accessorStatus = { googleAttemptId: 'attempt-B' };
+  Object.defineProperty(accessorStatus, 'status', {
+    enumerable: true,
+    get() { return 'authenticated'; },
+  });
+  for (const result of [inherited, inheritedStatus, accessor, accessorStatus]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('inherited and accessor-backed active OAuth identities cannot admit callbacks', () => {
+  const inheritedId = Object.create({ googleAttemptId: 'attempt-B' });
+  inheritedId.status = 'pending-gsi';
+  const inheritedStatus = Object.create({ status: 'pending-gsi' });
+  inheritedStatus.googleAttemptId = 'attempt-B';
+  const accessorId = { status: 'pending-gsi' };
+  Object.defineProperty(accessorId, 'googleAttemptId', {
+    enumerable: true, get() { return 'attempt-B'; },
+  });
+  const accessorStatus = { googleAttemptId: 'attempt-B' };
+  Object.defineProperty(accessorStatus, 'status', {
+    enumerable: true, get() { return 'pending-gsi'; },
+  });
+  for (const current of [inheritedId, inheritedStatus, accessorId, accessorStatus]) {
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('OAuth admission rejects Proxy-backed identity even when descriptors appear valid', () => {
+  const current = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-B' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-A';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
+  assert.equal(isCurrentGoogleAttempt(current, 'attempt-A'), false);
+
+  const spoofedCurrent = new Proxy({ status: 'pending-gsi', googleAttemptId: 'attempt-A' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-B';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(spoofedCurrent, 'attempt-B', () => {
+    called = true;
+    return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  }), spoofedCurrent);
+  assert.equal(called, false);
+
+  const spoofedResult = new Proxy({ status: 'authenticated', googleAttemptId: 'attempt-A' }, {
+    get(target, key, receiver) {
+      if (key === 'googleAttemptId') return 'attempt-B';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', () => spoofedResult).status, 'pending-gsi');
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('caller-supplied expected status cannot reopen a completed OAuth session', () => {
+  for (const status of ['authenticated', 'unauthenticated', 'pending-profile-setup']) {
+    const current = Object.freeze({ status, googleAttemptId: 'attempt-B' });
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B', status), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...current, status: 'authenticated' };
+    }, status), current);
+    assert.equal(called, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+  assert.equal(isCurrentGoogleAttempt(
+    { status: 'pending-drive-check', googleAttemptId: 'attempt-B' },
+    'attempt-B', 'pending-drive-check'
+  ), true);
+});
+
+
+test('OAuth admission never executes then accessors on reducer results', () => {
+  const current = pending('attempt-B');
+  let getterCalls = 0;
+  const hostile = { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  Object.defineProperty(hostile, 'then', { get() { getterCalls++; return undefined; } });
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  assert.equal(getterCalls, 0);
+  const inherited = Object.create({ get then() { getterCalls++; return undefined; } });
+  inherited.status = 'authenticated';
+  inherited.googleAttemptId = 'attempt-B';
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => inherited), current);
+  assert.equal(getterCalls, 0);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('embedded Unicode spaces cannot identify an OAuth attempt', () => {
+  for (const id of ['attempt B', 'attempt\u00a0B', 'attempt\u2003B', 'attempt\u3000B']) {
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+});
+
+
+test('oversized OAuth attempt identities cannot advance authentication', () => {
+  for (const id of ['a'.repeat(129), 'a'.repeat(4096)]) {
+    const current = pending(id);
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(called, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('a'.repeat(128)), 'a'.repeat(128)), true);
+});
+
+
+test('non-NFC OAuth attempt identifiers cannot alias canonical attempt state', () => {
+  const decomposed = 'cafe\u0301-attempt';
+  const composed = decomposed.normalize('NFC');
+  assert.notEqual(decomposed, composed);
+  let called = false;
+  const current = pending(decomposed);
+  assert.equal(isCurrentGoogleAttempt(current, decomposed), false);
+  assert.equal(admitGoogleAttemptResult(current, decomposed, () => {
+    called = true;
+    return { status: 'authenticated', googleAttemptId: decomposed };
+  }), current);
+  assert.equal(called, false);
+  assert.equal(isCurrentGoogleAttempt(pending(composed), composed), true);
+  assert.equal(admitGoogleAttemptResult(pending(composed), composed, advance).status, 'pending-drive-check');
+});
+
+
+test('unknown OAuth reducer statuses fail closed without changing the active attempt', () => {
+  const current = pending('attempt-B');
+  for (const status of ['verified', 'pending-payment', 'AUTHENTICATED', ' ', 'pending-gsi-extra']) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status,
+    })), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('non-plain OAuth reducer state objects fail closed', () => {
+  const current = pending('attempt-B');
+  class ForgedAuthState {
+    constructor() {
+      this.status = 'authenticated';
+      this.googleAttemptId = 'attempt-B';
+    }
+  }
+  const dateState = new Date();
+  dateState.status = 'authenticated';
+  dateState.googleAttemptId = 'attempt-B';
+  for (const state of [new ForgedAuthState(), dateState]) {
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => state), current);
+  }
+  const plain = admitGoogleAttemptResult(current, 'attempt-B', advance);
+  assert.equal(plain.status, 'pending-drive-check');
+});
+
+
+test('non-plain active OAuth state cannot authorize callback admission', () => {
+  class ForgedPendingState {
+    constructor() {
+      this.status = 'pending-gsi';
+      this.googleAttemptId = 'attempt-B';
+    }
+  }
+  const dateState = new Date('2026-11-06T00:00:00Z');
+  dateState.status = 'pending-gsi';
+  dateState.googleAttemptId = 'attempt-B';
+  for (const current of [new ForgedPendingState(), dateState]) {
+    let called = false;
+    assert.equal(isCurrentGoogleAttempt(current, 'attempt-B'), false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(called, false);
+  }
+  const plain = Object.create(null);
+  plain.status = 'pending-gsi';
+  plain.googleAttemptId = 'attempt-B';
+  assert.equal(isCurrentGoogleAttempt(plain, 'attempt-B'), true);
+  assert.equal(admitGoogleAttemptResult(pending('attempt-B'), 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('admission reducers cannot mutate active OAuth state before validation', () => {
+  const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', token: null };
+  const rejected = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    snapshot.token = 'unverified-token';
+    return { ...snapshot, status: 'unknown-status' };
+  });
+  assert.equal(rejected, current);
+  assert.equal(current.token, null);
+  assert.equal(current.status, 'pending-gsi');
+
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check',
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(current.status, 'pending-gsi');
+});
+
+
+test('nested OAuth admission snapshots cannot mutate live workspace or profile data', () => {
+  const current = {
+    status: 'pending-gsi', googleAttemptId: 'attempt-B',
+    profile: { name: 'Original', preferences: { theme: 'light' } },
+    workspaces: [{ id: 'owner', enabled: false }],
+  };
+  const rejected = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    assert.throws(() => { snapshot.profile.preferences.theme = 'dark'; }, TypeError);
+    assert.throws(() => { snapshot.workspaces[0].enabled = true; }, TypeError);
+    return { ...snapshot, status: 'invalid-status' };
+  });
+  assert.equal(rejected, current);
+  assert.equal(current.profile.preferences.theme, 'light');
+  assert.equal(current.workspaces[0].enabled, false);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check',
+    profile: { ...snapshot.profile, name: 'Verified' },
+  }));
+  assert.equal(accepted.profile.name, 'Verified');
+  assert.equal(current.profile.name, 'Original');
+});
+
+test('accessor-backed nested OAuth state fails closed without executing getters', () => {
+  let getterCalls = 0;
+  const profile = {};
+  Object.defineProperty(profile, 'name', { enumerable: true, get() { getterCalls++; return 'spoofed'; } });
+  const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', profile };
+  let reducerCalled = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    reducerCalled = true;
+    return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+  }), current);
+  assert.equal(reducerCalled, false);
+  assert.equal(getterCalls, 0);
+});
+
+test('cyclic OAuth snapshots fail closed while shared references remain isolated', () => {
+  const shared = { workspaceId: 'owner', enabled: false };
+  const current = {
+    status: 'pending-gsi', googleAttemptId: 'attempt-B',
+    primaryWorkspace: shared, workspaces: [shared],
+  };
+  current.self = current;
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...current, status: 'pending-drive-check' };
+  }), current);
+  assert.equal(invoked, false);
+
+  delete current.self;
+  const next = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => {
+    assert.equal(snapshot.primaryWorkspace, snapshot.workspaces[0]);
+    assert.notEqual(snapshot.primaryWorkspace, shared);
+    assert.throws(() => { snapshot.primaryWorkspace.enabled = true; }, TypeError);
+    assert.throws(() => { snapshot.workspaces.push({ workspaceId: 'other' }); }, TypeError);
+    return { ...snapshot, status: 'pending-drive-check' };
+  });
+  assert.equal(next.status, 'pending-drive-check');
+  assert.equal(current.primaryWorkspace.enabled, false);
+  assert.equal(current.workspaces.length, 1);
+});
+
+test('unsupported mutable nested OAuth values fail closed before reducer execution', () => {
+  for (const nested of [new Date(), new Map(), new Set(), new Uint8Array([1])]) {
+    const current = { status: 'pending-gsi', googleAttemptId: 'attempt-B', nested };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: 'attempt-B' };
+    }), current);
+    assert.equal(invoked, false);
+  }
+});
+
+test('OAuth reducer results with non-identity accessors fail closed before downstream reads', () => {
+  const current = pending('attempt-B');
+  for (const key of ['profile', 'workspaces', Symbol('hidden')]) {
+    let getterCalls = 0;
+    const result = { ...current, status: 'authenticated' };
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      get() { getterCalls++; throw new Error('hostile OAuth result getter'); },
+    });
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+    assert.equal(getterCalls, 0);
+  }
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', profile: { name: 'Verified' },
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.profile.name, 'Verified');
+});
+
+test('nested OAuth reducer result accessors and mutable instances fail closed', () => {
+  const current = pending('attempt-B');
+  for (const nested of [new Date(), new Map(), new Set(), new Uint8Array([1])]) {
+    const result = { ...current, status: 'authenticated', profile: { nested } };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  }
+  let getterCalls = 0;
+  const profile = {};
+  Object.defineProperty(profile, 'name', {
+    enumerable: true,
+    get() { getterCalls++; throw new Error('hostile nested getter'); },
+  });
+  const result = { ...current, status: 'authenticated', profile };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  assert.equal(getterCalls, 0);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', profile: { name: 'Verified' },
+  }));
+  assert.equal(accepted.profile.name, 'Verified');
+});
+
+test('proxy-backed OAuth state and reducer results fail closed without invoking traps', () => {
+  const current = pending('attempt-B');
+  let trapCalls = 0;
+  const hostile = new Proxy({ ...current }, {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    getOwnPropertyDescriptor() { trapCalls++; return undefined; },
+    ownKeys() { trapCalls++; return []; },
+    get() { trapCalls++; return 'spoofed'; },
+  });
+  let reducerCalled = false;
+  assert.equal(isCurrentGoogleAttempt(hostile, 'attempt-B'), false);
+  assert.equal(admitGoogleAttemptResult(hostile, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...current, status: 'authenticated' };
+  }), hostile);
+  assert.equal(reducerCalled, false);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => hostile), current);
+  assert.equal(trapCalls, 0);
+
+  const nested = new Proxy({ workspaceId: 'owner' }, {
+    getPrototypeOf() { trapCalls++; return Object.prototype; },
+    ownKeys() { trapCalls++; return ['workspaceId']; },
+  });
+  const withNested = { ...current, workspace: nested };
+  assert.equal(admitGoogleAttemptResult(withNested, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...current, status: 'authenticated' };
+  }), withNested);
+  assert.equal(reducerCalled, false);
+  assert.equal(trapCalls, 0);
+});
+
+
+test('Unicode noncharacters cannot identify an OAuth attempt', () => {
+  for (const codepoint of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x2FFFF, 0x10FFFF]) {
+    const id = `attempt-${String.fromCodePoint(codepoint)}-B`;
+    const current = pending(id);
+    let invoked = false;
+    assert.equal(isCurrentGoogleAttempt(current, id), false);
+    assert.equal(admitGoogleAttemptResult(current, id, () => {
+      invoked = true;
+      return { status: 'authenticated', googleAttemptId: id };
+    }), current);
+    assert.equal(invoked, false);
+  }
+  assert.equal(isCurrentGoogleAttempt(pending('attempt-B'), 'attempt-B'), true);
+});
+
+
+test('executable nested OAuth state cannot cross the admission boundary', () => {
+  const current = pending('attempt-B');
+  let invoked = false;
+  const withFunction = { ...current, profile: { onLogin() { invoked = true; } } };
+  assert.equal(admitGoogleAttemptResult(withFunction, 'attempt-B', () => {
+    invoked = true;
+    return { ...withFunction, status: 'authenticated' };
+  }), withFunction);
+  assert.equal(invoked, false);
+  const result = { ...current, status: 'authenticated', workspace: { callback: () => {} } };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+
+test('non-serializable symbol and bigint values cannot enter OAuth admission state', () => {
+  const active = pending('attempt-B');
+  for (const value of [Symbol('private'), 1n]) {
+    let called = false;
+    const current = { ...active, profile: { unsafe: value } };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...current, status: 'authenticated' };
+    }), current);
+    assert.equal(called, false, 'unsafe current state must not invoke reducer');
+    const candidate = { ...active, status: 'authenticated', profile: { unsafe: value } };
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => candidate), active);
+  }
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+
+test('lossy numeric OAuth snapshot and reducer values fail closed (including negative zero)', () => {
+  const current = pending('attempt-B');
+  for (const value of [NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, -0]) {
+    let invoked = false;
+    const withNumeric = { ...current, profile: { quota: value } };
+    assert.equal(admitGoogleAttemptResult(withNumeric, 'attempt-B', () => {
+      invoked = true;
+      return { ...current, status: 'authenticated' };
+    }), withNumeric);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', workspace: { quota: value },
+    })), current);
+  }
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', profile: { quota: Number.MAX_SAFE_INTEGER, fraction: 0.5 },
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.profile.fraction, 0.5);
+});
+
+
+test('undefined OAuth fields cannot silently disappear during JSON persistence', () => {
+  const active = pending('attempt-B');
+  for (const nested of [{ optional: undefined }, [undefined]]) {
+    const current = { ...active, workspace: nested };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      invoked = true;
+      return { ...current, status: 'authenticated' };
+    }), current);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => ({
+      ...active, status: 'authenticated', workspace: nested,
+    })), active);
+  }
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+
+test('sparse workspace arrays cannot silently become null entries during OAuth persistence', () => {
+  const current = pending('attempt-B');
+  const hole = new Array(2);
+  hole[1] = { id: 'owner' };
+  const deleted = [{ id: 'owner' }, { id: 'company' }];
+  delete deleted[0];
+  for (const workspaces of [hole, deleted]) {
+    let invoked = false;
+    const active = { ...current, workspaces };
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      invoked = true;
+      return { ...active, status: 'authenticated' };
+    }), active);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', workspaces,
+    })), current);
+  }
+  const valid = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', workspaces: [{ id: 'owner' }],
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
+
+test('symbol-keyed workspace metadata fails closed before JSON persistence can omit it', () => {
+  const active = pending('attempt-B');
+  const hidden = Symbol('workspace-audit');
+  const workspace = { id: 'owner', [hidden]: 'must-not-disappear' };
+  let reducerCalled = false;
+  const current = { ...active, workspace };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    reducerCalled = true;
+    return { ...active, status: 'authenticated' };
+  }), current);
+  assert.equal(reducerCalled, false);
+  assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => ({
+    ...active, status: 'authenticated', workspace,
+  })), active);
+  const valid = admitGoogleAttemptResult(active, 'attempt-B', () => ({
+    ...active, status: 'pending-drive-check', workspace: { id: 'owner' },
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
+
+
+test('non-enumerable workspace fields cannot disappear during OAuth persistence', () => {
+  const current = pending('attempt-B');
+  for (const key of ['workspaceId', 'billingScope']) {
+    const hidden = { id: 'owner' };
+    Object.defineProperty(hidden, key, { value: 'private', enumerable: false });
+    const active = { ...current, workspace: hidden };
+    let called = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      called = true;
+      return { ...active, status: 'authenticated' };
+    }), active);
+    assert.equal(called, false);
+    const output = { ...current, status: 'authenticated', workspace: hidden };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => output), current);
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+test('custom array properties are rejected before OAuth workspace persistence', () => {
+  const base = pending('attempt-B');
+  for (const property of ['workspaceId', '01', '4294967295']) {
+    const workspaces = [{ id: 'owner' }];
+    workspaces[property] = 'must-not-disappear';
+    const active = { ...base, workspaces };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      invoked = true;
+      return { ...base, status: 'authenticated' };
+    }), active);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspaces,
+    })), base);
+  }
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: [{ id: 'owner' }],
+  })).status, 'authenticated');
+});
+
+
+test('dense multi-digit workspace arrays survive OAuth admission without losing indices', () => {
+  const active = pending('attempt-B');
+  for (const length of [10, 12, 100]) {
+    const workspaces = Array.from({ length }, (_, index) => ({ id: 'workspace-' + index }));
+    const current = { ...active, workspaces };
+    const next = admitGoogleAttemptResult(current, 'attempt-B', snapshot => ({
+      ...snapshot, status: 'pending-drive-check',
+    }));
+    assert.notEqual(next, current, 'valid dense array must be admitted');
+    assert.equal(next.status, 'pending-drive-check');
+    assert.equal(next.workspaces.length, length);
+    assert.equal(next.workspaces[9].id, 'workspace-9');
+    assert.equal(next.workspaces[length - 1].id, 'workspace-' + (length - 1));
+  }
+  const withCustomProperty = Array.from({ length: 12 }, (_, index) => index);
+  withCustomProperty.label = 'not persisted by JSON';
+  const invalid = { ...active, workspaces: withCustomProperty };
+  assert.equal(admitGoogleAttemptResult(invalid, 'attempt-B', () => ({
+    ...invalid, status: 'authenticated',
+  })), invalid);
+});
+
+
+test('cyclic workspace records fail closed before reducer or persistence', () => {
+  const base = pending('attempt-B');
+  const workspace = { id: 'owner' };
+  workspace.self = workspace;
+  const current = { ...base, workspace };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  const output = { ...base, status: 'authenticated', workspace };
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => output), base);
+
+  // Reusing the same noncyclic record is valid and JSON serializable.
+  const shared = { id: 'owner' };
+  const accepted = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', primary: shared, secondary: shared,
+  }));
+  assert.equal(accepted.status, 'authenticated');
+});
+
+
+test('custom workspace array prototypes fail closed before OAuth state admission', () => {
+  const base = pending('attempt-B');
+  const derived = [{ id: 'owner' }];
+  const customPrototype = Object.create(Array.prototype);
+  customPrototype.toJSON = () => [{ id: 'substituted' }];
+  Object.setPrototypeOf(derived, customPrototype);
+  const subclassed = new (class WorkspaceList extends Array {} )();
+  subclassed.push({ id: 'owner' });
+  for (const workspaces of [derived, subclassed]) {
+    const active = { ...base, workspaces };
+    let reducerCalled = false;
+    assert.equal(admitGoogleAttemptResult(active, 'attempt-B', () => {
+      reducerCalled = true;
+      return { ...base, status: 'authenticated' };
+    }), active);
+    assert.equal(reducerCalled, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspaces,
+    })), base);
+  }
+  const valid = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'pending-drive-check', workspaces: [{ id: 'owner' }],
+  }));
+  assert.equal(valid.status, 'pending-drive-check');
+});
+
+test('oversized OAuth workspace arrays fail closed before reducer execution', () => {
+  const current = pending('attempt-B');
+  let called = false;
+  const oversized = [];
+  oversized.length = 10001;
+  const incoming = { ...current, workspaces: oversized };
+  assert.equal(admitGoogleAttemptResult(incoming, 'attempt-B', () => {
+    called = true;
+    return { ...incoming, status: 'authenticated' };
+  }), incoming);
+  assert.equal(called, false);
+
+  const output = { ...current, status: 'authenticated', workspaces: oversized };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => output), current);
+
+  const boundary = Array.from({ length: 10000 }, (_, i) => i);
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', (snapshot) => ({
+    ...snapshot, status: 'pending-drive-check', workspaces: boundary,
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+  assert.equal(accepted.workspaces.length, 10000);
+});
+
+test('oversized OAuth admission records fail closed before reducer execution', () => {
+  const oversized = Object.fromEntries(
+    Array.from({ length: 10001 }, (_, i) => ['field' + i, i])
+  );
+  const current = { ...pending('attempt-B'), profile: oversized };
+  let called = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    called = true;
+    return { ...current, status: 'authenticated' };
+  }), current);
+  assert.equal(called, false);
+
+  const valid = Object.fromEntries(
+    Array.from({ length: 10000 }, (_, i) => ['field' + i, i])
+  );
+  const accepted = admitGoogleAttemptResult(
+    { ...pending('attempt-B'), profile: valid },
+    'attempt-B',
+    state => ({ ...state, status: 'pending-drive-check' })
+  );
+  assert.equal(accepted.status, 'pending-drive-check');
+
+  const original = pending('attempt-B');
+  const result = { ...original, status: 'authenticated', profile: oversized };
+  assert.equal(admitGoogleAttemptResult(original, 'attempt-B', () => result), original);
+});
+
+
+test('malformed Unicode workspace identities fail closed on both admission paths', () => {
+  const base = pending('attempt-B');
+  for (const malformed of ['owner-' + String.fromCharCode(0xD800), 'owner-' + String.fromCharCode(0xDC00)]) {
+    const current = { ...base, workspace: { id: malformed } };
+    let called = false;
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+      called = true;
+      return { ...base, status: 'authenticated' };
+    }), current);
+    assert.equal(called, false);
+    assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+      ...base, status: 'authenticated', workspace: { id: malformed },
+    })), base);
+  }
+  const valid = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspace: { id: 'owner-' + String.fromCodePoint(0x1F680) },
+  }));
+  assert.equal(valid.status, 'authenticated');
+});
+
+
+test('deeply nested workspace snapshots fail closed without advancing OAuth', () => {
+  const base = pending('attempt-B');
+  const nest = depth => {
+    let value = { id: 'owner' };
+    for (let index = 0; index < depth; index++) value = { child: value };
+    return value;
+  };
+  const tooDeep = nest(65);
+  const current = { ...base, workspace: tooDeep };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspace: tooDeep,
+  })), base);
+  const accepted = admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'pending-drive-check', workspace: nest(62),
+  }));
+  assert.equal(accepted.status, 'pending-drive-check');
+});
+
+
+test('aggregate OAuth snapshot budget rejects many individually small records', () => {
+  const base = pending('attempt-B');
+  // Every container is below its individual limit, but total traversal is not.
+  const large = Array.from({ length: 9000 }, (_, index) => ({ id: index, detail: { active: true } }));
+  const current = { ...base, workspaces: large };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => {
+    invoked = true;
+    return { ...base, status: 'authenticated' };
+  }), current);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: large,
+  })), base);
+
+  const small = Array.from({ length: 100 }, (_, index) => ({ id: index, detail: { active: true } }));
+  assert.equal(admitGoogleAttemptResult(base, 'attempt-B', () => ({
+    ...base, status: 'authenticated', workspaces: small,
+  })).status, 'authenticated');
+});
+
+test('OAuth admission rejects prototype-sensitive keys at any workspace depth', () => {
+  const current = pending('attempt-B');
+  for (const key of ['__proto__', 'constructor', 'prototype']) {
+    for (const nested of [false, true]) {
+      const payload = Object.create(null);
+      Object.defineProperty(payload, key, { value: { owner: 'other-tenant' }, enumerable: true });
+      const candidate = { ...current, status: 'authenticated', workspace: nested ? { data: payload } : payload };
+      assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => candidate), current);
+      const contaminated = { ...current, workspace: nested ? { data: payload } : payload };
+      let invoked = false;
+      assert.equal(admitGoogleAttemptResult(contaminated, 'attempt-B', () => {
+        invoked = true;
+        return { ...contaminated, status: 'authenticated' };
+      }), contaminated);
+      assert.equal(invoked, false);
+    }
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
+
+
+test('invisible workspace property names cannot advance OAuth admission', () => {
+  const current = pending('attempt-B');
+  for (const key of ['workspace\u200bId', 'workspace\u034fId', 'workspace\ud800Id', 'workspace\ufdd0Id']) {
+    const state = { ...current, profile: { [key]: 'owner' } };
+    let invoked = false;
+    assert.equal(admitGoogleAttemptResult(state, 'attempt-B', () => {
+      invoked = true;
+      return { ...state, status: 'authenticated' };
+    }), state);
+    assert.equal(invoked, false);
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+      ...current, status: 'authenticated', profile: { [key]: 'owner' },
+    })), current);
+  }
+  const valid = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'authenticated', profile: { workspaceId: 'owner' },
+  }));
+  assert.equal(valid.status, 'authenticated');
+});
+
+
+test('accepted OAuth result is detached from reducer-owned mutable workspace records', () => {
+  const current = pending('attempt-B');
+  const reducerOwned = {
+    ...current, status: 'authenticated',
+    workspaces: [{ id: 'company', role: 'member' }],
+  };
+  const accepted = admitGoogleAttemptResult(current, 'attempt-B', () => reducerOwned);
+  assert.equal(accepted.status, 'authenticated');
+  assert.notEqual(accepted, reducerOwned);
+  assert.notEqual(accepted.workspaces, reducerOwned.workspaces);
+  assert.notEqual(accepted.workspaces[0], reducerOwned.workspaces[0]);
+  reducerOwned.workspaces[0].role = 'owner';
+  reducerOwned.workspaces.push({ id: 'personal', role: 'owner' });
+  reducerOwned.status = 'unauthenticated';
+  assert.equal(accepted.status, 'authenticated');
+  assert.deepEqual(accepted.workspaces.map((w) => [w.id, w.role]), [['company', 'member']]);
+  assert.throws(() => { accepted.workspaces[0].role = 'owner'; }, TypeError);
+});
+
+
+test('aggregate OAuth string budget rejects many individually valid fields before admission', () => {
+  const current = pending('attempt-B');
+  // Individual values fit the per-string cap, but their combined UTF-16
+  // payload exceeds the bounded snapshot budget.
+  const oversized = Array.from({ length: 17 }, () => 'x'.repeat(65536));
+  const contaminated = { ...current, workspaceLabels: oversized };
+  let invoked = false;
+  assert.equal(admitGoogleAttemptResult(contaminated, 'attempt-B', () => {
+    invoked = true;
+    return { ...contaminated, status: 'authenticated' };
+  }), contaminated);
+  assert.equal(invoked, false);
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'authenticated', workspaceLabels: oversized,
+  })), current);
+
+  const allowed = Array.from({ length: 8 }, () => 'x'.repeat(65536));
+  const admitted = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'pending-drive-check', workspaceLabels: allowed,
+  }));
+  assert.equal(admitted.status, 'pending-drive-check');
+  assert.equal(admitted.workspaceLabels.length, 8);
+});
