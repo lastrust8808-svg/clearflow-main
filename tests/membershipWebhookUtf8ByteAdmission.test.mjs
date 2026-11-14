@@ -63,7 +63,7 @@ test('signed valid supplementary Unicode event IDs remain admissible', () => {
 
 test('signed escaped lone surrogates in every admitted identity field fail closed', () => {
   for (const field of ['id', 'tenantId', 'memberId', 'subscriptionId', 'invoiceId', 'settlementId']) {
-    for (const escape of ['\\\\uD800', '\\\\uDC00']) {
+    for (const escape of ['\\uD800', '\\uDC00']) {
       // Encode a literal JSON escape, not an invalid JS source string.
       const json = JSON.stringify({ ...event, [field]: 'sentinel' });
       const rawBody = Buffer.from(json.replace('"sentinel"', '"bad-' + escape + '"'), 'utf8');
