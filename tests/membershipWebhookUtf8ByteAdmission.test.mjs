@@ -21,7 +21,14 @@ function signed(rawBody) {
 
 test('signed invalid UTF-8 bytes never become a scope-verified event', () => {
   const body = Buffer.from(JSON.stringify(event));
-  for (const bad of [Buffer.from([0xff]), Buffer.from([0xc0, 0xaf]), Buffer.from([0xed, 0xa0, 0x80])]) {
+  for (const bad of [
+    Buffer.from([0xff]),              // forbidden byte
+    Buffer.from([0xc0, 0xaf]),        // overlong encoding
+    Buffer.from([0xed, 0xa0, 0x80]),  // encoded surrogate
+    Buffer.from([0xe2, 0x82]),        // truncated three-byte sequence
+    Buffer.from([0x80]),              // isolated continuation byte
+    Buffer.from([0xf4, 0x90, 0x80, 0x80]), // code point above U+10FFFF
+  ]) {
     // Corrupt the allowed event ID itself, rather than adding an unknown field.
     // Otherwise the schema allowlist could reject the fixture even if fatal
     // UTF-8 decoding were accidentally removed.
