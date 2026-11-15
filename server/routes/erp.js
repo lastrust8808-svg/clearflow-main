@@ -83,7 +83,8 @@ router.post('/invoice-exports', (req, res) => {
     return rejectInvalidErpPayload(res, 'Invoice export requires a JSON object.', 'ERP_INVALID_BODY');
   }
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
+  if (!hasOwnErpIdentifiers(req.body, ['invoiceId', 'entityId', 'invoiceNumber']) ||
+      ![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing invoice export payload.');
   }
   return rejectNonDurableJob(res, 'invoice_export');
