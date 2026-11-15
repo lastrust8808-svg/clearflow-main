@@ -147,6 +147,12 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
 // queue is not a closed accounting period; never acknowledge one as processed.
 router.post('/reconciliations/:reconciliationId/close', (req, res) => {
   const { reconciliationId } = req.params;
+  // Reject malformed JSON container types before any future durable close adapter.
+  // Arrays, strings and null are not reconciliation approval payloads.
+  if (req.body !== undefined && (req.body === null ||
+      typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return rejectInvalidErpPayload(res, 'Reconciliation close requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   // Match statement-import's route/body identity contract. An optional body
   // reconciliationId must never override or disagree with the URL target.
   if (req.body && Object.hasOwn(req.body, 'reconciliationId') &&
