@@ -133,6 +133,30 @@ try {
     }
   });
 
+  await test('invoice and settlement mutations reject non-object JSON envelopes explicitly', async () => {
+    for (const path of ['/invoice-deliveries', '/invoice-exports', '/settlements/execute']) {
+      for (const body of [null, [], ['inv-test'], 'inv-test', 7, true]) {
+        const response = await invoke('POST', path, body);
+        assert.equal(response.statusCode, 400, path + ': ' + JSON.stringify(body));
+        assert.equal(response.body.success, false);
+        assert.equal(response.body.code, 'ERP_INVALID_BODY');
+        assert.equal(response.headers['cache-control'], 'no-store');
+        for (const key of ['job', 'execution', 'receipt', 'queuedAt']) {
+          assert.equal(response.body[key], undefined, path + ': ' + key);
+        }
+      }
+    }
+    const invoiceDelivery = await invoke('POST', '/invoice-deliveries', invoice);
+    const invoiceExport = await invoke('POST', '/invoice-exports', invoice);
+    const settlement = await invoke('POST', '/settlements/execute', {
+      entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 0.01,
+    });
+    for (const response of [invoiceDelivery, invoiceExport, settlement]) {
+      assert.equal(response.statusCode, 503);
+      assert.equal(response.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+    }
+  });
+
   await test('statement import rejects non-object JSON bodies before durable reservation', async () => {
     for (const body of [null, [], ['bank-test'], 'bank-test', 7, true]) {
       const response = await invoke('POST', '/reconciliations/:reconciliationId/statement-import',
