@@ -58,3 +58,26 @@ test('QR approval rejects port and hostname variants without URL normalization',
   assert.throws(() => requireApprovedQrOrigin(origin, ['https://verify.example.org:443']));
   assert.throws(() => requireApprovedQrOrigin(origin, ['https://VERIFY.example.org']));
 });
+
+test('QR approval refuses an accessor-backed allowlist before executing the getter', () => {
+  let executed = false;
+  const configured = [origin];
+  Object.defineProperty(configured, '0', {
+    enumerable: true,
+    configurable: true,
+    get() { executed = true; throw new Error('untrusted getter executed'); },
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, configured),
+    /Approved QR verification origin required/);
+  assert.equal(executed, false);
+});
+
+test('QR approval rejects a hidden named configuration property', () => {
+  const configured = [origin];
+  Object.defineProperty(configured, 'fallback', {
+    value: 'https://unreviewed.example.org',
+    enumerable: false,
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, configured),
+    /Approved QR verification origin required/);
+});
