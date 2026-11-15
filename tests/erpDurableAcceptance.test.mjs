@@ -133,6 +133,22 @@ try {
     }
   });
 
+  await test('reconciliation close rejects non-object bodies before any durable adapter', async () => {
+    for (const body of [null, [], ['recon-test'], 'recon-test', 7, true]) {
+      const response = await invoke('POST', '/reconciliations/:reconciliationId/close',
+        body, { reconciliationId: 'recon-test' });
+      assert.equal(response.statusCode, 400, JSON.stringify(body));
+      assert.equal(response.body.success, false);
+      assert.equal(response.body.code, 'ERP_INVALID_BODY');
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.equal(response.body.closeJob, undefined);
+    }
+    const valid = await invoke('POST', '/reconciliations/:reconciliationId/close',
+      {}, { reconciliationId: 'recon-test' });
+    assert.equal(valid.statusCode, 503);
+    assert.equal(valid.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+  });
+
   await test('missing delivery fields remain a 400 validation error', async () => {
     const response = await invoke('POST', '/invoice-deliveries', { invoiceId: 'inv-test' });
     assert.equal(response.statusCode, 400);
