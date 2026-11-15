@@ -55,6 +55,9 @@ function validSettlementAmount(value) {
 }
 
 router.post('/invoice-deliveries', (req, res) => {
+  if (req.body === undefined) {
+    return rejectInvalidErpPayload(res, 'Invoice delivery requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   if (req.body !== undefined && (req.body === null ||
       typeof req.body !== 'object' || Array.isArray(req.body))) {
     return rejectInvalidErpPayload(res, 'Invoice delivery requires a JSON object.', 'ERP_INVALID_BODY');
@@ -67,6 +70,9 @@ router.post('/invoice-deliveries', (req, res) => {
 });
 
 router.post('/invoice-exports', (req, res) => {
+  if (req.body === undefined) {
+    return rejectInvalidErpPayload(res, 'Invoice export requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   if (req.body !== undefined && (req.body === null ||
       typeof req.body !== 'object' || Array.isArray(req.body))) {
     return rejectInvalidErpPayload(res, 'Invoice export requires a JSON object.', 'ERP_INVALID_BODY');
@@ -81,6 +87,9 @@ router.post('/invoice-exports', (req, res) => {
 // Fail closed before contacting any provider: durable tenant-scoped idempotency,
 // approval and audit persistence are not yet implemented for this endpoint.
 router.post('/settlements/execute', (req, res) => {
+  if (req.body === undefined) {
+    return rejectInvalidErpPayload(res, 'Settlement execution requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   if (req.body !== undefined && (req.body === null ||
       typeof req.body !== 'object' || Array.isArray(req.body))) {
     return rejectInvalidErpPayload(res, 'Settlement execution requires a JSON object.', 'ERP_INVALID_BODY');
@@ -124,6 +133,9 @@ router.get('/settlements/execution-capabilities', (_req, res) => {
 });
 
 router.post('/reconciliations/:reconciliationId/statement-import', (req, res) => {
+  if (req.body === undefined) {
+    return rejectInvalidErpPayload(res, 'Statement import requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   // Reject malformed JSON containers explicitly, before a future durable import
   // adapter can mistake array or scalar bodies for an approval envelope.
   if (req.body !== undefined && (req.body === null ||
