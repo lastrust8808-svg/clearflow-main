@@ -32,3 +32,26 @@ test('QR origin approval rejects a proxy reporting extra hidden configuration ke
     /Approved QR verification origin required/);
   assert.equal(indexedReads, 0);
 });
+
+test('QR origin approval rejects symbol-keyed metadata even when non-enumerable', () => {
+  const approvals = [origin];
+  Object.defineProperty(approvals, Symbol('unreviewed-origin'), {
+    value: 'https://attacker.example.org',
+    enumerable: false,
+  });
+  assert.throws(() => requireApprovedQrOrigin(origin, approvals),
+    /Approved QR verification origin required/);
+});
+
+test('QR origin approval ignores a hostile inherited index getter', () => {
+  let getterCalls = 0;
+  const prototype = Object.create(Array.prototype);
+  Object.defineProperty(prototype, '0', {
+    get() { getterCalls++; throw new Error('inherited getter executed'); },
+  });
+  const approvals = [, origin];
+  Object.setPrototypeOf(approvals, prototype);
+  assert.throws(() => requireApprovedQrOrigin(origin, approvals),
+    /Approved QR verification origin required/);
+  assert.equal(getterCalls, 0);
+});
