@@ -68,3 +68,17 @@ test('malformed or accessor-backed profile IDs fail closed without executing get
     assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { id, email: valid.email }), current);
   }
 });
+
+test('Unicode noncharacters cannot become Google workspace identity keys', () => {
+  const current = pending();
+  for (const field of ['email', 'name', 'id']) {
+    for (const noncharacter of ['\uFDD0', '\uFFFE', '\u{1FFFE}']) {
+      const profile = { id: 'google-subject', name: 'Member', email: 'member@example.test' };
+      profile[field] = field === 'email' ? 'member' + noncharacter + '@example.test' : 'member' + noncharacter;
+      assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', profile), current, field);
+    }
+  }
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', {
+    id: 'google-subject', name: 'Member', email: 'member@example.test'
+  }).status, 'pending-drive-check');
+});
