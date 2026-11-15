@@ -174,6 +174,25 @@ try {
     assert.equal(valid.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
   });
 
+  await test('all other ERP mutations reject absent JSON bodies before durable adapters', async () => {
+    const cases = [
+      ['/invoice-deliveries', {}],
+      ['/invoice-exports', {}],
+      ['/settlements/execute', {}],
+      ['/reconciliations/:reconciliationId/statement-import', { reconciliationId: 'recon-test' }],
+    ];
+    for (const [path, params] of cases) {
+      const response = await invoke('POST', path, undefined, params);
+      assert.equal(response.statusCode, 400, path);
+      assert.equal(response.body.code, 'ERP_INVALID_BODY', path);
+      assert.equal(response.body.success, false, path);
+      assert.equal(response.headers['cache-control'], 'no-store', path);
+      for (const key of ['job', 'importJob', 'execution', 'receipt', 'queuedAt']) {
+        assert.equal(response.body[key], undefined, path + ': ' + key);
+      }
+    }
+  });
+
   await test('reconciliation close rejects an absent JSON body rather than reporting durable-store unavailability', async () => {
     const response = await invoke('POST', '/reconciliations/:reconciliationId/close',
       undefined, { reconciliationId: 'recon-test' });
