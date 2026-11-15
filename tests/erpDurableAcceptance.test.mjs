@@ -193,7 +193,7 @@ try {
   });
 
   await test('unpaired UTF-16 surrogate identifiers are rejected before durable reservation', async () => {
-    for (const surrogate of ['\\uD800', '\\uDC00']) {
+    for (const surrogate of ['\uD800', '\uDC00']) {
       const bad = 'entity' + surrogate + '-test';
       for (const [path, body, params] of [
         ['/invoice-deliveries', { ...invoice, entityId: bad }, {}],
@@ -210,7 +210,7 @@ try {
       }
     }
     // Valid supplementary characters are not isolated surrogates.
-    const valid = await invoke('POST', '/invoice-exports', { ...invoice, entityId: 'entity-\\u{1F680}' });
+    const valid = await invoke('POST', '/invoice-exports', { ...invoice, entityId: 'entity-\u{1F680}' });
     assert.equal(valid.statusCode, 503);
     assert.equal(valid.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
   });
