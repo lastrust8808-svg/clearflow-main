@@ -46,7 +46,7 @@ test('verified Google profile is detached from mutable provider payload', () => 
 test('malformed provider display name cannot enter pending recovery', () => {
   const current = pending();
   assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: valid.email, name: 123 }), current);
-  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: valid.email, name: 'Bad\\u0000Name' }), current);
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: valid.email, name: 'Bad\u0000Name' }), current);
 });
 
 test('verified profile ID is detached and retained for pending workspace recovery', () => {
@@ -64,7 +64,7 @@ test('malformed or accessor-backed profile IDs fail closed without executing get
   Object.defineProperty(accessor, 'id', { get() { reads++; return 'stolen'; } });
   assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', accessor), current);
   assert.equal(reads, 0);
-  for (const id of ['', '  ', 42, 'bad\\u0000id', 'e\\u0301']) {
+  for (const id of ['', '  ', 42, 'bad\u0000id', 'e\u0301']) {
     assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { id, email: valid.email }), current);
   }
 });
