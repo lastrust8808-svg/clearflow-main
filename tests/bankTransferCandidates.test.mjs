@@ -594,3 +594,21 @@ test('review scope accessors and inherited or symbol keys fail closed without ex
   assert.deepEqual(proposeBankTransferCandidates({ tenantId: 'tenant-a', transactions: [] }),
     { candidates: [], ambiguous: [] });
 });
+
+
+test('prototype-looking provider references remain distinct inert map keys', () => {
+  const records = [
+    row('checking', 'out-proto', -300, { providerReference: '__proto__' }),
+    row('savings', 'in-proto', 300, { providerReference: '__proto__' }),
+    row('checking', 'out-constructor', -400, { providerReference: 'constructor' }),
+    row('savings', 'in-constructor', 400, { providerReference: 'constructor' }),
+    row('checking', 'out-prototype', -500, { providerReference: 'prototype' }),
+    row('savings', 'in-prototype', 500, { providerReference: 'prototype' }),
+  ];
+  const expected = plan(records);
+  assert.deepEqual(expected.ambiguous, []);
+  assert.deepEqual(expected.candidates.map((candidate) => candidate.providerReference).sort(),
+    ['__proto__', 'constructor', 'prototype']);
+  assert.ok(expected.candidates.every((candidate) => candidate.status === 'review_required'));
+  assert.deepEqual(plan([...records].reverse()), expected);
+});
