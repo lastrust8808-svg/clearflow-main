@@ -37,6 +37,8 @@ function containsUnicodeNoncharacter(value) {
 function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
     !containsUnicodeNoncharacter(value) &&
+    // Reject lone UTF-16 surrogates before identifiers reach JSON/DB boundaries.
+    !/[\uD800-\uDFFF]/u.test(value) &&
     !/\p{Default_Ignorable_Code_Point}/u.test(value) &&
     Boolean(value.trim()) && value === value.trim() &&
     value === value.normalize('NFC') &&
