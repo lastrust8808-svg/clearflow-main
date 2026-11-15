@@ -967,3 +967,23 @@ test('aggregate OAuth string budget rejects many individually valid fields befor
   assert.equal(admitted.status, 'pending-drive-check');
   assert.equal(admitted.workspaceLabels.length, 8);
 });
+
+
+test('OAuth snapshots reject Unicode noncharacters in nested values without advancing authentication', () => {
+  const current = pending('attempt-B');
+  for (const invalid of ['\\uFDD0', '\\uFFFF', '\\u{1FFFE}', '\\u{10FFFF}']) {
+    const result = { ...current, status: 'authenticated', profile: { displayName: 'member' + invalid } };
+    assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+    const badCurrent = { ...current, profile: { displayName: invalid } };
+    let called = false;
+    assert.equal(admitGoogleAttemptResult(badCurrent, 'attempt-B', () => {
+      called = true;
+      return { ...badCurrent, status: 'authenticated' };
+    }), badCurrent);
+    assert.equal(called, false);
+  }
+  const valid = admitGoogleAttemptResult(current, 'attempt-B', () => ({
+    ...current, status: 'authenticated', profile: { displayName: 'Member 😀' },
+  }));
+  assert.equal(valid.status, 'authenticated');
+});
