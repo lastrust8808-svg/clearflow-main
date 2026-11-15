@@ -70,6 +70,23 @@ try {
     }
   });
 
+  await test('invoice export rejects partially inherited required fields before durable acceptance', async () => {
+    for (const inheritedField of ['invoiceId', 'entityId', 'invoiceNumber']) {
+      const body = Object.create({ [inheritedField]: invoice[inheritedField] });
+      for (const [key, value] of Object.entries(invoice)) {
+        if (key !== inheritedField) body[key] = value;
+      }
+      const response = await invoke('POST', '/invoice-exports', body);
+      assert.equal(response.statusCode, 400, inheritedField);
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.equal(response.body.success, false);
+      assert.equal(response.body.job, undefined);
+    }
+    const valid = await invoke('POST', '/invoice-exports', { ...invoice });
+    assert.equal(valid.statusCode, 503);
+    assert.equal(valid.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+  });
+
   await test('valid invoice delivery fails closed without durable acceptance', async () => {
     const response = await invoke('POST', '/invoice-deliveries', {
       ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid',
