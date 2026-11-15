@@ -29,7 +29,7 @@ writeFileSync(join(directory, 'erp.mjs'), source
   .replace("from '../services/paymentExecution.js'", "from './paymentExecution.mjs'"));
 const router = (await import(pathToFileURL(join(directory, 'erp.mjs')).href)).default;
 
-async function invoke(method, path, body = {}, params = {}) {
+async function invoke(method, path, body = undefined, params = {}) {
   const handler = router.routes.get(method + ' ' + path);
   assert.equal(typeof handler, 'function', 'expected registered ERP route');
   const response = {
