@@ -112,6 +112,12 @@ router.get('/settlements/execution-capabilities', (_req, res) => {
 });
 
 router.post('/reconciliations/:reconciliationId/statement-import', (req, res) => {
+  // Reject malformed JSON containers explicitly, before a future durable import
+  // adapter can mistake array or scalar bodies for an approval envelope.
+  if (req.body !== undefined && (req.body === null ||
+      typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return rejectInvalidErpPayload(res, 'Statement import requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   const { reconciliationId } = req.params;
   const { bankAccountId, statementEndingBalance } = req.body || {};
 
