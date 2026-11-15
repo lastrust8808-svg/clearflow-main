@@ -46,6 +46,30 @@ async function invoke(method, path, body = undefined, params = {}) {
 
 const invoice = { invoiceId: 'inv-test', entityId: 'entity-test', invoiceNumber: 'INV-TEST' };
 try {
+  await test('inherited mutation fields cannot impersonate own JSON payload fields', async () => {
+    const inheritedInvoice = Object.create(invoice);
+    const inheritedSettlement = Object.create({
+      entityId: 'entity-test', paymentId: 'pay-test', settlementId: 'settle-test', amount: 1,
+    });
+    const inheritedStatement = Object.create({
+      bankAccountId: 'bank-test', statementEndingBalance: 1,
+    });
+    const cases = [
+      ['/invoice-deliveries', inheritedInvoice, {}],
+      ['/invoice-exports', inheritedInvoice, {}],
+      ['/settlements/execute', inheritedSettlement, {}],
+      ['/reconciliations/:reconciliationId/statement-import', inheritedStatement, { reconciliationId: 'recon-test' }],
+    ];
+    for (const [path, body, params] of cases) {
+      const response = await invoke('POST', path, body, params);
+      assert.equal(response.statusCode, 400, path);
+      assert.equal(response.body.success, false, path);
+      assert.equal(response.headers['cache-control'], 'no-store', path);
+      assert.equal(response.body.job, undefined, path);
+      assert.equal(response.body.execution, undefined, path);
+    }
+  });
+
   await test('valid invoice delivery fails closed without durable acceptance', async () => {
     const response = await invoke('POST', '/invoice-deliveries', {
       ...invoice, deliveryMethod: 'email', recipientEmail: 'recipient@example.invalid',
