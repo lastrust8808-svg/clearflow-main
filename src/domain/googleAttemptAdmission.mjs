@@ -21,7 +21,7 @@ export function isCurrentGoogleAttempt(current, attemptId, expectedStatus = 'pen
     const fields = {};
     for (const key of ['status', 'googleAttemptId']) {
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
-      if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false;
+      if (!descriptor || !Object.hasOwn(descriptor, 'value') || !descriptor.enumerable) return false;
       fields[key] = descriptor.value;
     }
     // Admission is only valid during an in-flight Google authentication stage.
