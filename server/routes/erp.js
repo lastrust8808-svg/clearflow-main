@@ -55,6 +55,10 @@ function validSettlementAmount(value) {
 }
 
 router.post('/invoice-deliveries', (req, res) => {
+  if (req.body !== undefined && (req.body === null ||
+      typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return rejectInvalidErpPayload(res, 'Invoice delivery requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing invoice delivery payload.');
@@ -63,6 +67,10 @@ router.post('/invoice-deliveries', (req, res) => {
 });
 
 router.post('/invoice-exports', (req, res) => {
+  if (req.body !== undefined && (req.body === null ||
+      typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return rejectInvalidErpPayload(res, 'Invoice export requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
   if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing invoice export payload.');
@@ -73,6 +81,10 @@ router.post('/invoice-exports', (req, res) => {
 // Fail closed before contacting any provider: durable tenant-scoped idempotency,
 // approval and audit persistence are not yet implemented for this endpoint.
 router.post('/settlements/execute', (req, res) => {
+  if (req.body !== undefined && (req.body === null ||
+      typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return rejectInvalidErpPayload(res, 'Settlement execution requires a JSON object.', 'ERP_INVALID_BODY');
+  }
   const { entityId, paymentId, settlementId, amount } = req.body || {};
   if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
     return rejectInvalidErpPayload(res, 'Missing settlement execution payload.');
