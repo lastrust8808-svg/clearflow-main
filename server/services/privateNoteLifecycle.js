@@ -156,10 +156,12 @@ export function projectPrivateNoteLifecycle(snapshot) {
   if (new Set(Object.values(scope)).size !== 4) {
     throw new Error('Private note tenant, entity, trust and note scope identifiers must be distinct');
   }
-  const admittedEvents = requirePlainEventHistory(snapshotDescriptors.events?.value);
-  // Snapshot time is supplied by the caller; runtime integration must use a
-  // trusted server-side clock, not an untrusted request parameter.
+  // Validate the caller's as-of boundary before inspecting the potentially
+  // expensive/untrusted event history. Invalid snapshot time must fail closed
+  // without invoking proxy traps on journal entries.
+  // Runtime integration must supply a trusted server-side clock.
   const asOfAt = utcInstant(snapshotDescriptors.asOfAt?.value, 'asOfAt');
+  const admittedEvents = requirePlainEventHistory(snapshotDescriptors.events?.value);
   const seen = new Set();
   // Actor identifiers name principals, not independent event/document/evidence
   // receipts. Reject role collisions anywhere in the supplied journal history.
