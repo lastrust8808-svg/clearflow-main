@@ -192,6 +192,29 @@ try {
     }
   });
 
+  await test('unpaired UTF-16 surrogate identifiers are rejected before durable reservation', async () => {
+    for (const surrogate of ['\\uD800', '\\uDC00']) {
+      const bad = 'entity' + surrogate + '-test';
+      for (const [path, body, params] of [
+        ['/invoice-deliveries', { ...invoice, entityId: bad }, {}],
+        ['/invoice-exports', { ...invoice, entityId: bad }, {}],
+        ['/settlements/execute', { entityId: bad, paymentId: 'pay-test', settlementId: 'settle-test', amount: 1 }, {}],
+        ['/reconciliations/:reconciliationId/statement-import',
+          { bankAccountId: bad, statementEndingBalance: 1 }, { reconciliationId: 'recon-test' }],
+        ['/reconciliations/:reconciliationId/close', {}, { reconciliationId: bad }],
+      ]) {
+        const response = await invoke('POST', path, body, params);
+        assert.equal(response.statusCode, 400, path);
+        assert.equal(response.headers['cache-control'], 'no-store');
+        assert.equal(response.body.success, false);
+      }
+    }
+    // Valid supplementary characters are not isolated surrogates.
+    const valid = await invoke('POST', '/invoice-exports', { ...invoice, entityId: 'entity-\\u{1F680}' });
+    assert.equal(valid.statusCode, 503);
+    assert.equal(valid.body.code, 'ERP_DURABLE_JOB_STORE_REQUIRED');
+  });
+
   await test('embedded ASCII spaces cannot alias ERP operation identifiers', async () => {
     for (const field of ['invoiceId', 'entityId', 'invoiceNumber']) {
       for (const route of ['/invoice-deliveries', '/invoice-exports']) {
