@@ -64,6 +64,8 @@ VALUES
    repeat('c', 64), '{"invoiceId":"restore-queued"}'::jsonb);
 SQL
 
+# Use the PostgreSQL 16 binaries inside the verified disposable service: the
+# runner may install newer client tools that emit unsupported SET commands.
 # A complete table dump includes constraints and indexes, not merely JSON rows.
 # Restore into a NEW disposable database; never overwrite the source.
 source_count=$(psql -X -v ON_ERROR_STOP=1 -At -c \
@@ -72,10 +74,10 @@ if [[ "$source_count" != '3' ]]; then
   echo 'FAIL: source fixture is not exactly three durable jobs' >&2
   exit 1
 fi
-pg_dump --format=custom --table=public.erp_operation_jobs --file="$tmpdir/jobs.dump"
+docker exec "${containers[0]}" pg_dump -U erp_test -d erp_test --format=custom --table=public.erp_operation_jobs > "$tmpdir/jobs.dump"
 createdb "$restore_db"
 restore_created=true
-pg_restore --exit-on-error --no-owner --no-acl --dbname="$restore_db" "$tmpdir/jobs.dump"
+docker exec -i "${containers[0]}" pg_restore -U erp_test --exit-on-error --no-owner --no-acl --dbname="$restore_db" < "$tmpdir/jobs.dump"
 
 # Compare every persisted fixture column, including UUIDs, timestamps,
 # dispatch fences, failure reasons and JSON, across independent databases.
