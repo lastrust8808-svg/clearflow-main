@@ -34,6 +34,10 @@ function containsUnicodeNoncharacter(value) {
   return false;
 }
 
+function hasOwnErpIdentifiers(body, fields) {
+  return fields.every(field => Object.hasOwn(body, field));
+}
+
 function validErpIdentifier(value) {
   return typeof value === 'string' && value.length <= 255 &&
     !containsUnicodeNoncharacter(value) &&
@@ -63,7 +67,8 @@ router.post('/invoice-deliveries', (req, res) => {
     return rejectInvalidErpPayload(res, 'Invoice delivery requires a JSON object.', 'ERP_INVALID_BODY');
   }
   const { invoiceId, entityId, invoiceNumber } = req.body || {};
-  if (![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
+  if (!hasOwnErpIdentifiers(req.body, ['invoiceId', 'entityId', 'invoiceNumber']) ||
+      ![invoiceId, entityId, invoiceNumber].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing invoice delivery payload.');
   }
   return rejectNonDurableJob(res, 'invoice_delivery');
@@ -95,7 +100,8 @@ router.post('/settlements/execute', (req, res) => {
     return rejectInvalidErpPayload(res, 'Settlement execution requires a JSON object.', 'ERP_INVALID_BODY');
   }
   const { entityId, paymentId, settlementId, amount } = req.body || {};
-  if (![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
+  if (!hasOwnErpIdentifiers(req.body, ['entityId', 'paymentId', 'settlementId', 'amount']) ||
+      ![entityId, paymentId, settlementId].every(validErpIdentifier) || !validSettlementAmount(amount)) {
     return rejectInvalidErpPayload(res, 'Missing settlement execution payload.');
   }
   return rejectNonDurableJob(res, 'settlement_execution');
@@ -151,7 +157,8 @@ router.post('/reconciliations/:reconciliationId/statement-import', (req, res) =>
       req.body.reconciliationId !== reconciliationId) {
     return rejectInvalidErpPayload(res, 'Statement reconciliation identity mismatch.', 'ERP_RECONCILIATION_ID_MISMATCH');
   }
-  if (![reconciliationId, bankAccountId].every(validErpIdentifier)) {
+  if (!hasOwnErpIdentifiers(req.body, ['bankAccountId', 'statementEndingBalance']) ||
+      ![reconciliationId, bankAccountId].every(validErpIdentifier)) {
     return rejectInvalidErpPayload(res, 'Missing statement import payload.');
   }
   // Independently enforce the same exact-cent contract as the ERP client.
