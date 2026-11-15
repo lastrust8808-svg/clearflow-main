@@ -153,6 +153,15 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       emailField.value !== emailField.value.normalize('NFC')) {
       return current;
     }
+    // Unicode noncharacters are not stable cross-system identity keys. Reject
+    // them in all provider profile fields before workspace recovery.
+    const hasNoncharacter = (value) => Array.from(value).some((character) => {
+      const point = character.codePointAt(0);
+      return (point >= 0xFDD0 && point <= 0xFDEF) || (point & 0xFFFE) === 0xFFFE;
+    });
+    if (hasNoncharacter(emailField.value) ||
+        (nameField && typeof nameField.value === 'string' && hasNoncharacter(nameField.value)) ||
+        (idField && typeof idField.value === 'string' && hasNoncharacter(idField.value))) return current;
     if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
     if (idField && (typeof idField.value !== 'string' || !idField.value.trim() ||
       /[\p{Cc}\p{Cf}\p{Cs}]/u.test(idField.value) || idField.value !== idField.value.normalize('NFC'))) return current;
