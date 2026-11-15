@@ -217,8 +217,8 @@ test('rejects missing actor, malformed timestamps, out-of-order or tied events',
 });
 test('rejects malformed snapshot, event list and identifiers', () => {
   assert.throws(() => projectPrivateNoteLifecycle(null), /snapshot/);
-  assert.throws(() => projectPrivateNoteLifecycle({ ...scope, events: null }), /events/);
-  assert.throws(() => projectPrivateNoteLifecycle({ ...scope, trustId: ' ', events: [] }), /trustId/);
+  assert.throws(() => projectPrivateNoteLifecycle({ ...scope, asOfAt: '2026-11-01T00:00:00.000Z', events: null }), /events/);
+  assert.throws(() => projectPrivateNoteLifecycle({ ...scope, trustId: ' ', asOfAt: '2026-11-01T00:00:00.000Z', events: [] }), /trustId/);
   assert.throws(() => project([null]), /Invalid/);
 });
 test('does not mutate supplied events and freezes the projection', () => {
