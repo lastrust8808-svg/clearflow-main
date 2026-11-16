@@ -509,3 +509,23 @@ test('scope-bound signed JSON admits the exact byte ceiling but rejects one extr
     rawBody: over, signatureHeader: sign(over),
   })), null, 'one extra signed byte must fail closed');
 });
+
+
+test('fixture refuses proxy-wrapped binary bodies without executing traps', () => {
+  let traps = 0;
+  const proxy = new Proxy(Buffer.from(rawBody), {
+    get(target, key, receiver) {
+      traps++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(verify(input({ rawBody: proxy })), false);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { rawBody: proxy })), null);
+  assert.equal(traps, 0, 'no proxy traps should execute during verification');
+
+  const revoked = Proxy.revocable(Buffer.from(rawBody), {});
+  revoked.revoke();
+  assert.equal(verify(input({ rawBody: revoked.proxy })), false);
+  assert.equal(verifyScoped(scopedInput(scopedPayload, { rawBody: revoked.proxy })), null);
+  assert.equal(verify(input()), true, 'ordinary signed bytes remain valid');
+});
