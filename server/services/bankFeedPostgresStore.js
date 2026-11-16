@@ -28,7 +28,8 @@ function containsUnicodeNoncharacter(value) {
 function validScopeId(value) {
   return typeof value === 'string' &&
     value.length > 0 && value.length <= 256 &&
-    value === value.trim() && value.isWellFormed() && !containsUnicodeNoncharacter(value) &&
+    value === value.trim() && value === value.normalize('NFC') &&
+    value.isWellFormed() && !containsUnicodeNoncharacter(value) &&
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}]/u.test(value);
 }
 
