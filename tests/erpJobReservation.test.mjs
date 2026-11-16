@@ -2536,9 +2536,9 @@ test('non-enumerable invoice line items fail before a durable reservation', asyn
   Object.defineProperty(lines, '0', {
     value: lines[0], enumerable: false, writable: true, configurable: true,
   });
-  // JSON.stringify turns a hidden array index into null. A persisted digest
-  // must never silently differ from the submitted invoice line item.
-  assert.equal(JSON.stringify(lines), '[null]');
+  // JSON.stringify serializes array indices even when non-enumerable.
+  // Reject hidden descriptors explicitly rather than relying on JSON omission.
+  assert.equal(JSON.stringify(lines), '[{"description":"paint","amountCents":1250}]');
   await assert.rejects(
     reserve({ db, ...args, payload: { invoiceId: 'invoice-123', lines } }),
     /hidden array element/,
