@@ -37,7 +37,7 @@ test('origin authorization uses exact allowlist membership, never suffix matchin
     // valid but unapproved origins are rejected by exact membership.
     const rejection = ['https://VERIFY.example.org', 'https://verify.example.org/',
       'https://verify.example.org:8443', 'http://verify.example.org'].includes(candidate)
-      ? /Canonical HTTPS verification origin required/
+      ? /(?:Canonical|Public DNS) HTTPS verification origin required/
       : /Unapproved QR verification origin/;
     assert.throws(() => requireApprovedQrOrigin(candidate, allowlist), rejection);
     assert.throws(() => createApprovedTrustDocumentQrLink(candidate, allowlist), rejection);
