@@ -29,3 +29,20 @@ test('approved origin check does not execute a hostile array length getter', () 
   assert.equal(requireApprovedQrOrigin(approved, config), approved);
   assert.equal(reads, 0);
 });
+
+test('invalid string origins fail before inspecting allowlist configuration', () => {
+  let traps = 0;
+  const hostile = new Proxy(['https://verify.example.org'], {
+    getOwnPropertyDescriptor() { traps++; throw new Error('configuration inspected'); },
+    ownKeys() { traps++; throw new Error('configuration enumerated'); },
+    get() { traps++; throw new Error('configuration read'); },
+  });
+  for (const candidate of [
+    '', 'http://verify.example.org', 'https://verify.example.org/path',
+    'https://user@verify.example.org', 'https://verify.example.org:444',
+    'https://verify.example.org.evil.example.net',
+  ]) {
+    assert.throws(() => requireApprovedQrOrigin(candidate, hostile));
+  }
+  assert.equal(traps, 0);
+});
