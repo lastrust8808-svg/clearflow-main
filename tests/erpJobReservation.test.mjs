@@ -2529,3 +2529,19 @@ test('in-cents and in-minor-units aliases reject fractional or nonnumeric accoun
     assert.equal(db.calls, 1);
   }
 });
+
+test('non-enumerable invoice line items fail before a durable reservation', async () => {
+  const db = fakeDatabase();
+  const lines = [{ description: 'paint', amountCents: 1250 }];
+  Object.defineProperty(lines, '0', {
+    value: lines[0], enumerable: false, writable: true, configurable: true,
+  });
+  // JSON.stringify turns a hidden array index into null. A persisted digest
+  // must never silently differ from the submitted invoice line item.
+  assert.equal(JSON.stringify(lines), '[null]');
+  await assert.rejects(
+    reserve({ db, ...args, payload: { invoiceId: 'invoice-123', lines } }),
+    /hidden array element/,
+  );
+  assert.equal(db.calls, 0, 'rejected invoice lines must never reach storage');
+});
