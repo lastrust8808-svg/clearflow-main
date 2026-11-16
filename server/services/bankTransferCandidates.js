@@ -32,7 +32,7 @@ function validId(value) {
     !containsNoncharacter(value) &&
     // Reject invisible or lookalike Unicode spacing in provider identity keys.
     // Ordinary ASCII spaces remain allowed within human-readable references.
-    !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\u2028\u2029]/u.test(value.replaceAll(' ', ''));
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u.test(value.replaceAll(' ', ''));
 }
 
 function calendarDay(value) {
