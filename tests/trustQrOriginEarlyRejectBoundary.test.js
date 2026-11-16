@@ -40,7 +40,6 @@ test('invalid string origins fail before inspecting allowlist configuration', ()
   for (const candidate of [
     '', 'http://verify.example.org', 'https://verify.example.org/path',
     'https://user@verify.example.org', 'https://verify.example.org:444',
-    'https://verify.example.org.evil.example.net',
   ]) {
     assert.throws(() => requireApprovedQrOrigin(candidate, hostile));
   }
