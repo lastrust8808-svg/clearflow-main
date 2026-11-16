@@ -612,3 +612,21 @@ test('prototype-looking provider references remain distinct inert map keys', () 
   assert.ok(expected.candidates.every((candidate) => candidate.status === 'review_required'));
   assert.deepEqual(plan([...records].reverse()), expected);
 });
+
+
+test('default-ignorable Unicode cannot hide inside banking identity keys', () => {
+  // These code points are visually absent but are not all General_Category=Cf.
+  for (const invisible of ['\u034f', '\u115f', '\u1160', '\u17b4', '\u180b', '\ufe0f']) {
+    for (const field of ['tenantId', 'connectionId', 'accountId', 'transactionId', 'providerReference']) {
+      const invalid = row('checking', 'out', -500, { [field]: 'id' + invisible + 'suffix' });
+      assert.throws(
+        () => plan([invalid], field === 'tenantId' ? invalid.tenantId : 'tenant-a'),
+        /Invalid authorized transfer scope|Invalid or unauthorized transfer source record/,
+      );
+    }
+  }
+  assert.equal(plan([
+    row('checking', 'out', -500),
+    row('savings', 'in', 500),
+  ]).candidates[0].status, 'review_required');
+});
