@@ -137,3 +137,38 @@ test('distinct equal accounting payload nodes remain valid', async () => {
   );
   assert.equal(queries, 1);
 });
+
+test('aggregate JSON property names consume canonicalization budget before SQL', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('SQL must not execute'); } };
+  const fields = Object.fromEntries(
+    Array.from({ length: 100 }, (_, i) => ['invoiceField' + String(i).padStart(3, '0') + 'x'.repeat(700), null]),
+  );
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'aggregate-keys-001',
+      payload: fields,
+    }),
+    /aggregate string length limit exceeded/,
+  );
+  assert.equal(queries, 0);
+});
+
+test('ordinary accounting field names remain eligible for durable reservation', async () => {
+  let queries = 0;
+  const db = { async query() { queries++; throw new Error('test database unavailable'); } };
+  await assert.rejects(
+    reserveErpOperationJob({
+      db,
+      authenticatedScope: { tenantId: 'tenant-test', actorId: 'actor-test' },
+      operation: 'invoice_delivery',
+      idempotencyKey: 'aggregate-keys-valid-001',
+      payload: { invoiceNumber: 'INV-001', amountCents: 1200, memo: 'service' },
+    }),
+    /test database unavailable/,
+  );
+  assert.equal(queries, 1);
+});
