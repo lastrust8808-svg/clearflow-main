@@ -175,10 +175,12 @@ function isConfirmedInvoiceDelivery(
   if (payload.deliveryMethod === 'email') {
     return value.job.deliveryChannel === 'smtp' &&
       typeof payload.recipientEmail === 'string' && payload.recipientEmail.trim() !== '' &&
+      payload.recipientEmail === payload.recipientEmail.trim() &&
       value.job.recipientEmail === payload.recipientEmail;
   }
   return value.job.deliveryChannel === 'internal' &&
     typeof payload.internalDeliveryTarget === 'string' && payload.internalDeliveryTarget.trim() !== '' &&
+    payload.internalDeliveryTarget === payload.internalDeliveryTarget.trim() &&
     value.job.internalDeliveryTarget === payload.internalDeliveryTarget;
 }
 
