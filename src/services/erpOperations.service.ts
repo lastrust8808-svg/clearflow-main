@@ -349,6 +349,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   if (response.type === 'opaque' || response.type === 'opaqueredirect' || response.type === 'error') {
     throw new Error(`${label} outcome unknown: opaque financial response. Verify operation status before retrying.`);
   }
+  // A partial-content (206) or multi-status (207) acknowledgement cannot prove
+  // that the entire financial operation was durably accepted. Restrict success
+  // to the documented full-acknowledgement status codes; all others require
+  // reconciliation before retrying, even if a custom adapter sets ok=true.
+  if (response.ok && ![200, 201, 202].includes(response.status)) {
+    throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
+  }
   if (!response.ok) {
     // The ERP backend explicitly fails closed with this exact 503 contract
     // BEFORE accepting a job. Distinguish that confirmed no-op from a generic
