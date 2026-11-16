@@ -12,6 +12,9 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   if (typeof origin !== 'string' || !Array.isArray(approvedOrigins)) {
     throw new TypeError('Approved QR verification origin required');
   }
+  // Reject malformed candidate origins before inspecting configuration. This
+  // avoids invoking untrusted Proxy traps for requests that cannot authorize.
+  validatePublicQrOrigin(origin);
   // A Proxy may forge an indexed length read; use the own array-length
   // descriptor so omitted configuration entries cannot bypass validation.
   const lengthDescriptor = Object.getOwnPropertyDescriptor(approvedOrigins, 'length');
