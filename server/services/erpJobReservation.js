@@ -98,6 +98,11 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
   // invoice identities after the idempotency digest was persisted.
   if (typeof value === 'string') {
     if (value.length > 65536) throw new TypeError('ERP job payload string length limit exceeded');
+    // Bound aggregate text before canonicalization; thousands of individually
+    // valid fields must not force excessive hashing work or a misleading SQL attempt.
+    budget.remainingStringUnits ??= 65536;
+    budget.remainingStringUnits -= value.length;
+    if (budget.remainingStringUnits < 0) throw new TypeError('ERP job payload aggregate string length limit exceeded');
     if (/\p{Cs}/u.test(value)) throw new TypeError('ERP job payload contains malformed Unicode');
     if ([...value].some(char => {
       const cp = char.codePointAt(0);
