@@ -256,3 +256,19 @@ test('QR allowlist rejects extra named, hidden, and symbol metadata', () => {
   }
   assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
 });
+
+test('QR allowlist rejects noncanonical numeric metadata without executing getters', () => {
+  let getterCalls = 0;
+  for (const key of ['01', '-1', '1.0', '4294967295']) {
+    const config = [origin];
+    Object.defineProperty(config, key, {
+      configurable: true,
+      enumerable: true,
+      get() { getterCalls++; throw new Error('metadata getter must not run'); },
+    });
+    assert.throws(() => requireApprovedQrOrigin(origin, config),
+      /Approved QR verification origin required/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.equal(requireApprovedQrOrigin(origin, allowlist), origin);
+});
