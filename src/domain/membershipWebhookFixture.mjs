@@ -13,7 +13,10 @@ import { parseMembershipIdentifier, parseMembershipInstant, compareMembershipIns
  * Signed bytes: UTF-8 timestamp, '.', then the exact raw request body bytes.
  */
 export function verifyMembershipWebhookFixture({ rawBody, signatureHeader, secret, nowSeconds }) {
-  // Reject Proxy-wrapped binary bodies before byte-length or HMAC processing:\n  // proxy traps must never run inside the test verification boundary.\n  if (nodeTypes.isProxy(rawBody)) return false;\n  if (!(typeof rawBody === 'string' || Buffer.isBuffer(rawBody))) {
+  // Reject Proxy-wrapped binary bodies before byte-length or HMAC processing:
+  // proxy traps must never run inside the test verification boundary.
+  if (nodeTypes.isProxy(rawBody)) return false;
+  if (!(typeof rawBody === 'string' || Buffer.isBuffer(rawBody))) {
     throw new TypeError('rawBody must be raw UTF-8 text or a Buffer');
   }
   // Reject lossy UTF-16 encoding in fixture keys: different JavaScript secrets 
