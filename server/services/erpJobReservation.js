@@ -160,7 +160,9 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
     for (let i = 0; i < value.length; i++) {
       if (!Object.hasOwn(descriptors, i)) throw new TypeError('ERP job payload contains a sparse array');
       const descriptor = descriptors[i];
-      if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('ERP job payload contains an accessor');
+      if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable) {
+        throw new TypeError('ERP job payload contains an accessor or hidden array element');
+      }
       assertJsonSafe(descriptor.value, seen, depth + 1, budget);
     }
   } else {
