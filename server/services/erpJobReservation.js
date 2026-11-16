@@ -187,6 +187,13 @@ function assertJsonSafe(value, seen = new WeakSet(), depth = 0, budget = { remai
       if (key.length > 1024) {
         throw new TypeError('ERP job payload property name length limit exceeded');
       }
+      // Property names also contribute to canonical JSON and hashing cost.
+      // Count them against the same aggregate text budget as string values.
+      budget.remainingStringUnits ??= 65536;
+      budget.remainingStringUnits -= key.length;
+      if (budget.remainingStringUnits < 0) {
+        throw new TypeError('ERP job payload aggregate string length limit exceeded');
+      }
       if (/\p{Cs}/u.test(key)) {
         throw new TypeError('ERP job payload contains malformed Unicode');
       }
