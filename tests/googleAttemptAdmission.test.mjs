@@ -987,3 +987,16 @@ test('OAuth snapshots reject Unicode noncharacters in nested values without adva
   }));
   assert.equal(valid.status, 'authenticated');
 });
+
+
+test('OAuth admission rejects non-enumerable nested workspace fields before authentication', () => {
+  const current = pending('attempt-B');
+  const workspace = { id: 'workspace-A' };
+  Object.defineProperty(workspace, 'tenantId', {
+    value: 'hidden-tenant', enumerable: false, configurable: true,
+  });
+  const result = { ...current, status: 'authenticated', appData: { entities: [workspace] } };
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', () => result), current);
+  assert.equal(current.status, 'pending-gsi');
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
+});
