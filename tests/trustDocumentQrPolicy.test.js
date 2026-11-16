@@ -98,3 +98,30 @@ test('public QR origins reject nonstandard HTTPS listener ports', () => {
   const link = createTrustDocumentQrLink('https://verify.example.org');
   assert.equal(digestTrustDocumentQrLink(link.url, 'https://verify.example.org'), link.tokenHashSha256);
 });
+
+test('QR origin validation rejects disguised private hosts and URL parser canonicalization', () => {
+  for (const bad of [
+    'https://127.1', 'https://0177.0.0.1', 'https://0x7f000001',
+    'https://2130706433', 'https://[0:0:0:0:0:0:0:1]',
+    'https://localhost.', 'https://LOCALHOST',
+    'https://verify.example.org%2e', 'https://verify.example.org:0443',
+    'https://verify.example.org\\@localhost',
+    'https://verify.example.org\\localhost',
+  ]) {
+    assert.throws(() => createTrustDocumentQrLink(bad),
+      /Canonical HTTPS verification origin|Public DNS HTTPS verification origin/);
+  }
+});
+
+test('QR digest refuses parser-normalized token routes and non-string URL inputs', () => {
+  const { url } = createTrustDocumentQrLink(origin);
+  for (const bad of [
+    new URL(url), null, undefined, 42,
+    url.replace('/verify/document/', '/verify/%64ocument/'),
+    url.replace('/verify/document/', '/verify/document/%2E/'),
+    url.replace('/verify/document/', '/verify/document/./'),
+    url.replace('/verify/document/', '/verify/document/../document/'),
+  ]) {
+    assert.throws(() => digestTrustDocumentQrLink(bad, origin), /QR verification/);
+  }
+});
