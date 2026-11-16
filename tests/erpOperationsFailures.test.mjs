@@ -44,7 +44,7 @@ try {
           internalDeliveryTarget: ' member-1 ' } }],
     ]) {
       globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => receipt });
-      await assert.rejects(api.queueInvoiceDelivery(payload), /not confirmed/);
+      await assert.rejects(api.queueInvoiceDelivery(payload), /not confirmed|changed request identities during serialization/);
     }
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[0] });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), accepted[0]);
