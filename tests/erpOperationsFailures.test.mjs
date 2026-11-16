@@ -300,7 +300,7 @@ try {
       for (const status of [203, 204, 205, 206, 207, 208, 226]) {
         globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
         await assert.rejects(operations[index](payloads[index]),
-          /unverified server acknowledgement.*Verify operation status before retrying/);
+          /outcome unknown \(HTTP (?:203|204|205|206|207|208|226)\)\. Verify operation status before retrying/);
       }
       for (const status of [200, 201, 202]) {
         globalThis.fetch = async () => ({ ok: true, status, json: async () => accepted[index] });
