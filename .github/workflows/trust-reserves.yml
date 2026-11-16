@@ -74,4 +74,4 @@ jobs:
       - run: node --check server/services/trustDocumentSigningEvidence.js
       - run: node --check server/services/enforcementNoticeGate.js
       - run: node --check server/services/enforcementNoticeFingerprint.js
-      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNote*.test.js tests/trustDocument*.test.js tests/trustQrRegistryIdentifierHardening.test.js tests/trustSigningNoncharacters.test.js tests/trustSigning*.test.js tests/enforcementNotice*.test.js
+      - run: node --test tests/reserve*.test.js tests/note*.test.js tests/trustee*.test.js tests/privateNote*.test.js tests/trustDocument*.test.js tests/trustQr*.test.js tests/trustSigningNoncharacters.test.js tests/trustSigning*.test.js tests/enforcementNotice*.test.js
