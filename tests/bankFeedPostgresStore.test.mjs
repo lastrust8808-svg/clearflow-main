@@ -407,6 +407,9 @@ test('PostgreSQL adapter rejects persisted JSONB identities that disagree with s
 test('PostgreSQL adapter independently rejects ambiguous authorization scopes before scoped SQL', async () => {
   const invalidScopes = [
     { ...scope(), tenantId: 42 },
+    { ...scope(), tenantId: 'te\u0301nant-a' },
+    { ...scope(), connectionId: 'ite\u0301m-a' },
+    { ...scope(), allowedAccountIds: ['ac\u0301ct-a'] },
     { ...scope(), tenantId: ' tenant-a' },
     { ...scope(), tenantId: 'tenant-a\\u200b'.replace('\\u200b', '\u200b') },
     { ...scope(), connectionId: { toString: () => 'item-a' } },
