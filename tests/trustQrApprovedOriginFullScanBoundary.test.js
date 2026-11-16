@@ -32,3 +32,20 @@ test('QR approval does not execute accessor on a later allowlist entry', () => {
   );
   assert.equal(accessed, 0);
 });
+
+test('QR approval fails closed if proxy ownKeys throws after valid descriptor reads', () => {
+  const entries = new Proxy([approved], {
+    ownKeys() { throw new Error('ownKeys unavailable'); },
+  });
+  assert.throws(() => requireApprovedQrOrigin(approved, entries), /ownKeys unavailable/);
+});
+
+test('QR approval fails closed if a later proxy descriptor lookup throws', () => {
+  const entries = new Proxy([approved, 'https://other.example.org'], {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === '1') throw new Error('descriptor unavailable');
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  assert.throws(() => requireApprovedQrOrigin(approved, entries), /descriptor unavailable/);
+});
