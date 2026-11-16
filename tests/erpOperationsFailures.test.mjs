@@ -34,6 +34,21 @@ const accepted = [
     completionReceiptId: '123e4567-e89b-42d3-a456-426614174103', completionPersistedAt: '2026-10-28T00:00:03Z' } },
 ];
 try {
+  await test('padded invoice destinations cannot be acknowledged as sent even when echoed', async () => {
+    for (const [payload, receipt] of [
+      [{ ...payloads[0], recipientEmail: ' alice@example.invalid ' },
+        { ...accepted[0], job: { ...accepted[0].job, recipientEmail: ' alice@example.invalid ' } }],
+      [{ ...payloads[0], deliveryMethod: 'internal_user', recipientEmail: undefined,
+        internalDeliveryTarget: ' member-1 ' },
+        { ...accepted[0], job: { ...accepted[0].job, deliveryChannel: 'internal',
+          internalDeliveryTarget: ' member-1 ' } }],
+    ]) {
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => receipt });
+      await assert.rejects(api.queueInvoiceDelivery(payload), /not confirmed/);
+    }
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[0] });
+    assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), accepted[0]);
+  });
   await test('invisible Unicode delivery receipt identifiers never confirm sent invoices', async () => {
     for (const invisible of ['\u034f', '\ufe0f', '\u200d']) {
       const forged = {
