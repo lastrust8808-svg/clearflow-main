@@ -149,7 +149,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
           (point >= 0xFDD0 && point <= 0xFDEF) || (point & 0xFFFE) === 0xFFFE;
       }) ||
       !user || typeof emailField.value !== 'string' ||
-      !/^[^\s@\p{Cc}\p{Cf}]+@[^\s@\p{Cc}\p{Cf}]+\.[^\s@\p{Cc}\p{Cf}]+$/u.test(emailField.value) ||
+      !/^[^\s@\p{Cc}\p{Cf}\p{Cs}]+@[^\s@\p{Cc}\p{Cf}\p{Cs}]+\.[^\s@\p{Cc}\p{Cf}\p{Cs}]+$/u.test(emailField.value) ||
       emailField.value !== emailField.value.normalize('NFC')) {
       return current;
     }
