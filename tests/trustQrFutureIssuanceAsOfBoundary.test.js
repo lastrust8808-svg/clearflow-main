@@ -54,3 +54,28 @@ test('future-issued sibling binding is rejected regardless of registry order or 
     }
   }
 });
+
+test('historical lookup rejects future-issued revoked sibling even when its revocation predates a later lookup', () => {
+  const current = registry('2028-02-29T12:00:00.000Z').bindings[0];
+  const futureRevoked = {
+    ...current,
+    documentId: 'document-future-revoked',
+    versionId: 'version-future-revoked',
+    tokenHashSha256: createHash('sha256').update('future-revoked-sibling').digest('hex'),
+    status: 'revoked',
+    issuedAt: '2028-02-29T12:00:00.002Z',
+    revokedAt: '2028-02-29T12:00:00.003Z',
+    revocationEvidenceRef: 'receipt-future-revoked',
+  };
+  const asOfAt = '2028-02-29T12:00:00.001Z';
+  for (const bindings of [[current, futureRevoked], [futureRevoked, current]]) {
+    for (const hash of [unknownHash, current.tokenHashSha256, futureRevoked.tokenHashSha256]) {
+      assert.throws(
+        () => resolveTrustDocumentQrBinding({ ...scope, bindings }, {
+          ...scope, tokenHashSha256: hash, asOfAt,
+        }),
+        /QR binding issued after lookup as-of timestamp/,
+      );
+    }
+  }
+});
