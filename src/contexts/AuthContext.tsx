@@ -1029,7 +1029,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           authMessage: null,
         };
       });
-    }, 5000);
+    }, 30000);
 
     return () => window.clearTimeout(timeoutId);
   }, [
