@@ -732,3 +732,24 @@ test('QR registry separates owner, document, version and token identities across
     ...registry, bindings: [original, later],
   }, lookup), { status: 'bound', documentId: 'document-1', versionId: 'version-1' });
 });
+
+
+test('QR registry rejects malformed trusted lookup instants even for unknown tokens', () => {
+  const { registry, lookup } = fixture();
+  const unknownHash = createHash('sha256').update('unregistered-qr-token').digest('hex');
+  // An unknown token must not bypass canonical server-clock admission.
+  for (const asOfAt of [
+    '2026-10-30T12:00:00Z',
+    '2026-10-30T12:00:00.000+00:00',
+    '2026-02-30T12:00:00.000Z',
+    '2026-10-30T12:00:00.001Z ',
+    'not-a-timestamp',
+  ]) {
+    assert.throws(() => resolveTrustDocumentQrBinding(registry, {
+      ...lookup, tokenHashSha256: unknownHash, asOfAt,
+    }), /canonical UTC timestamp/);
+  }
+  assert.deepEqual(resolveTrustDocumentQrBinding(registry, {
+    ...lookup, tokenHashSha256: unknownHash,
+  }), { status: 'unknown' });
+});
