@@ -32,3 +32,22 @@ test('QR verification returns revoked at the exact trusted revocation instant', 
   assert.deepEqual(verifyTrustDocumentQrBytes(registry, lookup, versions,
     Buffer.from('tampered bytes')), { status: 'unknown' });
 });
+
+test('historical QR lookup rejects a later document registration rather than silently accepting a future version', () => {
+  const lookup = { ...scope, tokenHashSha256, asOfAt: '2026-10-29T12:00:00.000Z' };
+  const currentVersion = { ...version, status: 'active' };
+  delete currentVersion.revokedAt;
+  delete currentVersion.revocationEvidenceRef;
+  const futureVersion = {
+    ...currentVersion,
+    versionId: 'version-future',
+    sequence: 2,
+    evidenceRef: 'registration-receipt-future',
+    registeredAt: '2026-10-30T12:00:00.000Z',
+  };
+  const futureRegistry = { ...versions, versions: [currentVersion, futureVersion] };
+  assert.throws(
+    () => verifyTrustDocumentQrBytes(registry, lookup, futureRegistry, content),
+    /registered after lookup as-of timestamp/,
+  );
+});
