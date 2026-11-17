@@ -4,7 +4,7 @@
  * collapse distinct account identities into the same on-disk directory.
  * Control characters and Unicode format controls (including invisible and
  * bidirectional text controls) are not valid account or document identifiers.
- * Windows trims trailing periods and reserves device basenames (including
+ * Windows trims trailing periods and spaces before extensions and reserves device basenames (including
  * names with extensions and superscript ¹²³ device digits), which would otherwise alias or fail on that host.
  *
  * The same segment is also used as a JSON filename with a ".json" suffix.
@@ -30,7 +30,7 @@ export function sanitizeStorageSegment(value) {
     value === '..' ||
     /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/u.test(value) ||
     value.endsWith('.') ||
-    /^(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(value)
+    /^(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]) *(?:\.|$)/iu.test(value)
   ) {
     throw new TypeError('Invalid storage identifier.');
   }
