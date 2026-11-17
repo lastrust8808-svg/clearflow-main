@@ -282,3 +282,14 @@ test('Windows device aliases with mixed-case extensions fail closed before file 
     assert.equal(path.win32.dirname(path.win32.resolve(base, segment + '.json')), base);
   }
 });
+
+test('rejects Windows reserved device aliases padded with spaces before an extension', () => {
+  for (const device of ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'LPT9', 'CONIN$', 'CONOUT$']) {
+    for (const suffix of [' .txt', '  .json', ' .backup.json']) {
+      assert.throws(() => sanitizeStorageSegment(device + suffix), TypeError, device + suffix);
+    }
+  }
+  for (const value of ['console .txt', 'member name.txt', 'com10 .json']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
