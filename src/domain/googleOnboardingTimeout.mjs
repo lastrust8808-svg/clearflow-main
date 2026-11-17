@@ -165,6 +165,12 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
     if (idField && (typeof idField.value !== 'string' || !idField.value.trim() ||
       /[\p{Cc}\p{Cf}\p{Cs}]/u.test(idField.value) || idField.value !== idField.value.normalize('NFC'))) return current;
+    // Provider profile fields are untrusted until bounded. A valid-looking
+    // email with megabytes of local-part text must not enter React state or
+    // Drive workspace recovery simply because its syntax matches.
+    if (emailField.value.length > 320 ||
+        (nameField && nameField.value.length > 1024) ||
+        (idField && idField.value.length > 255)) return current;
     verifiedId = idField?.value;
     verifiedName = nameField?.value;
     verifiedEmail = emailField.value;
