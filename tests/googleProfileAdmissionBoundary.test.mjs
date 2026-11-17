@@ -82,3 +82,12 @@ test('Unicode noncharacters cannot become Google workspace identity keys', () =>
     id: 'google-subject', name: 'Member', email: 'member@example.test'
   }).status, 'pending-drive-check');
 });
+
+
+test('unpaired UTF-16 surrogates in Google email fail closed before workspace lookup', () => {
+  const current = pending();
+  for (const malformed of ['member\uD800@example.test', 'member\uDC00@example.test', 'member@example\uD800.test']) {
+    assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { email: malformed, name: 'Member' }), current);
+  }
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', valid).status, 'pending-drive-check');
+});
