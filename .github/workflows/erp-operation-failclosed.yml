@@ -8,10 +8,7 @@ on:
       - 'server/services/erpJobReservation.js'
       - 'server/db/erp_operation_jobs.proposed.sql'
       - 'tests/erpPostgresSchema.test.sql'
-      - 'tests/erpPostgresConnectionDurability.test.sh'
-      - 'tests/erpPostgresConcurrentClaims.test.sh'
-      - 'tests/erpPostgresServerRestart.test.sh'
-      - 'tests/erpPostgresBackupRestore.test.sh'
+      - 'tests/erpPostgres*.test.sh'
       - '.github/workflows/erp-operation-failclosed.yml'
   push:
     branches:
@@ -26,6 +23,8 @@ jobs:
           node-version: '22'
       - run: node --check server/routes/erp.js
       - run: node --check server/services/erpJobReservation.js
+      - name: Validate PostgreSQL acceptance test shell syntax
+        run: bash -n tests/erpPostgres*.test.sh
       - run: node --experimental-strip-types --test tests/erp*.test.mjs
 
   postgres-schema:
