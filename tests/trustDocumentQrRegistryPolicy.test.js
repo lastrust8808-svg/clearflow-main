@@ -753,3 +753,26 @@ test('QR registry rejects malformed trusted lookup instants even for unknown tok
     ...lookup, tokenHashSha256: unknownHash,
   }), { status: 'unknown' });
 });
+
+test('QR trusted clock admits real leap days and rejects impossible leap days before unknown-token resolution', () => {
+  const { registry, lookup } = fixture();
+  const unknownHash = createHash('sha256').update('leap-calendar-unknown').digest('hex');
+  // Calendar validation must not normalize February 29 into March 1.
+  for (const asOfAt of [
+    '2027-02-29T12:00:00.000Z',
+    '2100-02-29T12:00:00.000Z',
+    '2028-02-30T12:00:00.000Z',
+  ]) {
+    assert.throws(() => resolveTrustDocumentQrBinding(registry, {
+      ...lookup, tokenHashSha256: unknownHash, asOfAt,
+    }), /canonical UTC timestamp/);
+  }
+  for (const asOfAt of [
+    '2028-02-29T12:00:00.000Z',
+    '2000-02-29T12:00:00.000Z',
+  ]) {
+    assert.deepEqual(resolveTrustDocumentQrBinding(registry, {
+      ...lookup, tokenHashSha256: unknownHash, asOfAt,
+    }), { status: 'unknown' });
+  }
+});
