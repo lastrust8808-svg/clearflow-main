@@ -108,7 +108,11 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
     // JSON persistence ignores symbol-keyed fields, even when their values
     // are serializable. Never admit a workspace snapshot that loses them.
     if (typeof key === 'symbol') throw new TypeError('Symbol-keyed admission state');
-    // Property names also consume memory and serialization bandwidth. A map of\n    // long keys must not evade the aggregate string budget used for values.\n    if (key.length > 16384 || (budget.remainingKeyUnits -= key.length) < 0) {\n      throw new TypeError('Oversized admission state key');\n    }\n    // Invisible or malformed property names can alias workspace/account fields
+    // Property names also consume memory and serialization bandwidth. A map of
+    // long keys must not evade the aggregate string budget used for values.
+    if (key.length > 16384 || (budget.remainingKeyUnits -= key.length) < 0) {
+      throw new TypeError('Oversized admission state key');
+    }\n    // Invisible or malformed property names can alias workspace/account fields
     // across JSON, UI rendering and downstream persistence boundaries.
     if (/[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\uFDD0-\uFDEF\uFFFE\uFFFF]|[\u{1FFFE}-\u{1FFFF}\u{2FFFE}-\u{2FFFF}\u{3FFFE}-\u{3FFFF}\u{4FFFE}-\u{4FFFF}\u{5FFFE}-\u{5FFFF}\u{6FFFE}-\u{6FFFF}\u{7FFFE}-\u{7FFFF}\u{8FFFE}-\u{8FFFF}\u{9FFFE}-\u{9FFFF}\u{AFFFE}-\u{AFFFF}\u{BFFFE}-\u{BFFFF}\u{CFFFE}-\u{CFFFF}\u{DFFFE}-\u{DFFFF}\u{EFFFE}-\u{EFFFF}\u{FFFFE}-\u{FFFFF}\u{10FFFE}-\u{10FFFF}]/u.test(key)) {
       throw new TypeError('Invisible admission state key');
