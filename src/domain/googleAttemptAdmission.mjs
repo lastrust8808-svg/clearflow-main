@@ -78,6 +78,13 @@ function snapshotAdmissionState(value, seen = new WeakMap(), active = new WeakSe
   // Reject cycles before allowing a reducer to advance authentication state.
   if (active.has(value)) throw new TypeError('Cyclic admission state');
   if (seen.has(value)) return seen.get(value);
+  // JSON.stringify invokes inherited toJSON hooks even on otherwise plain
+  // records. Refuse polluted built-in prototypes before admitting a workspace
+  // snapshot that would serialize differently from its validated fields.
+  if (Object.hasOwn(Object.prototype, 'toJSON') ||
+      Object.hasOwn(Array.prototype, 'toJSON')) {
+    throw new TypeError('Inherited JSON serializer in admission state');
+  }
   const proto = Object.getPrototypeOf(value);
   if (Array.isArray(value) ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) {
     throw new TypeError('Unsupported mutable admission state');
