@@ -382,3 +382,11 @@ test('Google profile admission rejects unpaired UTF-16 surrogates in access toke
   assert.equal(valid.status, 'pending-drive-check');
   assert.equal(valid.apiAccessToken, 'valid-😀-token');
 });
+
+
+test('oversized Google OAuth access tokens cannot enter workspace recovery', () => {
+  const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
+  const user = Object.freeze({ id: 'verified-id', email: 'valid@example.test' });
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'x'.repeat(16385), user), waiting);
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'x'.repeat(16384), user).status, 'pending-drive-check');
+});
