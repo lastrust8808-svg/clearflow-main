@@ -26,7 +26,7 @@ test('independent document rotations reject a future sibling even for an otherwi
         () => resolveTrustDocumentQrBinding(registry, {
           ...scope, tokenHashSha256: token.repeat(64), asOfAt: at(7),
         }),
-        /issued after lookup as-of timestamp/,
+        /(issued after|revocation occurs after) lookup as-of timestamp/,
         `future issuance must reject lookup for ${token}`,
       );
     }
