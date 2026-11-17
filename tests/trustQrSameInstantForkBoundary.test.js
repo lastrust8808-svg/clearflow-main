@@ -29,3 +29,16 @@ test('same-instant QR rotation rejects a forked successor in every registry orde
     }
   }
 });
+
+test('sequential revoked QR rotations permit exact handoff without an active token', () => {
+  const first = { ...predecessor };
+  const second = { ...successorB, issuedAt: at };
+  for (const bindings of [[first, second], [second, first]]) {
+    const registry = { ...scope, bindings };
+    for (const tokenHashSha256 of [first.tokenHashSha256, second.tokenHashSha256, 'd'.repeat(64)]) {
+      assert.deepEqual(resolveTrustDocumentQrBinding(registry, {
+        ...scope, tokenHashSha256, asOfAt: '2026-11-17T10:00:00.001Z',
+      }), { status: 'unknown' });
+    }
+  }
+});
