@@ -32,3 +32,25 @@ test('QR issuance exactly at trusted as-of instant is admitted without leaking u
     ...scope, tokenHashSha256, asOfAt: at,
   }), { status: 'bound', documentId: 'document-future-issuance', versionId: 'version-future-issuance' });
 });
+
+test('future-issued sibling binding is rejected regardless of registry order or queried token', () => {
+  const current = registry('2028-02-29T12:00:00.000Z').bindings[0];
+  const future = {
+    ...current,
+    documentId: 'document-future-sibling',
+    versionId: 'version-future-sibling',
+    tokenHashSha256: createHash('sha256').update('future-sibling-token').digest('hex'),
+    issuedAt: '2028-02-29T12:00:00.001Z',
+  };
+  const asOfAt = '2028-02-29T12:00:00.000Z';
+  for (const bindings of [[current, future], [future, current]]) {
+    for (const requestedHash of [unknownHash, current.tokenHashSha256, future.tokenHashSha256]) {
+      assert.throws(
+        () => resolveTrustDocumentQrBinding({ ...scope, bindings }, {
+          ...scope, tokenHashSha256: requestedHash, asOfAt,
+        }),
+        /QR binding issued after lookup as-of timestamp/,
+      );
+    }
+  }
+});
