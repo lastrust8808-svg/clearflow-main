@@ -15,7 +15,7 @@ const versionRegistry = {
   versions: [{
     ...scope, documentId, versionId, sequence: 1,
     sha256: createHash('sha256').update(content).digest('hex'),
-    status: 'active', evidenceRef: 'receipt-issued-order',
+    status: 'current', evidenceRef: 'receipt-issued-order',
     registeredAt,
   }],
 };
