@@ -1000,3 +1000,23 @@ test('OAuth admission rejects non-enumerable nested workspace fields before auth
   assert.equal(current.status, 'pending-gsi');
   assert.equal(admitGoogleAttemptResult(current, 'attempt-B', advance).status, 'pending-drive-check');
 });
+
+
+test('inherited JSON serializer hooks cannot rewrite admitted workspace snapshots', () => {
+  const current = pending('attempt-B');
+  const reducer = (state) => ({ ...state, status: 'authenticated', workspace: { id: 'entity-1' } });
+  for (const prototype of [Object.prototype, Array.prototype]) {
+    const previous = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+    try {
+      Object.defineProperty(prototype, 'toJSON', {
+        configurable: true,
+        value() { return { id: 'forged-entity' }; },
+      });
+      assert.equal(admitGoogleAttemptResult(current, 'attempt-B', reducer), current);
+    } finally {
+      if (previous) Object.defineProperty(prototype, 'toJSON', previous);
+      else delete prototype.toJSON;
+    }
+  }
+  assert.equal(admitGoogleAttemptResult(current, 'attempt-B', reducer).workspace.id, 'entity-1');
+});
