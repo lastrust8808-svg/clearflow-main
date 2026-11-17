@@ -478,7 +478,17 @@ function transactionQueries(client) {
             nodeTypes.isProxy(value)) {
           throw new Error('Refusing out-of-scope banking checkpoint update.');
         }
+        const prototype = Object.getPrototypeOf(value);
+        if (prototype !== Object.prototype && prototype !== null) {
+          throw new Error('Refusing out-of-scope banking checkpoint update.');
+        }
         const descriptors = Object.getOwnPropertyDescriptors(value);
+        const expectedKeys = ['tenantId', 'provider', 'connectionId', 'cursor', 'revision'];
+        if (Reflect.ownKeys(descriptors).length !== expectedKeys.length ||
+            !expectedKeys.every((key) => descriptors[key]?.enumerable &&
+              Object.hasOwn(descriptors[key], 'value'))) {
+          throw new Error('Refusing out-of-scope banking checkpoint update.');
+        }
         const read = (key) => {
           const descriptor = descriptors[key];
           if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
