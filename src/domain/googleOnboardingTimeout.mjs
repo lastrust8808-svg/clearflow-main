@@ -142,7 +142,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     if (!emailField || !Object.hasOwn(emailField, 'value') ||
         (nameField && !Object.hasOwn(nameField, 'value')) ||
         (idField && !Object.hasOwn(idField, 'value'))) return current;
-    if (typeof accessToken !== 'string' || !accessToken.trim() || /[\s\p{Z}\p{Cc}\p{Cf}]/u.test(accessToken) ||
+    if (typeof accessToken !== 'string' || accessToken.length > 16384 || !accessToken.trim() || /[\s\p{Z}\p{Cc}\p{Cf}]/u.test(accessToken) ||
       Array.from(accessToken).some((character) => {
         const point = character.codePointAt(0);
         return (point >= 0xD800 && point <= 0xDFFF) ||
