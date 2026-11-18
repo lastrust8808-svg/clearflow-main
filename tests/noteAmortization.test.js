@@ -349,3 +349,20 @@ test('50-year zero-interest projection preserves every cent and month-end anchor
   assert.equal(result.installments.reduce((sum, row) => sum + row.principalMinor, 0), principalMinor);
   assert.ok(result.installments.every(row => row.paymentMinor > 0 && row.interestMinor === 0));
 });
+
+
+test('private-note projections are deterministic and never mutate caller-owned terms', () => {
+  const input = { ...terms };
+  const snapshot = structuredClone(input);
+  const first = buildFixedMonthlyNoteSchedule(input);
+  const second = buildFixedMonthlyNoteSchedule(input);
+  assert.deepEqual(input, snapshot);
+  assert.deepEqual(first, second);
+  assert.notStrictEqual(first, second);
+  assert.notStrictEqual(first.installments, second.installments);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.installments));
+  assert.ok(first.installments.every(Object.isFrozen));
+  assert.equal(first.installments.at(-1).remainingPrincipalMinor, 0);
+  assert.equal(first.totalRepaymentMinor, first.principalMinor + first.totalInterestMinor);
+});
