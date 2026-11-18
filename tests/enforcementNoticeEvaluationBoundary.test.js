@@ -59,3 +59,27 @@ test('future preparation is rejected without any delivery evidence', () => {
     status: 'incomplete', reason: 'preparation_after_evaluation',
   });
 });
+
+test('future delivery is rejected even when preparation timestamp is omitted', () => {
+  const { preparedAt, ...withoutPreparation } = base;
+  const result = assessEnforcementNoticeEvidence({
+    ...withoutPreparation,
+    deliveryEvidenceRef: 'delivery-receipt',
+    deliveredAt: '2026-11-17T12:00:00.003Z',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'delivery_after_evaluation',
+  });
+});
+
+test('missing preparation timestamp prevents ready status at exact delivery boundary', () => {
+  const { preparedAt, ...withoutPreparation } = base;
+  const result = assessEnforcementNoticeEvidence({
+    ...withoutPreparation,
+    deliveryEvidenceRef: 'delivery-receipt',
+    deliveredAt: base.evaluatedAt,
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'preparation_timestamp_missing',
+  });
+});
