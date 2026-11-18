@@ -83,3 +83,28 @@ test('missing preparation timestamp prevents ready status at exact delivery boun
     status: 'incomplete', reason: 'preparation_timestamp_missing',
   });
 });
+
+test('same-instant preparation and delivery remain only reviewable, not verified service', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base,
+    preparedAt: base.evaluatedAt,
+    deliveredAt: base.evaluatedAt,
+    deliveryEvidenceRef: 'delivery-receipt',
+  });
+  assert.deepEqual(result, {
+    status: 'evidence_ready_for_review', reason: 'unverified_delivery_claim',
+  });
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('preparation exactly at evaluation cannot validate earlier claimed delivery', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base,
+    preparedAt: base.evaluatedAt,
+    deliveredAt: '2026-11-17T12:00:00.001Z',
+    deliveryEvidenceRef: 'delivery-receipt',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'delivery_before_preparation',
+  });
+});
