@@ -24,8 +24,8 @@ try {
       queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     },
   };
-  await test('partial and multi-status responses cannot confirm ERP work', async () => {
-    for (const status of [206, 207, 208, 226]) {
+  await test('transformed, bodyless, partial and multi-status responses cannot confirm ERP work', async () => {
+    for (const status of [203, 204, 205, 206, 207, 208, 226]) {
       globalThis.fetch = async () => ({ ok: true, status, json: async () => receipt });
       await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
     }
