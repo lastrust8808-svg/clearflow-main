@@ -38,3 +38,24 @@ test('enforcement review does not treat exact evaluation-time delivery as verifi
   });
   assert.equal(Object.isFrozen(result), true);
 });
+
+test('future preparation takes precedence over contradictory early delivery', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base,
+    preparedAt: '2026-11-17T12:00:00.004Z',
+    deliveredAt: '2026-11-17T12:00:00.001Z',
+    deliveryEvidenceRef: 'delivery-receipt',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'preparation_after_evaluation',
+  });
+});
+
+test('future preparation is rejected without any delivery evidence', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base, preparedAt: '2026-11-17T12:00:00.003Z',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'preparation_after_evaluation',
+  });
+});
