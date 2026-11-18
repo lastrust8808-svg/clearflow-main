@@ -150,7 +150,8 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       }) ||
       !user || typeof emailField.value !== 'string' ||
       !/^[^\s@\p{Cc}\p{Cf}\p{Cs}]+@[^\s@\p{Cc}\p{Cf}\p{Cs}]+\.[^\s@\p{Cc}\p{Cf}\p{Cs}]+$/u.test(emailField.value) ||
-      emailField.value !== emailField.value.normalize('NFC')) {
+      emailField.value !== emailField.value.normalize('NFC') ||
+      /\p{Default_Ignorable_Code_Point}/u.test(emailField.value)) {
       return current;
     }
     // Unicode noncharacters are not stable cross-system identity keys. Reject
@@ -164,7 +165,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
         (idField && typeof idField.value === 'string' && hasNoncharacter(idField.value))) return current;
     if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
     if (idField && (typeof idField.value !== 'string' || !idField.value.trim() ||
-      /[\p{Cc}\p{Cf}\p{Cs}]/u.test(idField.value) || idField.value !== idField.value.normalize('NFC'))) return current;
+      /[\p{Default_Ignorable_Code_Point}\p{Cc}\p{Cf}\p{Cs}]/u.test(idField.value) || idField.value !== idField.value.normalize('NFC'))) return current;
     // Provider profile fields are untrusted until bounded. A valid-looking
     // email with megabytes of local-part text must not enter React state or
     // Drive workspace recovery simply because its syntax matches.
