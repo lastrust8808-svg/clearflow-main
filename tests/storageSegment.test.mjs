@@ -293,3 +293,15 @@ test('rejects Windows reserved device aliases padded with spaces before an exten
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+test('rejects default-ignorable Unicode identity aliases while preserving visible Unicode', () => {
+  // Variation selectors, combining grapheme joiners and Hangul fillers can
+  // visually hide an alternate account ID without being Unicode Cf controls.
+  for (const code of [0x034f, 0x061c, 0x115f, 0x1160, 0x180b, 0x180e, 0x2060, 0x3164, 0xfe0e, 0xfe0f, 0xffa0, 0xe0100]) {
+    const value = 'tenant-' + String.fromCodePoint(code) + '-account';
+    assert.throws(() => sanitizeStorageSegment(value), TypeError, 'U+' + code.toString(16));
+  }
+  for (const value of ['tenant-équipe', 'tenant-商店', 'tenant-🙂', 'tenant-a b']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
