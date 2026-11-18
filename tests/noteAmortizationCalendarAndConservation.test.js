@@ -78,3 +78,20 @@ test('interest-bearing schedule conserves every minor unit without claiming paym
   assert.ok(Object.isFrozen(schedule));
   assert.ok(Object.isFrozen(schedule.installments));
 });
+
+test('single-period interest is rounded half-up and never dropped from the payoff', () => {
+  // 1,000 minor units at 6% nominal annual yields exactly 5 minor units
+  // of monthly interest; a half-unit tie must round up.
+  for (const [principalMinor, expectedInterest] of [[1000, 5], [100, 1], [99, 0]]) {
+    const schedule = buildFixedMonthlyNoteSchedule({
+      ...terms, principalMinor, annualRateBps: 600, paymentCount: 1,
+    });
+    assert.equal(schedule.installments.length, 1);
+    assert.equal(schedule.installments[0].principalMinor, principalMinor);
+    assert.equal(schedule.installments[0].interestMinor, expectedInterest);
+    assert.equal(schedule.installments[0].paymentMinor, principalMinor + expectedInterest);
+    assert.equal(schedule.totalInterestMinor, expectedInterest);
+    assert.equal(schedule.totalRepaymentMinor, principalMinor + expectedInterest);
+    assert.equal(schedule.installments[0].remainingPrincipalMinor, 0);
+  }
+});
