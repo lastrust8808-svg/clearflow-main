@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { assessEnforcementNoticeEvidence } from '../server/services/enforcementNoticeGate.js';
+
+const base = {
+  tenantId: 'tenant', trustId: 'trust', noteId: 'note',
+  noticeId: 'notice', noticeVersionId: 'version',
+  preparedEvidenceRef: 'prepared-receipt',
+  preparedAt: '2026-11-17T12:00:00.000Z',
+  evaluatedAt: '2026-11-17T12:00:00.002Z',
+};
+
+test('enforcement review rejects future delivery even when the delivery receipt is missing', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base, deliveredAt: '2026-11-17T12:00:00.003Z',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'delivery_after_evaluation',
+  });
+});
+
+test('enforcement review rejects delivery before preparation even without a receipt', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base, deliveredAt: '2026-11-17T11:59:59.999Z',
+  });
+  assert.deepEqual(result, {
+    status: 'incomplete', reason: 'delivery_before_preparation',
+  });
+});
+
+test('enforcement review does not treat exact evaluation-time delivery as verified service', () => {
+  const result = assessEnforcementNoticeEvidence({
+    ...base, deliveryEvidenceRef: 'delivery-receipt',
+    deliveredAt: base.evaluatedAt,
+  });
+  assert.deepEqual(result, {
+    status: 'evidence_ready_for_review', reason: 'unverified_delivery_claim',
+  });
+  assert.equal(Object.isFrozen(result), true);
+});
