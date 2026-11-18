@@ -95,7 +95,7 @@ function requiredString(value, field) {
 }
 
 function safeInteger(value, field, min = 0, max = Number.MAX_SAFE_INTEGER) {
-  if (!Number.isSafeInteger(value) || value < min || value > max) {
+  if (!Number.isSafeInteger(value) || Object.is(value, -0) || value < min || value > max) {
     throw new RangeError(`${field} must be a safe integer between ${min} and ${max}`);
   }
   return value;
