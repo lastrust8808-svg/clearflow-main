@@ -38,6 +38,7 @@ function required(value, label) {
   if (typeof value !== 'string' || !value.trim() || value.length > 255 ||
       value !== value.trim() || value !== value.normalize('NFC') ||
       hasUnicodeNoncharacter(value) ||
+      /\p{Default_Ignorable_Code_Point}/u.test(value) ||
       /[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new TypeError(label + ' must be a canonical nonempty string');
   }
