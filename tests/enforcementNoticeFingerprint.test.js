@@ -104,3 +104,24 @@ test('complete delivery claim without preparation timestamp remains incomplete a
   assert.equal(matches(base, result.sha256), false);
   assert.notEqual(result.sha256, fingerprint(base).sha256);
 });
+
+
+test('fingerprint rejects unknown, symbol and non-enumerable fields without invoking getters', () => {
+  for (const decorate of [
+    packet => Object.defineProperty(packet, 'unexpected', { enumerable: true, value: 'unreviewed' }),
+    packet => Object.defineProperty(packet, Symbol('hidden'), { enumerable: true, value: 'secret' }),
+    packet => Object.defineProperty(packet, 'hidden', { enumerable: false, value: 'secret' })
+  ]) {
+    const packet = { ...base };
+    decorate(packet);
+    assert.throws(() => fingerprint(packet), /Unsupported or accessor|Unsupported/);
+  }
+  let getterCalls = 0;
+  const packet = { ...base };
+  Object.defineProperty(packet, 'unexpected', {
+    enumerable: true,
+    get() { getterCalls++; throw new Error('must not execute'); }
+  });
+  assert.throws(() => fingerprint(packet), /Unsupported or accessor/);
+  assert.equal(getterCalls, 0);
+});
