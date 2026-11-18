@@ -25,9 +25,9 @@ try {
     },
   };
   await test('transformed and empty-success statuses cannot acknowledge financial work', async () => {
-    // Partial, multi-status, already-reported and delta responses cannot attest
+    // Partial, multi-status, nonstandard 2xx and redirects (even when a test adapter reports ok=true) cannot attest
     // to a complete, durable accounting operation, even with a plausible receipt.
-    for (const status of [203, 204, 205, 206, 207, 208, 226]) {
+    for (const status of [203, 204, 205, 206, 207, 208, 209, 210, 226, 299, 300, 302, 307, 308]) {
       let calls = 0;
       globalThis.fetch = async () => {
         calls++;
