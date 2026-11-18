@@ -33,3 +33,18 @@ test('projected total repayment exceeding safe minor-unit range fails closed', (
     {name: 'RangeError'}
   );
 });
+
+
+test('Gregorian century leap rules reject invalid dates and preserve valid February anchors', () => {
+  for (const firstDueDate of ['1900-02-29', '2100-02-29', '2027-02-29', '2028-04-31']) {
+    assert.throws(() => buildFixedMonthlyNoteSchedule({...terms, firstDueDate}), {name: 'RangeError'});
+  }
+  const leapCentury = buildFixedMonthlyNoteSchedule({...terms, firstDueDate: '2000-02-29', paymentCount: 3});
+  assert.deepEqual(leapCentury.installments.map(x => x.dueDate), [
+    '2000-02-29', '2000-03-29', '2000-04-29'
+  ]);
+  const nonLeapCentury = buildFixedMonthlyNoteSchedule({...terms, firstDueDate: '2100-02-28', paymentCount: 3});
+  assert.deepEqual(nonLeapCentury.installments.map(x => x.dueDate), [
+    '2100-02-28', '2100-03-28', '2100-04-28'
+  ]);
+});
