@@ -538,3 +538,15 @@ test('Unicode noncharacters never authorize billing identities across planes', (
   }
   assert.equal(project(scope, [paid()], asOf).entitled, true);
 });
+
+test('default-ignorable billing identifiers fail closed before granting access', () => {
+  // U+034F (combining grapheme joiner) is default-ignorable but is not
+  // classified as a Unicode format/control/space character.
+  const hidden = '\u034F';
+  assert.throws(() => project({ ...scope, tenantId: 'tenant' + hidden + '-a' }, [paid()], asOf), /tenantId.*canonical/);
+  for (const field of ['id', 'invoiceId', 'settlementId']) {
+    const invalid = paid('hidden-' + field, { [field]: 'value' + hidden + '-1' });
+    assert.throws(() => project(scope, [invalid], asOf), /canonical/);
+  }
+  assert.equal(project(scope, [paid()], asOf).entitled, true);
+});
