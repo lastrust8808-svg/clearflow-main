@@ -95,7 +95,7 @@ test('unpaired UTF-16 surrogates in Google email fail closed before workspace lo
 
 test('default-ignorable Unicode cannot alias Google email or provider subject IDs', () => {
   const current = pending();
-  for (const invisible of ['\\u200B', '\\u034F', '\\u{E0100}']) {
+  for (const invisible of ['\u200B', '\u034F', '\u{E0100}']) {
     assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', {
       email: 'mem' + invisible + 'ber@example.test', name: 'Member', id: 'google-subject'
     }), current);
