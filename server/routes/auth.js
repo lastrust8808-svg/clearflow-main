@@ -1,4 +1,4 @@
-import { authConfigured, issueChallenge, exchangeChallenge, lookupSession, revokeToken } from '../services/identityStore.js';
+import { authConfigured, issueChallenge, exchangeChallenge, lookupSession, revokeToken, issueGoogleSession } from '../services/identityStore.js';
 import express from 'express';
 import { isMailerConfigured, sendPlainEmail } from '../utils/mailer.js';
 import { isSmsConfigured, sendVerificationSms } from '../utils/messenger.js';
@@ -270,8 +270,16 @@ router.post('/google/exchange', async (req, res) => {
     }
 
     const profile = await fetchGoogleUserProfile(tokenData.access_token);
+    if (!profile.email || profile.email_verified !== true) {
+      return res.status(403).json({ success: false, error: 'Verified Google email required.' });
+    }
+    if (!authConfigured()) {
+      return res.status(503).json({ success: false, error: 'Server-side authentication is not configured.' });
+    }
+    const session = await issueGoogleSession(profile.email);
 
     return res.status(200).json({
+      session,
       success: true,
       auth: {
         accessToken: tokenData.access_token,
