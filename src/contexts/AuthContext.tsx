@@ -395,6 +395,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     }
 
+    if (!payload.session?.token || !payload.session?.user?.email ||
+        payload.session.user.email.trim().toLowerCase() !== payload.profile?.email?.trim().toLowerCase()) {
+      throw new Error('Server did not establish a verified Google session.');
+    }
+
     return payload as {
       success: true;
       auth: {
@@ -407,6 +412,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email?: string;
         name?: string;
       };
+      session: { token: string; expiresIn: number; user: { id: string; email: string; role: string } };
     };
   }, []);
 
@@ -448,9 +454,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     needsDriveCatchUpRef.current = true;
     void exchangeGoogleAuthorizationCode(response.code)
-      .then((payload) =>
-        hydrateGoogleAccessSession(payload.auth.accessToken, payload.profile)
-      )
+      .then(async (payload) => {
+        const verification = await fetch(`${getApiBaseUrl()}/api/auth/session/me`, {
+          headers: { Authorization: `Bearer ${payload.session.token}` },
+        });
+        if (!verification.ok) throw new Error('Backend Google session verification failed.');
+        await hydrateGoogleAccessSession(payload.auth.accessToken, payload.profile);
+      })
       .catch((error) => {
         console.error('OAuth profile hydration failed:', error);
         setStorageAccessToken(null);

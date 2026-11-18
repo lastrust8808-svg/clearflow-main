@@ -96,3 +96,39 @@ export async function suspendIdentity(userId) {
   await pool.query('UPDATE clearflow_identity SET disabled=TRUE WHERE id=$1', [userId]);
   await pool.query('UPDATE clearflow_login_sessions SET revoked=TRUE WHERE user_id=$1', [userId]);
 }
+
+/**
+ * Exchange a Google-verified identity for a server-owned, revocable session.
+ * The caller must verify the Google access token with Google's userinfo endpoint;
+ * never accept an email supplied directly by the browser as identity proof.
+ */
+export async function issueGoogleSession(verifiedEmail) {
+  const email = String(verifiedEmail || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Invalid verified Google email');
+  await prepareAuth();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'INSERT INTO clearflow_identity(id,email) VALUES($1,$2) ON CONFLICT(email) DO NOTHING',
+      [crypto.randomUUID(), email]
+    );
+    const user = (await client.query(
+      'SELECT id,email,role,disabled FROM clearflow_identity WHERE email=$1 FOR UPDATE',
+      [email]
+    )).rows[0];
+    if (!user || user.disabled) throw new Error('Account disabled');
+    const token = crypto.randomBytes(32).toString('base64url');
+    await client.query(
+      "INSERT INTO clearflow_login_sessions(digest,user_id,expires) VALUES($1,$2,NOW()+INTERVAL '12 hours')",
+      [hash(token), user.id]
+    );
+    await client.query('COMMIT');
+    return { token, expiresIn: 43200, user: { id: user.id, email: user.email, role: user.role } };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
