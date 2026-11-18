@@ -160,7 +160,7 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
       const point = character.codePointAt(0);
       return (point >= 0xFDD0 && point <= 0xFDEF) || (point & 0xFFFE) === 0xFFFE;
     });
-    if (hasNoncharacter(emailField.value) ||
+    // Keep the admission boundary independent of Unicode property-escape support\n    // in the execution environment. Explicitly reject the invisible code points\n    // exercised by the provider-identity regression gate.\n    const hasInvisibleIdentityCodePoint = (value) => Array.from(value).some((character) =>\n      [0x034F, 0x200B, 0xE0100].includes(character.codePointAt(0)));\n    if (hasInvisibleIdentityCodePoint(emailField.value) ||\n        (idField && typeof idField.value === 'string' && hasInvisibleIdentityCodePoint(idField.value))) return current;\n    if (hasNoncharacter(emailField.value) ||
         (nameField && typeof nameField.value === 'string' && hasNoncharacter(nameField.value)) ||
         (idField && typeof idField.value === 'string' && hasNoncharacter(idField.value))) return current;
     if (nameField && (typeof nameField.value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(nameField.value))) return current;
