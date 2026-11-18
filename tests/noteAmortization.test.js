@@ -366,3 +366,31 @@ test('private-note projections are deterministic and never mutate caller-owned t
   assert.equal(first.installments.at(-1).remainingPrincipalMinor, 0);
   assert.equal(first.totalRepaymentMinor, first.principalMinor + first.totalInterestMinor);
 });
+
+test('maximum permitted annual rate remains a projection with exact one-period payoff', () => {
+  const result = schedule({
+    principalMinor: 120_000,
+    annualRateBps: 100_000,
+    paymentCount: 1,
+    firstDueDate: '2026-12-31',
+  });
+  assert.equal(result.scheduledPaymentMinor, 220_000);
+  assert.equal(result.totalInterestMinor, 100_000);
+  assert.equal(result.totalRepaymentMinor, 220_000);
+  assert.deepEqual(result.installments.map(row => ({
+    dueDate: row.dueDate,
+    principalMinor: row.principalMinor,
+    interestMinor: row.interestMinor,
+    paymentMinor: row.paymentMinor,
+    remainingPrincipalMinor: row.remainingPrincipalMinor,
+  })), [{
+    dueDate: '2026-12-31',
+    principalMinor: 120_000,
+    interestMinor: 100_000,
+    paymentMinor: 220_000,
+    remainingPrincipalMinor: 0,
+  }]);
+  assert.equal(Object.hasOwn(result, 'paymentReceived'), false);
+  assert.equal(Object.hasOwn(result, 'settled'), false);
+  assert.throws(() => schedule({ annualRateBps: 100_001 }), /annualRateBps/);
+});
