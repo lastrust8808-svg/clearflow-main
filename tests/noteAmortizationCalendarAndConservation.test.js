@@ -48,3 +48,33 @@ test('Gregorian century leap rules reject invalid dates and preserve valid Febru
     '2100-02-28', '2100-03-28', '2100-04-28'
   ]);
 });
+
+
+test('interest-bearing schedule conserves every minor unit without claiming payments occurred', () => {
+  const schedule = buildFixedMonthlyNoteSchedule({
+    ...terms, principalMinor: 100_003, annualRateBps: 725, paymentCount: 24,
+    firstDueDate: '2028-01-31',
+  });
+  let outstanding = schedule.principalMinor;
+  let principalSum = 0;
+  let interestSum = 0;
+  for (const [index, installment] of schedule.installments.entries()) {
+    assert.equal(installment.installmentNumber, index + 1);
+    assert.equal(installment.paymentMinor, installment.principalMinor + installment.interestMinor);
+    assert.ok(installment.principalMinor > 0);
+    assert.ok(installment.interestMinor >= 0);
+    assert.ok(installment.principalMinor <= outstanding);
+    outstanding -= installment.principalMinor;
+    assert.equal(installment.remainingPrincipalMinor, outstanding);
+    principalSum += installment.principalMinor;
+    interestSum += installment.interestMinor;
+  }
+  assert.equal(outstanding, 0);
+  assert.equal(principalSum, schedule.principalMinor);
+  assert.equal(interestSum, schedule.totalInterestMinor);
+  assert.equal(principalSum + interestSum, schedule.totalRepaymentMinor);
+  assert.equal(Object.hasOwn(schedule, 'paidMinor'), false);
+  assert.equal(Object.hasOwn(schedule, 'settled'), false);
+  assert.ok(Object.isFrozen(schedule));
+  assert.ok(Object.isFrozen(schedule.installments));
+});
