@@ -30,6 +30,12 @@ try {
       await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
     }
   });
+  await test('contradictory ok=false with 2xx status is indeterminate, not a safe rejection', async () => {
+    for (const status of [200, 201, 202, 204]) {
+      globalThis.fetch = async () => ({ ok: false, status, json: async () => receipt });
+      await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
+    }
+  });
   await test('full acknowledgement status codes preserve durable acceptance', async () => {
     for (const status of [200, 201, 202]) {
       globalThis.fetch = async () => ({ ok: true, status, json: async () => receipt });
