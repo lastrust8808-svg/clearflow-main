@@ -359,6 +359,12 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
   }
   if (!response.ok) {
+    // A contradictory adapter/proxy response (2xx status but ok=false) cannot
+    // establish either a rejection or durable acceptance. Do not tell the
+    // operator that a retry is safe after a potentially committed write.
+    if (response.status >= 200 && response.status < 300) {
+      throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
+    }
     // The ERP backend explicitly fails closed with this exact 503 contract
     // BEFORE accepting a job. Distinguish that confirmed no-op from a generic
     // 503 that might follow a committed operation. Never infer rejection from
