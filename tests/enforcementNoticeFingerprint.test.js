@@ -125,3 +125,20 @@ test('fingerprint rejects unknown, symbol and non-enumerable fields without invo
   assert.throws(() => fingerprint(packet), /Unsupported or accessor/);
   assert.equal(getterCalls, 0);
 });
+
+test('digest comparison rejects malformed and coercion-backed expected digests before packet inspection', () => {
+  let packetInspections = 0;
+  const hostilePacket = new Proxy(base, {
+    getPrototypeOf() { packetInspections++; throw new Error('packet inspected'); }
+  });
+  const valid = fingerprint(base).sha256;
+  for (const invalid of [
+    null, undefined, 0, new String(valid), { toString() { throw new Error('coercion'); } },
+    valid.slice(0, -1), valid.toUpperCase(), valid + '0', 'g'.repeat(64)
+  ]) {
+    assert.throws(() => matches(hostilePacket, invalid), /Canonical SHA-256 digest required/);
+  }
+  assert.equal(packetInspections, 0);
+  assert.equal(matches(base, valid), true);
+  assert.equal(fingerprint(base).serviceVerified, false);
+});
