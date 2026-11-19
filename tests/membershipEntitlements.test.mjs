@@ -550,3 +550,15 @@ test('default-ignorable billing identifiers fail closed before granting access',
   }
   assert.equal(project(scope, [paid()], asOf).entitled, true);
 });
+
+test('membership dates reject timezone offsets outside ISO 8601 limits', () => {
+  for (const offset of ['+14:01', '-14:30', '+15:00', '-23:00', '+00:60']) {
+    assert.throws(() => project(scope, [], '2026-11-19T12:00:00' + offset),
+      /valid calendar timestamp/, offset);
+    assert.throws(() => project(scope, [paid('evt-offset', {
+      occurredAt: '2026-11-19T12:00:00' + offset,
+    })], asOf), /valid calendar timestamp/, offset);
+  }
+  assert.equal(project(scope, [], '2026-11-19T12:00:00+14:00').status, 'pending');
+  assert.equal(project(scope, [], '2026-11-19T12:00:00-14:00').status, 'pending');
+});
