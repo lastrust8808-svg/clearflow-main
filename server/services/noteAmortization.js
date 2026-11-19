@@ -51,6 +51,14 @@ function requiredString(value, field) {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new TypeError(`${field} must be a nonempty unpadded string`);
   }
+  // Keep schedule ownership identifiers within the reserve/storage admission
+  // bound before normalization or downstream persistence.
+  if (value.length > 1024) {
+    throw new RangeError(`${field} exceeds maximum identifier length`);
+  }
+  if (value === '__proto__' || value === 'constructor' || value === 'prototype') {
+    throw new TypeError(`${field} must not be a prototype-sensitive identifier`);
+  }
   // Match the reserve, trustee and private-note identifier boundary. These
   // terms may later be matched to tenant-scoped immutable note records;
   // control bytes must never create ambiguous ledger identifiers.
