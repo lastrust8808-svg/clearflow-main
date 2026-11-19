@@ -90,11 +90,15 @@ function requirePlainReserveEntries(entries) {
     count++;
   }
   if (count !== length) throw new TypeError('Reserve entries must not contain holes');
+  // Snapshot admitted indexed descriptors rather than invoking a caller-controlled
+  // Proxy iterator or re-reading mutable indexed properties during classification.
+  const admitted = Array.from({ length }, (_, i) => descriptors[String(i)].value);
   // Admit every record before classification begins; an invalid later entry
   // cannot be silently skipped or treated as a partially trusted ledger.
-  for (const entry of entries) {
+  for (const entry of admitted) {
     requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
   }
+  return admitted;
 }
 
 function requiredString(value, field) {
@@ -194,7 +198,7 @@ export function calculateReserveCapacity(snapshot) {
     throw new RangeError('maxEvidenceAgeMs must be a nonnegative safe integer');
   }
   const asOfEpochMs = Date.parse(asOfAt);
-  requirePlainReserveEntries(snapshot.entries);
+  const admittedEntries = requirePlainReserveEntries(snapshot.entries);
 
   const totals = {
     cashTotalMinor: 0,
@@ -209,7 +213,7 @@ export function calculateReserveCapacity(snapshot) {
   const assetIds = new Set();
   const evidenceRefs = new Set();
   let oldestEvidenceAt = null;
-  for (const entry of snapshot.entries) {
+  for (const entry of admittedEntries) {
     requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
     const id = requiredString(entry.id, 'entry.id');
     if (ids.has(id)) throw new Error(`Duplicate reserve entry ID: ${id}`);
