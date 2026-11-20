@@ -305,3 +305,16 @@ test('rejects default-ignorable Unicode identity aliases while preserving visibl
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+
+test('encodes Windows wildcard characters rather than emitting invalid filename components', () => {
+  const values = ['tenant*admin', 'tenant**admin', '*', 'a*b.json'];
+  for (const value of values) {
+    const segment = sanitizeStorageSegment(value);
+    assert.equal(segment, encodeURIComponent(value).replace(/\*/g, '%2A'));
+    assert.ok(!segment.includes('*'));
+    const base = path.win32.resolve('C:\\', 'clearflow', 'accounts');
+    assert.equal(path.win32.dirname(path.win32.resolve(base, segment + '.json')), base);
+  }
+  assert.notEqual(sanitizeStorageSegment('tenant*admin'), sanitizeStorageSegment('tenant%2Aadmin'));
+});
