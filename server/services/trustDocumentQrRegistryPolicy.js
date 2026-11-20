@@ -296,7 +296,10 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   const versions = [];
   for (let index = 0; index < lengthDescriptor.value; index++) {
     const entry = versionDescriptors[String(index)];
-    if (!entry || !Object.hasOwn(entry, 'value')) {
+    if (!entry) {
+      throw new TypeError('Document versions must not contain holes');
+    }
+    if (!Object.hasOwn(entry, 'value')) {
       throw new TypeError('Document versions must contain enumerable data elements');
     }
     const originalRecord = entry.value;
