@@ -185,7 +185,10 @@ function safeAdd(left, right, field) {
  */
 export function calculateReserveCapacity(snapshot) {
   requirePlainReserveRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve snapshot');
-  // Use one admitted descriptor snapshot; never re-read caller-controlled fields.\n  const admitted = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot)).map(\n    ([key, descriptor]) => [key, descriptor.value]));\n  const tenantId = requiredString(admitted.tenantId, 'tenantId');
+  // Use one admitted descriptor snapshot; never re-read caller-controlled fields.
+  const admitted = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot)).map(
+    ([key, descriptor]) => [key, descriptor.value]));
+  const tenantId = requiredString(admitted.tenantId, 'tenantId');
   const entityId = requiredString(admitted.entityId, 'entityId');
   const trustId = requiredString(admitted.trustId, 'trustId');
   // Tenant, legal entity and trust are separate ownership scopes. Even an
