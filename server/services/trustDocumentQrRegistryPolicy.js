@@ -51,9 +51,13 @@ function timestamp(value, field) {
 // unreviewed identity/status claims. This is structural admission only; the
 // caller remains responsible for authenticating immutable registry evidence.
 function plainQrRecord(record, label, allowed, required = allowed) {
-  if (!record || typeof record !== 'object' || Array.isArray(record) ||
-      (Object.getPrototypeOf(record) !== Object.prototype &&
-       Object.getPrototypeOf(record) !== null)) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    throw new TypeError(label + ' must be a plain data record');
+  }
+  // Read the prototype only once: a hostile Proxy may change its reported
+  // prototype between inspections, bypassing plain-record admission.
+  const prototype = Object.getPrototypeOf(record);
+  if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError(label + ' must be a plain data record');
   }
   const descriptors = Object.getOwnPropertyDescriptors(record);
