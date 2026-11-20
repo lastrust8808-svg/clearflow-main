@@ -335,10 +335,10 @@ test('Windows-invalid punctuation remains encoded and distinct from literal perc
   for (const character of forbidden) {
     const logical = 'tenant-' + character + '-document';
     const encoded = sanitizeStorageSegment(logical);
-    assert.equal(encoded, encodeURIComponent(logical).replace(/\\*/g, '%2A'));
+    assert.equal(encoded, encodeURIComponent(logical).replace(/\*/g, '%2A'));
     assert.notEqual(encoded, sanitizeStorageSegment('tenant-' + encodeURIComponent(character) + '-document'));
-    assert.ok(!/[<>:"/\\\\|?*]/u.test(encoded), character);
-    const base = path.win32.resolve('C:\\\\', 'clearflow', 'accounts');
+    assert.ok(!/[<>:"/\\|?*]/u.test(encoded), character);
+    const base = path.win32.resolve('C:\\', 'clearflow', 'accounts');
     assert.equal(path.win32.dirname(path.win32.resolve(base, encoded + '.json')), base);
   }
 });
