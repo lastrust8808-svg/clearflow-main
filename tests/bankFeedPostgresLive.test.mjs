@@ -98,6 +98,18 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     );
     assert.equal((await entries(a.tenantId))[0].amountCents, 1300);
 
+    // An identical provider page replay after a durable restart must fail
+    // closed: no duplicate transaction and no extra cursor revision.
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(
+        store, a, page('cursor-a1', 'cursor-a2', [event('modified', 'ci-tx1', 1300)]),
+      ),
+      /Stale feed cursor checkpoint/,
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a2', revision: '2' });
+    assert.equal((await entries(a.tenantId)).length, 1);
+    assert.equal((await entries(a.tenantId))[0].amountCents, 1300);
+
     // A thrown error after a real INSERT must roll back the entire transaction.
     await assert.rejects(
       store.withTransaction(async (tx) => {
