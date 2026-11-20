@@ -119,7 +119,14 @@ function isAcceptedJob(
     if (job.operation !== operation || !hasDurableReceipt(job)) return false;
     // A manual fallback is not accepted delivery or export. An explicit sent
     // acknowledgement must carry completion metadata; export cannot be "sent".
-    if (job.status === 'queued') return true;
+    if (job.status === 'queued') {
+      // A reservation cannot simultaneously claim completed transport. Reject
+      // contradictory acknowledgements rather than letting the UI treat a
+      // fabricated delivery receipt as durable export acceptance.
+      return !Object.hasOwn(job, 'sentAt') &&
+        !Object.hasOwn(job, 'deliveryReceiptId') &&
+        !Object.hasOwn(job, 'deliveryChannel');
+    }
     return operation === 'send' && job.status === 'sent' &&
       isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
       Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
