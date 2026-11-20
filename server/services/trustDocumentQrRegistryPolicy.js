@@ -292,7 +292,7 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
     throw new RangeError('Document versions exceed the 10000-record review limit');
   }
   const versionDescriptors = Object.getOwnPropertyDescriptors(originalVersions);
-  const versionSnapshot = Object.defineProperties([], versionDescriptors);
+  const versionSnapshotDescriptors = { ...versionDescriptors };
   const versions = [];
   for (let index = 0; index < lengthDescriptor.value; index++) {
     const entry = versionDescriptors[String(index)];
@@ -314,8 +314,11 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
     const record = Object.defineProperties(Object.create(prototype),
       Object.getOwnPropertyDescriptors(originalRecord));
     versions.push(record);
-    Object.defineProperty(versionSnapshot, String(index), { ...entry, value: record });
+    versionSnapshotDescriptors[String(index)] = { ...entry, value: record };
   }
+  // Construct once: a legitimate frozen history may contain non-configurable
+  // indices, which cannot be redefined after the first descriptor copy.
+  const versionSnapshot = Object.defineProperties([], versionSnapshotDescriptors);
   assertPlainTrustDocumentVersions(versionSnapshot);
   const safeRegistry = { ...registrySnapshot, versions };
   if (safeRegistry.tenantId !== qrSnapshot.tenantId ||
