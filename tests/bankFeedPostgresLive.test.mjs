@@ -204,6 +204,10 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     const finalCheckpoint = await checkpoint(a.tenantId);
     assert.equal(finalCheckpoint.revision, '3');
     assert.ok(['cursor-a3', 'cursor-a4'].includes(finalCheckpoint.cursor));
+    // The winning cursor must correspond to the winning amount: a losing
+    // concurrent page must never leak its transaction payload into the ledger.
+    const expectedAmount = finalCheckpoint.cursor === 'cursor-a3' ? 200 : 300;
+    assert.equal(finalEntries.find((entry) => entry.transactionId === 'ci-tx2')?.amountCents, expectedAmount);
     assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
     assert.equal((await entries(b.tenantId))[0].amountCents, 9900);
   } finally {
