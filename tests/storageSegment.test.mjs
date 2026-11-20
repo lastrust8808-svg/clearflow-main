@@ -328,3 +328,17 @@ test('Windows wildcard encoding respects the exact 250-byte storage basename lim
   // A literal percent-encoded spelling is a distinct logical tenant identity.
   assert.notEqual(sanitizeStorageSegment(atLimit), sanitizeStorageSegment('a'.repeat(245) + '%2A'));
 });
+
+
+test('Windows-invalid punctuation remains encoded and distinct from literal percent spellings', () => {
+  const forbidden = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+  for (const character of forbidden) {
+    const logical = 'tenant-' + character + '-document';
+    const encoded = sanitizeStorageSegment(logical);
+    assert.equal(encoded, encodeURIComponent(logical).replace(/\\*/g, '%2A'));
+    assert.notEqual(encoded, sanitizeStorageSegment('tenant-' + encodeURIComponent(character) + '-document'));
+    assert.ok(!/[<>:"/\\\\|?*]/u.test(encoded), character);
+    const base = path.win32.resolve('C:\\\\', 'clearflow', 'accounts');
+    assert.equal(path.win32.dirname(path.win32.resolve(base, encoded + '.json')), base);
+  }
+});
