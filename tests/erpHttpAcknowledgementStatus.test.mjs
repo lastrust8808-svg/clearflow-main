@@ -36,6 +36,14 @@ try {
       await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
     }
   });
+  await test('queued export cannot claim completed delivery transport evidence', async () => {
+    for (const field of ['sentAt', 'deliveryReceiptId', 'deliveryChannel']) {
+      const contradictory = structuredClone(receipt);
+      contradictory.job[field] = field === 'sentAt' ? '2026-10-28T00:00:02Z' : 'smtp-receipt-1';
+      globalThis.fetch = async () => ({ ok: true, status: 202, json: async () => contradictory });
+      await assert.rejects(api.queueInvoiceExport(payload), /not confirmed by the server/);
+    }
+  });
   await test('full acknowledgement status codes preserve durable acceptance', async () => {
     for (const status of [200, 201, 202]) {
       globalThis.fetch = async () => ({ ok: true, status, json: async () => receipt });
