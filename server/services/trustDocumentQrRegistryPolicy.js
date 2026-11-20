@@ -71,6 +71,7 @@ function plainQrRecord(record, label, allowed, required = allowed) {
       throw new TypeError('Missing own ' + label + ' field: ' + key);
     }
   }
+  return Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
 }
 
 // Bound untrusted in-memory QR registry snapshots before enumerating indexed
@@ -102,6 +103,7 @@ function plainQrBindings(bindings) {
     count++;
   }
   if (count !== length) throw new TypeError('QR bindings must not contain holes');
+  return Array.from({ length }, (_, index) => descriptors[String(index)].value);
 }
 
 const QR_SCOPE_FIELDS = ['tenantId', 'entityId', 'trustId'];
@@ -120,22 +122,22 @@ const QR_BINDING_REQUIRED = QR_BINDING_FIELDS.slice(0, 8);
  * @returns {{status:'bound',documentId:string,versionId:string}|{status:'unknown'}}
  */
 export function resolveTrustDocumentQrBinding(registry, lookup) {
-  plainQrRecord(registry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
-  plainQrBindings(registry.bindings);
-  const tenantId = id(registry.tenantId, 'registry.tenantId');
-  const entityId = id(registry.entityId, 'registry.entityId');
-  const trustId = id(registry.trustId, 'registry.trustId');
-  plainQrRecord(lookup, 'QR lookup',
+  const registrySnapshot = plainQrRecord(registry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
+  const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
+  const tenantId = id(registrySnapshot.tenantId, 'registry.tenantId');
+  const entityId = id(registrySnapshot.entityId, 'registry.entityId');
+  const trustId = id(registrySnapshot.trustId, 'registry.trustId');
+  const lookupSnapshot = plainQrRecord(lookup, 'QR lookup',
     [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
-  if (id(lookup.tenantId, 'lookup.tenantId') !== tenantId ||
-      id(lookup.entityId, 'lookup.entityId') !== entityId ||
-      id(lookup.trustId, 'lookup.trustId') !== trustId) {
+  if (id(lookupSnapshot.tenantId, 'lookupSnapshot.tenantId') !== tenantId ||
+      id(lookupSnapshot.entityId, 'lookupSnapshot.entityId') !== entityId ||
+      id(lookupSnapshot.trustId, 'lookupSnapshot.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
   // The caller MUST supply this instant from its trusted server clock and load
   // an as-of registry snapshot. A client-provided timestamp is not authority.
-  const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
-  const requested = Buffer.from(digest(lookup.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
+  const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookupSnapshot.asOfAt');
+  const requested = Buffer.from(digest(lookupSnapshot.tokenHashSha256, 'lookupSnapshot.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
   const seenRevocationEvidence = new Set();
   // Keep document and version identities separate from independent revocation
@@ -148,8 +150,8 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   // These windows come from the caller's trusted, immutable registry.
   const versionWindows = new Map();
   let matched = null;
-  for (const binding of registry.bindings) {
-    plainQrRecord(binding, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED);
+  for (const originalBinding of bindingSnapshots) {
+    const binding = plainQrRecord(originalBinding, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED);
     if (binding.tenantId !== tenantId || binding.entityId !== entityId ||
         binding.trustId !== trustId) {
       throw new Error('QR binding tenant/entity scope mismatch');
