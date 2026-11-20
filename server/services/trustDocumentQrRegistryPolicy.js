@@ -276,28 +276,34 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   // reading scope, status or chronology. Earlier scope checks and Array#some
   // could execute an untrusted getter before the core byte verifier ran.
   // Structural admission is not authentication of registry provenance.
-  plainQrRecord(versionRegistry, 'QR document registry',
+  const qrSnapshot = plainQrRecord(qrRegistry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
+  const lookupSnapshot = plainQrRecord(lookup, 'QR lookup',
+    [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
+  const registrySnapshot = plainQrRecord(versionRegistry, 'QR document registry',
     [...QR_SCOPE_FIELDS, 'documentId', 'versions']);
-  assertPlainTrustDocumentVersions(versionRegistry.versions);
-  if (versionRegistry.tenantId !== qrRegistry.tenantId ||
-      versionRegistry.entityId !== qrRegistry.entityId ||
-      versionRegistry.trustId !== qrRegistry.trustId ||
-      versionRegistry.documentId !== binding.documentId ||
-      versionRegistry.versions.some(version => version.trustId !== qrRegistry.trustId)) {
+  assertPlainTrustDocumentVersions(registrySnapshot.versions);
+  // Admit descriptor values once. Never reread caller-owned Proxy fields after
+  // structural validation, including version rows and array indices.
+  const versionDescriptors = Object.getOwnPropertyDescriptors(registrySnapshot.versions);
+  const versions = Array.from({ length: versionDescriptors.length.value }, (_, index) => {
+    const record = versionDescriptors[String(index)].value;
+    const descriptors = Object.getOwnPropertyDescriptors(record);
+    return Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
+  });
+  const safeRegistry = { ...registrySnapshot, versions };
+  if (safeRegistry.tenantId !== qrSnapshot.tenantId ||
+      safeRegistry.entityId !== qrSnapshot.entityId ||
+      safeRegistry.trustId !== qrSnapshot.trustId ||
+      safeRegistry.documentId !== binding.documentId ||
+      versions.some(version => version.trustId !== qrSnapshot.trustId)) {
     throw new Error('QR document registry scope mismatch');
   }
-  // A later version must not retroactively supersede an earlier version in
-  // a historical QR lookup. A trusted store must supply an as-of snapshot;
-  // rejecting future registrations is safer than inferring historical status.
-  const asOfAt = timestamp(lookup.asOfAt, 'lookup.asOfAt');
-  for (const version of versionRegistry.versions) {
+  const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookup.asOfAt');
+  for (const version of versions) {
     const registeredAt = timestamp(version.registeredAt, 'version.registeredAt');
     if (registeredAt > asOfAt) {
       throw new Error('QR document version registered after lookup as-of timestamp');
     }
-    // A future revocation must not rewrite a historical QR verification.
-    // Revocation timestamps and status must come from an authenticated
-    // append-only as-of registry; this structural check cannot prove either.
     if (version.status === 'revoked') {
       const revokedAt = timestamp(version.revokedAt, 'version.revokedAt');
       if (revokedAt <= registeredAt) {
@@ -310,7 +316,7 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
       throw new Error('Nonrevoked QR document version cannot carry revocation timestamp');
     }
   }
-  const decision = verifyTrustDocumentBytes(versionRegistry, {
+  const decision = verifyTrustDocumentBytes(safeRegistry, {
     versionId: binding.versionId,
     content,
   });
@@ -319,12 +325,11 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   // retroactively attached to finalized bytes. Registry timestamps must come
   // from trusted, append-only storage; this pure check does not authenticate them.
   if (decision.status !== 'unknown') {
-    const tokenBinding = qrRegistry.bindings.find(
-      row => row.tokenHashSha256 === lookup.tokenHashSha256,
-    );
-    const documentVersion = versionRegistry.versions.find(
-      row => row.versionId === binding.versionId,
-    );
+    const bindingDescriptors = Object.getOwnPropertyDescriptors(qrSnapshot.bindings);
+    const tokenBinding = Array.from({ length: bindingDescriptors.length.value }, (_, index) =>
+      plainQrRecord(bindingDescriptors[String(index)].value, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED),
+    ).find(row => row.tokenHashSha256 === lookupSnapshot.tokenHashSha256);
+    const documentVersion = versions.find(row => row.versionId === binding.versionId);
     if (tokenBinding.issuedAt < documentVersion.registeredAt) {
       throw new Error('QR binding issued before document version registration');
     }
