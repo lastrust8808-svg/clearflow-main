@@ -318,3 +318,13 @@ test('encodes Windows wildcard characters rather than emitting invalid filename 
   }
   assert.notEqual(sanitizeStorageSegment('tenant*admin'), sanitizeStorageSegment('tenant%2Aadmin'));
 });
+
+
+test('Windows wildcard encoding respects the exact 250-byte storage basename limit', () => {
+  const atLimit = 'a'.repeat(247) + '*';
+  assert.equal(sanitizeStorageSegment(atLimit), 'a'.repeat(247) + '%2A');
+  assert.equal(sanitizeStorageSegment(atLimit).length + '.json'.length, 255);
+  assert.throws(() => sanitizeStorageSegment('a'.repeat(248) + '*'), TypeError);
+  // A literal percent-encoded spelling is a distinct logical tenant identity.
+  assert.notEqual(sanitizeStorageSegment(atLimit), sanitizeStorageSegment('a'.repeat(245) + '%2A'));
+});
