@@ -95,10 +95,14 @@ function requirePlainReserveEntries(entries) {
   const admitted = Array.from({ length }, (_, i) => descriptors[String(i)].value);
   // Admit every record before classification begins; an invalid later entry
   // cannot be silently skipped or treated as a partially trusted ledger.
-  for (const entry of admitted) {
+  return admitted.map(entry => {
     requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
-  }
-  return admitted;
+    // Validate own descriptors once, then classify a plain snapshot. A Proxy
+    // get trap must not replace previously admitted asset or amount fields.
+    const descriptors = Object.getOwnPropertyDescriptors(entry);
+    return Object.fromEntries(Object.entries(descriptors).map(
+      ([key, descriptor]) => [key, descriptor.value]));
+  });
 }
 
 function requiredString(value, field) {
