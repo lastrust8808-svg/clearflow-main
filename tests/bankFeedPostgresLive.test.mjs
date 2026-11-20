@@ -140,6 +140,12 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     );
     assert.equal((await entries(a.tenantId)).length, 1);
     assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a2', revision: '2' });
+    // A failed write on tenant A must not modify tenant B's independently
+    // committed financial evidence or cursor, even on the same connection pool.
+    assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
+    assert.deepEqual((await entries(b.tenantId)).map(({ transactionId, amountCents }) => ({ transactionId, amountCents })), [
+      { transactionId: 'ci-tx1', amountCents: 9900 },
+    ]);
 
     // Malformed persisted financial evidence must block cursor acknowledgement.
     await pool.query(
