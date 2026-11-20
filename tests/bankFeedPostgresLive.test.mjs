@@ -111,6 +111,24 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     );
     assert.equal((await entries(a.tenantId)).length, 1);
 
+    // A database constraint failure after a valid insert must roll back all
+    // writes, not leave a partially committed financial feed page.
+    await assert.rejects(
+      store.withTransaction(async (tx) => {
+        await tx.saveEntries(a, [{
+          ...a, accountId: 'ci-account', transactionId: 'ci-constraint-rollback',
+          amountCents: 100, status: 'posted', requiresReview: true,
+        }]);
+        await pool.query('SELECT 1'); // Independent connection remains usable.
+        await tx.saveEntries(a, [{
+          ...a, accountId: 'ci-account', transactionId: null,
+          amountCents: 200, status: 'posted', requiresReview: true,
+        }]);
+      }),
+    );
+    assert.equal((await entries(a.tenantId)).length, 1);
+    assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a2', revision: '2' });
+
     // Malformed persisted financial evidence must block cursor acknowledgement.
     await pool.query(
       `INSERT INTO public.clearflow_bank_feed_entries
