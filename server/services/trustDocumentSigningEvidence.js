@@ -345,14 +345,30 @@ export function assessTrustDocumentSigningPacket(packet) {
       Array.isArray(versionRegistry)) {
     throw new TypeError('Immutable document version registry required');
   }
-  assertPlainTrustDocumentRegistry(versionRegistry);
-  // Read the admitted registry descriptors once. A Proxy may return a
-  // different ownership scope or version list on subsequent property reads.
+  // Snapshot the untrusted registry exactly once before structural admission.
+  // Validating the original and then rereading its Proxy descriptors permits
+  // an inconsistent second response to substitute ownership or versions.
+  const registryPrototype = Object.getPrototypeOf(versionRegistry);
+  if (registryPrototype !== Object.prototype && registryPrototype !== null) {
+    throw new TypeError('Document registry must be a plain data record');
+  }
   const registryDescriptors = Object.getOwnPropertyDescriptors(versionRegistry);
   const admittedRegistry = Object.freeze(Object.fromEntries(
-    ['tenantId', 'entityId', 'trustId', 'documentId', 'versions']
-      .map(key => [key, registryDescriptors[key].value])
+    Reflect.ownKeys(registryDescriptors).map(key => [
+      key, Object.hasOwn(registryDescriptors[key], 'value')
+        ? registryDescriptors[key].value : undefined,
+    ])
   ));
+  // Preserve the complete field/descriptor contract, including hidden,
+  // symbol-named and accessor properties, before consuming the snapshot.
+  for (const key of Reflect.ownKeys(registryDescriptors)) {
+    const descriptor = registryDescriptors[key];
+    if (typeof key !== 'string' || !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, 'value')) {
+      throw new TypeError('Document registry fields must be enumerable own data properties');
+    }
+  }
+  assertPlainTrustDocumentRegistry(admittedRegistry);
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) {
     if (admittedRegistry[key] !== scope[key]) {
       throw new Error('Signing document version registry ' + key + ' scope mismatch');
