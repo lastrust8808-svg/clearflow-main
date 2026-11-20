@@ -48,3 +48,24 @@ test('reserve classification uses admitted descriptors instead of indexed proxy 
   assert.equal(result.unencumberedCashMinor, 70);
   assert.equal(indexReads, 0);
 });
+
+test('reserve classification does not execute entry Proxy get traps after admission', () => {
+  const data = snapshot();
+  const entry = {
+    id: 'entry', assetId: 'asset', evidenceRef: 'receipt',
+    observedAt: '2026-11-19T12:00:00.000Z',
+    tenantId: 'tenant', entityId: 'entity', trustId: 'trust',
+    currency: 'USD', kind: 'cash', sourceType: 'bank_balance',
+    amountMinor: 100, restrictedMinor: 20, pledgedMinor: 10,
+  };
+  let reads = 0;
+  data.entries = [new Proxy(entry, {
+    get() {
+      reads++;
+      throw new Error('untrusted entry field read executed');
+    },
+  })];
+  const result = calculateReserveCapacity(data);
+  assert.equal(result.unencumberedCashMinor, 70);
+  assert.equal(reads, 0);
+});
