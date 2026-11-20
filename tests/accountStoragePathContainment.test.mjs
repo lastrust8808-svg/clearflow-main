@@ -1527,3 +1527,19 @@ test('symlinked account roots cannot alias another tenant app-data vault', async
     await fs.rm(victimPath, { recursive: true, force: true });
   }
 });
+
+test('secondary account vaults reject traversal and invisible tenant identities', async () => {
+  for (const accountId of ['..', '.', ' ', 'tenant\u202Eadmin']) {
+    const operations = [
+      () => loadAccountRemittanceVault(accountId, 'vendor-1'),
+      () => saveAccountRemittanceVault(accountId, 'vendor-1', { amount: 1 }),
+      () => loadAccountTransactionProofVault(accountId),
+      () => saveAccountTransactionProofVault(accountId, { proofs: [] }),
+      () => loadAccountExtractionRecord(accountId, 'record-1'),
+      () => saveAccountExtractionRecord(accountId, 'record-1', { status: 'test' }),
+    ];
+    for (const operation of operations) {
+      await assert.rejects(operation(), TypeError);
+    }
+  }
+});
