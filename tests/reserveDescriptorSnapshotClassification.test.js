@@ -69,3 +69,30 @@ test('reserve classification does not execute entry Proxy get traps after admiss
   assert.equal(result.unencumberedCashMinor, 70);
   assert.equal(reads, 0);
 });
+
+test('reserve classification uses admitted header descriptors without Proxy field gets', () => {
+  const data = snapshot();
+  let reads = 0;
+  const guarded = new Proxy(data, {
+    get(target, key, receiver) {
+      if (typeof key === 'string' && Object.hasOwn(target, key)) {
+        reads++;
+        throw new Error('untrusted header field read');
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.equal(calculateReserveCapacity(guarded).cashTotalMinor, 0);
+  assert.equal(reads, 0);
+});
+
+test('reserve classification rejects accessor-backed header before executing getter', () => {
+  const data = snapshot();
+  let invoked = 0;
+  Object.defineProperty(data, 'entries', { enumerable: true, get() {
+    invoked++;
+    throw new Error('getter executed');
+  } });
+  assert.throws(() => calculateReserveCapacity(data), /data properties/);
+  assert.equal(invoked, 0);
+});
