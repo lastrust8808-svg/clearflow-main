@@ -120,8 +120,7 @@ const ATTESTATION_FIELDS = new Set([
 ]);
 
 function requirePlainAttestationRecord(attestation) {
-  if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation) ||
-      false) {
+  if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) {
     throw new TypeError('Signature attestation must be a plain record');
   }
   // Inspect the prototype exactly once: Proxy traps can change their answer.
@@ -155,8 +154,7 @@ const SIGNING_PACKET_FIELDS = new Set([
 ]);
 
 function requirePlainSigningPacket(packet) {
-  if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
-      false) {
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) {
     throw new TypeError('Signing packet must be a plain data record');
   }
   // Inspect the prototype exactly once: Proxy traps can change their answer.
@@ -192,8 +190,7 @@ const SIGNING_GOVERNANCE_FIELDS = new Set([
 ]);
 
 function requirePlainSigningGovernance(governance) {
-  if (!governance || typeof governance !== 'object' || Array.isArray(governance) ||
-      false) {
+  if (!governance || typeof governance !== 'object' || Array.isArray(governance)) {
     throw new TypeError('Signing governance must be a plain data record');
   }
   // Inspect the prototype exactly once: Proxy traps can change their answer.
