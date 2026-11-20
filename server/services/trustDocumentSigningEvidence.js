@@ -121,8 +121,12 @@ const ATTESTATION_FIELDS = new Set([
 
 function requirePlainAttestationRecord(attestation) {
   if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation) ||
-      (Object.getPrototypeOf(attestation) !== Object.prototype &&
-       Object.getPrototypeOf(attestation) !== null)) {
+      false) {
+    throw new TypeError('Signature attestation must be a plain record');
+  }
+  // Inspect the prototype exactly once: Proxy traps can change their answer.
+  const prototype = Object.getPrototypeOf(attestation);
+  if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('Signature attestation must be a plain record');
   }
   const descriptors = Object.getOwnPropertyDescriptors(attestation);
@@ -152,8 +156,12 @@ const SIGNING_PACKET_FIELDS = new Set([
 
 function requirePlainSigningPacket(packet) {
   if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
-      (Object.getPrototypeOf(packet) !== Object.prototype &&
-       Object.getPrototypeOf(packet) !== null)) {
+      false) {
+    throw new TypeError('Signing packet must be a plain data record');
+  }
+  // Inspect the prototype exactly once: Proxy traps can change their answer.
+  const prototype = Object.getPrototypeOf(packet);
+  if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('Signing packet must be a plain data record');
   }
   const descriptors = Object.getOwnPropertyDescriptors(packet);
@@ -185,8 +193,12 @@ const SIGNING_GOVERNANCE_FIELDS = new Set([
 
 function requirePlainSigningGovernance(governance) {
   if (!governance || typeof governance !== 'object' || Array.isArray(governance) ||
-      (Object.getPrototypeOf(governance) !== Object.prototype &&
-       Object.getPrototypeOf(governance) !== null)) {
+      false) {
+    throw new TypeError('Signing governance must be a plain data record');
+  }
+  // Inspect the prototype exactly once: Proxy traps can change their answer.
+  const prototype = Object.getPrototypeOf(governance);
+  if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('Signing governance must be a plain data record');
   }
   const descriptors = Object.getOwnPropertyDescriptors(governance);
