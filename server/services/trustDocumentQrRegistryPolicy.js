@@ -279,15 +279,41 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
   const registrySnapshot = plainQrRecord(versionRegistry, 'QR document registry',
     [...QR_SCOPE_FIELDS, 'documentId', 'versions']);
-  assertPlainTrustDocumentVersions(registrySnapshot.versions);
-  // Admit descriptor values once. Never reread caller-owned Proxy fields after
-  // structural validation, including version rows and array indices.
-  const versionDescriptors = Object.getOwnPropertyDescriptors(registrySnapshot.versions);
-  const versions = Array.from({ length: versionDescriptors.length.value }, (_, index) => {
-    const record = versionDescriptors[String(index)].value;
-    const descriptors = Object.getOwnPropertyDescriptors(record);
-    return Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
-  });
+  // Snapshot the array and each record exactly once before structural admission.
+  // Preserve descriptors while validating: copying only values would silently
+  // erase accessors, hidden properties, and symbols that must be rejected.
+  const originalVersions = registrySnapshot.versions;
+  if (!Array.isArray(originalVersions) ||
+      Object.getPrototypeOf(originalVersions) !== Array.prototype) {
+    throw new TypeError('Document versions must be a plain array');
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(originalVersions, 'length');
+  if (!lengthDescriptor || lengthDescriptor.value > 10000) {
+    throw new RangeError('Document versions exceed the 10000-record review limit');
+  }
+  const versionDescriptors = Object.getOwnPropertyDescriptors(originalVersions);
+  const versionSnapshot = Object.defineProperties([], versionDescriptors);
+  const versions = [];
+  for (let index = 0; index < lengthDescriptor.value; index++) {
+    const entry = versionDescriptors[String(index)];
+    if (!entry || !Object.hasOwn(entry, 'value')) {
+      throw new TypeError('Document versions must contain enumerable data elements');
+    }
+    const originalRecord = entry.value;
+    if (!originalRecord || typeof originalRecord !== 'object' ||
+        Array.isArray(originalRecord)) {
+      throw new TypeError('Document version must be a plain record');
+    }
+    const prototype = Object.getPrototypeOf(originalRecord);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('Document version must be a plain record');
+    }
+    const record = Object.defineProperties(Object.create(prototype),
+      Object.getOwnPropertyDescriptors(originalRecord));
+    versions.push(record);
+    Object.defineProperty(versionSnapshot, String(index), { ...entry, value: record });
+  }
+  assertPlainTrustDocumentVersions(versionSnapshot);
   const safeRegistry = { ...registrySnapshot, versions };
   if (safeRegistry.tenantId !== qrSnapshot.tenantId ||
       safeRegistry.entityId !== qrSnapshot.entityId ||
