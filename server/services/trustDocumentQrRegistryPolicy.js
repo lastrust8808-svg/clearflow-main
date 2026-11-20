@@ -129,15 +129,15 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   const trustId = id(registrySnapshot.trustId, 'registry.trustId');
   const lookupSnapshot = plainQrRecord(lookup, 'QR lookup',
     [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
-  if (id(lookupSnapshot.tenantId, 'lookupSnapshot.tenantId') !== tenantId ||
-      id(lookupSnapshot.entityId, 'lookupSnapshot.entityId') !== entityId ||
-      id(lookupSnapshot.trustId, 'lookupSnapshot.trustId') !== trustId) {
+  if (id(lookupSnapshot.tenantId, 'lookup.tenantId') !== tenantId ||
+      id(lookupSnapshot.entityId, 'lookup.entityId') !== entityId ||
+      id(lookupSnapshot.trustId, 'lookup.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
   // The caller MUST supply this instant from its trusted server clock and load
   // an as-of registry snapshot. A client-provided timestamp is not authority.
-  const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookupSnapshot.asOfAt');
-  const requested = Buffer.from(digest(lookupSnapshot.tokenHashSha256, 'lookupSnapshot.tokenHashSha256'), 'hex');
+  const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookup.asOfAt');
+  const requested = Buffer.from(digest(lookupSnapshot.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
   const seenHashes = new Set();
   const seenRevocationEvidence = new Set();
   // Keep document and version identities separate from independent revocation
