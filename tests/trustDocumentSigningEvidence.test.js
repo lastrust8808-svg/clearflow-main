@@ -1054,3 +1054,32 @@ test('historical version list cannot forge its length through Proxy indexed read
     versionRegistry: { ...original.versionRegistry, versions: oversized },
   }), /bounded plain array/);
 });
+
+test('signing envelopes inspect each hostile prototype only once', () => {
+  const valid = packet();
+  for (const [field, record] of [
+    ['governance', valid.governance],
+    ['attestations', valid.attestations[0]],
+  ]) {
+    let inspections = 0;
+    const hostile = new Proxy(record, {
+      getPrototypeOf(target) {
+        inspections++;
+        return inspections === 1 ? Object.prototype : Date.prototype;
+      },
+    });
+    const changes = field === 'attestations'
+      ? { attestations: [hostile] } : { governance: hostile };
+    assert.doesNotThrow(() => assess(changes));
+    assert.equal(inspections, 1, field + ' prototype inspected more than once');
+  }
+  let packetInspections = 0;
+  const hostilePacket = new Proxy(valid, {
+    getPrototypeOf(target) {
+      packetInspections++;
+      return packetInspections === 1 ? Object.prototype : Date.prototype;
+    },
+  });
+  assert.doesNotThrow(() => assessTrustDocumentSigningPacket(hostilePacket));
+  assert.equal(packetInspections, 1);
+});
