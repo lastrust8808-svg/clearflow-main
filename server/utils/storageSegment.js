@@ -40,7 +40,8 @@ export function sanitizeStorageSegment(value) {
   // rather than letting malformed user identifiers reach filesystem I/O.
   let segment;
   try {
-    segment = encodeURIComponent(value);
+    // encodeURIComponent leaves '*' literal, but Windows forbids it in filenames.
+    segment = encodeURIComponent(value).replace(/\*/g, '%2A');
   } catch (error) {
     if (error instanceof URIError) {
       throw new TypeError('Invalid storage identifier.');
