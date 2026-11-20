@@ -4,15 +4,10 @@ on:
   push:
     branches:
       - security/infrastructure-audit-2026-10-28
+  # Run on every PR revision so required security checks cannot be skipped by
+  # changing only auth, migrations, or other files outside the storage paths.
   pull_request:
-    paths:
-      - server/services/accountStorage.js
-      - server/utils/storageSegment.js
-      - tests/storageSegment.test.mjs
-      - tests/storageHangulNormalization.test.mjs
-      - tests/storageNoncharacterPlanes.test.mjs
-      - tests/accountStoragePathContainment.test.mjs
-      - .github/workflows/security-storage-path-guards.yml
+  workflow_dispatch:
 
 jobs:
   storage-path-containment:
