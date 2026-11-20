@@ -1083,3 +1083,22 @@ test('signing envelopes inspect each hostile prototype only once', () => {
   assert.doesNotThrow(() => assessTrustDocumentSigningPacket(hostilePacket));
   assert.equal(packetInspections, 1);
 });
+
+test('signing registry consumes one descriptor snapshot and rejects second-read substitution', () => {
+  const original = packet().versionRegistry;
+  let descriptorReads = 0;
+  const unstable = new Proxy(original, {
+    ownKeys(target) { return Reflect.ownKeys(target); },
+    getOwnPropertyDescriptor(target, key) {
+      if (key === 'versions') {
+        descriptorReads++;
+        if (descriptorReads > 1) {
+          return { configurable: true, enumerable: true, writable: true, value: [] };
+        }
+      }
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  assert.equal(assess({ versionRegistry: unstable }).status, 'evidence_ready_for_review');
+  assert.equal(descriptorReads, 1, 'registry versions descriptor must be read once');
+});
