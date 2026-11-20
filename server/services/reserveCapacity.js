@@ -60,6 +60,7 @@ function requirePlainReserveRecord(record, allowed, required, label) {
       throw new TypeError(label + '.' + key + ' must be an own data field');
     }
   }
+  return descriptors;
 }
 
 // Preflight the complete ledger entry list before reading any entry. Sparse,
@@ -96,10 +97,9 @@ function requirePlainReserveEntries(entries) {
   // Admit every record before classification begins; an invalid later entry
   // cannot be silently skipped or treated as a partially trusted ledger.
   return admitted.map(entry => {
-    requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
-    // Validate own descriptors once, then classify a plain snapshot. A Proxy
-    // get trap must not replace previously admitted asset or amount fields.
-    const descriptors = Object.getOwnPropertyDescriptors(entry);
+    // Validate and capture the same descriptors: a Proxy may change values
+    // between descriptor reads even if neither read invokes a getter.
+    const descriptors = requirePlainReserveRecord(entry, ENTRY_FIELDS, ENTRY_REQUIRED_FIELDS, 'Reserve entry');
     return Object.fromEntries(Object.entries(descriptors).map(
       ([key, descriptor]) => [key, descriptor.value]));
   });
@@ -184,9 +184,9 @@ function safeAdd(left, right, field) {
  * }>}} snapshot
  */
 export function calculateReserveCapacity(snapshot) {
-  requirePlainReserveRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve snapshot');
-  // Use one admitted descriptor snapshot; never re-read caller-controlled fields.
-  const admitted = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot)).map(
+  const snapshotDescriptors = requirePlainReserveRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve snapshot');
+  // Use the validated descriptor snapshot; never re-read caller-controlled fields.
+  const admitted = Object.fromEntries(Object.entries(snapshotDescriptors).map(
     ([key, descriptor]) => [key, descriptor.value]));
   const tenantId = requiredString(admitted.tenantId, 'tenantId');
   const entityId = requiredString(admitted.entityId, 'entityId');
