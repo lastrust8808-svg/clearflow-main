@@ -4,13 +4,8 @@ on:
   push:
     branches:
       - security/infrastructure-audit-2026-10-28
+  # Run on every PR revision: application/auth changes must not bypass the release audit.
   pull_request:
-    paths:
-      - package.json
-      - package-lock.json
-      - npm-shrinkwrap.json
-      - .npmrc
-      - .github/workflows/security-dependency-audit.yml
   workflow_dispatch:
 
 permissions:
