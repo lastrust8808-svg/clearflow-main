@@ -361,10 +361,13 @@ export function assessTrustDocumentSigningPacket(packet) {
   ));
   // Preserve the complete field/descriptor contract, including hidden,
   // symbol-named and accessor properties, before consuming the snapshot.
+  const registryFields = new Set(['tenantId', 'entityId', 'trustId', 'documentId', 'versions']);
   for (const key of Reflect.ownKeys(registryDescriptors)) {
+    if (typeof key !== 'string' || !registryFields.has(key)) {
+      throw new TypeError('Document registry contains unsupported fields');
+    }
     const descriptor = registryDescriptors[key];
-    if (typeof key !== 'string' || !descriptor.enumerable ||
-        !Object.hasOwn(descriptor, 'value')) {
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
       throw new TypeError('Document registry fields must be enumerable own data properties');
     }
   }
