@@ -185,24 +185,24 @@ function safeAdd(left, right, field) {
  */
 export function calculateReserveCapacity(snapshot) {
   requirePlainReserveRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Reserve snapshot');
-  const tenantId = requiredString(snapshot.tenantId, 'tenantId');
-  const entityId = requiredString(snapshot.entityId, 'entityId');
-  const trustId = requiredString(snapshot.trustId, 'trustId');
+  // Use one admitted descriptor snapshot; never re-read caller-controlled fields.\n  const admitted = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot)).map(\n    ([key, descriptor]) => [key, descriptor.value]));\n  const tenantId = requiredString(admitted.tenantId, 'tenantId');
+  const entityId = requiredString(admitted.entityId, 'entityId');
+  const trustId = requiredString(admitted.trustId, 'trustId');
   // Tenant, legal entity and trust are separate ownership scopes. Even an
   // empty snapshot must not collapse their identities into one ledger key.
   // This is structural validation, not authenticated trustee authority.
   if (new Set([tenantId, entityId, trustId]).size !== 3) {
     throw new Error('Reserve tenant, entity and trust identifiers must be distinct');
   }
-  const currency = requiredString(snapshot.currency, 'currency');
+  const currency = requiredString(admitted.currency, 'currency');
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError('currency must be a three-letter uppercase code');
-  const asOfAt = canonicalInstant(snapshot.asOfAt, 'asOfAt');
-  const maxEvidenceAgeMs = snapshot.maxEvidenceAgeMs;
+  const asOfAt = canonicalInstant(admitted.asOfAt, 'asOfAt');
+  const maxEvidenceAgeMs = admitted.maxEvidenceAgeMs;
   if (!Number.isSafeInteger(maxEvidenceAgeMs) || maxEvidenceAgeMs < 0 || Object.is(maxEvidenceAgeMs, -0)) {
     throw new RangeError('maxEvidenceAgeMs must be a nonnegative safe integer');
   }
   const asOfEpochMs = Date.parse(asOfAt);
-  const admittedEntries = requirePlainReserveEntries(snapshot.entries);
+  const admittedEntries = requirePlainReserveEntries(admitted.entries);
 
   const totals = {
     cashTotalMinor: 0,
