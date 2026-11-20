@@ -269,16 +269,14 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Metadata-free result
  */
 export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, content) {
-  const binding = resolveTrustDocumentQrBinding(qrRegistry, lookup);
-  // An unknown or revoked QR token must not reveal whether a document exists.
-  if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
-  // Preflight the registry and the *entire* historical version list before
-  // reading scope, status or chronology. Earlier scope checks and Array#some
-  // could execute an untrusted getter before the core byte verifier ran.
-  // Structural admission is not authentication of registry provenance.
-  const qrSnapshot = plainQrRecord(qrRegistry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
+  const qrHeader = plainQrRecord(qrRegistry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
+  const qrRows = plainQrBindings(qrHeader.bindings).map(row =>
+    plainQrRecord(row, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED));
+  const qrSnapshot = { ...qrHeader, bindings: qrRows };
   const lookupSnapshot = plainQrRecord(lookup, 'QR lookup',
     [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
+  const binding = resolveTrustDocumentQrBinding(qrSnapshot, lookupSnapshot);
+  if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
   const registrySnapshot = plainQrRecord(versionRegistry, 'QR document registry',
     [...QR_SCOPE_FIELDS, 'documentId', 'versions']);
   assertPlainTrustDocumentVersions(registrySnapshot.versions);
@@ -325,10 +323,7 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   // retroactively attached to finalized bytes. Registry timestamps must come
   // from trusted, append-only storage; this pure check does not authenticate them.
   if (decision.status !== 'unknown') {
-    const bindingDescriptors = Object.getOwnPropertyDescriptors(qrSnapshot.bindings);
-    const tokenBinding = Array.from({ length: bindingDescriptors.length.value }, (_, index) =>
-      plainQrRecord(bindingDescriptors[String(index)].value, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED),
-    ).find(row => row.tokenHashSha256 === lookupSnapshot.tokenHashSha256);
+    const tokenBinding = qrRows.find(row => row.tokenHashSha256 === lookupSnapshot.tokenHashSha256);
     const documentVersion = versions.find(row => row.versionId === binding.versionId);
     if (tokenBinding.issuedAt < documentVersion.registeredAt) {
       throw new Error('QR binding issued before document version registration');
