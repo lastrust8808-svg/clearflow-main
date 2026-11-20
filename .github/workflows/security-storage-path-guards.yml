@@ -36,4 +36,4 @@ jobs:
         with:
           node-version: '22'
       - name: Verify storage identifier behavior on a native Windows filesystem
-        run: node --test tests/storageSegment.test.mjs
+        run: node --test tests/storageSegment.test.mjs tests/storageHangulNormalization.test.mjs tests/storageNoncharacterPlanes.test.mjs
