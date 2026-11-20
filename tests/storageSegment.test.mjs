@@ -342,3 +342,19 @@ test('Windows-invalid punctuation remains encoded and distinct from literal perc
     assert.equal(path.win32.dirname(path.win32.resolve(base, encoded + '.json')), base);
   }
 });
+
+test('Windows superscript device aliases remain rejected with mixed case and extensions', () => {
+  for (const family of ['COM', 'LPT']) {
+    for (const digit of ['¹', '²', '³']) {
+      for (const prefix of [family, family.toLowerCase()]) {
+        for (const suffix of ['', '.json', '  .backup.json']) {
+          assert.throws(() => sanitizeStorageSegment(prefix + digit + suffix), TypeError);
+        }
+      }
+    }
+  }
+  // Ordinary numeric names must remain available; only Windows device aliases fail.
+  for (const value of ['com0.json', 'com10.json', 'lpt0.json', 'lpt10.json']) {
+    assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
+  }
+});
