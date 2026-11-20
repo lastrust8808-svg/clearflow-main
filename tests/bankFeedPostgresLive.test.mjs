@@ -208,6 +208,18 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     // concurrent page must never leak its transaction payload into the ledger.
     const expectedAmount = finalCheckpoint.cursor === 'cursor-a3' ? 200 : 300;
     assert.equal(finalEntries.find((entry) => entry.transactionId === 'ci-tx2')?.amountCents, expectedAmount);
+    // Replaying the losing page after the concurrent winner must remain
+    // rejected, including after the row lock has been released.
+    const losingCursor = finalCheckpoint.cursor === 'cursor-a3' ? 'cursor-a4' : 'cursor-a3';
+    const losingAmount = losingCursor === 'cursor-a3' ? 200 : 300;
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(
+        store, a, page('cursor-a2', losingCursor, [event('added', 'ci-tx2', losingAmount)]),
+      ),
+      /Stale feed cursor checkpoint/,
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), finalCheckpoint);
+    assert.deepEqual(await entries(a.tenantId), finalEntries);
     assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
     assert.equal((await entries(b.tenantId))[0].amountCents, 9900);
   } finally {
