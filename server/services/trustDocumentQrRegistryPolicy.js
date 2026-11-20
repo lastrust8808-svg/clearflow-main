@@ -90,7 +90,7 @@ function plainQrBindings(bindings) {
   // Array length is an own non-accessor data property. Do not read any
   // binding or indexed descriptor until the bounded size has been checked.
   const length = Object.getOwnPropertyDescriptor(bindings, 'length').value;
-  if (length > MAX_QR_BINDINGS) {
+  if (!Number.isSafeInteger(length) || length < 0 || length > MAX_QR_BINDINGS) {
     throw new RangeError('QR binding list exceeds maximum entry count');
   }
   const descriptors = Object.getOwnPropertyDescriptors(bindings);
@@ -292,7 +292,8 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
     throw new TypeError('Document versions must be a plain array');
   }
   const lengthDescriptor = Object.getOwnPropertyDescriptor(originalVersions, 'length');
-  if (!lengthDescriptor || lengthDescriptor.value > 10000) {
+  if (!lengthDescriptor || !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value < 0 || lengthDescriptor.value > 10000) {
     throw new RangeError('Document versions exceed the 10000-record review limit');
   }
   const versionDescriptors = Object.getOwnPropertyDescriptors(originalVersions);
