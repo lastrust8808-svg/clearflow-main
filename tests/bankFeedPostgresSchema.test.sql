@@ -1,4 +1,4 @@
--- Disposable PostgreSQL 16 acceptance fixture for proposed banking migration 003.
+-- Disposable PostgreSQL 15/16 acceptance fixture for proposed banking migration 003.
 -- This is not a production migration, tenant-auth test, or provider integration.
 \set ON_ERROR_STOP on
 
@@ -1995,3 +1995,28 @@ END $test$;
 ROLLBACK;
 
 SELECT 'PASS: migration idempotence, rollback, replay identity, tenant/provider key isolation, provider cursor CAS and constraints' AS result;
+
+-- A connection with durable entries must not be deleted implicitly.
+-- Deletion would orphan the audit trail or erase replay evidence.
+DO $test$
+BEGIN
+  BEGIN
+    DELETE FROM public.clearflow_bank_feed_checkpoints
+      WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+        AND connection_id = 'shared-item';
+    RAISE EXCEPTION 'Checkpoint deletion erased durable banking evidence';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_checkpoints
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND cursor = 'cursor-1'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.clearflow_bank_feed_entries
+    WHERE tenant_id = 'tenant-a' AND provider = 'plaid'
+      AND connection_id = 'shared-item' AND account_id = 'acct-a'
+      AND transaction_id = 'tx-1'
+  ) THEN
+    RAISE EXCEPTION 'Rejected checkpoint deletion altered durable evidence';
+  END IF;
+END $test$;
