@@ -30,3 +30,31 @@ test('approved QR lookup rejects token and route tampering without changing regi
   assert.throws(() => digestApprovedTrustDocumentQrLink(issued.url + '?x=1', origin, approved));
   assert.throws(() => digestApprovedTrustDocumentQrLink(issued.url.replace('/verify/document/', '/verify/other/'), origin, approved));
 });
+
+test('approved QR gate fails closed on hostile configuration enumeration without issuing a token', () => {
+  let indexedReads = 0;
+  const hostile = new Proxy([origin], {
+    get(target, key, receiver) {
+      if (key === '0') indexedReads++;
+      return Reflect.get(target, key, receiver);
+    },
+    ownKeys() {
+      throw new TypeError('configuration enumeration failed');
+    },
+  });
+  assert.throws(() => createApprovedTrustDocumentQrLink(origin, hostile),
+    /configuration enumeration failed/);
+  assert.equal(indexedReads, 0);
+});
+
+test('approved QR gate refuses an accessor-backed unused allowlist entry', () => {
+  let executed = false;
+  const hostile = [origin, 'https://other.example.org'];
+  Object.defineProperty(hostile, '1', {
+    enumerable: true, configurable: true,
+    get() { executed = true; throw new Error('must not execute'); },
+  });
+  assert.throws(() => createApprovedTrustDocumentQrLink(origin, hostile),
+    /Approved QR verification origin required/);
+  assert.equal(executed, false);
+});
