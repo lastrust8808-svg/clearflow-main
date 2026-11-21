@@ -45,3 +45,22 @@ test('invalid string origins fail before inspecting allowlist configuration', ()
   }
   assert.equal(traps, 0);
 });
+
+
+test('invalid origin is rejected before invoking hostile allowlist prototype inspection', () => {
+  let prototypeInspections = 0;
+  const hostile = new Proxy([approved], {
+    getPrototypeOf() {
+      prototypeInspections++;
+      throw new Error('untrusted prototype inspected');
+    },
+  });
+  for (const candidate of [
+    'https://verify.example.org/path',
+    'http://verify.example.org',
+    'https://verify.example.org:444',
+  ]) {
+    assert.throws(() => requireApprovedQrOrigin(candidate, hostile));
+  }
+  assert.equal(prototypeInspections, 0);
+});
