@@ -136,7 +136,13 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     // on ordinary objects, which must never run during identity admission.
     // Reject all accessors, including unrelated enumerable properties.
     const descriptors = Object.getOwnPropertyDescriptors(user);
-    if (Object.values(descriptors).some((descriptor) => !Object.hasOwn(descriptor, 'value'))) return current;
+    // Bound provider-supplied object breadth before structuredClone traverses it.
+    // Only scalar profile metadata is needed for pending identity recovery.
+    const fields = Object.values(descriptors);
+    if (fields.length > 32 || fields.some((descriptor) =>
+      !Object.hasOwn(descriptor, 'value') ||
+      (descriptor.value !== null && typeof descriptor.value === 'object') ||
+      typeof descriptor.value === 'function')) return current;
     // Browser-compatible structured cloning then rejects Proxy profiles.
     // Keep both operations inside try so failures never advance authentication.
     structuredClone(user);
