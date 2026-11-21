@@ -393,3 +393,19 @@ test('rejects leading and trailing Unicode whitespace in storage identity paths'
     }
   }
 });
+
+test('literal percent-escape sequences cannot bypass the encoded filename byte limit', () => {
+  // Logical percent signs are escaped again, so apparent compact %XX sequences
+  // must consume five on-disk bytes each and never be decoded by path handling.
+  const withinLimit = '%2F'.repeat(50);
+  const encoded = sanitizeStorageSegment(withinLimit);
+  assert.equal(encoded.length, 250);
+  assert.equal(encoded, '%252F'.repeat(50));
+  assert.equal(Buffer.byteLength(encoded + '.json'), 255);
+  assert.throws(() => sanitizeStorageSegment(withinLimit + '%2F'), TypeError);
+  assert.notEqual(sanitizeStorageSegment('%2F'), sanitizeStorageSegment('/'));
+  for (const implementation of [path.posix, path.win32]) {
+    const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+    assert.equal(implementation.dirname(implementation.resolve(base, encoded + '.json')), base);
+  }
+});
