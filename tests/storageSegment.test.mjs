@@ -376,3 +376,20 @@ test('mixed multibyte identifiers enforce the encoded filesystem byte budget', (
   // A literal percent-escaped spelling must not alias the Unicode identity.
   assert.notEqual(encoded, sanitizeStorageSegment('🙂%F0%9F%99%82'));
 });
+
+
+test('rejects leading and trailing Unicode whitespace in storage identity paths', () => {
+  const whitespace = [' ', '\t', '\n', '\r', '\u00a0', '\u1680', '\u2003', '\u202f', '\u205f', '\u3000'];
+  for (const character of whitespace) {
+    for (const identifier of [character + 'tenant', 'tenant' + character]) {
+      assert.throws(() => sanitizeStorageSegment(identifier), TypeError, JSON.stringify(identifier));
+    }
+  }
+  for (const identifier of ['tenant name', 'tenant-name', 'tenant_name']) {
+    const segment = sanitizeStorageSegment(identifier);
+    for (const implementation of [path.posix, path.win32]) {
+      const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+      assert.equal(implementation.dirname(implementation.resolve(base, segment + '.json')), base);
+    }
+  }
+});
