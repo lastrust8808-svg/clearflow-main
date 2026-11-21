@@ -64,3 +64,22 @@ test('invalid origin is rejected before invoking hostile allowlist prototype ins
   }
   assert.equal(prototypeInspections, 0);
 });
+
+test('noncanonical origin aliases fail before touching approved-origin configuration', () => {
+  let inspected = false;
+  const hostile = new Proxy(['https://verify.example.org'], {
+    getPrototypeOf() { inspected = true; throw new Error('prototype inspected'); },
+    getOwnPropertyDescriptor() { inspected = true; throw new Error('descriptor inspected'); },
+    ownKeys() { inspected = true; throw new Error('keys inspected'); },
+  });
+  for (const candidate of [
+    'https://VERIFY.example.org',
+    'https://verify.example.org.',
+    'https://verify.example.org?source=qr',
+    'https://verify.example.org#document',
+    'https://verify.example.org:443',
+  ]) {
+    assert.throws(() => requireApprovedQrOrigin(candidate, hostile));
+    assert.equal(inspected, false, candidate);
+  }
+});
