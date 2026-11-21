@@ -267,6 +267,22 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     assert.deepEqual((await entries(b.tenantId)).map(({ transactionId, amountCents }) => ({ transactionId, amountCents })), [
       { transactionId: 'ci-tx1', amountCents: 9900 },
     ]);
+
+    // After restart and stale replay rejection, a genuinely new page must
+    // still advance exactly once. The previous winner and other tenant must
+    // survive; replay protection must not permanently freeze the feed.
+    await commitAuthorizedBankFeedPage(
+      store, a, page(finalCheckpoint.cursor, 'cursor-a5', [event('added', 'ci-tx3', 450)]),
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), { cursor: 'cursor-a5', revision: '4' });
+    const advancedEntries = await entries(a.tenantId);
+    assert.equal(advancedEntries.length, 3);
+    assert.equal(advancedEntries.find((entry) => entry.transactionId === 'ci-tx2')?.amountCents, expectedAmount);
+    assert.equal(advancedEntries.find((entry) => entry.transactionId === 'ci-tx3')?.amountCents, 450);
+    assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
+    assert.deepEqual((await entries(b.tenantId)).map(({ transactionId, amountCents }) => ({ transactionId, amountCents })), [
+      { transactionId: 'ci-tx1', amountCents: 9900 },
+    ]);
   } finally {
     await pool.end();
   }
