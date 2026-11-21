@@ -214,7 +214,11 @@ try {
         await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
       }
       for (const status of [400, 401, 403, 422]) {
+        // An unreadable 4xx body cannot establish that the operation was rejected.
         globalThis.fetch = async () => ({ ok: false, status });
+        await assert.rejects(operations[i](payloads[i]), /outcome unknown.*Verify operation status before retrying/);
+        // Only explicit, parseable rejection evidence permits a definite rejection.
+        globalThis.fetch = async () => ({ ok: false, status, json: async () => ({ success: false, error: 'invalid_request' }) });
         await assert.rejects(operations[i](payloads[i]), /was rejected by the server.*Resolve the error before retrying/);
       }
     });
