@@ -75,7 +75,7 @@ test('QR origin authorization rejects overridden array membership metadata', () 
   }));
   assert.throws(
     () => requireApprovedQrOrigin('https://attacker.example.org', inherited),
-    /Unapproved QR verification origin/,
+    /Approved QR verification origin required/,
   );
 });
 
