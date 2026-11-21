@@ -460,7 +460,14 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     // primitive, empty object, or success-omitting body can come from a proxy
     // after the ERP backend committed the operation; require reconciliation.
     if (!isRecord(rejectionBody) || rejectionBody.success !== false ||
-        typeof rejectionBody.error !== 'string' || rejectionBody.error.trim() === '') {
+        typeof rejectionBody.error !== 'string' || rejectionBody.error.trim() === '' ||
+        // A rejection carrying an undocumented status, receipt, approval or
+        // completion marker may describe a write that already committed.
+        // Only the minimal documented validation-error envelope is definitive.
+        !Object.keys(rejectionBody).every((field) =>
+          field === 'success' || field === 'error' || field === 'code') ||
+        (Object.hasOwn(rejectionBody, 'code') &&
+          (typeof rejectionBody.code !== 'string' || rejectionBody.code.trim() === ''))) {
       throw new Error(`${label} outcome unknown (HTTP ${response.status}): missing rejection evidence. Verify operation status before retrying.`);
     }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
