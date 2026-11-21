@@ -1,0 +1,438 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { commitAuthorizedBankFeedPage } from '../src/services/bankFeedAtomicCommit.service.ts';
+
+const scope = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', allowedAccountIds: ['acct-a'] });
+const checkpoint = () => ({ tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', cursor: null, revision: 0 });
+const event = (transactionId = 'tx-1') => ({ kind: 'added', accountId: 'acct-a', transactionId, amountCents: 2500, pending: false });
+const page = (events = [event()], nextCursor = 'cursor-1', requestedCursor = null) => ({ requestedCursor, events, nextCursor, hasMore: false });
+
+function fakeTransactionalStore(options = {}) {
+  const state = { checkpoint: checkpoint(), entries: [] };
+  const calls = { transactions: 0, rows: 0, cursor: 0, rollbacks: 0, entryReads: 0 };
+  return {
+    state, calls,
+    async withTransaction(fn) {
+      calls.transactions++;
+      const pending = structuredClone(state);
+      const tx = {
+        async loadCheckpointForUpdate() { return structuredClone(pending.checkpoint); },
+        async loadEntries() { calls.entryReads++; return structuredClone(pending.entries); },
+        async saveEntries(_scope, entries) {
+          calls.rows++;
+          if (options.failRows) throw new Error('simulated row write failure');
+          pending.entries = structuredClone(entries);
+        },
+        async compareAndSwapCheckpoint(_scope, previous, next) {
+          calls.cursor++;
+          if (options.failCas || previous.revision !== pending.checkpoint.revision ||
+              previous.cursor !== pending.checkpoint.cursor) return false;
+          pending.checkpoint = structuredClone(next);
+          return true;
+        },
+      };
+      try {
+        const result = await fn(tx);
+        Object.assign(state, pending);
+        return result;
+      } catch (error) {
+        calls.rollbacks++;
+        throw error;
+      }
+    },
+  };
+}
+
+test('atomic bank-feed page commits transaction rows and cursor once', async () => {
+  const store = fakeTransactionalStore();
+  const result = await commitAuthorizedBankFeedPage(store, scope(), page());
+  assert.equal(result.applied, 1);
+  assert.equal(result.commitRequired, true);
+  assert.equal(store.state.entries.length, 1);
+  assert.equal(store.state.entries[0].transactionId, 'tx-1');
+  assert.deepEqual(store.state.checkpoint, { ...checkpoint(), cursor: 'cursor-1', revision: 1 });
+  assert.equal(store.calls.rows, 1);
+  assert.equal(store.calls.cursor, 1);
+});
+
+test('duplicate identities in a single provider page cannot write rows or advance the cursor', async () => {
+  const store = fakeTransactionalStore();
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('same'), event('same')])),
+    /Duplicate provider event identity within one feed page/,
+  );
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.equal(store.calls.rollbacks, 0, 'duplicate page must be rejected before opening transaction');
+  assert.equal(store.calls.transactions, 0);
+});
+
+test('invalid provider event identities fail before lock and historical row reads', async () => {
+  const store = fakeTransactionalStore();
+  const invalidEvents = [
+    { ...event(), accountId: 'acct-foreign' },
+    { ...event(), transactionId: ' tx-padded' },
+    { ...event(), transactionId: 'tx' + String.fromCharCode(10) + 'forged' },
+    { ...event(), kind: 'unrecognized' },
+  ];
+  for (const invalid of invalidEvents) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page([invalid])),
+      /invalid or unauthorized account\/transaction identity/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'bad identities must never acquire a lock');
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('malformed posting and removal evidence fails before checkpoint lock and historical reads', async () => {
+  const store = fakeTransactionalStore();
+  const missingAmount = { ...event('missing-amount') };
+  delete missingAmount.amountCents;
+  const missingState = { ...event('missing-state') };
+  delete missingState.pending;
+  const invalidEvents = [
+    missingAmount,
+    { ...event('fractional'), amountCents: 12.5 },
+    { ...event('unsafe'), amountCents: Number.MAX_SAFE_INTEGER + 1 },
+    { ...event('negative-zero'), amountCents: -0 },
+    missingState,
+    { ...event('string-state'), pending: 'false' },
+    { ...event('bad-link'), pendingTransactionId: ' padded' },
+    { ...event('self-link'), pendingTransactionId: 'self-link' },
+    { ...event('pending-link'), pending: true, pendingTransactionId: 'prior' },
+    { ...event('bad-hash'), providerPayloadHash: 'not-a-sha256' },
+    { ...event('upper-hash'), providerPayloadHash: 'A'.repeat(64) },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-amount', amountCents: 1 },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-state', pending: false },
+    { kind: 'removed', accountId: 'acct-a', transactionId: 'removed-hash', providerPayloadHash: 'a'.repeat(64) },
+  ];
+  for (const invalid of invalidEvents) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page([invalid])),
+      /Invalid provider posting amount or state|Invalid provider pending-to-posted linkage|Invalid provider payload fingerprint|Malformed provider removal financial evidence/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'invalid financial evidence must never acquire checkpoint lock');
+  assert.equal(store.calls.entryReads, 0, 'invalid financial evidence must never read historical rows');
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+
+  // A valid negative cent amount and correctly shaped fingerprint still pass.
+  const valid = { ...event('refund'), amountCents: -125, providerPayloadHash: 'a'.repeat(64) };
+  const result = await commitAuthorizedBankFeedPage(store, scope(), page([valid]));
+  assert.equal(result.applied, 1);
+  assert.equal(store.state.entries[0].amountCents, -125);
+  assert.equal(store.state.entries[0].providerPayloadHash, 'a'.repeat(64));
+  assert.equal(store.state.checkpoint.cursor, 'cursor-1');
+});
+
+test('row-write failure rolls back cursor and entries', async () => {
+  const store = fakeTransactionalStore({ failRows: true });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page()), /row write failure/);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  assert.equal(store.calls.cursor, 0);
+  assert.equal(store.calls.rollbacks, 1);
+});
+
+test('cursor compare-and-swap failure rolls back already proposed rows', async () => {
+  const store = fakeTransactionalStore({ failCas: true });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page()), /compare-and-swap failed/);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  assert.equal(store.calls.rows, 1);
+  assert.equal(store.calls.rollbacks, 1);
+});
+
+test('unchanged terminal empty poll makes no writes', async () => {
+  const store = fakeTransactionalStore();
+  const first = await commitAuthorizedBankFeedPage(store, scope(), page([], 'cursor-1'));
+  assert.equal(first.commitRequired, true, 'first empty page advances from null cursor');
+  const again = await commitAuthorizedBankFeedPage(store, scope(), page([], 'cursor-1', 'cursor-1'));
+  assert.equal(again.commitRequired, false);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 1);
+  assert.equal(store.state.checkpoint.revision, 1);
+});
+
+test('stale provider response cannot regress a committed cursor or add stale rows', async () => {
+  const store = fakeTransactionalStore();
+  await commitAuthorizedBankFeedPage(store, scope(), page([event('tx-1')], 'cursor-1'));
+  const committed = structuredClone(store.state);
+  const writes = { rows: store.calls.rows, cursor: store.calls.cursor };
+  // This response was fetched from the initial null cursor, but another
+  // worker has already committed cursor-1 before this transaction obtains lock.
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('stale-tx')], 'cursor-stale', null)),
+    /Stale feed cursor checkpoint/,
+  );
+  assert.deepEqual(store.state, committed, 'no stale rows or cursor regression');
+  assert.equal(store.calls.rows, writes.rows);
+  assert.equal(store.calls.cursor, writes.cursor);
+  assert.equal(store.calls.rollbacks, 1);
+
+  // A response actually fetched from the current cursor can still advance.
+  const fresh = await commitAuthorizedBankFeedPage(
+    store, scope(), page([event('tx-2')], 'cursor-2', 'cursor-1'),
+  );
+  assert.equal(fresh.applied, 1);
+  assert.equal(store.state.checkpoint.cursor, 'cursor-2');
+  assert.equal(store.state.checkpoint.revision, 2);
+  assert.deepEqual(store.state.entries.map((entry) => entry.transactionId), ['tx-1', 'tx-2']);
+});
+
+test('stale and cross-tenant checkpoints fail before historical transaction reads', async () => {
+  const store = fakeTransactionalStore();
+  await commitAuthorizedBankFeedPage(store, scope(), page());
+  const committed = structuredClone(store.state);
+  const reads = store.calls.entryReads;
+  assert.equal(reads, 1);
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page([event('stale')], 'old-next', null)),
+    /Stale feed cursor checkpoint/,
+  );
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'foreign' },
+      page([event('foreign')], 'next', 'cursor-1')),
+    /outside the authorized connection scope/,
+  );
+  assert.equal(store.calls.entryReads, reads, 'invalid pages must not read historical rows');
+  assert.equal(store.calls.rows, 1, 'no additional row writes');
+  assert.equal(store.calls.cursor, 1, 'no cursor advancement');
+  assert.equal(store.calls.rollbacks, 2);
+  assert.deepEqual(store.state, committed);
+});
+
+test('missing or accessor-backed requested cursor fails before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const missing = page();
+  delete missing.requestedCursor;
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), missing),
+    /Malformed bank feed page required field/,
+  );
+  const accessor = page();
+  let getterCalls = 0;
+  Object.defineProperty(accessor, 'requestedCursor', {
+    enumerable: true, get() { getterCalls++; return null; },
+  });
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), accessor),
+    /Malformed bank feed page field/,
+  );
+  assert.equal(getterCalls, 0);
+  assert.equal(store.calls.transactions, 0);
+});
+
+test('malformed or ambiguous authorized scopes fail before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const invalidScopes = [
+    { ...scope(), tenantId: ' ' },
+    { ...scope(), connectionId: '' },
+    { ...scope(), provider: 'unrecognized' },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct-a'] },
+    { ...scope(), allowedAccountIds: ['acct-a', 'acct' + String.fromCharCode(10) + 'foreign'] },
+    { ...scope(), allowedAccountIds: [] },
+  ];
+  for (const invalidScope of invalidScopes) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, invalidScope, page()),
+      /Invalid authorized feed scope or event collection/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0, 'invalid scope must never acquire a database lock');
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('malformed provider cursor evidence fails before acquiring a transaction', async () => {
+  const store = fakeTransactionalStore();
+  const invalidPages = [
+    { ...page(), requestedCursor: ' cursor-padded' },
+    { ...page(), nextCursor: '' },
+    { ...page(), nextCursor: 'cursor\nforged' },
+    { ...page(), nextCursor: null },
+    { ...page(), hasMore: 'false' },
+    page([event()], 'cursor-1', 'cursor-1'),
+    { ...page([], 'cursor-1', 'cursor-1'), hasMore: true },
+  ];
+  for (const invalid of invalidPages) {
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), invalid),
+      /Invalid feed cursor checkpoint or page metadata|cannot retain its cursor/,
+    );
+  }
+  assert.equal(store.calls.transactions, 0);
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('malformed locked checkpoint fails before historical reads or cursor writes', async () => {
+  const store = fakeTransactionalStore();
+  const badCheckpoints = [
+    { ...checkpoint(), revision: -1 },
+    { ...checkpoint(), revision: Number.NaN },
+    { ...checkpoint(), revision: -0 },
+    { ...checkpoint(), cursor: 'bad\ncursor' },
+    { ...checkpoint(), revision: Number.MAX_SAFE_INTEGER },
+  ];
+  for (const invalid of badCheckpoints) {
+    store.state.checkpoint = invalid;
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page()),
+      /Invalid feed cursor checkpoint or page metadata|revision would exceed/,
+    );
+  }
+  assert.equal(store.calls.transactions, badCheckpoints.length);
+  assert.equal(store.calls.entryReads, 0);
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+  assert.equal(store.calls.rollbacks, badCheckpoints.length);
+  assert.deepEqual(store.state.entries, []);
+});
+
+test('out-of-scope checkpoint or provider event fails before any write', async () => {
+  const store = fakeTransactionalStore();
+  await assert.rejects(commitAuthorizedBankFeedPage(store, { ...scope(), tenantId: 'tenant-b' }, page()),
+    /outside the authorized connection scope/);
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page([{ ...event(), accountId: 'acct-foreign' }])),
+    /unauthorized/);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  assert.equal(store.calls.rows, 0);
+  assert.equal(store.calls.cursor, 0);
+});
+
+test('scope, page and event accessors fail before opening a transaction', async () => {
+  const store = fakeTransactionalStore();
+  let getterCalls = 0;
+  const hostileScope = { ...scope() };
+  Object.defineProperty(hostileScope, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return 'tenant-b'; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, hostileScope, page()),
+    /Malformed bank feed scope field/);
+  const hostilePage = { ...page() };
+  Object.defineProperty(hostilePage, 'events', {
+    enumerable: true, get() { getterCalls++; return [event()]; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), hostilePage),
+    /Malformed bank feed page field/);
+  const hostileEvent = { ...event() };
+  Object.defineProperty(hostileEvent, 'amountCents', {
+    enumerable: true, get() { getterCalls++; return 1; },
+  });
+  await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page([hostileEvent])),
+    /Malformed bank feed event field/);
+  assert.equal(getterCalls, 0, 'untrusted accessors must never execute');
+  assert.equal(store.calls.transactions, 0);
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('mutating caller scope and provider page while waiting for checkpoint lock cannot redirect commit', async () => {
+  const store = fakeTransactionalStore();
+  const mutableScope = scope();
+  const mutablePage = page();
+  const originalTransaction = store.withTransaction.bind(store);
+  store.withTransaction = (operation) => originalTransaction(async (tx) => {
+    const originalLoad = tx.loadCheckpointForUpdate;
+    tx.loadCheckpointForUpdate = async (lockedScope) => {
+      const current = await originalLoad(lockedScope);
+      mutableScope.tenantId = 'tenant-foreign';
+      mutableScope.allowedAccountIds[0] = 'acct-foreign';
+      mutablePage.events[0].accountId = 'acct-foreign';
+      mutablePage.events[0].amountCents = 999999;
+      mutablePage.nextCursor = 'cursor-forged';
+      return current;
+    };
+    return operation(tx);
+  });
+  const result = await commitAuthorizedBankFeedPage(store, mutableScope, mutablePage);
+  assert.equal(result.applied, 1);
+  assert.equal(store.state.entries[0].tenantId, 'tenant-a');
+  assert.equal(store.state.entries[0].accountId, 'acct-a');
+  assert.equal(store.state.entries[0].amountCents, 2500);
+  assert.equal(store.state.checkpoint.cursor, 'cursor-1');
+});
+
+test('sparse, accessor-backed or metadata-bearing provider batches fail before transaction', async () => {
+  const store = fakeTransactionalStore();
+  const sparse = Array(1);
+  const extra = Object.assign([event()], { hiddenTransaction: 'discarded' });
+  const accessorArray = [event()];
+  Object.defineProperty(accessorArray, '0', {
+    enumerable: true, get() { throw new Error('unexpected provider getter'); },
+  });
+  for (const events of [sparse, extra, accessorArray]) {
+    await assert.rejects(commitAuthorizedBankFeedPage(store, scope(), page(events)),
+      /Malformed bank feed events list/);
+  }
+  assert.equal(store.calls.transactions, 0);
+});
+
+test('oversized provider pages and authorized scopes fail before transaction acquisition', async () => {
+  const store = fakeTransactionalStore();
+  const oversizedEvents = Array.from({ length: 5001 }, (_, index) => event(`tx-${index}`));
+  const oversizedAccounts = Array.from({ length: 1001 }, (_, index) => `acct-${index}`);
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, scope(), page(oversizedEvents)),
+    /Malformed bank feed events list/,
+  );
+  await assert.rejects(
+    commitAuthorizedBankFeedPage(store, { ...scope(), allowedAccountIds: oversizedAccounts }, page()),
+    /Malformed bank feed accounts list/,
+  );
+  assert.equal(store.calls.transactions, 0, 'no transaction lock for oversized untrusted input');
+  assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+});
+
+test('noncanonical locked checkpoint evidence fails before historical reads or writes', async () => {
+  let getterCalls = 0;
+  const accessor = checkpoint();
+  Object.defineProperty(accessor, 'tenantId', {
+    enumerable: true, get() { getterCalls++; return 'tenant-a'; },
+  });
+  const inherited = Object.assign(Object.create({ tenantId: 'tenant-a' }), {
+    provider: 'plaid', connectionId: 'item-a', cursor: null, revision: 0,
+  });
+  const missing = checkpoint();
+  delete missing.revision;
+  const hidden = checkpoint();
+  Object.defineProperty(hidden, 'revision', { value: 0, enumerable: false });
+  const invalidCheckpoints = [
+    accessor,
+    inherited,
+    missing,
+    hidden,
+    { ...checkpoint(), unreviewedMetadata: 'discarded' },
+  ];
+  for (const invalid of invalidCheckpoints) {
+    const store = fakeTransactionalStore();
+    const originalWithTransaction = store.withTransaction.bind(store);
+    store.withTransaction = (operation) => originalWithTransaction(async (tx) => {
+      tx.loadCheckpointForUpdate = async () => invalid;
+      return operation(tx);
+    });
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(store, scope(), page()),
+      /Malformed bank feed checkpoint/,
+    );
+    assert.equal(store.calls.transactions, 1);
+    assert.equal(store.calls.entryReads, 0, 'reject checkpoint before historical reads');
+    assert.equal(store.calls.rows, 0);
+    assert.equal(store.calls.cursor, 0);
+    assert.equal(store.calls.rollbacks, 1);
+    assert.deepEqual(store.state, { checkpoint: checkpoint(), entries: [] });
+  }
+  assert.equal(getterCalls, 0, 'checkpoint accessors must not execute');
+  const valid = fakeTransactionalStore();
+  assert.equal((await commitAuthorizedBankFeedPage(valid, scope(), page())).applied, 1);
+  assert.equal(valid.state.checkpoint.cursor, 'cursor-1');
+});
