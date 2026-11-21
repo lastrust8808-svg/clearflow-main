@@ -49,6 +49,11 @@ function authenticatedActorIdentity(scope) {
       throw new TypeError('Authenticated ERP scope contains an unsafe property');
     }
   }
+  // Reject extra authorization claims rather than silently dropping them.
+  // The authenticated identity contract is an exact two-field tuple.
+  if (Reflect.ownKeys(descriptors).length !== 2) {
+    throw new TypeError('Authenticated ERP identity contains unexpected claims');
+  }
   if (!Object.hasOwn(descriptors, 'tenantId') || !Object.hasOwn(descriptors, 'actorId')) {
     throw new TypeError('Authenticated ERP scope is missing an own identity');
   }
@@ -75,6 +80,11 @@ function authenticatedWorkerIdentity(scope) {
     if (typeof key !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
       throw new TypeError('Authenticated ERP worker contains an unsafe property');
     }
+  }
+  // Reject extra authorization claims rather than silently dropping them.
+  // The authenticated identity contract is an exact two-field tuple.
+  if (Reflect.ownKeys(descriptors).length !== 2) {
+    throw new TypeError('Authenticated ERP identity contains unexpected claims');
   }
   if (!Object.hasOwn(descriptors, 'tenantId') || !Object.hasOwn(descriptors, 'workerId')) {
     throw new TypeError('Authenticated ERP worker is missing an own identity');
