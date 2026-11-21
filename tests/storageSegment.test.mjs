@@ -358,3 +358,21 @@ test('Windows superscript device aliases remain rejected with mixed case and ext
     assert.equal(sanitizeStorageSegment(value), encodeURIComponent(value));
   }
 });
+
+
+test('mixed multibyte identifiers enforce the encoded filesystem byte budget', () => {
+  // Each astral symbol occupies twelve ASCII bytes after percent encoding;
+  // this boundary must account for the .json suffix on both host platforms.
+  const atLimit = 'a'.repeat(10) + '🙂'.repeat(20);
+  const encoded = sanitizeStorageSegment(atLimit);
+  assert.equal(encoded.length, 250);
+  assert.equal(Buffer.byteLength(encoded + '.json'), 255);
+  assert.throws(() => sanitizeStorageSegment(atLimit + 'a'), TypeError);
+  for (const implementation of [path.posix, path.win32]) {
+    const base = implementation.resolve(implementation.sep, 'clearflow', 'accounts');
+    const filename = encoded + '.json';
+    assert.equal(implementation.dirname(implementation.resolve(base, filename)), base);
+  }
+  // A literal percent-escaped spelling must not alias the Unicode identity.
+  assert.notEqual(encoded, sanitizeStorageSegment('🙂%F0%9F%99%82'));
+});
