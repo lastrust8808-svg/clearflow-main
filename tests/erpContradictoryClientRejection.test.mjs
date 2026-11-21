@@ -34,6 +34,18 @@ try {
     }
   });
 
+  await test('unreadable 4xx rejection evidence is indeterminate, not safe to retry', async () => {
+    for (const status of [400, 403, 422]) {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls++;
+        return { ok: false, status, json: async () => { throw new SyntaxError('invalid JSON'); } };
+      };
+      await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
+      assert.equal(calls, 1);
+    }
+  });
+
   await test('ordinary 4xx without a receipt remains an explicit rejection', async () => {
     for (const body of [{ success: false, code: 'INVALID_REQUEST' }, null]) {
       globalThis.fetch = async () => ({ ok: false, status: 422, json: async () => body });
