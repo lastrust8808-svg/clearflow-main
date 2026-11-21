@@ -179,9 +179,13 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   // Every acceptance and revocation must have separate provenance, including
   // across trustees. References are structural only until verified by storage.
   const governanceEvidenceRefs = new Set();
-  for (const appointment of snapshot.appointments) {
+  for (let appointment of snapshot.appointments) {
     requirePlainGovernanceRecord(appointment, APPOINTMENT_FIELDS,
       APPOINTMENT_REQUIRED_FIELDS, 'Trustee appointment');
+    // Snapshot validated own descriptors; a Proxy get trap must not replace
+    // appointment scope, evidence, or chronology after validation.
+    appointment = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(appointment))
+      .map(([key, descriptor]) => [key, descriptor.value]));
     const trusteeId = id(appointment.trusteeId, 'appointment.trusteeId');
     // A trustee principal must not impersonate a tenant, entity or trust key.
     // Signer IDs legitimately repeat trustee IDs, but not scope identities.
