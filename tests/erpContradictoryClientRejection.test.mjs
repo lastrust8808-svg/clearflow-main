@@ -46,6 +46,30 @@ try {
     }
   });
 
+  await test('4xx rejection envelopes with completion or approval metadata remain indeterminate', async () => {
+    for (const status of [400, 403, 422]) {
+      for (const extra of [
+        { status: 'processed' },
+        { receiptId: 'receipt-1' },
+        { approval: 'granted' },
+        { operation: 'invoice_export' },
+        { code: 123 },
+        { code: '' },
+      ]) {
+        let calls = 0;
+        globalThis.fetch = async () => {
+          calls++;
+          return { ok: false, status, json: async () => ({
+            success: false, error: 'Invalid request', ...extra,
+          }) };
+        };
+        await assert.rejects(api.queueInvoiceExport(payload),
+          /outcome unknown.*Verify operation status before retrying/);
+        assert.equal(calls, 1);
+      }
+    }
+  });
+
   await test('only explicit failure envelopes classify 4xx as rejected', async () => {
     for (const body of [{ success: false, code: 'INVALID_REQUEST', error: 'Invalid request' }]) {
       let calls = 0;
