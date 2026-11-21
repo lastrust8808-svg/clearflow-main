@@ -251,6 +251,22 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     );
     assert.deepEqual(await checkpoint(a.tenantId), finalCheckpoint);
     assert.deepEqual(await entries(a.tenantId), finalEntries);
+    // A restarted adapter must also reject the winning page's duplicate
+    // delivery. Verify both tenants' durable evidence remains unchanged.
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(
+        store, a, page('cursor-a2', finalCheckpoint.cursor, [
+          event('added', 'ci-tx2', expectedAmount),
+        ]),
+      ),
+      /Stale feed cursor checkpoint/,
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), finalCheckpoint);
+    assert.deepEqual(await entries(a.tenantId), finalEntries);
+    assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
+    assert.deepEqual((await entries(b.tenantId)).map(({ transactionId, amountCents }) => ({ transactionId, amountCents })), [
+      { transactionId: 'ci-tx1', amountCents: 9900 },
+    ]);
   } finally {
     await pool.end();
   }
