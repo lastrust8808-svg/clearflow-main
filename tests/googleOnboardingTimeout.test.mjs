@@ -390,3 +390,15 @@ test('oversized Google OAuth access tokens cannot enter workspace recovery', () 
   assert.equal(admitVerifiedGoogleProfile(waiting, 'x'.repeat(16385), user), waiting);
   assert.equal(admitVerifiedGoogleProfile(waiting, 'x'.repeat(16384), user).status, 'pending-drive-check');
 });
+
+test('Google profile admission bounds clone breadth and rejects nested provider metadata', () => {
+  const waiting = Object.freeze({ ...pending('new'), status: 'pending-gsi' });
+  const base = { email: 'verified@example.test', name: 'Verified' };
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'token', { ...base, nested: { payload: 'untrusted' } }), waiting);
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'token', { ...base, extras: [1, 2] }), waiting);
+  const oversized = { ...base };
+  for (let i = 0; i < 31; i++) oversized['extra' + i] = 'value';
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'token', oversized), waiting);
+  const bounded = { ...base, picture: 'https://example.test/photo.png' };
+  assert.equal(admitVerifiedGoogleProfile(waiting, 'token', bounded).status, 'pending-drive-check');
+});
