@@ -43,3 +43,18 @@ test('rejects sparse batch even when extra metadata preserves descriptor count',
   Object.defineProperty(transactions, 'approval', { value: 'approved', enumerable: false });
   assert.throws(() => review(transactions), /Malformed transfer transaction batch/);
 });
+
+test('malformed late slot fails before inspecting earlier record fields', () => {
+  const transactions = rows();
+  let inspected = 0;
+  Object.defineProperty(transactions[0], 'amountCents', {
+    enumerable: true, configurable: true,
+    get() { inspected++; throw new Error('record getter executed'); },
+  });
+  Object.defineProperty(transactions, '1', {
+    enumerable: true, configurable: true,
+    get() { throw new Error('batch getter executed'); },
+  });
+  assert.throws(() => review(transactions), /Malformed transfer transaction batch/);
+  assert.equal(inspected, 0);
+});
