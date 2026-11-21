@@ -718,10 +718,29 @@ export interface LedgerAccountRecord {
     | 'income'
     | 'expense'
     | 'memo';
+  accountSubType?:
+    | 'currentAssets'
+    | 'nonCurrentAssets'
+    | 'transfersBetweenAccounts'
+    | 'currentLiabilities'
+    | 'nonCurrentLiabilities'
+    | 'equity'
+    | 'retainedEarnings'
+    | 'operatingRevenues'
+    | 'costOfGoodsSold'
+    | 'operatingExpenses'
+    | 'otherIncome'
+    | 'otherExpenses';
+  normalBalance?: 'debit' | 'credit';
   currency?: string;
   balance: number;
   remittanceEligible?: boolean;
   remittanceClassification?: 'cash' | 'obligation' | 'receivable' | 'reserve' | 'other';
+  mercuryLedgerId?: string;
+  mercurySortCode?: string;
+  mercuryCanonicalName?: string;
+  parentMercurySortCode?: string;
+  mappingStatus?: 'matched' | 'clearflow_extension' | 'unmapped';
   linkedAssetIds?: string[];
   linkedWalletIds?: string[];
 }
