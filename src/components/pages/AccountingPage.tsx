@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentProps, CSSProperties, Dispatch, SetStateAction } from 'react';
 import type { CoreDataBundle, DocumentRecord, InvoiceRecord, SettlementPath, TokenRecord } from '../../types/core';
+import {
+  ensureMercuryCompatibleChartOfAccounts,
+  isMercuryCompatibleBusinessEntity,
+} from '../../data/chartOfAccounts';
 import { analyzeAccountingUpload } from '../../services/accountingIntake.service';
 import { saveDocumentFile } from '../../services/documentVault.service';
 import {
@@ -572,6 +576,27 @@ export default function AccountingPage({ data, setData, activeEntityId }: Accoun
     [scopedData],
   );
   const defaultEntity = getPrimaryEntity(scopedData);
+
+  useEffect(() => {
+    if (!defaultEntity || !isMercuryCompatibleBusinessEntity(defaultEntity)) {
+      return;
+    }
+
+    setData((previous) => {
+      const nextLedgerAccounts = ensureMercuryCompatibleChartOfAccounts(
+        previous.ledgerAccounts,
+        defaultEntity.id,
+      );
+
+      return nextLedgerAccounts === previous.ledgerAccounts
+        ? previous
+        : {
+            ...previous,
+            ledgerAccounts: nextLedgerAccounts,
+          };
+    });
+  }, [defaultEntity?.id, defaultEntity?.type, setData]);
+
   const defaultPayrollEntity =
     scopedData.entities.find((entity) =>
       entity.type === 'llc' ||
@@ -3359,7 +3384,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             ? `${sourceLedgerAccount.code} ${sourceLedgerAccount.name}`
             : selectedTreasuryAccount?.name ||
               sourceBankAccount?.accountName ||
-              '1000 Operating Cash',
+              '10000 Cash and Cash Equivalents',
         amount: resolvedAmount,
         status: 'draft' as const,
         source: 'system' as const,
@@ -4611,7 +4636,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 ? '2000 Accounts Payable'
                 : '6105 Digital Asset Disbursements'
             : payload.direction === 'incoming'
-            ? '1000 Operating Cash'
+            ? '10000 Cash and Cash Equivalents'
             : linkedBill
               ? '2000 Accounts Payable'
               : '6100 Disbursements',
@@ -4630,7 +4655,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
               ? `${sourceLedgerAccount.code} ${sourceLedgerAccount.name}`
               : selectedTreasuryAccount
                 ? selectedTreasuryAccount.name
-              : '1000 Operating Cash',
+              : '10000 Cash and Cash Equivalents',
         amount,
         status: paymentStatus === 'settled' ? ('posted' as const) : ('draft' as const),
         source: 'system' as const,
@@ -8078,8 +8103,8 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
         entryNumber: `JE-${stamp}`,
         entryDate: targetLine.postedDate,
         memo,
-        debitAccount: isDebit ? '6855 Bank Fees and Charges' : '1000 Operating Cash',
-        creditAccount: isDebit ? '1000 Operating Cash' : '4890 Miscellaneous Income',
+        debitAccount: isDebit ? '6855 Bank Fees and Charges' : '10000 Cash and Cash Equivalents',
+        creditAccount: isDebit ? '10000 Cash and Cash Equivalents' : '4890 Miscellaneous Income',
         amount: absoluteAmount,
         status: 'posted' as const,
         source: 'system' as const,
@@ -9404,7 +9429,7 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
             records={ledgerAccounts}
             getTitle={(record) => `${record.code} ${record.name}`}
             getSubtitle={(record) =>
-              `${record.accountType} | ${record.currency} | balance ${formatCurrency(
+              `${record.accountType}${record.accountSubType ? ` / ${record.accountSubType}` : ''} | normal ${record.normalBalance || 'not set'} | ${record.currency} | balance ${formatCurrency(
                 record.balance,
                 record.currency,
               )}`
@@ -9414,6 +9439,14 @@ ${profile.arbitrationProcedureNotes || vendor.notes || 'Insert the actual clause
                 <div>
                   Remittance posture: {record.remittanceEligible ? 'eligible' : 'manual'} | classification{' '}
                   {record.remittanceClassification || 'not set'}
+                </div>
+                <div>
+                  Mercury Books:{' '}
+                  {record.mappingStatus === 'matched'
+                    ? `${record.mercuryCanonicalName || record.name} · sort ${record.mercurySortCode || record.code}${record.mercuryLedgerId ? ' · linked' : ' · canonical match'}`
+                    : record.mappingStatus === 'clearflow_extension'
+                      ? 'ClearFlow control account — no forced Mercury category'
+                      : 'unmapped'}
                 </div>
                 <div>
                   Links: {record.linkedAssetIds?.length || 0} assets | {record.linkedWalletIds?.length || 0}{' '}
