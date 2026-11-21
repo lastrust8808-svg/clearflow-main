@@ -1,6 +1,13 @@
 # Trusts, Reserves & Documents — integration contract (draft)
 
-Status: design and acceptance gates only. No runtime implementation or release verification is claimed.
+Status: draft, non-production domain-policy implementation with automated invariant tests. The policy modules are not authenticated, durable application integrations; no production release or end-to-end verification is claimed.
+
+## Verified evidence and release boundary (2026-11-21)
+- Draft PR #27 HEAD `0fbf8df41c92cf6d79e979c51e59121a9c394c97`: GitHub Actions run `44866732968` reports completed/success for the Trust reserves and note invariants workflow. This is CI evidence only, not a staging or live-integration result.
+- Domain policy implementations exist for reserve journal/capacity, private-note lifecycle/amortization, enforcement notice evaluation, document versions, QR origin/registry policy, and trustee/signing evidence. Passing unit checks do not establish durable records, authenticated legal authority, valid signatures, actual service, enforceability or settled funds.
+- **Unverified acceptance gates:** authenticated tenant/entity/trustee authorization; persistent tenant-isolated storage and restart/restore tests; externally evidenced signer consent/provenance; HTTPS QR endpoint with actual generated PDF hash verification; end-to-end revocation/privacy tests; audited enforcement delivery and human review. None is waived by this CI run.
+- Cross-workstream coordination: Security PR #23 and Integration PR #29 both change account storage/path utilities; Authentication PR #32 changes session and identity handling. Do not integrate or duplicate these changes on this branch until their contracts and conflicts are resolved.
+
 
 ## Ownership and isolation
 - Own trust administration, trustee authority, beneficiaries, asset ownership, reserve ledgers, private notes, document generation, QR verification, signatures, presentment/default workflows.
