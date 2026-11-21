@@ -115,6 +115,14 @@ export function proposeBankTransferCandidates(scope) {
   if (Reflect.ownKeys(descriptors).length !== transactions.length + 1) {
     throw new Error('Malformed transfer transaction batch.');
   }
+  // Validate every array slot before inspecting any source record. A malformed
+  // late slot must not allow earlier untrusted record fields to be processed.
+  for (let index = 0; index < transactions.length; index++) {
+    const d = descriptors[String(index)];
+    if (!d || !d.enumerable || !Object.hasOwn(d, 'value')) {
+      throw new Error('Malformed transfer transaction batch.');
+    }
+  }
   const rows = [];
   // Pending rows cannot be matched, but a pending row sharing a provider
   // reference can prove that the reference is not a unique transfer ID.
