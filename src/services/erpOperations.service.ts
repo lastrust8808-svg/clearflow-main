@@ -123,11 +123,11 @@ function isAcceptedJob(
       // A reservation cannot simultaneously claim completed transport. Reject
       // contradictory acknowledgements rather than letting the UI treat a
       // fabricated delivery receipt as durable export acceptance.
-      return !['sentAt', 'deliveryReceiptId', 'deliveryChannel',
-        'completionReceiptId', 'completionPersistedAt', 'importedAt', 'closedAt',
-        'deliveredAt', 'exportedAt', 'processedAt', 'fallbackReason',
-        'failedAt', 'cancelledAt', 'errorCode', 'retryRequired']
-        .some((field) => Object.hasOwn(job, field));
+      // An allowlist prevents newly introduced completion/fallback fields from
+      // silently crossing the queued-only acceptance boundary.
+      return Object.keys(job).every((field) =>
+        ['id', 'invoiceId', 'entityId', 'invoiceNumber', 'operation',
+         'status', 'queuedAt', 'persistedAt', 'persistence'].includes(field));
     }
     return operation === 'send' && job.status === 'sent' &&
       isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
