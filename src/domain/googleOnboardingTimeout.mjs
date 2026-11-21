@@ -138,6 +138,10 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     const descriptors = Object.getOwnPropertyDescriptors(user);
     // Bound provider-supplied object breadth before structuredClone traverses it.
     // Only scalar profile metadata is needed for pending identity recovery.
+    // Symbol-keyed metadata is not represented by Object.values and is not
+    // needed for workspace identity. Reject it rather than admitting hidden
+    // provider fields outside the ordinary breadth and accessor checks.
+    if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) return current;
     const fields = Object.values(descriptors);
     if (fields.length > 32 || fields.some((descriptor) =>
       !Object.hasOwn(descriptor, 'value') ||
