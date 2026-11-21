@@ -26,3 +26,18 @@ test('rejects a proxy whose prototype inspection fails without reading entries',
   assert.throws(() => requireApprovedQrOrigin(origin, hostile), /prototype inspection blocked/);
   assert.equal(readIndex, false);
 });
+
+test('rejects malformed request origin before touching hostile allowlist prototype', () => {
+  let inspected = false;
+  const hostile = new Proxy([origin], {
+    getPrototypeOf() {
+      inspected = true;
+      throw new Error('configuration should not be inspected');
+    },
+  });
+  assert.throws(
+    () => requireApprovedQrOrigin('http://verify.example.com', hostile),
+    /HTTPS|origin|URL/i,
+  );
+  assert.equal(inspected, false);
+});
