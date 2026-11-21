@@ -437,6 +437,22 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     if ((response.status >= 300 && response.status < 400) || response.status === 0 || response.status >= 500 || response.status === 408 || response.status === 409 || response.status === 425 || response.status === 429) {
       throw new Error(`${label} outcome unknown (HTTP ${response.status}). Verify operation status before retrying.`);
     }
+    // A contradictory 4xx body may still contain evidence of a committed job.
+    // Do not tell the operator that a retry is safe when the response claims
+    // success or includes an operation receipt despite its rejection status.
+    let rejectionBody: unknown;
+    try {
+      rejectionBody = await response.json();
+    } catch {
+      // An ordinary client rejection may have no JSON body.
+    }
+    if (isRecord(rejectionBody) &&
+        (rejectionBody.success === true ||
+         Object.hasOwn(rejectionBody, 'job') ||
+         Object.hasOwn(rejectionBody, 'importJob') ||
+         Object.hasOwn(rejectionBody, 'closeJob'))) {
+      throw new Error(`${label} outcome unknown (HTTP ${response.status}): contradictory operation receipt. Verify operation status before retrying.`);
+    }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
   }
   // A partial/multi-status HTTP success is not a complete financial-operation
