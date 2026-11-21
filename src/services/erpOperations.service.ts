@@ -125,7 +125,7 @@ function isAcceptedJob(
       // fabricated delivery receipt as durable export acceptance.
       return !['sentAt', 'deliveryReceiptId', 'deliveryChannel',
         'completionReceiptId', 'completionPersistedAt', 'importedAt', 'closedAt',
-        'fallbackReason']
+        'deliveredAt', 'exportedAt', 'processedAt', 'fallbackReason']
         .some((field) => Object.hasOwn(job, field));
     }
     return operation === 'send' && job.status === 'sent' &&
