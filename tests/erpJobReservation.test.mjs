@@ -2545,3 +2545,21 @@ test('non-enumerable invoice line items fail before a durable reservation', asyn
   );
   assert.equal(db.calls, 0, 'rejected invoice lines must never reach storage');
 });
+
+
+test('ERP reservation and worker claim reject extra authenticated identity claims before SQL', async () => {
+  const db = fakeDatabase();
+  for (const extra of [
+    { isAdmin: true }, { approved: true }, { entityId: 'other-entity' },
+    { verified: true }, { authorization: 'allow' },
+  ]) {
+    await assert.rejects(reserve({
+      db, ...args, authenticatedScope: { ...scope, ...extra },
+    }), /unexpected claims/);
+    await assert.rejects(claim({
+      db, operation: 'invoice_delivery',
+      authenticatedWorker: { tenantId: 'tenant-a', workerId: 'worker-a', ...extra },
+    }), /unexpected claims/);
+  }
+  assert.equal(db.calls, 0, 'unexpected identity claims must never reach SQL');
+});
