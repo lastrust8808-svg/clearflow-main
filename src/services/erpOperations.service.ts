@@ -103,7 +103,10 @@ function isAcceptedJob(
   operation: 'send' | 'export' | undefined,
   expectedIds: Record<string, string>,
 ): boolean {
-  if (!isRecord(value) || value.success !== true || !isRecord(value[key])) return false;
+  if (!isRecord(value) || value.success !== true || !isRecord(value[key]) ||
+      // A success envelope must not simultaneously advertise fallback, failure,
+      // or a second operation receipt outside the validated job object.
+      !Object.keys(value).every((field) => field === 'success' || field === key)) return false;
   const job = value[key];
   // The PostgreSQL reservation store returns canonical UUIDs, never synthetic
   // in-memory job IDs. A nonempty arbitrary string is not durable evidence.
