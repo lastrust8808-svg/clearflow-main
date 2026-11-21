@@ -15,6 +15,11 @@ export function requireApprovedQrOrigin(origin, approvedOrigins) {
   // Reject malformed candidate origins before inspecting configuration. This
   // avoids invoking untrusted Proxy traps for requests that cannot authorize.
   validatePublicQrOrigin(origin);
+  // Configuration must be an ordinary array, not an inherited policy object.
+  // A subclass or altered prototype can carry hidden authorization behavior.
+  if (Object.getPrototypeOf(approvedOrigins) !== Array.prototype) {
+    throw new TypeError('Approved QR verification origin required');
+  }
   // A Proxy may forge an indexed length read; use the own array-length
   // descriptor so omitted configuration entries cannot bypass validation.
   const lengthDescriptor = Object.getOwnPropertyDescriptor(approvedOrigins, 'length');
