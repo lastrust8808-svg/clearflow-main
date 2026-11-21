@@ -630,3 +630,19 @@ test('default-ignorable Unicode cannot hide inside banking identity keys', () =>
     row('savings', 'in', 500),
   ]).candidates[0].status, 'review_required');
 });
+
+
+test('transfer review enforces the bounded batch size before examining source records', () => {
+  const maxBatch = Array.from({ length: 1000 }, (_, i) =>
+    row('checking', 'tx-' + i, -100, { providerReference: undefined }));
+  assert.deepEqual(plan(maxBatch), { candidates: [], ambiguous: [] });
+
+  let accessed = 0;
+  const oversized = [...maxBatch, row('savings', 'extra', 100)];
+  Object.defineProperty(oversized, '1000', {
+    enumerable: true, configurable: true,
+    get() { accessed++; throw new Error('oversized evidence evaluated'); },
+  });
+  assert.throws(() => plan(oversized), /Invalid authorized transfer scope or batch/);
+  assert.equal(accessed, 0);
+});
