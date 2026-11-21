@@ -147,6 +147,11 @@ function calendarDate(value, field) {
  */
 export function evaluateTrusteeSigningPolicy(snapshot) {
   requirePlainGovernanceRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Governance snapshot');
+  // Read each validated own data descriptor exactly once. A Proxy may return
+  // different values from get traps after descriptor validation; never use
+  // those untrusted reads for trustee scope, signers, or policy decisions.
+  snapshot = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot))
+    .map(([key, descriptor]) => [key, descriptor.value]));
   const tenantId = id(snapshot.tenantId, 'tenantId');
   const entityId = id(snapshot.entityId, 'entityId');
   const trustId = id(snapshot.trustId, 'trustId');
