@@ -234,6 +234,23 @@ test('real pg adapter: tenant isolation, durable restart, rollback and concurren
     assert.deepEqual(await entries(a.tenantId), finalEntries);
     assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
     assert.equal((await entries(b.tenantId))[0].amountCents, 9900);
+
+    // A fresh pool after the concurrency race must observe the exact winning
+    // financial record and cursor, not an in-memory adapter cache.
+    await pool.end();
+    pool = new Pool(poolOptions);
+    store = createBankFeedPostgresStore(pool);
+    assert.deepEqual(await checkpoint(a.tenantId), finalCheckpoint);
+    assert.deepEqual(await entries(a.tenantId), finalEntries);
+    assert.deepEqual(await checkpoint(b.tenantId), { cursor: 'cursor-b1', revision: '1' });
+    await assert.rejects(
+      commitAuthorizedBankFeedPage(
+        store, a, page('cursor-a2', losingCursor, [event('added', 'ci-tx2', losingAmount)]),
+      ),
+      /Stale feed cursor checkpoint/,
+    );
+    assert.deepEqual(await checkpoint(a.tenantId), finalCheckpoint);
+    assert.deepEqual(await entries(a.tenantId), finalEntries);
   } finally {
     await pool.end();
   }
