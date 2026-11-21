@@ -4,7 +4,7 @@ import { requireApprovedQrOrigin } from '../server/services/trustDocumentQrAppro
 
 const origin = 'https://verify.example.org';
 
-test('approved-origin authorization ignores hostile inherited collection helpers', () => {
+test('approved-origin authorization rejects hostile inherited collection helpers without execution', () => {
   let executed = 0;
   const approved = [origin];
   const hostilePrototype = Object.create(Array.prototype);
@@ -18,7 +18,7 @@ test('approved-origin authorization ignores hostile inherited collection helpers
     });
   }
   Object.setPrototypeOf(approved, hostilePrototype);
-  assert.equal(requireApprovedQrOrigin(origin, approved), origin);
+  assert.throws(() => requireApprovedQrOrigin(origin, approved), /Approved QR verification origin required/);
   assert.equal(executed, 0);
 });
 
