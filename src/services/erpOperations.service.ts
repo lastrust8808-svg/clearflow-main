@@ -133,6 +133,13 @@ function isAcceptedJob(
          'status', 'queuedAt', 'persistedAt', 'persistence'].includes(field));
     }
     return operation === 'send' && job.status === 'sent' &&
+      // A completed send must not carry conflicting fallback/failure metadata.
+      // Restrict evidence to the documented delivery receipt contract.
+      Object.keys(job).every((field) =>
+        ['id', 'invoiceId', 'entityId', 'invoiceNumber', 'operation',
+         'status', 'queuedAt', 'persistedAt', 'persistence', 'sentAt',
+         'deliveryReceiptId', 'deliveryChannel', 'recipientEmail',
+         'internalDeliveryTarget'].includes(field)) &&
       isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
       Date.parse(job.sentAt) >= Date.parse(job.persistedAt) &&
       // A timestamp and destination alone are not transport evidence.
