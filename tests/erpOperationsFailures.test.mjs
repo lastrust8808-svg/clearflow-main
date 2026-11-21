@@ -49,6 +49,17 @@ try {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[0] });
     assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), accepted[0]);
   });
+  await test('sent invoice receipts reject contradictory fallback and failure evidence', async () => {
+    const valid = accepted[0];
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => valid });
+    assert.deepEqual(await api.queueInvoiceDelivery(payloads[0]), valid);
+    for (const field of ['fallbackReason', 'fallbackRequired', 'error', 'failedAt',
+      'cancelledAt', 'retryRequired', 'completionReceiptId', 'exportedAt']) {
+      const contradictory = { ...valid, job: { ...valid.job, [field]: 'conflicting-evidence' } };
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => contradictory });
+      await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /not confirmed/, field);
+    }
+  });
   await test('invisible Unicode delivery receipt identifiers never confirm sent invoices', async () => {
     for (const invisible of ['\u034f', '\ufe0f', '\u200d']) {
       const forged = {
