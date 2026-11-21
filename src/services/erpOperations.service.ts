@@ -165,7 +165,18 @@ function isAcceptedJob(
   // completion receipt with a canonical database identity and chronology.
   // The authenticated backend must verify the actual ledger/audit transaction.
   const completionId = job.completionReceiptId;
-  return job.operation === expectedOperation && job.status === 'processed' &&
+  // A processed accounting receipt must not also claim fallback, failure,
+  // cancellation, or an unrecognized completion state. Apply the same strict
+  // evidence boundary used for queued and sent invoice acknowledgements.
+  const processedFields = key === 'importJob'
+    ? ['id', 'reconciliationId', 'bankAccountId', 'status', 'operation',
+       'queuedAt', 'persistedAt', 'persistence', 'importedAt',
+       'completionReceiptId', 'completionPersistedAt']
+    : ['id', 'reconciliationId', 'status', 'operation', 'queuedAt',
+       'persistedAt', 'persistence', 'closedAt', 'completionReceiptId',
+       'completionPersistedAt'];
+  return Object.keys(job).every((field) => processedFields.includes(field)) &&
+    job.operation === expectedOperation && job.status === 'processed' &&
     hasDurableReceipt(job) && isUtcTimestamp(job.persistedAt) &&
     isUtcTimestamp(completedAt) &&
     typeof completionId === 'string' &&
