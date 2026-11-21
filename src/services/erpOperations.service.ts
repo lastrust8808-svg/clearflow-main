@@ -456,6 +456,13 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
          Object.hasOwn(rejectionBody, 'closeJob'))) {
       throw new Error(`${label} outcome unknown (HTTP ${response.status}): contradictory operation receipt. Verify operation status before retrying.`);
     }
+    // Only an explicit, coherent failure envelope proves a rejected write. A
+    // primitive, empty object, or success-omitting body can come from a proxy
+    // after the ERP backend committed the operation; require reconciliation.
+    if (!isRecord(rejectionBody) || rejectionBody.success !== false ||
+        typeof rejectionBody.error !== 'string' || rejectionBody.error.trim() === '') {
+      throw new Error(`${label} outcome unknown (HTTP ${response.status}): missing rejection evidence. Verify operation status before retrying.`);
+    }
     throw new Error(`${label} was rejected by the server (HTTP ${response.status}). Resolve the error before retrying.`);
   }
   // A partial/multi-status HTTP success is not a complete financial-operation
