@@ -107,3 +107,15 @@ test('default-ignorable Unicode cannot alias Google email or provider subject ID
     email: valid.email, name: 'Member', id: 'google-subject'
   }).status, 'pending-drive-check');
 });
+
+test('symbol-keyed Google profile metadata is rejected without executing hidden getters', () => {
+  const current = pending();
+  let reads = 0;
+  const hidden = Symbol('hidden');
+  const profile = { ...valid };
+  Object.defineProperty(profile, hidden, { enumerable: true, get() { reads++; return 'secret'; } });
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', profile), current);
+  assert.equal(reads, 0);
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', { ...valid, [hidden]: 'metadata' }), current);
+  assert.equal(admitVerifiedGoogleProfile(current, 'provider-token', valid).status, 'pending-drive-check');
+});
