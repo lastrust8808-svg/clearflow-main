@@ -1,0 +1,39 @@
+name: Security storage path guards
+
+on:
+  push:
+    branches:
+      - security/infrastructure-audit-2026-10-28
+  # Run on every PR revision so required security checks cannot be skipped by
+  # changing only auth, migrations, or other files outside the storage paths.
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  storage-path-containment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check storage code syntax
+        run: |
+          node --check server/utils/storageSegment.js
+          node --check server/services/accountStorage.js
+      - name: Run path traversal and storage integration regressions
+        run: node --test tests/storageSegment.test.mjs tests/storageHangulNormalization.test.mjs tests/storageNoncharacterPlanes.test.mjs tests/accountStoragePathContainment.test.mjs
+
+  windows-filename-compatibility:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify storage identifier behavior on a native Windows filesystem
+        run: node --test tests/storageSegment.test.mjs tests/storageHangulNormalization.test.mjs tests/storageNoncharacterPlanes.test.mjs
