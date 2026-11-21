@@ -444,7 +444,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     try {
       rejectionBody = await response.json();
     } catch {
-      // An ordinary client rejection may have no JSON body.
+      // A malformed or unreadable error body cannot establish whether a
+      // financial write committed before an intermediary rejected the reply.
+      // Require status reconciliation rather than encouraging a blind retry.
+      throw new Error(`${label} outcome unknown (HTTP ${response.status}): unreadable rejection evidence. Verify operation status before retrying.`);
     }
     if (isRecord(rejectionBody) &&
         (rejectionBody.success === true ||
