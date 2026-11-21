@@ -171,6 +171,15 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   }
   requirePlainGovernanceList(snapshot.appointments, 'appointments');
   requirePlainGovernanceList(snapshot.signerIds, 'signerIds');
+  // Snapshot validated indexed descriptors rather than iterating untrusted
+  // arrays. Proxy get/getOwnProperty traps may disagree after validation.
+  const snapshotList = list => {
+    const descriptors = Object.getOwnPropertyDescriptors(list);
+    return Array.from({ length: descriptors.length.value },
+      (_, index) => descriptors[String(index)].value);
+  };
+  snapshot.appointments = snapshotList(snapshot.appointments);
+  snapshot.signerIds = snapshotList(snapshot.signerIds);
   const trustees = new Set();
   const active = new Set();
   // A date alone cannot stand in for a distinct acceptance record. The caller
