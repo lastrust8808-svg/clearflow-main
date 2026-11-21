@@ -46,10 +46,22 @@ try {
     }
   });
 
-  await test('ordinary 4xx without a receipt remains an explicit rejection', async () => {
-    for (const body of [{ success: false, code: 'INVALID_REQUEST' }, null]) {
-      globalThis.fetch = async () => ({ ok: false, status: 422, json: async () => body });
+  await test('only explicit failure envelopes classify 4xx as rejected', async () => {
+    for (const body of [{ success: false, code: 'INVALID_REQUEST', error: 'Invalid request' }]) {
+      let calls = 0;
+      globalThis.fetch = async () => { calls++; return { ok: false, status: 422, json: async () => body }; };
       await assert.rejects(api.queueInvoiceExport(payload), /was rejected by the server/);
+      assert.equal(calls, 1);
+    }
+  });
+
+  await test('missing failure evidence on 4xx requires reconciliation', async () => {
+    for (const body of [null, {}, [], 'rejected', { success: false, code: 'INVALID_REQUEST' },
+      { success: false, error: '  ' }, { error: 'Invalid request' }]) {
+      let calls = 0;
+      globalThis.fetch = async () => { calls++; return { ok: false, status: 422, json: async () => body }; };
+      await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
+      assert.equal(calls, 1);
     }
   });
 } finally {
