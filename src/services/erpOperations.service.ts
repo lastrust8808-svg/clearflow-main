@@ -123,9 +123,9 @@ function isAcceptedJob(
       // A reservation cannot simultaneously claim completed transport. Reject
       // contradictory acknowledgements rather than letting the UI treat a
       // fabricated delivery receipt as durable export acceptance.
-      return !Object.hasOwn(job, 'sentAt') &&
-        !Object.hasOwn(job, 'deliveryReceiptId') &&
-        !Object.hasOwn(job, 'deliveryChannel');
+      return !['sentAt', 'deliveryReceiptId', 'deliveryChannel',
+        'completionReceiptId', 'completionPersistedAt', 'importedAt', 'closedAt']
+        .some((field) => Object.hasOwn(job, field));
     }
     return operation === 'send' && job.status === 'sent' &&
       isUtcTimestamp(job.sentAt) && isUtcTimestamp(job.persistedAt) &&
