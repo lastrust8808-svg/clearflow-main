@@ -409,3 +409,18 @@ test('literal percent-escape sequences cannot bypass the encoded filename byte l
     assert.equal(implementation.dirname(implementation.resolve(base, encoded + '.json')), base);
   }
 });
+
+
+test('malformed UTF-16 storage identifiers fail closed without rejecting valid astral characters', () => {
+  // Unpaired surrogates cause encodeURIComponent to throw URIError; the
+  // storage boundary must expose the documented TypeError instead.
+  for (const identifier of [
+    '\uD800', '\uDC00', 'tenant-\uD800', 'tenant-\uDC00',
+    '\uD800tenant', 'tenant\uD800x',
+  ]) {
+    assert.throws(() => sanitizeStorageSegment(identifier), TypeError, JSON.stringify(identifier));
+  }
+  for (const identifier of ['tenant-🙂', 'tenant-𐀀', 'tenant-𝄞']) {
+    assert.equal(sanitizeStorageSegment(identifier), encodeURIComponent(identifier));
+  }
+});
