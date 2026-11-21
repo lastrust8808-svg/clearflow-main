@@ -44,3 +44,24 @@ test('ordinary Unicode scope identities still reach a parameterized scoped SELEC
   assert.deepEqual(calls[1].params, ['équipe', 'plaid', '商店-一号']);
   assert.equal(calls[2].sql, 'COMMIT');
 });
+
+test('default-ignorable Unicode scope aliases fail before scoped SQL', async () => {
+  for (const code of [0x034F, 0x115F, 0x3164, 0xFE0F, 0xFFA0, 0xE0100]) {
+    for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+      const calls = [];
+      const pool = { async connect() {
+        return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+      } };
+      const bad = scope();
+      const identifier = 'id-' + String.fromCodePoint(code);
+      if (field === 'allowedAccountIds') bad.allowedAccountIds = [identifier];
+      else bad[field] = identifier;
+      await assert.rejects(
+        createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+        /Invalid authenticated banking scope/,
+        field + ' U+' + code.toString(16),
+      );
+      assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
+    }
+  }
+});
