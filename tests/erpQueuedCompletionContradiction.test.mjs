@@ -29,7 +29,7 @@ test('queued invoice export rejects contradictory completion receipts', async ()
     assert.deepEqual(await queueInvoiceExport(payload), receipt);
     for (const field of ['sentAt', 'deliveryReceiptId', 'deliveryChannel',
       'completionReceiptId', 'completionPersistedAt', 'importedAt', 'closedAt',
-      'fallbackReason']) {
+      'deliveredAt', 'exportedAt', 'processedAt', 'fallbackReason']) {
       const contradictory = { ...receipt, job: { ...receipt.job, [field]: 'forged-completion' } };
       globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => contradictory });
       await assert.rejects(queueInvoiceExport(payload), /not confirmed/, field);
