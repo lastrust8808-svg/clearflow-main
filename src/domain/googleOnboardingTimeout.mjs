@@ -132,14 +132,19 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     // A provider profile must not execute getters or proxy traps while being
     // admitted to the pending workspace recovery state.
     if (!user || typeof user !== 'object' || Array.isArray(user)) return current;
-    // Browser-compatible structured cloning rejects Proxy profiles (DataCloneError).
-    // Keep this inside try: cloning failure must never advance authentication.
+    // Inspect own descriptors before cloning: structuredClone invokes getters
+    // on ordinary objects, which must never run during identity admission.
+    // Reject all accessors, including unrelated enumerable properties.
+    const descriptors = Object.getOwnPropertyDescriptors(user);
+    if (Object.values(descriptors).some((descriptor) => !Object.hasOwn(descriptor, 'value'))) return current;
+    // Browser-compatible structured cloning then rejects Proxy profiles.
+    // Keep both operations inside try so failures never advance authentication.
     structuredClone(user);
     const prototype = Object.getPrototypeOf(user);
     if (prototype !== Object.prototype && prototype !== null) return current;
-    const emailField = Object.getOwnPropertyDescriptor(user, 'email');
-    const nameField = Object.getOwnPropertyDescriptor(user, 'name');
-    const idField = Object.getOwnPropertyDescriptor(user, 'id');
+    const emailField = descriptors.email;
+    const nameField = descriptors.name;
+    const idField = descriptors.id;
     if (!emailField || !Object.hasOwn(emailField, 'value') ||
         (nameField && !Object.hasOwn(nameField, 'value')) ||
         (idField && !Object.hasOwn(idField, 'value'))) return current;
