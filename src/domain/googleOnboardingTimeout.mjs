@@ -1,5 +1,3 @@
-import { types as nodeTypes } from 'node:util';
-
 /**
  * Resolve a Google OAuth popup timeout without manufacturing a membership.
  *
@@ -133,7 +131,10 @@ export function admitVerifiedGoogleProfile(current, accessToken, user) {
     if (!current || current.status !== 'pending-gsi') return current;
     // A provider profile must not execute getters or proxy traps while being
     // admitted to the pending workspace recovery state.
-    if (!user || typeof user !== 'object' || Array.isArray(user) || nodeTypes.isProxy(user)) return current;
+    if (!user || typeof user !== 'object' || Array.isArray(user)) return current;
+    // Browser-compatible structured cloning rejects Proxy profiles (DataCloneError).
+    // Keep this inside try: cloning failure must never advance authentication.
+    structuredClone(user);
     const prototype = Object.getPrototypeOf(user);
     if (prototype !== Object.prototype && prototype !== null) return current;
     const emailField = Object.getOwnPropertyDescriptor(user, 'email');
