@@ -4,12 +4,20 @@ import { createBankFeedPostgresStore } from '../server/services/bankFeedPostgres
 
 // Authorization must fail before obtaining a database connection. This test
 // intentionally uses no PostgreSQL server and cannot initiate a bank transfer.
-test('direct banking adapter rejects malformed authorization scopes before connecting', async () => {
+test('direct banking adapter rejects malformed authorization scopes before scoped SQL', async () => {
   let connections = 0;
+  const statements = [];
   const store = createBankFeedPostgresStore({
     async connect() {
       connections++;
-      throw new Error('database must not be contacted');
+      return {
+        async query(sql) {
+          statements.push(sql);
+          if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [], rowCount: null };
+          throw new Error('scoped SQL must not execute');
+        },
+        release() {},
+      };
     },
   });
   const valid = {
@@ -31,5 +39,6 @@ test('direct banking adapter rejects malformed authorization scopes before conne
       /Invalid authenticated banking scope/,
     );
   }
-  assert.equal(connections, 0);
+  assert.equal(connections, invalid.length);
+  assert.deepEqual(statements, invalid.flatMap(() => ['BEGIN', 'ROLLBACK']));
 });
