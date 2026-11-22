@@ -18,7 +18,7 @@ test('supplementary Unicode version IDs remain valid across registry and proof',
 });
 
 test('unpaired UTF-16 surrogates are rejected in version identifiers', () => {
-  for (const invalid of ['version-\\uD800', 'version-\\uDC00', 'version-\\uD800x']) {
+  for (const invalid of ['version-\uD800', 'version-\uDC00', 'version-\uD800x']) {
     assert.throws(() => verifyTrustDocumentVersion(registry(invalid),
       { versionId: invalid, sha256: digest }), /well-formed Unicode/);
   }
