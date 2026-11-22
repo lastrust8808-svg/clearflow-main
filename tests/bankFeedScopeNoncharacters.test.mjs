@@ -65,3 +65,36 @@ test('default-ignorable Unicode scope aliases fail before scoped SQL', async () 
     }
   }
 });
+
+test('Unicode spacing aliases in banking SQL scope fail before SELECT, while ASCII-separated IDs remain supported', async () => {
+  for (const code of [0x00A0, 0x1680, 0x2002, 0x2028, 0x2029, 0x3000]) {
+    for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+      const calls = [];
+      const pool = { async connect() {
+        return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+      } };
+      const bad = scope();
+      const identifier = 'id' + String.fromCodePoint(code) + 'alias';
+      if (field === 'allowedAccountIds') bad.allowedAccountIds = [identifier];
+      else bad[field] = identifier;
+      await assert.rejects(
+        createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+        /Invalid authenticated banking scope/,
+        field + ' U+' + code.toString(16),
+      );
+      assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
+    }
+  }
+
+  const calls = [];
+  const pool = { async connect() {
+    return { async query(sql, params) {
+      calls.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    }, release() {} };
+  } };
+  const spaced = { tenantId: 'tenant one', provider: 'plaid',
+    connectionId: 'item one', allowedAccountIds: ['account one'] };
+  await createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(spaced));
+  assert.deepEqual(calls[1].params, ['tenant one', 'plaid', 'item one']);
+});
