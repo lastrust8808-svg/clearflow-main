@@ -488,7 +488,7 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
     throw new Error(`${label} outcome unknown: unreadable server acknowledgement. Verify operation status before retrying.`);
   }
   if (!validate(result)) {
-    throw new Error(`${label} outcome unknown: server acknowledgement lacks verified durable evidence. Verify operation status before retrying.`);
+    throw new Error(`${label} not confirmed; outcome unknown: server acknowledgement lacks verified durable evidence. Verify operation status before retrying.`);
   }
   return result as T;
 }
