@@ -9,10 +9,10 @@ const at = '2026-11-22T10:00:00.000Z';
 test('QR byte verification snapshots lookup descriptors once', () => {
   let reads = 0;
   const lookup = new Proxy({ ...scope, tokenHashSha256: hash, asOfAt: at }, {
-    getOwnPropertyDescriptors(target) {
+    ownKeys(target) {
       reads++;
       if (reads > 1) throw new Error('lookup inspected twice');
-      return Object.getOwnPropertyDescriptors(target);
+      return Reflect.ownKeys(target);
     },
   });
   // No binding matches: the wrapper should return unknown without needing
