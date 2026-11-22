@@ -51,3 +51,13 @@ test('offset-encoded future refunds do not revoke earlier UTC historical access'
   assert.equal(project(scope, [refund, success], '2026-11-15T10:00:00.000199Z').status, 'active');
   assert.equal(project(scope, [refund, success], '2026-11-15T10:00:00.000200Z').status, 'past_due');
 });
+
+test('offset-encoded renewal cannot grant access before its submillisecond UTC instant', () => {
+  const renewal = event('renewal-offset', 'payment_succeeded', '2026-12-01T05:00:00.000200-05:00', {
+    invoiceId: 'invoice-2', settlementId: 'settlement-2',
+    periodEnd: '2027-01-01T12:00:00.000200+02:00',
+  });
+  assert.equal(project(scope, [renewal, success], '2026-12-01T10:00:00.000199Z').status, 'expired');
+  assert.equal(project(scope, [renewal, success], '2026-12-01T10:00:00.000200Z').status, 'active');
+  assert.equal(project(scope, [renewal, success], '2027-01-01T10:00:00.000200Z').status, 'expired');
+});
