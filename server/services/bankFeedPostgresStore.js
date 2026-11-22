@@ -30,7 +30,7 @@ function validScopeId(value) {
     value.length > 0 && value.length <= 256 &&
     value === value.trim() && value === value.normalize('NFC') &&
     value.isWellFormed() && !containsUnicodeNoncharacter(value) &&
-    !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Default_Ignorable_Code_Point}]/u.test(value);
+    !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u.test(value.replaceAll(' ', ''));
 }
 
 function assertScope(scope) {
