@@ -485,10 +485,10 @@ async function postErp<T>(path: string, payload: unknown, label: string, validat
   try {
     result = await response.json();
   } catch {
-    throw new Error(`${label} returned an invalid server response. Please verify before retrying.`);
+    throw new Error(`${label} outcome unknown: unreadable server acknowledgement. Verify operation status before retrying.`);
   }
   if (!validate(result)) {
-    throw new Error(`${label} was not confirmed by the server. Please verify before retrying.`);
+    throw new Error(`${label} outcome unknown: server acknowledgement lacks verified durable evidence. Verify operation status before retrying.`);
   }
   return result as T;
 }
