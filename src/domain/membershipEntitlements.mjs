@@ -117,7 +117,10 @@ function instant(value, label) {
   if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1] ||
       Number(hourText) > 23 || Number(minuteText) > 59 || Number(secondText) > 59 ||
       (offsetHourText !== undefined && (Number(offsetHourText) > 14 || Number(offsetMinuteText) > 59 ||
-        (Number(offsetHourText) === 14 && Number(offsetMinuteText) !== 0)))) {
+        (Number(offsetHourText) === 14 && Number(offsetMinuteText) !== 0) ||
+        // RFC 3339 -00:00 denotes an unknown local offset, not a known UTC
+        // instant. Reject it for payment ordering and entitlement expiry.
+        parts[7] === '-00:00'))) {
     throw new TypeError(label + ' is not a valid calendar timestamp');
   }
   const ms = Date.parse(value);
