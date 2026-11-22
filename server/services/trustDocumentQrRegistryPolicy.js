@@ -137,12 +137,13 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       id(lookupSnapshot.trustId, 'lookup.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
-  // Reject mismatched ownership scope before traversing untrusted binding rows.
-  const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
+  // Validate the entire lookup before touching any untrusted binding rows.
+  // A malformed timestamp or digest must not cause registry traversal.
   // The caller MUST supply this instant from its trusted server clock and load
   // an as-of registry snapshot. A client-provided timestamp is not authority.
   const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookup.asOfAt');
   const requested = Buffer.from(digest(lookupSnapshot.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
+  const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
   const seenHashes = new Set();
   const seenRevocationEvidence = new Set();
   // Keep document and version identities separate from independent revocation
