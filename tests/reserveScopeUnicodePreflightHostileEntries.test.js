@@ -18,12 +18,12 @@ test('rejects noncanonical reserve scope identifiers before entry traversal', ()
   };
   for (const [field, value] of [
     ['tenantId', '__proto__'],
-    ['entityId', 'entity\\u0000alias'],
-    ['trustId', 'trust\\u200Balias'],
-    ['trustId', 'trust\\uFDD0'],
-    ['entityId', 'e\\u0301ntity'],
+    ['entityId', 'entity\u0000alias'],
+    ['trustId', 'trust\u200Balias'],
+    ['trustId', 'trust\uFDD0'],
+    ['entityId', 'e\u0301ntity'],
     ['tenantId', 'tenant '],
-    ['trustId', 'trust\\uD800'],
+    ['trustId', 'trust\uD800'],
   ]) {
     assert.throws(() => calculateReserveCapacity({ ...valid, [field]: value }),
       /identifier|control|invisible|noncharacters|NFC|Unicode|unpadded/i,
