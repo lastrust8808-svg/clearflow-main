@@ -24,6 +24,24 @@ try {
       queuedAt: '2026-10-28T00:00:00Z', persistedAt: '2026-10-28T00:00:01Z',
     },
   };
+  await test('redirected, opaque, and wrong-endpoint receipts cannot confirm financial work', async () => {
+    const cases = [
+      { redirected: true, url: 'https://erp.test/api/erp/invoices/export' },
+      { redirected: false, url: 'https://untrusted.example/receipt' },
+      { type: 'opaque' },
+      { type: 'opaqueredirect' },
+      { type: 'error' },
+    ];
+    for (const metadata of cases) {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls++;
+        return { ok: true, status: 200, json: async () => plausibleReceipt, ...metadata };
+      };
+      await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown.*Verify operation status before retrying/);
+      assert.equal(calls, 1, 'ambiguous response must not trigger a second financial POST');
+    }
+  });
   await test('transformed and empty-success statuses cannot acknowledge financial work', async () => {
     // Partial, multi-status, nonstandard 2xx and redirects (even when a test adapter reports ok=true) cannot attest
     // to a complete, durable accounting operation, even with a plausible receipt.
