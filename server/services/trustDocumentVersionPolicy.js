@@ -108,6 +108,9 @@ export function assertPlainTrustDocumentRegistry(registry) {
       throw new TypeError('Document registry missing own field: ' + key);
     }
   }
+  // Use only values from the validated descriptor pass: a hostile Proxy can
+  // otherwise substitute scope or versions during a later property read.
+  return Object.fromEntries([...REGISTRY_FIELDS].map(key => [key, descriptors[key].value]));
 }
 
 const VERSION_FIELDS = new Set([
@@ -182,7 +185,7 @@ function requirePlainDocumentProof(proof, allowedFields, requiredFields, label) 
  * @returns {{status:'valid'|'superseded'|'revoked'|'unknown'}} Frozen, metadata-free result
  */
 export function verifyTrustDocumentVersion(registry, proof) {
-  assertPlainTrustDocumentRegistry(registry);
+  registry = assertPlainTrustDocumentRegistry(registry);
   for (const key of ['tenantId', 'entityId', 'trustId', 'documentId']) identifier(registry[key], key);
   requirePlainVersionList(registry.versions);
   requirePlainDocumentProof(proof, ['versionId', 'sha256'],
