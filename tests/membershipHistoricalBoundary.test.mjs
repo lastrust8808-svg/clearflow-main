@@ -37,3 +37,17 @@ test('future renewal cannot grant historical access before its own effective ins
   assert.equal(project(scope, [renewal, success], '2026-12-01T10:00:00.000150Z').status, 'expired');
   assert.equal(project(scope, [renewal, success], '2026-12-01T10:00:00.000200Z').status, 'active');
 });
+
+test('historical boundaries compare equivalent instants across timezone offsets', () => {
+  const cancel = event('cancel-offset', 'subscription_cancelled', '2026-11-15T05:00:00.000200-05:00');
+  assert.equal(project(scope, [cancel, success], '2026-11-15T10:00:00.000199Z').status, 'active');
+  assert.equal(project(scope, [cancel, success], '2026-11-15T10:00:00.000200Z').status, 'cancelled');
+});
+
+test('offset-encoded future refunds do not revoke earlier UTC historical access', () => {
+  const refund = event('refund-offset', 'payment_refunded', '2026-11-15T12:00:00.000200+02:00', {
+    invoiceId: 'invoice-1',
+  });
+  assert.equal(project(scope, [refund, success], '2026-11-15T10:00:00.000199Z').status, 'active');
+  assert.equal(project(scope, [refund, success], '2026-11-15T10:00:00.000200Z').status, 'past_due');
+});
