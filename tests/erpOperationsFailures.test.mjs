@@ -491,7 +491,7 @@ try {
   });
   await test('malformed JSON does not become success', async () => {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); } });
-    await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /invalid server response/);
+    await assert.rejects(api.queueInvoiceDelivery(payloads[0]), /outcome unknown: unreadable server acknowledgement/);
   });
   await test('mismatched operation cannot be accepted', async () => {
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => accepted[1] });
