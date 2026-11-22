@@ -301,6 +301,14 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
   if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
   const registrySnapshot = plainQrRecord(versionRegistry, 'QR document registry',
     [...QR_SCOPE_FIELDS, 'documentId', 'versions']);
+  // Reject a mismatched document registry before inspecting its potentially
+  // untrusted version history. This is an authorization-boundary preflight,
+  // not a substitute for server-side authenticated access control.
+  if (QR_SCOPE_FIELDS.some(field =>
+      id(registrySnapshot[field], 'documentRegistry.' + field) !== qrSnapshot[field]) ||
+      id(registrySnapshot.documentId, 'documentRegistry.documentId') !== binding.documentId) {
+    throw new Error('QR document registry scope mismatch');
+  }
   // Snapshot the array and each record exactly once before structural admission.
   // Preserve descriptors while validating: copying only values would silently
   // erase accessors, hidden properties, and symbols that must be rejected.
