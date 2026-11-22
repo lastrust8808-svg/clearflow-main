@@ -41,7 +41,7 @@ try {
       const contradictory = structuredClone(receipt);
       contradictory.job[field] = field === 'sentAt' ? '2026-10-28T00:00:02Z' : 'smtp-receipt-1';
       globalThis.fetch = async () => ({ ok: true, status: 202, json: async () => contradictory });
-      await assert.rejects(api.queueInvoiceExport(payload), /not confirmed by the server/);
+      await assert.rejects(api.queueInvoiceExport(payload), /outcome unknown: server acknowledgement lacks verified durable evidence/);
     }
   });
   await test('full acknowledgement status codes preserve durable acceptance', async () => {
