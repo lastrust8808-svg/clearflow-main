@@ -48,6 +48,9 @@ function requirePlainGovernanceRecord(record, allowed, required, label) {
       throw new TypeError(label + '.' + key + ' must be an own data field');
     }
   }
+  // Use this validated descriptor snapshot for policy decisions. A second
+  // Proxy descriptor read could substitute scope or appointment authority.
+  return Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
 }
 
 // Reject sparse or accessor-backed lists before any array element is read.
@@ -149,12 +152,10 @@ function calendarDate(value, field) {
  *   signerCount:number}} Frozen policy assessment, not an authorization token.
  */
 export function evaluateTrusteeSigningPolicy(snapshot) {
-  requirePlainGovernanceRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Governance snapshot');
+  snapshot = requirePlainGovernanceRecord(snapshot, SNAPSHOT_FIELDS, SNAPSHOT_FIELDS, 'Governance snapshot');
   // Read each validated own data descriptor exactly once. A Proxy may return
   // different values from get traps after descriptor validation; never use
   // those untrusted reads for trustee scope, signers, or policy decisions.
-  snapshot = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(snapshot))
-    .map(([key, descriptor]) => [key, descriptor.value]));
   const tenantId = id(snapshot.tenantId, 'tenantId');
   const entityId = id(snapshot.entityId, 'entityId');
   const trustId = id(snapshot.trustId, 'trustId');
@@ -185,12 +186,10 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   // across trustees. References are structural only until verified by storage.
   const governanceEvidenceRefs = new Set();
   for (let appointment of snapshot.appointments) {
-    requirePlainGovernanceRecord(appointment, APPOINTMENT_FIELDS,
+    appointment = requirePlainGovernanceRecord(appointment, APPOINTMENT_FIELDS,
       APPOINTMENT_REQUIRED_FIELDS, 'Trustee appointment');
     // Snapshot validated own descriptors; a Proxy get trap must not replace
     // appointment scope, evidence, or chronology after validation.
-    appointment = Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(appointment))
-      .map(([key, descriptor]) => [key, descriptor.value]));
     const trusteeId = id(appointment.trusteeId, 'appointment.trusteeId');
     // A trustee principal must not impersonate a tenant, entity or trust key.
     // Signer IDs legitimately repeat trustee IDs, but not scope identities.
