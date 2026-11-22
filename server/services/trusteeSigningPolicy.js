@@ -82,6 +82,9 @@ function requirePlainGovernanceList(list, label) {
     indexed++;
   }
   if (indexed !== length) throw new TypeError(label + ' must not contain holes');
+  // Use the descriptors already validated, not a second potentially different
+  // Proxy descriptor snapshot supplied after the first validation pass.
+  return Array.from({ length }, (_, index) => descriptors[String(index)].value);
 }
 
 function id(value, field) {
@@ -169,17 +172,10 @@ export function evaluateTrusteeSigningPolicy(snapshot) {
   if (!Array.isArray(snapshot.appointments) || !Array.isArray(snapshot.signerIds)) {
     throw new TypeError('appointments and signerIds must be arrays');
   }
-  requirePlainGovernanceList(snapshot.appointments, 'appointments');
-  requirePlainGovernanceList(snapshot.signerIds, 'signerIds');
-  // Snapshot validated indexed descriptors rather than iterating untrusted
-  // arrays. Proxy get/getOwnProperty traps may disagree after validation.
-  const snapshotList = list => {
-    const descriptors = Object.getOwnPropertyDescriptors(list);
-    return Array.from({ length: descriptors.length.value },
-      (_, index) => descriptors[String(index)].value);
-  };
-  snapshot.appointments = snapshotList(snapshot.appointments);
-  snapshot.signerIds = snapshotList(snapshot.signerIds);
+  // Validate and capture each array in one descriptor pass. Never re-query
+  // untrusted Proxy descriptors after admission: their values can change.
+  snapshot.appointments = requirePlainGovernanceList(snapshot.appointments, 'appointments');
+  snapshot.signerIds = requirePlainGovernanceList(snapshot.signerIds, 'signerIds');
   const trustees = new Set();
   const active = new Set();
   // A date alone cannot stand in for a distinct acceptance record. The caller
