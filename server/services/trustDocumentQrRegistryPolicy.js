@@ -143,6 +143,11 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
   // an as-of registry snapshot. A client-provided timestamp is not authority.
   const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookup.asOfAt');
   const requested = Buffer.from(digest(lookupSnapshot.tokenHashSha256, 'lookup.tokenHashSha256'), 'hex');
+  // Reject ambiguous registry ownership before reading any binding records.
+  // A scope alias cannot be made valid by a token match or by registry contents.
+  if (new Set([tenantId, entityId, trustId]).size !== 3) {
+    throw new Error('QR tenant, entity and trust identifiers must be distinct');
+  }
   const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
   const seenHashes = new Set();
   const seenRevocationEvidence = new Set();
