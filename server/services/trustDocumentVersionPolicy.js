@@ -20,7 +20,7 @@ function identifier(value, field) {
   // Malformed UTF-16 is replaced during UTF-8 encoding and can alias
   // distinct registry, proof or evidence identifiers in durable storage.
   // A valid surrogate pair (supplementary Unicode) remains admissible.
-  if (/[\uD800-\uDFFF]/u.test(value)) {
+  if (Array.from(value).some(character => character.length === 1 && /[\uD800-\uDFFF]/u.test(character))) {
     throw new TypeError(field + ' must contain well-formed Unicode');
   }
   // Canonically equivalent spellings must not become distinct version or
