@@ -117,8 +117,13 @@ const VERSION_FIELDS = new Set([
 ]);
 
 function requirePlainVersionRecord(version) {
-  if (!version || typeof version !== 'object' || Array.isArray(version) ||
-      (Object.getPrototypeOf(version) !== Object.prototype && Object.getPrototypeOf(version) !== null)) {
+  if (!version || typeof version !== 'object' || Array.isArray(version)) {
+    throw new TypeError('Document version must be a plain record');
+  }
+  // A Proxy may return a different prototype on successive inspections.
+  // Capture one result before admitting provenance-bearing fields.
+  const prototype = Object.getPrototypeOf(version);
+  if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('Document version must be a plain record');
   }
   const descriptors = Object.getOwnPropertyDescriptors(version);
