@@ -438,7 +438,7 @@ test('QR trust scope is mandatory even within the same tenant and entity', () =>
   assert.throws(() => resolveTrustDocumentQrBinding({ ...registry,
     bindings: [{ ...registry.bindings[0], trustId: undefined }] }, lookup), /scope mismatch/);
   assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
-    versionRegistry({ trustId: undefined }), finalizedBytes), /scope mismatch/);
+    versionRegistry({ trustId: undefined }), finalizedBytes), /documentRegistry\.trustId/);
   assert.throws(() => verifyTrustDocumentQrBytes(registry, lookup,
     versionRegistry({ versions: [{ ...versionRegistry().versions[0], trustId: undefined }] }),
     finalizedBytes), /scope mismatch/);
