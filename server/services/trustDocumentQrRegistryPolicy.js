@@ -127,7 +127,6 @@ const QR_BINDING_REQUIRED = QR_BINDING_FIELDS.slice(0, 8);
  */
 export function resolveTrustDocumentQrBinding(registry, lookup) {
   const registrySnapshot = plainQrRecord(registry, 'QR registry', [...QR_SCOPE_FIELDS, 'bindings']);
-  const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
   const tenantId = id(registrySnapshot.tenantId, 'registry.tenantId');
   const entityId = id(registrySnapshot.entityId, 'registry.entityId');
   const trustId = id(registrySnapshot.trustId, 'registry.trustId');
@@ -138,6 +137,8 @@ export function resolveTrustDocumentQrBinding(registry, lookup) {
       id(lookupSnapshot.trustId, 'lookup.trustId') !== trustId) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
+  // Reject mismatched ownership scope before traversing untrusted binding rows.
+  const bindingSnapshots = plainQrBindings(registrySnapshot.bindings);
   // The caller MUST supply this instant from its trusted server clock and load
   // an as-of registry snapshot. A client-provided timestamp is not authority.
   const asOfAt = timestamp(lookupSnapshot.asOfAt, 'lookup.asOfAt');
