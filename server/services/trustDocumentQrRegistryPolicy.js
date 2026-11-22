@@ -284,11 +284,14 @@ export function verifyTrustDocumentQrBytes(qrRegistry, lookup, versionRegistry, 
     id(earlyLookup[field], 'lookup.' + field) !== id(qrHeader[field], 'registry.' + field))) {
     throw new Error('QR lookup tenant/entity scope mismatch');
   }
+  // Validate the lookup once, before touching binding records. A hostile
+  // descriptor-backed lookup must not substitute a second scope or digest.
+  timestamp(earlyLookup.asOfAt, 'lookup.asOfAt');
+  digest(earlyLookup.tokenHashSha256, 'lookup.tokenHashSha256');
   const qrRows = plainQrBindings(qrHeader.bindings).map(row =>
     plainQrRecord(row, 'QR binding', QR_BINDING_FIELDS, QR_BINDING_REQUIRED));
   const qrSnapshot = { ...qrHeader, bindings: qrRows };
-  const lookupSnapshot = plainQrRecord(lookup, 'QR lookup',
-    [...QR_SCOPE_FIELDS, 'tokenHashSha256', 'asOfAt']);
+  const lookupSnapshot = earlyLookup;
   const binding = resolveTrustDocumentQrBinding(qrSnapshot, lookupSnapshot);
   if (binding.status !== 'bound') return Object.freeze({ status: 'unknown' });
   const registrySnapshot = plainQrRecord(versionRegistry, 'QR document registry',
