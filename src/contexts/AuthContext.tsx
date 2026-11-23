@@ -3,6 +3,7 @@ import { AppData, Entity, User } from '../types/app.models';
 import type { WealthMandateProfile } from '../types/app.models';
 import type { CoreDataBundle } from '../types/core';
 import { userDataService } from '../services/user-data.service';
+import { expirePendingGoogleSignIn, expirePendingGoogleDriveCheck, rejectFailedGoogleAuthorization, rejectUnverifiedGoogleOnboardingFallback, rejectFailedGoogleDriveRecovery, admitVerifiedGoogleProfile } from '../domain/googleOnboardingTimeout.mjs';
 import { getDocumentFile } from '../services/documentVault.service';
 import { googleDriveService } from '../services/google-drive.service';
 import type {
@@ -314,23 +315,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [normalizeIdentityEmail, storedTermsAcceptanceIndex]
   );
 
-  const buildProvisionalGoogleUser = useCallback(
-    (identity?: { name: string; email: string } | null): User | null => {
-      if (!identity?.email) {
-        return null;
-      }
-
-      return {
-        id: buildGoogleDurableAccountId(identity.email) || crypto.randomUUID(),
-        name: identity.name || identity.email,
-        email: identity.email,
-        isVerified: false,
-        primaryContactType: 'google',
-      };
-    },
-    []
-  );
-  
   const hydrateGoogleAccessSession = useCallback(async (
     accessToken: string,
     providedProfile?: { name?: string; email?: string | null }
@@ -352,7 +336,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return profileResponse.json();
           })();
 
-    userDataService.setActiveUserEmail(profile.email);
     const provisionalUser: User = {
       id: crypto.randomUUID(),
       name: profile.name || profile.email,
@@ -361,14 +344,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       primaryContactType: 'google',
     };
 
-    setState((current) => ({
-      ...current,
-      token: current.token || 'google-oauth-token',
-      apiAccessToken: accessToken,
-      status: 'pending-drive-check',
-      gsiUser: { name: provisionalUser.name, email: provisionalUser.email || '' },
-      appData: current.appData || { user: provisionalUser, entities: [] },
-    }));
+    // A late OAuth profile response must not reopen a timed-out, logged-out,
+    // or independently authenticated workspace. The Drive effect sets the
+    // active email only after the pending session has been admitted.
+    setState((current) =>
+      admitVerifiedGoogleProfile(current, accessToken, provisionalUser) as AuthState
+    );
   }, []);
 
   const exchangeGoogleAuthorizationCode = useCallback(async (code: string) => {
@@ -408,39 +389,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const handleAuthorizationCodeResponse = useCallback((response: any) => {
-    if (response.error || !response.code) {
-        console.error('OAuth Error:', response.error || 'Missing authorization code.');
-        setState((current) => {
-          if (
-            (current.status === 'pending-gsi' || current.status === 'pending-drive-check') &&
-            current.appData?.user
-          ) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
-        return;
+    if (response?.error || !response?.code) {
+      console.error('OAuth Error:', response?.error || 'Missing authorization code.');
+      needsDriveCatchUpRef.current = false;
+      setState((current) => rejectFailedGoogleAuthorization(current) as AuthState);
+      return;
     }
 
     needsDriveCatchUpRef.current = true;
@@ -450,35 +403,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       )
       .catch((error) => {
         console.error('OAuth profile hydration failed:', error);
-        setState((current) => {
-          if (current.appData?.user) {
-            const nextStatus = canBypassProfileSetupForGoogleIdentity(
-              current.gsiUser || {
-                email: current.appData.user.email,
-                name: current.appData.user.name,
-              },
-              current.appData
-            )
-              ? 'authenticated'
-              : 'pending-profile-setup';
-            return {
-              ...current,
-              status: nextStatus,
-              gsiUser: null,
-            };
-          }
-
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-          };
-        });
+        needsDriveCatchUpRef.current = false;
+        setState((current) => rejectFailedGoogleAuthorization(current) as AuthState);
       });
-  }, [canBypassProfileSetupForGoogleIdentity, exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
+  }, [exchangeGoogleAuthorizationCode, hydrateGoogleAccessSession]);
 
   const debouncedSave = useCallback(debounce(async (token: string, data: AppData) => {
     if (!token || !data) return;
@@ -486,9 +414,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await userDataService.saveUserData(token, data);
       const googleDurableAccountId = buildGoogleDurableAccountId(data.user.email);
       if (googleDurableAccountId) {
-        void saveAccountAppData(googleDurableAccountId, data).catch((error) => {
-          console.warn('Failed to mirror Google workspace to durable storage.', error);
-        });
+        // Do not report saved until the durable workspace mirror confirms.
+        await saveAccountAppData(googleDurableAccountId, data);
       }
       setSavingStatus('saved');
       setTimeout(() => setSavingStatus('idle'), 2500); // Show 'saved' for 2.5s
@@ -522,11 +449,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (state.localAccountId) {
       try {
         saveLocalAuthAppData(state.localAccountId, state.appData);
-        void saveAccountAppData(state.localAccountId, state.appData).catch((error) => {
-          console.warn('Failed to mirror local account data to durable storage.', error);
-        });
-        setSavingStatus('saved');
-        setTimeout(() => setSavingStatus('idle'), 2500);
+        void saveAccountAppData(state.localAccountId, state.appData)
+          .then(() => {
+            setSavingStatus('saved');
+            setTimeout(() => setSavingStatus('idle'), 2500);
+          })
+          .catch((error) => {
+            console.warn('Failed to mirror local account data to durable storage.', error);
+            setSavingStatus('error');
+          });
       } catch (err) {
         console.error('Failed to save local user data:', err);
         setSavingStatus('error');
@@ -540,8 +471,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       !state.apiAccessToken ||
       !state.appData ||
       !needsDriveCatchUpRef.current ||
-      state.status === 'pending-gsi' ||
-      state.status === 'pending-drive-check'
+      state.status !== 'authenticated'
     ) {
       return;
     }
@@ -551,13 +481,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     void userDataService
       .saveUserData(state.apiAccessToken, state.appData)
-      .then(() => {
+      .then(async () => {
         const googleDurableAccountId = buildGoogleDurableAccountId(state.appData?.user.email);
-        if (googleDurableAccountId && state.appData) {
-          void saveAccountAppData(googleDurableAccountId, state.appData).catch((error) => {
-            console.warn('Failed to mirror Google Drive catch-up to durable storage.', error);
-          });
+        if (!googleDurableAccountId || !state.appData) {
+          throw new Error('Google Drive catch-up requires a durable account identity and workspace.');
         }
+        await saveAccountAppData(googleDurableAccountId, state.appData);
         initialDataLoaded.current = true;
         setSavingStatus('saved');
         window.setTimeout(() => setSavingStatus('idle'), 2500);
@@ -733,6 +662,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ]);
 
   useEffect(() => {
+    const pendingEmail = state.gsiUser?.email;
+    const pendingAccessToken = state.apiAccessToken;
+    // An old Drive request may settle after timeout, logout, or a new login.
+    // Only the matching pending attempt may advance the workspace state.
+    const setPendingDriveState = (update: (current: AuthState) => AuthState) => {
+      setState((current) => {
+        if (
+          current.status !== 'pending-drive-check' ||
+          current.apiAccessToken !== pendingAccessToken ||
+          current.gsiUser?.email !== pendingEmail
+        ) return current;
+        return update(current);
+      });
+    };
     const mergeGoogleIdentity = (appData: AppData, googleIdentity: { name: string; email: string }) => ({
       ...appData,
       user: {
@@ -768,7 +711,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               mergeGoogleIdentity(recoveredData, state.gsiUser),
               state.gsiUser
             );
-            setState(current => ({
+            setPendingDriveState(current => ({
               ...current,
               status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
               appData: mergedAppData,
@@ -786,7 +729,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
                 if (durableAppData) {
                   recoveredAppData = durableAppData;
-                  saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
+                  // Keep recovery in memory until the pending OAuth attempt is
+                  // accepted. A stale Drive response must not overwrite the
+                  // next session's local cache before setPendingDriveState guards it.
                 }
               } catch (error) {
                 console.warn('Unable to load durable Google-linked workspace. Falling back to local recovery.', error);
@@ -797,7 +742,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 state.gsiUser
               );
               needsDriveCatchUpRef.current = true;
-              setState((current) => ({
+              setPendingDriveState((current) => ({
                 ...current,
                 localAccountId: localGoogleMatch.userId,
                 status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
@@ -809,7 +754,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             if (state.pendingGoogleMode !== 'new') {
               const missingEmail = state.gsiUser.email;
-              setState((current) => ({
+              setPendingDriveState((current) => ({
                 ...current,
                 status: 'unauthenticated',
                 token: null,
@@ -830,7 +775,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               primaryContactType: 'google',
             };
             const newAppData = { user: newUser, entities: [] };
-            setState(current => ({
+            setPendingDriveState(current => ({
               ...current,
               status: 'pending-profile-setup',
               appData: newAppData,
@@ -840,62 +785,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }));
           }
         } catch (error) {
-          console.error('Unable to load workspace after Google sign-in. Continuing with new-user profile setup.', error);
-          const localGoogleMatch = findLocalAccountByGoogleEmail(state.gsiUser.email);
-          if (localGoogleMatch) {
-            const mergedAppData = mergeStoredTermsAcceptance(
-              {
-                ...localGoogleMatch.appData,
-                user: {
-                  ...localGoogleMatch.appData.user,
-                  name: localGoogleMatch.appData.user.name || state.gsiUser.name,
-                  email: state.gsiUser.email,
-                  primaryContactType: 'google' as const,
-                },
-              },
-              state.gsiUser
-            );
-            needsDriveCatchUpRef.current = true;
-            setState((current) => ({
-              ...current,
-              localAccountId: localGoogleMatch.userId,
-              status: getGoogleWorkspaceStatus(mergedAppData, state.gsiUser),
-              appData: mergedAppData,
-              gsiUser: null,
-            }));
-            return;
-          }
-
-          if (state.pendingGoogleMode !== 'new') {
-            setState((current) => ({
-              ...current,
-              status: 'unauthenticated',
-              token: null,
-              apiAccessToken: null,
-              appData: null,
-              gsiUser: null,
-              pendingGoogleMode: null,
-              authMessage:
-                'ClearFlow could not verify an existing workspace. Retry Existing User Login, or choose Create New Account if this is your first enrollment.',
-            }));
-            return;
-          }
-
-          const newUser: User = {
-            id: buildGoogleDurableAccountId(state.gsiUser.email) || crypto.randomUUID(),
-            ...state.gsiUser,
-            isVerified: false,
-            primaryContactType: 'google',
-          };
-          const newAppData = { user: newUser, entities: [] };
-          setState(current => ({
-            ...current,
-            status: 'pending-profile-setup',
-            appData: newAppData,
-            gsiUser: null,
-            pendingGoogleMode: null,
-            authMessage: null,
-          }));
+          console.error('Unable to verify Google workspace after sign-in:', error);
+          needsDriveCatchUpRef.current = false;
+          setPendingDriveState((current) => rejectFailedGoogleDriveRecovery(current) as AuthState);
         }
       }
     };
@@ -915,43 +807,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const timeoutId = window.setTimeout(() => {
-      setState((current) => {
-        if (current.status !== 'pending-drive-check' || !current.gsiUser) {
-          return current;
-        }
-
-        if (current.pendingGoogleMode !== 'new') {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            gsiUser: null,
-            pendingGoogleMode: null,
-            authMessage:
-              'Existing-account lookup timed out before a saved workspace was confirmed. Retry Existing User Login.',
-          };
-        }
-
-        const newUser: User = {
-          ...(current.appData?.user || {
-            id: buildGoogleDurableAccountId(current.gsiUser.email) || crypto.randomUUID(),
-            ...current.gsiUser,
-            isVerified: false,
-            primaryContactType: 'google' as const,
-          }),
-        };
-
-        return {
-          ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: newUser, entities: [] },
-          gsiUser: null,
-          pendingGoogleMode: null,
-          authMessage: null,
-        };
-      });
+      setState((current) => expirePendingGoogleDriveCheck(current) as AuthState);
     }, 8000);
 
     return () => window.clearTimeout(timeoutId);
@@ -995,135 +851,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
+    // A timed-out OAuth popup has not authenticated a Google identity.
+    // Never reuse lastKnownGoogleUser or cached appData to create a profile.
     const timeoutId = window.setTimeout(() => {
-      setState((current) => {
-        if (current.status !== 'pending-gsi') {
-          return current;
-        }
-
-        const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
-
-        if (current.pendingGoogleMode !== 'new') {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            pendingGoogleMode: null,
-            authMessage:
-              'Existing-account sign-in did not complete. Retry Existing User Login; first-time users must choose Create New Account.',
-          };
-        }
-
-        const fallbackUser =
-          current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
-
-        if (!fallbackUser) {
-          return {
-            ...current,
-            status: 'unauthenticated',
-            gsiUser: null,
-            token: null,
-            apiAccessToken: null,
-            appData: null,
-            pendingGoogleMode: null,
-            authMessage: 'New-account enrollment could not confirm your Google identity. Please retry.',
-          };
-        }
-
-        return {
-          ...current,
-          status: 'pending-profile-setup',
-          appData: current.appData || { user: fallbackUser, entities: [] },
-          gsiUser: null,
-          pendingGoogleMode: null,
-          authMessage: null,
-        };
-      });
+      setState((current) => expirePendingGoogleSignIn(current) as AuthState);
     }, 5000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [
-    buildProvisionalGoogleUser,
-    getGoogleWorkspaceStatus,
-    lastKnownGoogleUser,
-    mergeStoredTermsAcceptance,
-    state.status,
-    state.pendingGoogleMode,
-  ]);
+  }, [state.status]);
 
-  useEffect(() => {
-    if (state.status !== 'unauthenticated' || state.appData || !lastKnownGoogleUser?.email) {
-      return;
-    }
-
-    const localGoogleMatch = findLocalAccountByGoogleEmail(lastKnownGoogleUser.email);
-    if (!localGoogleMatch) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const restoreRememberedSession = async () => {
-      let recoveredAppData = localGoogleMatch.appData;
-
-      try {
-        const durableAppData = await loadAccountAppData(localGoogleMatch.userId);
-        if (durableAppData) {
-          recoveredAppData = durableAppData;
-          saveLocalAuthAppData(localGoogleMatch.userId, durableAppData);
-        }
-      } catch (error) {
-        console.warn('Failed to rehydrate remembered Google session from durable storage.', error);
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      const mergedAppData = mergeStoredTermsAcceptance(
-        {
-          ...recoveredAppData,
-          user: {
-            ...recoveredAppData.user,
-            name: recoveredAppData.user.name || lastKnownGoogleUser.name,
-            email: lastKnownGoogleUser.email,
-            primaryContactType: 'google',
-          },
-        },
-        lastKnownGoogleUser
-      );
-
-      initialDataLoaded.current = false;
-      userDataService.setActiveUserEmail(lastKnownGoogleUser.email);
-      setState((current) => {
-        if (current.status !== 'unauthenticated' || current.appData) {
-          return current;
-        }
-
-        return {
-          ...current,
-          localAccountId: localGoogleMatch.userId,
-          appData: mergedAppData,
-          status: getGoogleWorkspaceStatus(mergedAppData, lastKnownGoogleUser),
-        };
-      });
-    };
-
-    void restoreRememberedSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    getGoogleWorkspaceStatus,
-    lastKnownGoogleUser,
-    mergeStoredTermsAcceptance,
-    state.appData,
-    state.status,
-  ]);
+  // A remembered Google identity is only a sign-in hint. It cannot restore an
+  // authenticated tenant workspace without fresh Google or local credentials.
+  // Local-account recovery remains available through explicit credential auth.
 
   useEffect(() => {
     setIsInitialized(true);
@@ -1220,12 +959,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       authMessage: null,
     }));
 
+    try {
       activeTokenClient.requestCode({
-        prompt:
-          mode === 'new'
-            ? 'consent select_account'
-            : '',
+        prompt: mode === 'new' ? 'consent select_account' : '',
       });
+    } catch (error) {
+      // A synchronous popup/SDK failure must never be reported as a successful
+      // authorization start. Do not advance any existing authenticated session.
+      console.error('Google authorization popup could not start:', error);
+      setState((current) =>
+        current.status === 'pending-gsi'
+          ? { ...current, status: 'unauthenticated', pendingGoogleMode: null,
+              authMessage: 'Google sign-in could not start. Please try again.' }
+          : current
+      );
+      return { success: false, error: 'Google sign-in could not start. Please try again.' };
+    }
 
     return { success: true };
   }, [ensureGoogleClients, isConfigured, tokenClient]);
@@ -1761,12 +1510,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             })
             .catch((fallbackError) => {
               console.warn('Unable to complete Google onboarding fallback after Drive save error.', fallbackError);
+              // A failed Drive write and failed backup cannot establish a durable account.
+              // Preserve the draft for retry rather than reporting successful onboarding.
               setState((s) => ({
                 ...s,
-                appData: finalAppData,
-                status: 'authenticated',
+                appData: null,
+                token: null,
+                apiAccessToken: null,
+                localAccountId: null,
+                gsiUser: null,
+                pendingGoogleMode: null,
+                status: 'unauthenticated',
+                authMessage: 'Workspace setup could not be saved. Please sign in and retry.',
               }));
-              clearStoredMembershipDraft();
             });
         });
     } else if (state.token === 'mock-token') {
@@ -1914,52 +1670,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const continueGoogleOnboardingFallback = () => {
-    setState((current) => {
-      if (current.status !== 'pending-gsi' && current.status !== 'pending-drive-check') {
-        return current;
-      }
-
-      const fallbackIdentity = current.gsiUser || lastKnownGoogleUser;
-
-      if (current.pendingGoogleMode !== 'new') {
-        return {
-          ...current,
-          status: 'unauthenticated',
-          gsiUser: null,
-          token: null,
-          apiAccessToken: null,
-          appData: null,
-          pendingGoogleMode: null,
-          authMessage:
-            'ClearFlow could not confirm an existing account from this sign-in attempt. Retry Existing User Login or choose Create New Account.',
-        };
-      }
-
-      const fallbackUser =
-        current.appData?.user || buildProvisionalGoogleUser(fallbackIdentity);
-
-      if (!fallbackUser) {
-        return {
-          ...current,
-          status: 'unauthenticated',
-          gsiUser: null,
-          token: null,
-          apiAccessToken: null,
-          appData: null,
-          pendingGoogleMode: null,
-          authMessage: 'New-account enrollment could not confirm an identity. Please retry.',
-        };
-      }
-
-      return {
-        ...current,
-        status: 'pending-profile-setup',
-        appData: current.appData || { user: fallbackUser, entities: [] },
-        gsiUser: null,
-        pendingGoogleMode: null,
-        authMessage: null,
-      };
-    });
+    // A remembered email, cached account, or stalled Drive lookup is not
+    // permission to enroll or open a workspace without verified recovery.
+    needsDriveCatchUpRef.current = false;
+    setState((current) => rejectUnverifiedGoogleOnboardingFallback(current) as AuthState);
   };
 
   const value: AuthContextType = {
