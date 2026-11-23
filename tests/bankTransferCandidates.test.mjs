@@ -646,3 +646,21 @@ test('transfer review enforces the bounded batch size before examining source re
   assert.throws(() => plan(oversized), /Invalid authorized transfer scope or batch/);
   assert.equal(accessed, 0);
 });
+
+
+test('review-only transfer scope IDs match bank-feed SQL whitespace constraints', () => {
+  for (const tenantId of ['tenant a', 'tenant\talias']) {
+    assert.throws(() => plan([], tenantId), /Invalid authorized transfer scope/);
+  }
+  for (const field of ['connectionId', 'accountId', 'transactionId']) {
+    assert.throws(() => plan([row('checking', 'out', -500, { [field]: 'segment with space' })]),
+      /Invalid or unauthorized transfer source record/);
+  }
+  // Bank statement references are descriptive evidence, not authorization keys.
+  const result = plan([
+    row('checking', 'out', -500, { providerReference: 'reference with spaces' }),
+    row('savings', 'in', 500, { providerReference: 'reference with spaces' }),
+  ]);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].status, 'review_required');
+});
