@@ -13,7 +13,7 @@ const packet = (tenantId) => ({
 });
 
 test('signing scope rejects Unicode whitespace before accessing untrusted governance', () => {
-  for (const whitespace of ['\\u00a0', '\\u2003', '\\u2028', '\\u3000']) {
+  for (const whitespace of ['\u00a0', '\u2003', '\u2028', '\u3000']) {
     let accessed = false;
     const input = packet('tenant' + whitespace + 'a');
     Object.defineProperty(input, 'governance', {
