@@ -330,6 +330,21 @@ export async function reserveErpOperationJob({
   }
   let record = insert.rows[0];
   const created = insert.rows.length === 1;
+  // A database adapter receipt must be ordinary data, not an accessor or Proxy
+  // capable of changing tenant, digest, or status between validation and use.
+  function assertSafeReservationRow(row) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || nodeTypes.isProxy(row) ||
+        (Object.getPrototypeOf(row) !== Object.prototype && Object.getPrototypeOf(row) !== null)) {
+      throw new Error('ERP job storage returned an unsafe reservation row');
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(row);
+    for (const key of ['id', 'tenant_id', 'actor_id', 'operation', 'idempotency_key', 'payload_sha256', 'status', 'created_at']) {
+      if (!Object.hasOwn(descriptors, key) || !Object.hasOwn(descriptors[key], 'value')) {
+        throw new Error('ERP job storage returned an unsafe reservation field');
+      }
+    }
+  }
+  if (created) assertSafeReservationRow(record);
   if (!created) {
     const existing = await db.query(
       `SELECT id, tenant_id, actor_id, operation, idempotency_key,
@@ -343,6 +358,7 @@ export async function reserveErpOperationJob({
     }
     record = existing.rows[0];
     if (!record) throw new Error('ERP job reservation could not be verified');
+    assertSafeReservationRow(record);
     if (record.actor_id !== actorId || record.payload_sha256 !== digest) {
       const error = new Error('ERP idempotency key conflicts with an existing job');
       error.code = 'ERP_IDEMPOTENCY_CONFLICT';
