@@ -338,8 +338,15 @@ export async function reserveErpOperationJob({
       throw new Error('ERP job storage returned an unsafe reservation row');
     }
     const descriptors = Object.getOwnPropertyDescriptors(row);
-    for (const key of ['id', 'tenant_id', 'actor_id', 'operation', 'idempotency_key', 'payload_sha256', 'status', 'created_at']) {
-      if (!Object.hasOwn(descriptors, key) || !Object.hasOwn(descriptors[key], 'value')) {
+    const fields = ['id', 'tenant_id', 'actor_id', 'operation', 'idempotency_key', 'payload_sha256', 'status', 'created_at'];
+    // SQL returns exactly eight columns. Never silently accept adapter-added,
+    // hidden or symbol-backed claims in a durable accounting receipt.
+    if (Reflect.ownKeys(descriptors).length !== fields.length) {
+      throw new Error('ERP job storage returned an unsafe reservation shape');
+    }
+    for (const key of fields) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
         throw new Error('ERP job storage returned an unsafe reservation field');
       }
     }
