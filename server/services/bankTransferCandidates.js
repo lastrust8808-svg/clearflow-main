@@ -35,7 +35,13 @@ function validId(value) {
     !/[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zs}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u.test(value.replaceAll(' ', ''));
 }
 
-// Scope keys must agree with the PostgreSQL bank-feed authorization contract.\n// Human-readable provider references may still contain ordinary ASCII spaces.\nfunction validScopeId(value) {\n  return validId(value) && !value.includes(' ');\n}\n\nfunction calendarDay(value) {
+// Scope keys must agree with the PostgreSQL bank-feed authorization contract.
+// Human-readable provider references may still contain ordinary ASCII spaces.
+function validScopeId(value) {
+  return validId(value) && !value.includes(' ');
+}
+
+function calendarDay(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
   if (year < 100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
