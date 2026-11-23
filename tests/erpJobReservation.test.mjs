@@ -1081,7 +1081,12 @@ test('quarantine rejects invalid scope, operation and job ID without querying', 
 test('actor status lookup can report outcome_unknown without claiming delivery', async () => {
   const { readErpOperationJobStatus } = await import('../server/services/erpJobReservation.js');
   const result = await readErpOperationJobStatus({
-    db: { query: async () => ({ rows: [quarantineRow()] }) },
+    db: { query: async () => ({ rows: [{
+      id: claimedJobId, tenant_id: scope.tenantId, actor_id: scope.actorId,
+      operation: 'invoice_delivery', status: 'outcome_unknown',
+      created_at: new Date('2026-10-29T12:00:00Z'),
+      updated_at: new Date('2026-10-29T12:04:00Z'),
+    }] }) },
     authenticatedScope: scope, jobId: claimedJobId,
   });
   assert.equal(result.status, 'outcome_unknown');
