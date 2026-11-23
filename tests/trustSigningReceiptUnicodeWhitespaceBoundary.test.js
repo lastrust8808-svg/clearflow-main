@@ -35,7 +35,7 @@ const base = () => ({
 
 test('signing audit identifiers reject Unicode whitespace across signer and receipt roles', () => {
   for (const field of ['signerId', 'identityEvidenceRef', 'consentEvidenceRef', 'signatureEvidenceRef']) {
-    for (const space of ['\\u00a0', '\\u2003', '\\u2028', '\\u3000']) {
+    for (const space of ['\u00a0', '\u2003', '\u2028', '\u3000']) {
       const packet = base();
       packet.attestations[0][field] += space + 'suffix';
       assert.throws(() => assessTrustDocumentSigningPacket(packet),
