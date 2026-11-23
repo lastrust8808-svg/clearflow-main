@@ -22,7 +22,7 @@ test('reserve scope type preflight does not coerce identifiers or traverse entri
     maxEvidenceAgeMs: 0, entries,
   };
   for (const field of ['tenantId', 'entityId', 'trustId']) {
-    for (const value of [null, undefined, 0, 1, false, true, 1n, [], hostileId]) {
+    for (const value of [null, undefined, 0, 1, false, true, 1n, Symbol('scope'), () => 'scope', [], hostileId]) {
       assert.throws(
         () => calculateReserveCapacity({ ...base, [field]: value }),
         new RegExp('^TypeError: ' + field + ' must be a nonempty unpadded string$'),
