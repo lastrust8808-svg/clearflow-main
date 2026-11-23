@@ -322,9 +322,15 @@ export async function reserveErpOperationJob({
   if (!Array.isArray(insert?.rows) || insert.rows.length > 1) {
     throw new Error('ERP job storage returned an invalid reservation result');
   }
+  // Only an actual zero-row INSERT means a unique-key conflict. A returned
+  // null/undefined row is a malformed storage receipt, not permission to
+  // perform a replay lookup that could conceal a broken database response.
+  if (insert.rows.length === 1 && (insert.rows[0] === null || typeof insert.rows[0] !== 'object' || Array.isArray(insert.rows[0]))) {
+    throw new Error('ERP job storage returned an invalid reservation row');
+  }
   let record = insert.rows[0];
-  const created = Boolean(record);
-  if (!record) {
+  const created = insert.rows.length === 1;
+  if (!created) {
     const existing = await db.query(
       `SELECT id, tenant_id, actor_id, operation, idempotency_key,
               payload_sha256, status, created_at
