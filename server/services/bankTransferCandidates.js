@@ -71,8 +71,8 @@ function snapshotTransaction(value, tenantId) {
   }
   if (REQUIRED.some((key) => !Object.hasOwn(row, key)) ||
       row.tenantId !== tenantId || !['plaid', 'mercury'].includes(row.provider) ||
-      !validId(row.connectionId) || !validId(row.accountId) ||
-      !validId(row.transactionId) ||
+      !validScopeId(row.connectionId) || !validScopeId(row.accountId) ||
+      !validScopeId(row.transactionId) ||
       !Number.isSafeInteger(row.amountCents) || row.amountCents === 0 ||
       Object.is(row.amountCents, -0) ||
       typeof row.currency !== 'string' || !/^[A-Z]{3}$/.test(row.currency) ||
