@@ -34,7 +34,6 @@ test('oversized reserve scope identifiers fail before hostile entry traversal', 
         /ledger traversed/,
         field + ' must admit the exact boundary before entry validation',
       );
-      traversals++;
       assert.equal(traversals, ['tenantId', 'entityId', 'trustId'].indexOf(field) * 2 + (identifier.endsWith('😀') ? 2 : 1));
     }
   }
