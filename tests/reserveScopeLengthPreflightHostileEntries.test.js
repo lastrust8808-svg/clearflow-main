@@ -24,10 +24,28 @@ test('oversized reserve scope identifiers fail before hostile entry traversal', 
     );
     assert.equal(traversals, 0, field + ' must not inspect entries');
   }
-  // At the accepted limit, validation may proceed to inspect entries.
-  assert.throws(
-    () => calculateReserveCapacity({ ...base, trustId: 'x'.repeat(1024) }),
-    /ledger traversed/,
-  );
-  assert.equal(traversals, 1);
+  // Every scope role must admit exactly the same 1024-code-unit limit.
+  // A supplementary scalar occupies two UTF-16 units, so the boundary must
+  // be measured consistently without silently normalizing the identifier.
+  for (const field of ['tenantId', 'entityId', 'trustId']) {
+    for (const identifier of ['x'.repeat(1024), 'x'.repeat(1022) + '😀']) {
+      assert.throws(
+        () => calculateReserveCapacity({ ...base, [field]: identifier }),
+        /ledger traversed/,
+        field + ' must admit the exact boundary before entry validation',
+      );
+      traversals++;
+      assert.equal(traversals, ['tenantId', 'entityId', 'trustId'].indexOf(field) * 2 + (identifier.endsWith('😀') ? 2 : 1));
+    }
+  }
+  // One supplementary scalar beyond the 1024-unit limit must fail before
+  // entry traversal, even though the scalar count is smaller.
+  const priorTraversals = traversals;
+  for (const field of ['tenantId', 'entityId', 'trustId']) {
+    assert.throws(
+      () => calculateReserveCapacity({ ...base, [field]: 'x'.repeat(1023) + '😀' }),
+      /maximum identifier length/,
+    );
+    assert.equal(traversals, priorTraversals);
+  }
 });
