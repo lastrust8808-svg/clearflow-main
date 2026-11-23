@@ -38,7 +38,7 @@ function identifier(value, field) {
   // Directional formatting controls can visually reorder signer and evidence
   // identifiers in review screens without changing their stored identity.
   if (/\p{Default_Ignorable_Code_Point}|\p{White_Space}/u.test(value)) {
-    throw new TypeError(field + ' must not contain invisible Unicode formatting or whitespace');
+    throw new TypeError(field + ' must not contain invisible Unicode formatting controls or whitespace');
   }
   // Bound every signing identity and evidence pointer before storage or hashing.
   // Count UTF-16 code units consistently with the trust ledger identifiers.
