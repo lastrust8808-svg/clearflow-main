@@ -427,7 +427,13 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
     throw new Error('ERP job storage returned an unsafe status row');
   }
   const statusDescriptors = Object.getOwnPropertyDescriptors(record);
-  for (const field of ['id', 'tenant_id', 'actor_id', 'operation', 'status', 'created_at', 'updated_at']) {
+  // A status SELECT has an exact receipt shape. Hidden or unexpected fields
+  // can conceal contradictory lifecycle or tenant claims in adapter results.
+  const statusFields = ['id', 'tenant_id', 'actor_id', 'operation', 'status', 'created_at', 'updated_at'];
+  if (Reflect.ownKeys(statusDescriptors).length !== statusFields.length) {
+    throw new Error('ERP job storage returned unexpected status fields');
+  }
+  for (const field of statusFields) {
     if (!Object.hasOwn(statusDescriptors, field) ||
         !Object.hasOwn(statusDescriptors[field], 'value') || !statusDescriptors[field].enumerable) {
       throw new Error('ERP job storage returned an unsafe status field');
