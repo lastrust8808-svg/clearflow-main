@@ -25,7 +25,7 @@ const packet = (secondSignerId) => ({
   ...scope, content, finalizedAt: '2026-10-28T09:00:00.000Z',
   evaluatedAt: '2026-10-29T12:00:00.000Z',
   governance: { tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId,
-    mode: 'independent', appointments: [appointment('a'), appointment(secondSignerId)] },
+    mode: 'joint', appointments: [appointment('a'), appointment(secondSignerId)] },
   versionRegistry: {
     tenantId: scope.tenantId, entityId: scope.entityId, trustId: scope.trustId,
     documentId: scope.documentId,
