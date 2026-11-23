@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createBankFeedPostgresStore } from '../server/services/bankFeedPostgresStore.js';
+
+function scope() {
+  return { tenantId: 'tenant-a', provider: 'plaid', connectionId: 'item-a', allowedAccountIds: ['acct-a'] };
+}
+
+test('banking scope rejects Unicode noncharacters on all SQL identity fields', async () => {
+  for (const code of [0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x10FFFF]) {
+    for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+      const calls = [];
+      const pool = { async connect() {
+        return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+      } };
+      const bad = scope();
+      const identifier = 'id-' + String.fromCodePoint(code);
+      if (field === 'allowedAccountIds') bad.allowedAccountIds = [identifier];
+      else bad[field] = identifier;
+      await assert.rejects(
+        createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+        /Invalid authenticated banking scope/,
+        field + ' U+' + code.toString(16),
+      );
+      assert.deepEqual(calls, ['BEGIN', 'ROLLBACK'], 'invalid identities must never reach scoped SQL');
+    }
+  }
+});
+
+test('ordinary Unicode scope identities still reach a parameterized scoped SELECT', async () => {
+  const calls = [];
+  const pool = { async connect() {
+    return { async query(sql, params) {
+      calls.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    }, release() {} };
+  } };
+  const good = { tenantId: 'équipe', provider: 'plaid', connectionId: '商店-一号', allowedAccountIds: ['🙂'] };
+  const checkpoint = await createBankFeedPostgresStore(pool).withTransaction(
+    tx => tx.loadCheckpointForUpdate(good),
+  );
+  assert.equal(checkpoint, null);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[1].params, ['équipe', 'plaid', '商店-一号']);
+  assert.equal(calls[2].sql, 'COMMIT');
+});
+
+test('default-ignorable Unicode scope aliases fail before scoped SQL', async () => {
+  for (const code of [0x034F, 0x115F, 0x3164, 0xFE0F, 0xFFA0, 0xE0100]) {
+    for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+      const calls = [];
+      const pool = { async connect() {
+        return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+      } };
+      const bad = scope();
+      const identifier = 'id-' + String.fromCodePoint(code);
+      if (field === 'allowedAccountIds') bad.allowedAccountIds = [identifier];
+      else bad[field] = identifier;
+      await assert.rejects(
+        createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+        /Invalid authenticated banking scope/,
+        field + ' U+' + code.toString(16),
+      );
+      assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
+    }
+  }
+});
+
+test('Unicode and ASCII spacing aliases in banking SQL scope fail before SELECT', async () => {
+  for (const code of [0x00A0, 0x1680, 0x2002, 0x2028, 0x2029, 0x3000]) {
+    for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+      const calls = [];
+      const pool = { async connect() {
+        return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+      } };
+      const bad = scope();
+      const identifier = 'id' + String.fromCodePoint(code) + 'alias';
+      if (field === 'allowedAccountIds') bad.allowedAccountIds = [identifier];
+      else bad[field] = identifier;
+      await assert.rejects(
+        createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+        /Invalid authenticated banking scope/,
+        field + ' U+' + code.toString(16),
+      );
+      assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
+    }
+  }
+
+  // ASCII whitespace must also fail closed: PostgreSQL identity constraints
+  // reject whitespace and these values must never reach a scoped SELECT.
+  for (const field of ['tenantId', 'connectionId', 'allowedAccountIds']) {
+    const calls = [];
+    const pool = { async connect() {
+      return { async query(sql) { calls.push(sql); return { rows: [], rowCount: 0 }; }, release() {} };
+    } };
+    const bad = scope();
+    if (field === 'allowedAccountIds') bad.allowedAccountIds = ['account one'];
+    else bad[field] = field === 'tenantId' ? 'tenant one' : 'item one';
+    await assert.rejects(
+      createBankFeedPostgresStore(pool).withTransaction(tx => tx.loadCheckpointForUpdate(bad)),
+      /Invalid authenticated banking scope/,
+      field,
+    );
+    assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
+  }
+});
