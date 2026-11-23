@@ -420,6 +420,19 @@ export async function readErpOperationJobStatus({ db, authenticatedScope, jobId 
   }
   const record = result.rows[0];
   if (!record) return null;
+  // A status receipt is untrusted database-adapter data. Reject Proxy traps,
+  // inherited fields, and getters before inspecting tenant or job identity.
+  if (nodeTypes.isProxy(record) || typeof record !== 'object' || Array.isArray(record) ||
+      (Object.getPrototypeOf(record) !== Object.prototype && Object.getPrototypeOf(record) !== null)) {
+    throw new Error('ERP job storage returned an unsafe status row');
+  }
+  const statusDescriptors = Object.getOwnPropertyDescriptors(record);
+  for (const field of ['id', 'tenant_id', 'actor_id', 'operation', 'status', 'created_at', 'updated_at']) {
+    if (!Object.hasOwn(statusDescriptors, field) ||
+        !Object.hasOwn(statusDescriptors[field], 'value') || !statusDescriptors[field].enumerable) {
+      throw new Error('ERP job storage returned an unsafe status field');
+    }
+  }
   if (record.id !== canonicalJobId || record.tenant_id !== tenantId ||
       record.actor_id !== actorId || !operations.has(record.operation) ||
       !['queued', 'processing', 'failed', 'outcome_unknown'].includes(record.status)) {
